@@ -17,8 +17,10 @@ public sealed partial class HomeAssistantWebSocketClient
         private readonly CancellationTokenSource _source = new();
         private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
         private readonly object _progressGate = new();
+        private readonly object _stopGate = new();
         private readonly Task _pump;
         private TaskCompletionSource<bool> _progress = CreateProgressSource();
+        private Task? _stopTask;
         private long _publishedSequence;
         private long _processedSequence;
         private int _stopped;
@@ -90,28 +92,15 @@ public sealed partial class HomeAssistantWebSocketClient
 
         public async Task FailAndStopAsync(Exception exception)
         {
-            if (Interlocked.Exchange(ref _stopped, 1) != 0)
-            {
-                return;
-            }
-
-            _channel.Writer.TryComplete(exception);
-            await _stop(this, CancellationToken.None).ConfigureAwait(false);
+            await EnsureStopStarted(exception).ConfigureAwait(false);
         }
 
         public async Task StopAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (Interlocked.Exchange(ref _stopped, 1) != 0)
-            {
-                return;
-            }
-
-            // Once stopping starts, cleanup is atomic. Abandoning it after the stopped flag is set
-            // would make the server registration impossible to remove or retry.
-            await _stop(this, CancellationToken.None).ConfigureAwait(false);
-            _channel.Writer.TryComplete();
-            CancelSource();
+            await AwaitWithCancellationAsync(
+                EnsureStopStarted(exception: null),
+                cancellationToken).ConfigureAwait(false);
         }
 
         private async Task PumpAsync()
@@ -140,10 +129,7 @@ public sealed partial class HomeAssistantWebSocketClient
             catch (Exception ex)
             {
                 _diagnostic(HomeAssistantDiagnosticLevel.Error, "subscription.handler_failed", "A Home Assistant subscription handler failed.", ex);
-                if (Interlocked.Exchange(ref _stopped, 1) == 0)
-                {
-                    await _stop(this, CancellationToken.None).ConfigureAwait(false);
-                }
+                await EnsureStopStarted(ex).ConfigureAwait(false);
 
                 throw;
             }
@@ -203,14 +189,48 @@ public sealed partial class HomeAssistantWebSocketClient
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _stopped, 1) != 0)
+            _ = EnsureStopStarted(exception: null);
+        }
+
+        private Task EnsureStopStarted(Exception? exception)
+        {
+            lock (_stopGate)
             {
+                if (_stopTask is not null)
+                {
+                    return _stopTask;
+                }
+
+                _ = Interlocked.Exchange(ref _stopped, 1);
+                if (exception is null)
+                {
+                    _channel.Writer.TryComplete();
+                    CancelSource();
+                }
+                else
+                {
+                    _channel.Writer.TryComplete(exception);
+                }
+
+                _stopTask = _stop(this, CancellationToken.None);
+                return _stopTask;
+            }
+        }
+
+        private static async Task AwaitWithCancellationAsync(Task task, CancellationToken cancellationToken)
+        {
+            if (!cancellationToken.CanBeCanceled || task.IsCompleted)
+            {
+                await task.ConfigureAwait(false);
                 return;
             }
 
-            _ = _stop(this, CancellationToken.None);
-            _channel.Writer.TryComplete();
-            CancelSource();
+            var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (cancellationToken.Register(() => canceled.TrySetCanceled()))
+            {
+                var completed = await Task.WhenAny(task, canceled.Task).ConfigureAwait(false);
+                await completed.ConfigureAwait(false);
+            }
         }
 
         private void CancelSource()

@@ -56,7 +56,39 @@ public sealed class HomeAssistantSupervisorClientOptions
     public int MaximumResponseBytes { get; set; } = 64 * 1024 * 1024;
 }
 
+/// <summary>Version, health, and release-channel information for the Supervisor component.</summary>
 public sealed class HomeAssistantSupervisorInfo
+{
+    [JsonPropertyName("version")]
+    public string? Version { get; set; }
+
+    [JsonPropertyName("version_latest")]
+    public string? LatestVersion { get; set; }
+
+    [JsonPropertyName("update_available")]
+    public bool UpdateAvailable { get; set; }
+
+    [JsonPropertyName("arch")]
+    public string? Architecture { get; set; }
+
+    [JsonPropertyName("channel")]
+    public string? Channel { get; set; }
+
+    [JsonPropertyName("healthy")]
+    public bool Healthy { get; set; }
+
+    [JsonPropertyName("supported")]
+    public bool Supported { get; set; }
+
+    [JsonPropertyName("timezone")]
+    public string? TimeZone { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>Combined installation overview reported by the Supervisor root endpoint.</summary>
+public sealed class HomeAssistantSupervisorOverview
 {
     [JsonPropertyName("supervisor")]
     public string? SupervisorVersion { get; set; }

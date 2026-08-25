@@ -301,7 +301,7 @@ safe in one session and keeps cmdlets pipeline-friendly without hidden global
 state:
 
 ```powershell
-$token = Get-Content -LiteralPath $env:HOME_ASSISTANT_TOKEN_FILE -Raw
+$token = (Get-Content -LiteralPath $env:HOME_ASSISTANT_TOKEN_FILE -Raw).Trim()
 $ha = Connect-HomeAssistant -Uri 'https://home.example.net' -AccessToken $token
 
 $ha | Get-HomeAssistantInfo

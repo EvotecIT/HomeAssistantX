@@ -107,6 +107,7 @@ try {
     $integrations = @($connection | Get-HomeAssistantIntegration)
     $apps = @($connection | Get-HomeAssistantApp)
     $backups = @($connection | Get-HomeAssistantBackup)
+    $supervisorOverview = $connection | Get-HomeAssistantInfo -Supervisor
     $configuration = $connection | Test-HomeAssistantConfiguration
 
     if ($info.Version -ne '2026.8.3') { throw 'Core information was not returned.' }
@@ -115,6 +116,7 @@ try {
     if ($integrations.Count -ne 1) { throw 'Configuration entries were not returned.' }
     if ($apps.Count -ne 1) { throw 'Supervisor apps were not returned.' }
     if ($backups.Count -ne 1) { throw 'Supervisor backups were not returned.' }
+    if ($supervisorOverview.CoreVersion -ne '2026.8.3') { throw 'Supervisor installation overview was not returned.' }
     if (-not $configuration.IsValid) { throw 'Configuration validation failed.' }
 
     $diagnosticPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')
@@ -193,15 +195,26 @@ try {
         if ($server.StandardOutput.ReadLine() -ne 'SUBSCRIPTION_PAUSED') {
             throw 'The event receiver did not establish a WebSocket subscription.'
         }
+        $releaseTimer = [Diagnostics.Stopwatch]::StartNew()
         $server.StandardInput.WriteLine('RELEASE_PAUSED_SUBSCRIPTION')
         $server.StandardInput.Flush()
         if ($server.StandardOutput.ReadLine() -ne 'SUBSCRIPTION_RELEASED') {
             throw 'The event subscription could not be released.'
         }
+        $server.StandardInput.WriteLine('GET_LAST_EVENT_SUBSCRIPTION')
+        $server.StandardInput.Flush()
+        $subscriptionCommand = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+        if ($subscriptionCommand.type -ne 'subscribe_events' -or $subscriptionCommand.event_type -ne 'state_changed') {
+            throw 'The event cmdlet did not establish the expected state-change subscription.'
+        }
         $server.StandardInput.WriteLine('PUBLISH_STATE_CHANGE')
         $server.StandardInput.Flush()
-        if ($server.StandardOutput.ReadLine() -ne 'STATE_CHANGE_PUBLISHED') {
-            throw 'The loopback state change was not published.'
+        $publishResult = $server.StandardOutput.ReadLine()
+        if ($publishResult -ne 'STATE_CHANGE_PUBLISHED 1') {
+            $server.StandardInput.WriteLine('GET_UNSUBSCRIBE_COUNT')
+            $server.StandardInput.Flush()
+            $unsubscribeCount = $server.StandardOutput.ReadLine()
+            throw "The loopback state change did not reach exactly one active subscription. Received: $publishResult; unsubscribe count: $unsubscribeCount; release-to-publish: $($releaseTimer.ElapsedMilliseconds) ms"
         }
         $null = Wait-Job -Job $eventJob -Timeout 15
         if ($eventJob.State -ne 'Completed') {
@@ -209,7 +222,8 @@ try {
         }
         $receivedEvents = @(Receive-Job -Job $eventJob -ErrorAction Stop)
         if ($receivedEvents.Count -ne 1 -or $receivedEvents[0].EventType -ne 'state_changed') {
-            throw 'Receive-HomeAssistantEvent did not emit the matching state-change event.'
+            $eventTypes = @($receivedEvents | ForEach-Object { $_.EventType }) -join ', '
+            throw "Receive-HomeAssistantEvent returned $($receivedEvents.Count) records with event types [$eventTypes]."
         }
     } finally {
         Stop-Job -Job $eventJob -ErrorAction SilentlyContinue

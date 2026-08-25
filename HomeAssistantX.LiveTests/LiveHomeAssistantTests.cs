@@ -83,7 +83,10 @@ public sealed class LiveHomeAssistantTests
         var supervisorCapability = capabilities.Capabilities.Single(item => item.Name == "supervisor");
         if (supervisorCapability.Availability == HomeAssistantCapabilityAvailability.Available)
         {
-            _ = await client.Supervisor.GetInfoAsync();
+            var supervisorInfo = await client.Supervisor.GetInfoAsync();
+            var supervisorOverview = await client.Supervisor.GetOverviewAsync();
+            Assert.False(string.IsNullOrWhiteSpace(supervisorInfo.Version));
+            Assert.False(string.IsNullOrWhiteSpace(supervisorOverview.CoreVersion));
             _ = await client.Supervisor.GetCoreInfoAsync();
             _ = await client.Supervisor.GetAvailableUpdatesAsync();
             supervisorApps = (await client.Supervisor.GetAppsAsync()).Count;

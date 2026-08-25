@@ -24,6 +24,7 @@ while (await Console.In.ReadLineAsync() is { } command)
             break;
         case "RELEASE_PAUSED_SUBSCRIPTION":
             server.ReleasePausedSubscription();
+            await server.WaitForPausedSubscriptionActivationAsync();
             Console.WriteLine("SUBSCRIPTION_RELEASED");
             break;
         case "WAIT_FOR_UNSUBSCRIBE":
@@ -43,15 +44,22 @@ while (await Console.In.ReadLineAsync() is { } command)
         case "GET_LAST_SUPERVISOR_COMMAND":
             Console.WriteLine(server.GetLastWebSocketCommand("supervisor/api") ?? "SUPERVISOR_COMMAND_NONE");
             break;
+        case "GET_LAST_EVENT_SUBSCRIPTION":
+            Console.WriteLine(server.GetLastWebSocketCommand("subscribe_events") ?? "EVENT_SUBSCRIPTION_NONE");
+            break;
+        case "GET_UNSUBSCRIBE_COUNT":
+            Console.WriteLine(server.UnsubscribeCommandCount);
+            break;
         case "PUBLISH_STATE_CHANGE":
+            var recipients = 0;
             for (var index = 0; index < 3; index++)
             {
-                await server.PublishStateChangeAsync(
+                recipients = await server.PublishStateChangeAsync(
                     "light.kitchen",
                     TestHomeAssistantServer.KitchenLightOffStateJson,
                     TestHomeAssistantServer.KitchenLightOnStateJson);
             }
-            Console.WriteLine("STATE_CHANGE_PUBLISHED");
+            Console.WriteLine("STATE_CHANGE_PUBLISHED " + recipients);
             break;
         case "CLEAR_LAST_SUPERVISOR_COMMAND":
             server.ClearLastWebSocketCommand("supervisor/api");

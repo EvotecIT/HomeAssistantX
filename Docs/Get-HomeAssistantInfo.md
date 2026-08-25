@@ -135,7 +135,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 - `HomeAssistantX.Models.HomeAssistantConfiguration`
 - `HomeAssistantX.Operations.HomeAssistantCapabilityReport`
 - `HomeAssistantX.Operations.HomeAssistantSystemHealthSnapshot`
-- `HomeAssistantX.Supervisor.HomeAssistantSupervisorInfo`
+- `HomeAssistantX.Supervisor.HomeAssistantSupervisorOverview`
 
 ## RELATED LINKS
 

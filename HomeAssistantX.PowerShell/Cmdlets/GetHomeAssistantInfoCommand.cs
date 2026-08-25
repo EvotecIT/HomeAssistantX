@@ -12,7 +12,7 @@ namespace HomeAssistantX.PowerShell;
 [OutputType(typeof(Models.HomeAssistantConfiguration))]
 [OutputType(typeof(Operations.HomeAssistantCapabilityReport))]
 [OutputType(typeof(Operations.HomeAssistantSystemHealthSnapshot))]
-[OutputType(typeof(Supervisor.HomeAssistantSupervisorInfo))]
+[OutputType(typeof(Supervisor.HomeAssistantSupervisorOverview))]
 public sealed class GetHomeAssistantInfoCommand : HomeAssistantCmdlet
 {
     private const string OverviewParameterSet = "Overview";
@@ -42,7 +42,7 @@ public sealed class GetHomeAssistantInfoCommand : HomeAssistantCmdlet
         {
             CapabilitiesParameterSet => await Client.Operations.GetCapabilitiesAsync(CancelToken).ConfigureAwait(false),
             HealthParameterSet => await Client.Operations.Health.GetAsync(CancelToken).ConfigureAwait(false),
-            SupervisorParameterSet => await Client.Supervisor.GetInfoAsync(CancelToken).ConfigureAwait(false),
+            SupervisorParameterSet => await Client.Supervisor.GetOverviewAsync(CancelToken).ConfigureAwait(false),
             _ => await Client.Rest.GetConfigurationAsync(CancelToken).ConfigureAwait(false)
         };
         WriteObject(result);

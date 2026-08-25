@@ -56,12 +56,22 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         return new HomeAssistantSupervisorClient(new CoreSupervisorTransport(rest, webSocket));
     }
 
+    /// <summary>Gets Supervisor component version, health, and channel information.</summary>
     public async Task<HomeAssistantSupervisorInfo> GetInfoAsync(
         CancellationToken cancellationToken = default)
     {
         return Decode<HomeAssistantSupervisorInfo>(
-            await SendAsync(HttpMethod.Get, "/info", null, cancellationToken).ConfigureAwait(false),
+            await SendAsync(HttpMethod.Get, "/supervisor/info", null, cancellationToken).ConfigureAwait(false),
             "Supervisor information");
+    }
+
+    /// <summary>Gets the combined Supervisor, Core, OS, and host installation overview.</summary>
+    public async Task<HomeAssistantSupervisorOverview> GetOverviewAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return Decode<HomeAssistantSupervisorOverview>(
+            await SendAsync(HttpMethod.Get, "/info", null, cancellationToken).ConfigureAwait(false),
+            "Supervisor installation overview");
     }
 
     public Task<JsonElement> GetCoreInfoAsync(CancellationToken cancellationToken = default)

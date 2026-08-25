@@ -1255,7 +1255,7 @@
       </command:returnValue>
       <command:returnValue>
         <dev:type>
-          <maml:name>HomeAssistantX.Supervisor.HomeAssistantSupervisorInfo</maml:name>
+          <maml:name>HomeAssistantX.Supervisor.HomeAssistantSupervisorOverview</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>

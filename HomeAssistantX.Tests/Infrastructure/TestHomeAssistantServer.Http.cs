@@ -63,6 +63,10 @@ internal sealed partial class TestHomeAssistantServer
 
         switch (method + " " + pathWithoutQuery)
         {
+            case "GET /supervisor/info":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\",\"data\":{\"version\":\"2026.08.0\",\"version_latest\":\"2026.08.1\",\"update_available\":true,\"arch\":\"amd64\",\"channel\":\"stable\",\"healthy\":true,\"supported\":true,\"timezone\":\"Europe/Warsaw\"}}")
+                    .ConfigureAwait(false);
+                break;
             case "GET /info":
                 await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\",\"data\":{\"supervisor\":\"2026.08.0\",\"homeassistant\":\"2026.8.3\",\"hassos\":\"17.0\",\"hostname\":\"test-host\",\"operating_system\":\"Home Assistant OS\",\"machine\":\"generic-x86-64\",\"arch\":\"amd64\",\"supported\":true,\"channel\":\"stable\",\"state\":\"running\",\"features\":[\"reboot\"]}}")
                     .ConfigureAwait(false);
@@ -149,7 +153,13 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, "{\"require_restart\":false}").ConfigureAwait(false);
                 break;
             case "POST /api/config/config_entries/flow":
-                await WriteHttpResponseAsync(stream, 200, "{\"type\":\"form\",\"flow_id\":\"flow-1\",\"handler\":\"test\",\"step_id\":\"reauth_confirm\"}").ConfigureAwait(false);
+                if (!IsReconfigurationRequest(body))
+                {
+                    await WriteHttpResponseAsync(stream, 400, "{\"message\":\"Invalid reconfiguration request\"}").ConfigureAwait(false);
+                    break;
+                }
+
+                await WriteHttpResponseAsync(stream, 200, "{\"type\":\"form\",\"flow_id\":\"flow-1\",\"handler\":\"test\",\"step_id\":\"reconfigure\"}").ConfigureAwait(false);
                 break;
             case "POST /api/config/config_entries/flow/flow-1":
                 await WriteHttpResponseAsync(stream, 200, "{\"type\":\"create_entry\",\"flow_id\":\"flow-1\",\"result\":{\"entry_id\":\"entry-1\"}}").ConfigureAwait(false);
@@ -201,6 +211,18 @@ internal sealed partial class TestHomeAssistantServer
     {
         return form.TryGetValue(name, out var value)
             && string.Equals(value, expected, StringComparison.Ordinal);
+    }
+
+    private static bool IsReconfigurationRequest(string body)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(body);
+        var root = document.RootElement;
+        return root.ValueKind == System.Text.Json.JsonValueKind.Object
+            && root.TryGetProperty("handler", out var handler)
+            && string.Equals(handler.GetString(), "test", StringComparison.Ordinal)
+            && root.TryGetProperty("entry_id", out var entryId)
+            && string.Equals(entryId.GetString(), "entry-1", StringComparison.Ordinal)
+            && !root.TryGetProperty("context", out _);
     }
 
     private static IReadOnlyDictionary<string, string> ParseForm(string body)

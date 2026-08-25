@@ -77,7 +77,8 @@ public sealed class HomeAssistantIntegrationClient
             ?? throw new HomeAssistantProtocolException("The Home Assistant configuration-entry operation could not be decoded.");
     }
 
-    public Task<JsonElement> StartReauthenticationAsync(
+    /// <summary>Starts Home Assistant's user-initiated reconfiguration flow for an existing entry.</summary>
+    public Task<JsonElement> StartReconfigurationAsync(
         string domain,
         string entryId,
         CancellationToken cancellationToken = default)

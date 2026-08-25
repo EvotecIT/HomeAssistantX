@@ -75,7 +75,7 @@ open-ended Home Assistant payloads remain `JsonElement`.
 | Structured system log | First class | `Logs.GetSystemLogAsync`; legacy plaintext endpoint remains separate |
 | Repairs | First class / extensible | List issues, include ignored issues, get issue data, set ignored state |
 | System health | Extensible | Collects the streamed `system_health/info` response into a bounded snapshot |
-| Configuration entries | First class / extensible | List/filter/get, reload, enable/disable, start and continue reauthentication flows |
+| Configuration entries | First class / extensible | List/filter/get, reload, enable/disable, start user-initiated reconfiguration, and continue an existing flow |
 | Automation and script traces | First class / extensible | List summaries, retrieve one run, inspect related contexts |
 | Update entities | First class | Discover update states, release notes, and invoke `update.install` |
 | Diagnostics | First class / binary | List diagnostic handlers and download redacted config-entry or device diagnostics |
@@ -88,7 +88,7 @@ bearer-token client for trusted app/add-on contexts.
 
 | Capability | Status | Notes |
 | --- | --- | --- |
-| Supervisor and Core information | First class / extensible | Typed stable identity/version fields; unknown data preserved |
+| Supervisor and Core information | First class / extensible | `GetInfoAsync` models Supervisor component health/version, `GetOverviewAsync` models the combined installation, and Core-specific data remains extensible |
 | Available updates | First class | Core, Supervisor, OS, and installed app targets |
 | Apps/add-ons | First class / extensible | List/get plus install, update, start, stop, restart, and uninstall |
 | Backups | First class / extensible | List and create full backups, including compression, location, password, database exclusion, and background mode |

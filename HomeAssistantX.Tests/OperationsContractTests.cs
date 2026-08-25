@@ -22,6 +22,8 @@ public sealed class OperationsContractTests
         var integrations = await client.Operations.Integrations.GetAllAsync("test");
         var integration = await client.Operations.Integrations.GetAsync("entry-1");
         var reload = await client.Operations.Integrations.ReloadAsync("entry-1");
+        var reconfiguration = await client.Operations.Integrations.StartReconfigurationAsync("test", "entry-1");
+        var reconfigurationRequestBody = server.LastRequestBody;
         var handlers = await client.Operations.Diagnostics.GetHandlersAsync();
         var diagnostic = await client.Operations.Diagnostics.GetConfigEntryAsync("entry-1");
         var traces = await client.Operations.Traces.GetAllAsync("automation", "night");
@@ -40,6 +42,13 @@ public sealed class OperationsContractTests
         Assert.Equal("entry-1", integration.EntryId);
         Assert.True(integration.SupportsUnload);
         Assert.False(reload.RequiresRestart);
+        Assert.Equal("reconfigure", reconfiguration.GetProperty("step_id").GetString());
+        using (var request = JsonDocument.Parse(Assert.IsType<string>(reconfigurationRequestBody)))
+        {
+            Assert.Equal("test", request.RootElement.GetProperty("handler").GetString());
+            Assert.Equal("entry-1", request.RootElement.GetProperty("entry_id").GetString());
+            Assert.False(request.RootElement.TryGetProperty("context", out _));
+        }
         Assert.Single(handlers);
         Assert.True(handlers[0].Handlers.ConfigEntry);
         Assert.Contains("REDACTED", Encoding.UTF8.GetString(diagnostic));
@@ -111,10 +120,17 @@ public sealed class OperationsContractTests
         using var client = TestClientFactory.Create(server);
 
         var info = await client.Supervisor.GetInfoAsync();
+        using (var infoCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("supervisor/api"))))
+        {
+            Assert.Equal("/supervisor/info", infoCommand.RootElement.GetProperty("endpoint").GetString());
+        }
+
+        var overview = await client.Supervisor.GetOverviewAsync();
         var updates = await client.Supervisor.GetAvailableUpdatesAsync();
         var apps = await client.Supervisor.GetAppsAsync();
         var backups = await client.Supervisor.GetBackupsAsync();
         var jobs = await client.Supervisor.GetJobsAsync();
+        var job = await client.Supervisor.GetJobAsync("job-1");
         var resolution = await client.Supervisor.GetResolutionAsync();
         var log = await client.Supervisor.GetLogAsync(HomeAssistantSupervisorLogTarget.Core, lines: 25);
         var backup = await client.Supervisor.CreateFullBackupAsync(new HomeAssistantBackupRequest
@@ -125,12 +141,15 @@ public sealed class OperationsContractTests
         });
         await client.Supervisor.InvokeAppAsync("test_app", HomeAssistantAppOperation.Restart);
 
-        Assert.Equal("2026.8.3", info.CoreVersion);
+        Assert.Equal("2026.08.0", info.Version);
+        Assert.True(info.Healthy);
+        Assert.Equal("2026.8.3", overview.CoreVersion);
         Assert.Single(updates);
         Assert.Single(apps);
         Assert.True(apps[0].Installed);
         Assert.Single(backups);
         Assert.Single(jobs);
+        Assert.Equal("job-1", job.Id);
         Assert.Single(resolution.GetProperty("issues").EnumerateArray());
         Assert.Contains("test log line", log);
         Assert.Equal("job-new", backup.GetProperty("job_id").GetString());
@@ -147,12 +166,17 @@ public sealed class OperationsContractTests
         using var supervisor = HomeAssistantSupervisorClient.Create(server.BaseUri, TestHomeAssistantServer.AccessToken);
 
         var info = await supervisor.GetInfoAsync();
+        Assert.Equal("/supervisor/info", server.LastRequestPath);
+        var overview = await supervisor.GetOverviewAsync();
+        Assert.Equal("/info", server.LastRequestPath);
         var updates = await supervisor.GetAvailableUpdatesAsync();
+        Assert.Equal("/available_updates", server.LastRequestPath);
         var apps = await supervisor.GetAppsAsync();
         var backups = await supervisor.GetBackupsAsync();
         var log = await supervisor.GetLogAsync(HomeAssistantSupervisorLogTarget.Core, 10);
 
-        Assert.Equal("2026.08.0", info.SupervisorVersion);
+        Assert.Equal("2026.08.0", info.Version);
+        Assert.Equal("2026.8.3", overview.CoreVersion);
         Assert.Single(updates);
         Assert.Single(apps);
         Assert.Single(backups);

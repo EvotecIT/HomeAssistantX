@@ -26,6 +26,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _failNextSubscription;
     private TaskCompletionSource<bool>? _pausedSubscriptionReceived;
     private TaskCompletionSource<bool>? _pausedSubscriptionRelease;
+    private TaskCompletionSource<bool>? _pausedSubscriptionActivated;
     private readonly TaskCompletionSource<bool> _unsubscribeReceived =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource<bool> _systemHealthEventsSent =
@@ -90,6 +91,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public bool OmitSystemHealthFinish { get; set; }
 
+    public bool IgnoreUnsubscribeAcknowledgement { get; set; }
+
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;
@@ -118,6 +121,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         _pausedSubscriptionReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pausedSubscriptionRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pausedSubscriptionActivated = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     public Task WaitForPausedSubscriptionAsync()
@@ -132,12 +136,18 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             ?? throw new InvalidOperationException("No subscription pause is configured.")).TrySetResult(true);
     }
 
+    public Task WaitForPausedSubscriptionActivationAsync()
+    {
+        return (_pausedSubscriptionActivated
+            ?? throw new InvalidOperationException("No subscription activation is configured.")).Task;
+    }
+
     public Task WaitForUnsubscribeAsync()
     {
         return _unsubscribeReceived.Task;
     }
 
-    public async Task PublishStateChangeAsync(
+    public async Task<int> PublishStateChangeAsync(
         string entityId,
         string? oldStateJson,
         string? newStateJson,
@@ -149,10 +159,12 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             ["old_state"] = ParseOptional(oldStateJson),
             ["new_state"] = ParseOptional(newStateJson)
         };
+        var recipients = 0;
         foreach (var session in _sessions.Values)
         {
             if (session.StateSubscriptionId is int subscriptionId)
             {
+                recipients++;
                 await session.SendAsync(new Dictionary<string, object?>
                 {
                     ["id"] = subscriptionId,
@@ -173,6 +185,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 }, cancellationToken).ConfigureAwait(false);
             }
         }
+
+        return recipients;
     }
 
     public async Task DropWebSocketsAsync()
@@ -445,6 +459,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ? id
                     : session.StateSubscriptionId;
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                _pausedSubscriptionActivated?.TrySetResult(true);
                 return;
             case "unsubscribe_events":
                 var unsubscribeSubscriptionId = command.GetProperty("subscription").GetInt32();
@@ -462,6 +477,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 else
                 {
                     Interlocked.Increment(ref _invalidUnsubscribeCommandCount);
+                }
+
+                if (IgnoreUnsubscribeAcknowledgement)
+                {
+                    return;
                 }
 
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
@@ -562,6 +582,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         var endpoint = command.GetProperty("endpoint").GetString();
         object response = endpoint switch
         {
+            "/supervisor/info" => ParseJson("{\"version\":\"2026.08.0\",\"version_latest\":\"2026.08.1\",\"update_available\":true,\"arch\":\"amd64\",\"channel\":\"stable\",\"healthy\":true,\"supported\":true,\"timezone\":\"Europe/Warsaw\"}"),
             "/info" => ParseJson("{\"supervisor\":\"2026.08.0\",\"homeassistant\":\"2026.8.3\",\"hassos\":\"17.0\",\"hostname\":\"test-host\",\"operating_system\":\"Home Assistant OS\",\"machine\":\"generic-x86-64\",\"arch\":\"amd64\",\"supported\":true,\"channel\":\"stable\",\"state\":\"running\",\"features\":[\"reboot\"]}"),
             "/core/info" => ParseJson("{\"version\":\"2026.8.3\",\"version_latest\":\"2026.8.4\",\"update_available\":true}"),
             "/available_updates" => ParseJson("{\"available_updates\":[{\"update_type\":\"core\",\"version_latest\":\"2026.8.4\",\"panel_path\":\"/update-available/core\"}]}"),

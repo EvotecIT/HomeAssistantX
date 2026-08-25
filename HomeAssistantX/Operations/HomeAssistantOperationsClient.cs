@@ -88,7 +88,7 @@ public sealed class HomeAssistantOperationsClient
                     "supervisor/api",
                     new Dictionary<string, object?>
                     {
-                        ["endpoint"] = "/info",
+                        ["endpoint"] = "/supervisor/info",
                         ["method"] = "get"
                     },
                     cancellationToken).ConfigureAwait(false);
