@@ -1,4 +1,5 @@
 ﻿#if NET10_0
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.States;
 using HomeAssistantX.Tests.Infrastructure;
@@ -87,7 +88,7 @@ public sealed class StateClientContractTests
         using var client = TestClientFactory.Create(server, subscriptionBufferCapacity: 1);
         var handlerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseHandler = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var subscription = await client.States.SubscribeAsync(HomeAssistantStateFilter.All, async (_, _) =>
+        using var subscription = await client.States.SubscribeAsync(HomeAssistantStateFilter.All, async (_, _) =>
         {
             handlerStarted.TrySetResult(true);
             await releaseHandler.Task;
@@ -98,17 +99,33 @@ public sealed class StateClientContractTests
             TestHomeAssistantServer.KitchenLightOffStateJson,
             TestHomeAssistantServer.KitchenLightOnStateJson);
         await WithTimeoutAsync(handlerStarted.Task);
+        Assert.Equal("on", client.States.Snapshot["light.kitchen"].State);
+
         await server.PublishStateChangeAsync(
             "light.kitchen",
             TestHomeAssistantServer.KitchenLightOnStateJson,
             TestHomeAssistantServer.KitchenLightOffStateJson);
+        await WaitUntilAsync(() => client.States.Snapshot["light.kitchen"].State == "off");
+
         await server.PublishStateChangeAsync(
             "light.kitchen",
             TestHomeAssistantServer.KitchenLightOffStateJson,
             TestHomeAssistantServer.KitchenLightOnStateJson);
+        await WaitUntilAsync(() => client.States.Snapshot["light.kitchen"].State == "on");
         releaseHandler.TrySetResult(true);
 
-        await Assert.ThrowsAnyAsync<Exception>(async () => await WithTimeoutAsync(subscription.Completion));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> predicate)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (!predicate())
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The expected state transition was not observed.");
+            await Task.Delay(10);
+        }
     }
 
     private static async Task<T> WithTimeoutAsync<T>(Task<T> task)

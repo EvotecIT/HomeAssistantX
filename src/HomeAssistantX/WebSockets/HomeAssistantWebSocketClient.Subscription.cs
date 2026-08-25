@@ -184,11 +184,12 @@ public sealed partial class HomeAssistantWebSocketClient
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _stopped, 1) == 0)
+            if (Interlocked.Exchange(ref _stopped, 1) != 0)
             {
-                _ = _stop(this, CancellationToken.None);
+                return;
             }
 
+            _ = _stop(this, CancellationToken.None);
             _channel.Writer.TryComplete();
             _source.Cancel();
         }

@@ -82,7 +82,7 @@ public sealed class WebSocketContractTests
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
-        var subscription = await client.Events.SubscribeAsync(
+        using var subscription = await client.Events.SubscribeAsync(
             "state_changed",
             (_, _) => throw new InvalidOperationException("consumer failed"));
 
