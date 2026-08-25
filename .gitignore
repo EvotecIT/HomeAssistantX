@@ -1,0 +1,13 @@
+bin/
+obj/
+artifacts/
+Artefacts/
+TestResults/
+.vs/
+.idea/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+coverage*.xml
+coverage*.json

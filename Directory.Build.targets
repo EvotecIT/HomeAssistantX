@@ -1,0 +1,9 @@
+﻿<Project>
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(PackageId)' != '' And '$(IsPackable)' != 'false' And '$(IsTestProject)' != 'true'">
+    <EnablePackageValidation>true</EnablePackageValidation>
+  </PropertyGroup>
+</Project>

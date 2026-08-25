@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore HomeAssistantX.slnx
+      - name: Build all target frameworks
+        run: dotnet build HomeAssistantX.slnx --configuration Release --no-restore
+      - name: Test .NET 10 protocol contracts
+        run: dotnet test tests/HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net10.0
+      - name: Test .NET Framework contracts
+        run: dotnet test tests/HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net472
+      - name: Pack
+        run: dotnet pack src/HomeAssistantX/HomeAssistantX.csproj --configuration Release --no-build --output artifacts/packages
