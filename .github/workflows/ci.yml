@@ -21,8 +21,8 @@ jobs:
       - name: Build all target frameworks
         run: dotnet build HomeAssistantX.slnx --configuration Release --no-restore
       - name: Test .NET 10 protocol contracts
-        run: dotnet test tests/HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net10.0
+        run: dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net10.0
       - name: Test .NET Framework contracts
-        run: dotnet test tests/HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net472
+        run: dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net472
       - name: Pack
-        run: dotnet pack src/HomeAssistantX/HomeAssistantX.csproj --configuration Release --no-build --output artifacts/packages
+        run: dotnet pack HomeAssistantX/HomeAssistantX.csproj --configuration Release --no-build --output artifacts/packages
