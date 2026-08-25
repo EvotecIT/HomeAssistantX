@@ -4,7 +4,7 @@ using var server = new TestHomeAssistantServer { SendStateChangeBeforeSnapshot =
 Console.WriteLine("READY " + server.BaseUri.AbsoluteUri);
 while (await Console.In.ReadLineAsync() is { } command)
 {
-    switch (command)
+    switch (command.TrimStart('\uFEFF'))
     {
         case "SET_RECONNECT_STATES":
             server.SetStates("[" + TestHomeAssistantServer.KitchenLightOnStateJson + "]");
@@ -29,6 +29,33 @@ while (await Console.In.ReadLineAsync() is { } command)
         case "WAIT_FOR_UNSUBSCRIBE":
             await server.WaitForUnsubscribeAsync();
             Console.WriteLine("UNSUBSCRIBED");
+            break;
+        case "PING":
+            Console.WriteLine("PONG");
+            break;
+        case "GET_LAST_SERVICE_CALL":
+            Console.WriteLine(server.LastServiceCallBody ?? "SERVICE_CALL_NONE");
+            break;
+        case "CLEAR_LAST_SERVICE_CALL":
+            server.ClearLastServiceCall();
+            Console.WriteLine("SERVICE_CALL_CLEARED");
+            break;
+        case "GET_LAST_SUPERVISOR_COMMAND":
+            Console.WriteLine(server.GetLastWebSocketCommand("supervisor/api") ?? "SUPERVISOR_COMMAND_NONE");
+            break;
+        case "PUBLISH_STATE_CHANGE":
+            for (var index = 0; index < 3; index++)
+            {
+                await server.PublishStateChangeAsync(
+                    "light.kitchen",
+                    TestHomeAssistantServer.KitchenLightOffStateJson,
+                    TestHomeAssistantServer.KitchenLightOnStateJson);
+            }
+            Console.WriteLine("STATE_CHANGE_PUBLISHED");
+            break;
+        case "CLEAR_LAST_SUPERVISOR_COMMAND":
+            server.ClearLastWebSocketCommand("supervisor/api");
+            Console.WriteLine("SUPERVISOR_COMMAND_CLEARED");
             break;
         case "EXIT":
             return 0;

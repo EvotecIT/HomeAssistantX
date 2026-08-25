@@ -24,5 +24,23 @@ jobs:
         run: dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net10.0
       - name: Test .NET Framework contracts
         run: dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net472
+      - name: Test PowerShell 7 module contracts
+        shell: pwsh
+        run: ./Tests/PowerShell/Test-Module.ps1 -AssemblyPath ./HomeAssistantX.PowerShell/bin/Release/net10.0/HomeAssistantX.PowerShell.dll
+      - name: Test PowerShell 7 portable binary contracts
+        shell: pwsh
+        run: ./Tests/PowerShell/Test-Module.ps1 -AssemblyPath ./HomeAssistantX.PowerShell/bin/Release/netstandard2.0/HomeAssistantX.PowerShell.dll
+      - name: Test PowerShell 7 source bootstrapper
+        shell: pwsh
+        run: ./Tests/PowerShell/Test-Module.ps1 -ModuleManifest ./HomeAssistantX.psd1
+      - name: Test Windows PowerShell 5.1 module contracts
+        shell: powershell
+        run: ./Tests/PowerShell/Test-Module.ps1 -AssemblyPath ./HomeAssistantX.PowerShell/bin/Release/net472/HomeAssistantX.PowerShell.dll
+      - name: Test Windows PowerShell 5.1 source bootstrapper
+        shell: powershell
+        run: ./Tests/PowerShell/Test-Module.ps1 -ModuleManifest ./HomeAssistantX.psd1
       - name: Pack
         run: dotnet pack HomeAssistantX/HomeAssistantX.csproj --configuration Release --no-build --output artifacts/packages
+      - name: Test packed package consumers
+        shell: pwsh
+        run: ./Tests/Packages/Test-PackageConsumers.ps1 -PackagePath (Get-Item ./artifacts/packages/HomeAssistantX.*.nupkg).FullName

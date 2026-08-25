@@ -2,11 +2,13 @@
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Events;
+using HomeAssistantX.Operations;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.Systems;
+using HomeAssistantX.Supervisor;
 using HomeAssistantX.WebSockets;
 
 namespace HomeAssistantX;
@@ -26,6 +28,8 @@ public sealed class HomeAssistantClient : IDisposable
         Events = new HomeAssistantEventClient(WebSocket);
         Registries = new HomeAssistantRegistryClient(WebSocket);
         System = new HomeAssistantSystemClient(WebSocket);
+        Operations = new HomeAssistantOperationsClient(Rest, WebSocket, States, Services);
+        Supervisor = HomeAssistantSupervisorClient.CreateViaCore(Rest, WebSocket);
     }
 
     public HomeAssistantClientOptions Options { get; }
@@ -45,6 +49,15 @@ public sealed class HomeAssistantClient : IDisposable
     /// <summary>Provides documented Home Assistant system, validation, target, and authentication commands.</summary>
     public HomeAssistantSystemClient System { get; }
 
+    /// <summary>Provides health, log, repairs, integration, trace, update, and backup operations.</summary>
+    public HomeAssistantOperationsClient Operations { get; }
+
+    /// <summary>
+    /// Provides Supervisor operations through Home Assistant Core's authenticated WebSocket proxy.
+    /// The current Home Assistant user must be an administrator and the installation must include Supervisor.
+    /// </summary>
+    public HomeAssistantSupervisorClient Supervisor { get; }
+
     public static HomeAssistantClient Create(Uri baseUri, string accessToken)
     {
         return new HomeAssistantClient(
@@ -59,6 +72,7 @@ public sealed class HomeAssistantClient : IDisposable
         }
 
         States.Dispose();
+        Supervisor.Dispose();
         WebSocket.Dispose();
         Rest.Dispose();
     }

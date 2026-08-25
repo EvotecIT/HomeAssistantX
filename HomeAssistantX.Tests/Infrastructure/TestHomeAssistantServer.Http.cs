@@ -63,6 +63,25 @@ internal sealed partial class TestHomeAssistantServer
 
         switch (method + " " + pathWithoutQuery)
         {
+            case "GET /info":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\",\"data\":{\"supervisor\":\"2026.08.0\",\"homeassistant\":\"2026.8.3\",\"hassos\":\"17.0\",\"hostname\":\"test-host\",\"operating_system\":\"Home Assistant OS\",\"machine\":\"generic-x86-64\",\"arch\":\"amd64\",\"supported\":true,\"channel\":\"stable\",\"state\":\"running\",\"features\":[\"reboot\"]}}")
+                    .ConfigureAwait(false);
+                break;
+            case "GET /available_updates":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\",\"data\":{\"available_updates\":[{\"update_type\":\"core\",\"version_latest\":\"2026.8.4\"}]}}")
+                    .ConfigureAwait(false);
+                break;
+            case "GET /addons":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\",\"data\":{\"addons\":[{\"slug\":\"test_app\",\"name\":\"Test app\",\"installed\":true,\"available\":true}]}}")
+                    .ConfigureAwait(false);
+                break;
+            case "GET /backups":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\",\"data\":{\"backups\":[{\"slug\":\"backup-1\",\"name\":\"Before update\",\"protected\":true,\"compressed\":true,\"content\":{\"homeassistant\":true}}]}}")
+                    .ConfigureAwait(false);
+                break;
+            case "GET /core/logs":
+                await WriteHttpResponseAsync(stream, 200, "2026-08-25 direct supervisor log line").ConfigureAwait(false);
+                break;
             case "GET /api/":
                 await WriteHttpResponseAsync(stream, 200, "{\"message\":\"API running.\",\"custom_api_field\":true}").ConfigureAwait(false);
                 break;
@@ -125,6 +144,27 @@ internal sealed partial class TestHomeAssistantServer
                 break;
             case "POST /api/config/core/check_config":
                 await WriteHttpResponseAsync(stream, 200, "{\"result\":\"valid\",\"errors\":null}").ConfigureAwait(false);
+                break;
+            case "POST /api/config/config_entries/entry/entry-1/reload":
+                await WriteHttpResponseAsync(stream, 200, "{\"require_restart\":false}").ConfigureAwait(false);
+                break;
+            case "POST /api/config/config_entries/flow":
+                await WriteHttpResponseAsync(stream, 200, "{\"type\":\"form\",\"flow_id\":\"flow-1\",\"handler\":\"test\",\"step_id\":\"reauth_confirm\"}").ConfigureAwait(false);
+                break;
+            case "POST /api/config/config_entries/flow/flow-1":
+                await WriteHttpResponseAsync(stream, 200, "{\"type\":\"create_entry\",\"flow_id\":\"flow-1\",\"result\":{\"entry_id\":\"entry-1\"}}").ConfigureAwait(false);
+                break;
+            case "GET /api/diagnostics/config_entry/entry-1":
+                await WriteHttpResponseAsync(stream, 200, "{\"data\":{\"token\":\"REDACTED\"}}").ConfigureAwait(false);
+                break;
+            case "GET /api/diagnostics/config_entry/entry-1/device/device-1":
+                await WriteHttpResponseAsync(stream, 200, "{\"data\":{\"device\":\"device-1\"}}").ConfigureAwait(false);
+                break;
+            case "GET /api/hassio/core/logs":
+            case "GET /api/hassio/supervisor/logs":
+            case "GET /api/hassio/host/logs":
+            case "GET /api/hassio/addons/test_app/logs":
+                await WriteHttpResponseAsync(stream, 200, "2026-08-25 test log line").ConfigureAwait(false);
                 break;
             case "POST /api/intent/handle":
                 await WriteHttpResponseAsync(stream, 200, "{\"response\":{\"speech\":{\"plain\":{\"speech\":\"Done\"}}}}").ConfigureAwait(false);
