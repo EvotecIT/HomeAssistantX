@@ -14,6 +14,22 @@ while (await Console.In.ReadLineAsync() is { } command)
             await server.DropWebSocketsAsync();
             Console.WriteLine("DROPPED");
             break;
+        case "PAUSE_NEXT_SUBSCRIPTION":
+            server.PauseNextSubscription();
+            Console.WriteLine("PAUSE_CONFIGURED");
+            break;
+        case "WAIT_FOR_PAUSED_SUBSCRIPTION":
+            await server.WaitForPausedSubscriptionAsync();
+            Console.WriteLine("SUBSCRIPTION_PAUSED");
+            break;
+        case "RELEASE_PAUSED_SUBSCRIPTION":
+            server.ReleasePausedSubscription();
+            Console.WriteLine("SUBSCRIPTION_RELEASED");
+            break;
+        case "WAIT_FOR_UNSUBSCRIBE":
+            await server.WaitForUnsubscribeAsync();
+            Console.WriteLine("UNSUBSCRIBED");
+            break;
         case "EXIT":
             return 0;
         default:

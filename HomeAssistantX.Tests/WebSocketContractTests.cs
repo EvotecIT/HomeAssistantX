@@ -141,6 +141,8 @@ public sealed class WebSocketContractTests
         await WithTimeoutAsync(stop);
 
         Assert.Equal(1, server.UnsubscribeCommandCount);
+        Assert.Equal(0, server.InvalidUnsubscribeCommandCount);
+        Assert.Equal(server.LastSubscriptionSessionId, server.LastUnsubscribeSessionId);
         await subscription.Completion;
     }
 
@@ -163,6 +165,8 @@ public sealed class WebSocketContractTests
         await WithTimeoutAsync(stop);
 
         Assert.Equal(1, server.UnsubscribeCommandCount);
+        Assert.Equal(0, server.InvalidUnsubscribeCommandCount);
+        Assert.Equal(server.LastSubscriptionSessionId, server.LastUnsubscribeSessionId);
         await subscription.Completion;
     }
 
@@ -179,7 +183,56 @@ public sealed class WebSocketContractTests
         await subscription.StopAsync();
 
         Assert.Equal(1, server.UnsubscribeCommandCount);
+        Assert.Equal(0, server.InvalidUnsubscribeCommandCount);
+        Assert.Equal(server.LastSubscriptionSessionId, server.LastUnsubscribeSessionId);
         await subscription.Completion;
+    }
+
+    [Fact]
+    public async Task CanceledInitialActivationCleansUpAnAmbiguousServerSubscription()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        await client.WebSocket.ConnectAsync();
+        server.PauseNextSubscription();
+        using var cancellation = new CancellationTokenSource();
+
+        var activation = client.Events.SubscribeAsync(
+            "state_changed",
+            (_, _) => Task.CompletedTask,
+            cancellation.Token);
+        await WithTimeoutAsync(server.WaitForPausedSubscriptionAsync());
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => activation);
+        server.ReleasePausedSubscription();
+        await WithTimeoutAsync(server.WaitForUnsubscribeAsync());
+
+        Assert.Equal(1, server.UnsubscribeCommandCount);
+        Assert.Equal(0, server.InvalidUnsubscribeCommandCount);
+        Assert.Equal(server.LastSubscriptionSessionId, server.LastUnsubscribeSessionId);
+    }
+
+    [Fact]
+    public async Task TimedOutInitialActivationCleansUpAnAmbiguousServerSubscription()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromMilliseconds(500));
+        await client.WebSocket.ConnectAsync();
+        server.PauseNextSubscription();
+
+        var activation = client.Events.SubscribeAsync(
+            "state_changed",
+            (_, _) => Task.CompletedTask);
+        await WithTimeoutAsync(server.WaitForPausedSubscriptionAsync());
+
+        await Assert.ThrowsAsync<HomeAssistantConnectionException>(() => activation);
+        server.ReleasePausedSubscription();
+        await WithTimeoutAsync(server.WaitForUnsubscribeAsync());
+
+        Assert.Equal(1, server.UnsubscribeCommandCount);
+        Assert.Equal(0, server.InvalidUnsubscribeCommandCount);
+        Assert.Equal(server.LastSubscriptionSessionId, server.LastUnsubscribeSessionId);
     }
 
     [Fact]

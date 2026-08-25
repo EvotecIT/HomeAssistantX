@@ -26,7 +26,12 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _failNextSubscription;
     private TaskCompletionSource<bool>? _pausedSubscriptionReceived;
     private TaskCompletionSource<bool>? _pausedSubscriptionRelease;
+    private readonly TaskCompletionSource<bool> _unsubscribeReceived =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _unsubscribeCommandCount;
+    private int _invalidUnsubscribeCommandCount;
+    private int _lastSubscriptionSessionId;
+    private int _lastUnsubscribeSessionId;
     private int _disposed;
 
     public TestHomeAssistantServer()
@@ -57,6 +62,12 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string? LastRevokedRefreshToken { get; private set; }
 
     public int UnsubscribeCommandCount => Volatile.Read(ref _unsubscribeCommandCount);
+
+    public int InvalidUnsubscribeCommandCount => Volatile.Read(ref _invalidUnsubscribeCommandCount);
+
+    public int LastSubscriptionSessionId => Volatile.Read(ref _lastSubscriptionSessionId);
+
+    public int LastUnsubscribeSessionId => Volatile.Read(ref _lastUnsubscribeSessionId);
 
     public string? GetLastWebSocketCommand(string commandType)
     {
@@ -100,6 +111,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         (_pausedSubscriptionRelease
             ?? throw new InvalidOperationException("No subscription pause is configured.")).TrySetResult(true);
+    }
+
+    public Task WaitForUnsubscribeAsync()
+    {
+        return _unsubscribeReceived.Task;
     }
 
     public async Task PublishStateChangeAsync(
@@ -298,7 +314,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 var command = commandDocument.RootElement;
                 var id = command.GetProperty("id").GetInt32();
                 var type = command.GetProperty("type").GetString() ?? string.Empty;
-                await HandleWebSocketCommandAsync(session, id, type, command).ConfigureAwait(false);
+                await HandleWebSocketCommandAsync(sessionId, session, id, type, command).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (_source.IsCancellationRequested)
@@ -319,6 +335,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     }
 
     private async Task HandleWebSocketCommandAsync(
+        int sessionId,
         SocketSession session,
         int id,
         string type,
@@ -396,12 +413,14 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 var pauseRelease = _pausedSubscriptionRelease;
                 if (pauseReceived is not null && pauseRelease is not null)
                 {
-                    _pausedSubscriptionReceived = null;
                     pauseReceived.TrySetResult(true);
                     await pauseRelease.Task.ConfigureAwait(false);
+                    _pausedSubscriptionReceived = null;
                     _pausedSubscriptionRelease = null;
                 }
 
+                session.SubscriptionIds.Add(id);
+                Volatile.Write(ref _lastSubscriptionSessionId, sessionId);
                 session.StateSubscriptionId = command.TryGetProperty("event_type", out var eventType)
                     && eventType.GetString() == "state_changed"
                     ? id
@@ -409,8 +428,23 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "unsubscribe_events":
+                var unsubscribeSubscriptionId = command.GetProperty("subscription").GetInt32();
+                var validUnsubscribe = session.SubscriptionIds.Remove(unsubscribeSubscriptionId);
                 Interlocked.Increment(ref _unsubscribeCommandCount);
-                session.StateSubscriptionId = null;
+                Volatile.Write(ref _lastUnsubscribeSessionId, sessionId);
+                if (validUnsubscribe)
+                {
+                    _unsubscribeReceived.TrySetResult(true);
+                    if (session.StateSubscriptionId == unsubscribeSubscriptionId)
+                    {
+                        session.StateSubscriptionId = null;
+                    }
+                }
+                else
+                {
+                    Interlocked.Increment(ref _invalidUnsubscribeCommandCount);
+                }
+
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "call_service":
@@ -573,6 +607,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         }
 
         public int? StateSubscriptionId { get; set; }
+
+        public HashSet<int> SubscriptionIds { get; } = new();
 
         public async Task<string> ReceiveAsync(CancellationToken cancellationToken)
         {

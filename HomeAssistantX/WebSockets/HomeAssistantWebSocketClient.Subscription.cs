@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using System.Threading.Channels;
+using System.Net.WebSockets;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Subscriptions;
 
@@ -53,22 +54,26 @@ public sealed partial class HomeAssistantWebSocketClient
 
         public int? ServerId { get; private set; }
 
+        public ClientWebSocket? ServerSocket { get; private set; }
+
         public SemaphoreSlim LifecycleGate => _lifecycleGate;
 
         public bool IsStopped => Volatile.Read(ref _stopped) != 0;
 
         public Task Completion => _pump;
 
-        public void SetServerId(int serverId)
+        public void SetServerSubscription(int serverId, ClientWebSocket socket)
         {
             ServerId = serverId;
+            ServerSocket = socket;
         }
 
-        public void ClearServerId(int expectedServerId)
+        public void ClearServerSubscription(int expectedServerId)
         {
             if (ServerId == expectedServerId)
             {
                 ServerId = null;
+                ServerSocket = null;
             }
         }
 

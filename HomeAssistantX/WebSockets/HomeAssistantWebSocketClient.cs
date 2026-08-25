@@ -196,6 +196,21 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         }
 
         await ConnectAsync(cancellationToken).ConfigureAwait(false);
+        var socket = _socket;
+        if (socket is null || socket.State != WebSocketState.Open)
+        {
+            throw CreateNotConnectedException();
+        }
+
+        return await RequestOnSocketAsync(socket, commandType, payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<JsonElement> RequestOnSocketAsync(
+        ClientWebSocket socket,
+        string commandType,
+        IReadOnlyDictionary<string, object?>? payload,
+        CancellationToken cancellationToken)
+    {
         var commandId = NextCommandId();
         var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_pendingRequests.TryAdd(commandId, completion))
@@ -205,7 +220,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
 
         try
         {
-            await SendCommandAsync(commandId, commandType, payload, cancellationToken).ConfigureAwait(false);
+            await SendCommandAsync(socket, commandId, commandType, payload, cancellationToken).ConfigureAwait(false);
             return await AwaitWithTimeoutAsync(completion.Task, _options.RequestTimeout, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -329,22 +344,31 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                 return;
             }
 
+            var socket = _socket;
+            if (socket is null || socket.State != WebSocketState.Open)
+            {
+                throw CreateNotConnectedException();
+            }
+
             var serverId = NextCommandId();
-            registration.SetServerId(serverId);
+            registration.SetServerSubscription(serverId, socket);
             _serverSubscriptions[serverId] = registration;
 
             var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingRequests[serverId] = completion;
             try
             {
-                await SendCommandAsync(serverId, registration.CommandType, registration.Payload, cancellationToken)
+                await SendCommandAsync(socket, serverId, registration.CommandType, registration.Payload, cancellationToken)
                     .ConfigureAwait(false);
                 await AwaitWithTimeoutAsync(completion.Task, _options.RequestTimeout, cancellationToken).ConfigureAwait(false);
             }
-            catch
+            catch (HomeAssistantCommandException)
             {
+                // A command error is an explicit rejection, so no server subscription exists.
+                // Cancellation, timeout, and connection failures are ambiguous after send: keep
+                // the identifier so the registration's cleanup can still attempt unsubscribe.
                 _serverSubscriptions.TryRemove(serverId, out _);
-                registration.ClearServerId(serverId);
+                registration.ClearServerSubscription(serverId);
                 throw;
             }
             finally
@@ -362,13 +386,15 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
     {
         _subscriptions.TryRemove(registration.Id, out _);
         int? serverId;
+        ClientWebSocket? serverSocket;
         await registration.LifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             serverId = registration.ServerId;
+            serverSocket = registration.ServerSocket;
             if (serverId is not null)
             {
-                registration.ClearServerId(serverId.Value);
+                registration.ClearServerSubscription(serverId.Value);
                 _serverSubscriptions.TryRemove(serverId.Value, out _);
             }
         }
@@ -377,14 +403,17 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             registration.LifecycleGate.Release();
         }
 
-        if (serverId is null || _socket?.State != WebSocketState.Open)
+        if (serverId is null || serverSocket is null || serverSocket.State != WebSocketState.Open)
         {
             return;
         }
 
         try
         {
-            await RequestAsync(
+            // Subscription identifiers are scoped to the WebSocket that created them. Never
+            // reconnect here: a replacement connection cannot unsubscribe the old identifier.
+            await RequestOnSocketAsync(
+                serverSocket,
                 "unsubscribe_events",
                 new Dictionary<string, object?> { ["subscription"] = serverId.Value },
                 cancellationToken).ConfigureAwait(false);
@@ -396,6 +425,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
     }
 
     private async Task SendCommandAsync(
+        ClientWebSocket socket,
         int commandId,
         string commandType,
         IReadOnlyDictionary<string, object?>? payload,
@@ -412,23 +442,32 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         command["id"] = commandId;
         command["type"] = commandType;
 
-        var socket = _socket;
-        if (socket is null || socket.State != WebSocketState.Open)
+        if (socket.State != WebSocketState.Open)
         {
-            throw new HomeAssistantConnectionException(
-                "The Home Assistant WebSocket is not connected.",
-                new WebSocketException(WebSocketError.InvalidState));
+            throw CreateNotConnectedException();
         }
 
         await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (socket.State != WebSocketState.Open)
+            {
+                throw CreateNotConnectedException();
+            }
+
             await SendJsonAsync(socket, command, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _sendGate.Release();
         }
+    }
+
+    private static HomeAssistantConnectionException CreateNotConnectedException()
+    {
+        return new HomeAssistantConnectionException(
+            "The Home Assistant WebSocket is not connected.",
+            new WebSocketException(WebSocketError.InvalidState));
     }
 
     private static Task SendJsonAsync(ClientWebSocket socket, object payload, CancellationToken cancellationToken)

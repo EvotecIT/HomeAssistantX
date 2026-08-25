@@ -1,6 +1,7 @@
 ﻿#if NET472
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
@@ -61,6 +62,59 @@ public sealed class NetFrameworkWebSocketContractTests
         Assert.Equal(HomeAssistantConnectionState.Connected, client.WebSocket.State);
         Assert.Equal("on", client.States.Snapshot["light.kitchen"].State);
         Assert.False(client.States.Snapshot.ContainsKey("sensor.kitchen_temperature"));
+    }
+
+    [Fact]
+    public async Task NetFrameworkCanceledActivationCleansUpAnAmbiguousServerSubscription()
+    {
+        using var server = await CrossProcessHomeAssistantServer.StartAsync();
+        var options = new HomeAssistantClientOptions(
+            server.BaseUri,
+            new StaticAccessTokenProvider(TestHomeAssistantServer.AccessToken))
+        {
+            RequestTimeout = TimeSpan.FromSeconds(5),
+            ConnectTimeout = TimeSpan.FromSeconds(5)
+        };
+        using var client = new HomeAssistantClient(options);
+        await client.WebSocket.ConnectAsync();
+        await server.SendCommandAsync("PAUSE_NEXT_SUBSCRIPTION", "PAUSE_CONFIGURED");
+        using var cancellation = new CancellationTokenSource();
+
+        var activation = client.Events.SubscribeAsync(
+            "state_changed",
+            (_, _) => Task.CompletedTask,
+            cancellation.Token);
+        await server.SendCommandAsync("WAIT_FOR_PAUSED_SUBSCRIPTION", "SUBSCRIPTION_PAUSED");
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => activation);
+        await server.SendCommandAsync("RELEASE_PAUSED_SUBSCRIPTION", "SUBSCRIPTION_RELEASED");
+        await server.SendCommandAsync("WAIT_FOR_UNSUBSCRIBE", "UNSUBSCRIBED");
+    }
+
+    [Fact]
+    public async Task NetFrameworkTimedOutActivationCleansUpAnAmbiguousServerSubscription()
+    {
+        using var server = await CrossProcessHomeAssistantServer.StartAsync();
+        var options = new HomeAssistantClientOptions(
+            server.BaseUri,
+            new StaticAccessTokenProvider(TestHomeAssistantServer.AccessToken))
+        {
+            RequestTimeout = TimeSpan.FromMilliseconds(500),
+            ConnectTimeout = TimeSpan.FromSeconds(5)
+        };
+        using var client = new HomeAssistantClient(options);
+        await client.WebSocket.ConnectAsync();
+        await server.SendCommandAsync("PAUSE_NEXT_SUBSCRIPTION", "PAUSE_CONFIGURED");
+
+        var activation = client.Events.SubscribeAsync(
+            "state_changed",
+            (_, _) => Task.CompletedTask);
+        await server.SendCommandAsync("WAIT_FOR_PAUSED_SUBSCRIPTION", "SUBSCRIPTION_PAUSED");
+
+        await Assert.ThrowsAsync<HomeAssistantConnectionException>(() => activation);
+        await server.SendCommandAsync("RELEASE_PAUSED_SUBSCRIPTION", "SUBSCRIPTION_RELEASED");
+        await server.SendCommandAsync("WAIT_FOR_UNSUBSCRIBE", "UNSUBSCRIBED");
     }
 
     private static async Task<T> WithTimeoutAsync<T>(Task<T> task)
