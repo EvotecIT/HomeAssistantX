@@ -1,0 +1,184 @@
+﻿using System.Net.Sockets;
+
+namespace HomeAssistantX.Tests.Infrastructure;
+
+internal sealed partial class TestHomeAssistantServer
+{
+    private async Task HandleHttpAsync(
+        NetworkStream stream,
+        string requestLine,
+        IReadOnlyDictionary<string, string> headers,
+        string body)
+    {
+        var parts = requestLine.Split(' ');
+        var method = parts[0];
+        var path = parts.Length > 1 ? parts[1] : "/";
+        var pathWithoutQuery = path.Split('?')[0];
+        LastRequestBody = body;
+        LastRequestPath = path;
+
+        if (method == "POST" && pathWithoutQuery == "/auth/token")
+        {
+            var form = ParseForm(body);
+            OAuthTokenRequestCount++;
+            var refresh = form.TryGetValue("grant_type", out var grantType)
+                && string.Equals(grantType, "refresh_token", StringComparison.Ordinal);
+            var valid = refresh
+                ? HasExactValue(form, "refresh_token", "oauth-refresh-token")
+                    && HasExactValue(form, "client_id", "https://app.example.net/")
+                : HasExactValue(form, "grant_type", "authorization_code")
+                    && HasExactValue(form, "code", "authorization-code")
+                    && HasExactValue(form, "client_id", "https://app.example.net/");
+            if (!valid)
+            {
+                await WriteHttpResponseAsync(stream, 400, "{\"error\":\"invalid_request\"}").ConfigureAwait(false);
+                return;
+            }
+
+            await WriteHttpResponseAsync(
+                stream,
+                200,
+                refresh
+                    ? "{\"access_token\":\"refreshed-access-token\",\"token_type\":\"Bearer\",\"expires_in\":1800}"
+                    : "{\"access_token\":\"oauth-access-token\",\"token_type\":\"Bearer\",\"expires_in\":1800,\"refresh_token\":\"oauth-refresh-token\"}")
+                .ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/auth/revoke")
+        {
+            var form = ParseForm(body);
+            form.TryGetValue("token", out var refreshToken);
+            LastRevokedRefreshToken = refreshToken;
+            await WriteHttpResponseAsync(stream, 200, string.Empty).ConfigureAwait(false);
+            return;
+        }
+
+        LastAuthorization = headers.TryGetValue("Authorization", out var authorization) ? authorization : null;
+        if (!string.Equals(LastAuthorization, "Bearer " + AccessToken, StringComparison.Ordinal))
+        {
+            await WriteHttpResponseAsync(stream, 401, "{\"message\":\"Unauthorized\"}").ConfigureAwait(false);
+            return;
+        }
+
+        switch (method + " " + pathWithoutQuery)
+        {
+            case "GET /api/":
+                await WriteHttpResponseAsync(stream, 200, "{\"message\":\"API running.\",\"custom_api_field\":true}").ConfigureAwait(false);
+                break;
+            case "GET /api/config":
+                await WriteHttpResponseAsync(stream, 200,
+                    "{\"location_name\":\"Test Home\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}")
+                    .ConfigureAwait(false);
+                break;
+            case "GET /api/components":
+                await WriteHttpResponseAsync(stream, 200, "[\"api\",\"websocket_api\",\"recorder\"]").ConfigureAwait(false);
+                break;
+            case "GET /api/events":
+                await WriteHttpResponseAsync(stream, 200, "[{\"event\":\"state_changed\",\"listener_count\":5}]").ConfigureAwait(false);
+                break;
+            case "GET /api/services":
+                await WriteHttpResponseAsync(stream, 200,
+                    "[{\"domain\":\"light\",\"services\":{\"turn_on\":{\"fields\":{\"brightness_pct\":{}}}}}]")
+                    .ConfigureAwait(false);
+                break;
+            case "GET /api/history/period/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
+                await WriteHttpResponseAsync(stream, 200, "[[" + KitchenTemperatureStateJson + "]]").ConfigureAwait(false);
+                break;
+            case "GET /api/logbook/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
+                await WriteHttpResponseAsync(stream, 200,
+                    "[{\"when\":\"2026-08-24T12:00:00+00:00\",\"name\":\"Kitchen light\",\"message\":\"turned on\",\"domain\":\"light\",\"entity_id\":\"light.kitchen\"}]")
+                    .ConfigureAwait(false);
+                break;
+            case "GET /api/states":
+                await WriteHttpResponseAsync(stream, 200, GetStates()).ConfigureAwait(false);
+                break;
+            case "GET /api/states/sensor.kitchen_temperature":
+                await WriteHttpResponseAsync(stream, 200, KitchenTemperatureStateJson).ConfigureAwait(false);
+                break;
+            case "POST /api/states/sensor.virtual":
+                await WriteHttpResponseAsync(stream, 200,
+                    "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}").ConfigureAwait(false);
+                break;
+            case "DELETE /api/states/sensor.virtual":
+                await WriteHttpResponseAsync(stream, 200, "{\"message\":\"Entity removed.\"}").ConfigureAwait(false);
+                break;
+            case "GET /api/error_log":
+                await WriteHttpResponseAsync(stream, 200, "test integration warning").ConfigureAwait(false);
+                break;
+            case "GET /api/camera_proxy/camera.front":
+                await WriteHttpResponseAsync(stream, 200, "test-image-bytes").ConfigureAwait(false);
+                break;
+            case "GET /api/calendars":
+                await WriteHttpResponseAsync(stream, 200, "[{\"entity_id\":\"calendar.home\",\"name\":\"Home\"}]").ConfigureAwait(false);
+                break;
+            case "GET /api/calendars/calendar.home":
+                await WriteHttpResponseAsync(stream, 200,
+                    "[{\"summary\":\"Dinner\",\"start\":{\"dateTime\":\"2026-08-25T18:00:00+02:00\"},\"end\":{\"dateTime\":\"2026-08-25T20:00:00+02:00\"},\"location\":\"Home\"}]")
+                    .ConfigureAwait(false);
+                break;
+            case "POST /api/events/homeassistantx_test":
+                await WriteHttpResponseAsync(stream, 200, "{\"message\":\"Event homeassistantx_test fired.\"}").ConfigureAwait(false);
+                break;
+            case "POST /api/template":
+                await WriteHttpResponseAsync(stream, 200, "rendered value").ConfigureAwait(false);
+                break;
+            case "POST /api/config/core/check_config":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"valid\",\"errors\":null}").ConfigureAwait(false);
+                break;
+            case "POST /api/intent/handle":
+                await WriteHttpResponseAsync(stream, 200, "{\"response\":{\"speech\":{\"plain\":{\"speech\":\"Done\"}}}}").ConfigureAwait(false);
+                break;
+            case "POST /api/conversation/process":
+                await WriteHttpResponseAsync(stream, 200, "{\"conversation_id\":\"conversation-1\",\"continue_conversation\":false}").ConfigureAwait(false);
+                break;
+            case "GET /api/test/oversize":
+                await WriteHeadersAndStallAsync(stream, 100_000_000).ConfigureAwait(false);
+                break;
+            case "GET /api/test/stall":
+                await WriteHeadersAndStallAsync(stream, 10).ConfigureAwait(false);
+                break;
+            case "GET /api/test/invalid-json":
+                await WriteHttpResponseAsync(stream, 200, "{not-json").ConfigureAwait(false);
+                break;
+            case "POST /api/services/light/turn_on":
+                LastServiceCallBody = body;
+                await WriteHttpResponseAsync(stream, 200, "[]").ConfigureAwait(false);
+                break;
+            case "POST /api/services/test/fail":
+                await WriteHttpResponseAsync(stream, 400, "{\"message\":\"Validation failed\"}").ConfigureAwait(false);
+                break;
+            default:
+                await WriteHttpResponseAsync(stream, 404, "{\"message\":\"Not found\"}").ConfigureAwait(false);
+                break;
+        }
+    }
+
+    private static bool HasExactValue(
+        IReadOnlyDictionary<string, string> form,
+        string name,
+        string expected)
+    {
+        return form.TryGetValue(name, out var value)
+            && string.Equals(value, expected, StringComparison.Ordinal);
+    }
+
+    private static IReadOnlyDictionary<string, string> ParseForm(string body)
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var field in body.Split('&'))
+        {
+            var separator = field.IndexOf('=');
+            var name = separator < 0 ? field : field.Substring(0, separator);
+            var value = separator < 0 ? string.Empty : field.Substring(separator + 1);
+            values[DecodeFormValue(name)] = DecodeFormValue(value);
+        }
+
+        return values;
+    }
+
+    private static string DecodeFormValue(string value)
+    {
+        return Uri.UnescapeDataString(value.Replace('+', ' '));
+    }
+}

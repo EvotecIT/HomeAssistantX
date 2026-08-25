@@ -1,13 +1,7 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/HomeAssistantX/HomeAssistantX.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/HomeAssistantX.TestServer/HomeAssistantX.TestServer.csproj" />
-    <Project Path="tests/HomeAssistantX.Tests/HomeAssistantX.Tests.csproj" />
-    <Project Path="tests/HomeAssistantX.LiveTests/HomeAssistantX.LiveTests.csproj" />
-  </Folder>
-  <Folder Name="/samples/">
-    <Project Path="samples/HomeAssistantX.Console/HomeAssistantX.Console.csproj" />
-  </Folder>
+  <Project Path="HomeAssistantX/HomeAssistantX.csproj" />
+  <Project Path="HomeAssistantX.Examples/HomeAssistantX.Examples.csproj" />
+  <Project Path="HomeAssistantX.LiveTests/HomeAssistantX.LiveTests.csproj" />
+  <Project Path="HomeAssistantX.Tests/HomeAssistantX.Tests.csproj" />
+  <Project Path="HomeAssistantX.TestServer/HomeAssistantX.TestServer.csproj" />
 </Solution>

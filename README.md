@@ -4,6 +4,8 @@ HomeAssistantX is a typed, event-driven .NET client for the Home Assistant REST 
 
 The single `HomeAssistantX` package targets .NET Framework 4.7.2, .NET Standard 2.0, and .NET 10.
 
+See the [support matrix](https://github.com/EvotecIT/HomeAssistantX/blob/main/Docs/SUPPORT.md) for exact REST, WebSocket, OAuth, notification, registry, and platform boundaries.
+
 ## Install
 
 ```powershell
@@ -25,6 +27,8 @@ Console.WriteLine($"{configuration.LocationName}: {states.Count} entities");
 ```
 
 Production applications should implement `IHomeAssistantAccessTokenProvider` over their platform credential store rather than keeping tokens in configuration files.
+
+For interactive sign-in, `HomeAssistantOAuthClient` builds the authorization URI and implements code exchange, refresh, and refresh-token revocation. `RefreshingAccessTokenProvider` serializes proactive refresh and calls back into the host to persist replacement tokens securely.
 
 ## Receive changes without polling
 
@@ -71,6 +75,9 @@ Applications remain responsible for confirmations and authorization around conse
 - `Services` — service discovery and fluent REST/WebSocket calls
 - `Events` — event-bus subscriptions without polling
 - `Registries` — area, floor, device, entity, and config-entry snapshots
+- `System` — WebSocket config, panels, validation, targets, exposure settings, signed paths, and conversation commands
+
+`Rest` also covers the complete documented Core REST families: components, event catalogs, history, logbook, state representations, camera images, calendars, templates, configuration checks, intents, and conversations.
 
 Unknown JSON fields and entity attributes are preserved so a Home Assistant update or custom integration does not require an immediate package release. Product-specific models belong above this layer.
 
@@ -92,8 +99,8 @@ REST responses and WebSocket messages are size-bounded. The defaults are 64 MiB 
 ```powershell
 dotnet restore HomeAssistantX.slnx
 dotnet build HomeAssistantX.slnx --configuration Release --no-restore
-dotnet test tests/HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build
-dotnet pack src/HomeAssistantX/HomeAssistantX.csproj --configuration Release --no-build
+dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build
+dotnet pack HomeAssistantX/HomeAssistantX.csproj --configuration Release --no-build
 ```
 
 The contract suite uses a real loopback HTTP/WebSocket peer, including fragmented messages, out-of-order concurrent responses, state changes racing the initial snapshot, disconnect/reconnect, and missed-state reconciliation. It does not reduce protocol proof to mocked method calls.
