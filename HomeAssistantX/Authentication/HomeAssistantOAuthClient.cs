@@ -1,4 +1,5 @@
 ﻿using System.Net.Http;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using HomeAssistantX.Configuration;
@@ -105,7 +106,7 @@ public sealed class HomeAssistantOAuthClient : IDisposable
             using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                throw new HomeAssistantAuthenticationException("Home Assistant rejected the token revocation request.");
+                ThrowForOAuthStatus(response.StatusCode, "token revocation request");
             }
         }
         catch (HttpRequestException ex)
@@ -131,7 +132,7 @@ public sealed class HomeAssistantOAuthClient : IDisposable
                 cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                throw new HomeAssistantAuthenticationException("Home Assistant rejected the OAuth token request.");
+                ThrowForOAuthStatus(response.StatusCode, "OAuth token request");
             }
 
             var bytes = await ReadBoundedAsync(response.Content, cancellationToken).ConfigureAwait(false);
@@ -154,6 +155,10 @@ public sealed class HomeAssistantOAuthClient : IDisposable
         {
             throw new HomeAssistantConnectionException("The Home Assistant OAuth token request failed.", ex);
         }
+        catch (IOException ex)
+        {
+            throw new HomeAssistantConnectionException("The Home Assistant OAuth response ended unexpectedly.", ex);
+        }
         catch (JsonException ex)
         {
             throw new HomeAssistantProtocolException("Home Assistant returned invalid OAuth token JSON.", ex);
@@ -172,23 +177,59 @@ public sealed class HomeAssistantOAuthClient : IDisposable
 #else
         using var stream = await content.ReadAsStreamAsync().ConfigureAwait(false);
 #endif
+        using var cancellationRegistration = cancellationToken.Register(
+            state => ((Stream)state!).Dispose(),
+            stream);
         using var buffer = new MemoryStream();
         var chunk = new byte[8192];
-        while (true)
+        try
         {
-            var read = await stream.ReadAsync(chunk, 0, chunk.Length, cancellationToken).ConfigureAwait(false);
-            if (read == 0)
+            while (true)
             {
-                return buffer.ToArray();
-            }
+                var read = await stream.ReadAsync(chunk, 0, chunk.Length, cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    return buffer.ToArray();
+                }
 
-            if (buffer.Length + read > MaximumTokenResponseBytes)
-            {
-                throw new HomeAssistantProtocolException("The Home Assistant OAuth response exceeded the size limit.");
-            }
+                if (buffer.Length + read > MaximumTokenResponseBytes)
+                {
+                    throw new HomeAssistantProtocolException("The Home Assistant OAuth response exceeded the size limit.");
+                }
 
-            buffer.Write(chunk, 0, read);
+                buffer.Write(chunk, 0, read);
+            }
         }
+        catch (IOException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException("The Home Assistant OAuth response read was canceled.", cancellationToken);
+        }
+        catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException("The Home Assistant OAuth response read was canceled.", cancellationToken);
+        }
+    }
+
+    private static void ThrowForOAuthStatus(HttpStatusCode statusCode, string operation)
+    {
+        var numericStatus = (int)statusCode;
+        if (numericStatus == 429 || numericStatus >= 500)
+        {
+            var transportFailure = new HttpRequestException(
+                "Home Assistant returned transient HTTP " + numericStatus + ".");
+            throw new HomeAssistantConnectionException(
+                "The Home Assistant " + operation + " failed transiently.",
+                transportFailure);
+        }
+
+        if (numericStatus >= 400 && numericStatus < 500)
+        {
+            throw new HomeAssistantAuthenticationException(
+                "Home Assistant rejected the " + operation + " with HTTP " + numericStatus + ".");
+        }
+
+        throw new HomeAssistantProtocolException(
+            "Home Assistant returned unexpected HTTP " + numericStatus + " for the " + operation + ".");
     }
 
     private static void ValidateClient(Uri clientId, Uri redirectUri)
