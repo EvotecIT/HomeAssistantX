@@ -14,7 +14,7 @@ public sealed class HomeAssistantState
 
     [JsonPropertyName("attributes")]
     [JsonConverter(typeof(HomeAssistantAttributeDictionaryConverter))]
-    public Dictionary<string, JsonElement> Attributes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> Attributes { get; set; } = new(StringComparer.Ordinal);
 
     [JsonPropertyName("last_changed")]
     public DateTimeOffset? LastChanged { get; set; }
@@ -44,7 +44,7 @@ public sealed class HomeAssistantState
 
     public bool TryGetAttribute<T>(string name, out T? value)
     {
-        if (Attributes.TryGetValue(name, out var raw))
+        if (HomeAssistantAttributeReader.TryGetValue(Attributes, name, out var raw))
         {
             try
             {

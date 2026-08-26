@@ -15,21 +15,22 @@ internal sealed class HomeAssistantAttributeDictionaryConverter
     {
         if (reader.TokenType == JsonTokenType.Null)
         {
-            return new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         }
 
         using var document = JsonDocument.ParseValue(ref reader);
         if (document.RootElement.ValueKind != JsonValueKind.Object)
         {
-            return new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         }
 
-        return document.RootElement
-            .EnumerateObject()
-            .ToDictionary(
-                property => property.Name,
-                property => property.Value.Clone(),
-                StringComparer.OrdinalIgnoreCase);
+        var attributes = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            attributes[property.Name] = property.Value.Clone();
+        }
+
+        return attributes;
     }
 
     public override void Write(

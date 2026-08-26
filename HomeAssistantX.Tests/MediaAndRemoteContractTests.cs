@@ -88,6 +88,21 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public void StateDecoderPreservesCaseDistinctAttributesAndKnownReadsStayCaseInsensitive()
+    {
+        var state = DeserializeState(
+            "{\"entity_id\":\"media_player.case\",\"state\":\"idle\",\"attributes\":{" +
+            "\"friendly_name\":\"First\",\"Friendly_Name\":\"Second\",\"future\":1,\"Future\":2}}");
+
+        Assert.Equal(4, state.Attributes.Count);
+        Assert.Equal(1, state.Attributes["future"].GetInt32());
+        Assert.Equal(2, state.Attributes["Future"].GetInt32());
+        Assert.Equal("First", HomeAssistantMediaPlayerStatus.FromState(state).FriendlyName);
+        Assert.True(state.TryGetAttribute<string>("FRIENDLY_NAME", out var name));
+        Assert.Equal("First", name);
+    }
+
+    [Fact]
     public void RemoteStatusParsesActivityAndUnknownFieldsWithoutLosingRawState()
     {
         var raw = DeserializeState(

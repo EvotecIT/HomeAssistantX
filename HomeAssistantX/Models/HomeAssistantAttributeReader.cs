@@ -7,7 +7,7 @@ internal static class HomeAssistantAttributeReader
 {
     public static string? GetString(IReadOnlyDictionary<string, JsonElement> attributes, string name)
     {
-        if (!attributes.TryGetValue(name, out var value))
+        if (!TryGetValue(attributes, name, out var value))
         {
             return null;
         }
@@ -24,7 +24,7 @@ internal static class HomeAssistantAttributeReader
 
     public static double? GetDouble(IReadOnlyDictionary<string, JsonElement> attributes, string name)
     {
-        if (!attributes.TryGetValue(name, out var value))
+        if (!TryGetValue(attributes, name, out var value))
         {
             return null;
         }
@@ -46,7 +46,7 @@ internal static class HomeAssistantAttributeReader
 
     public static long? GetInt64(IReadOnlyDictionary<string, JsonElement> attributes, string name)
     {
-        if (!attributes.TryGetValue(name, out var value))
+        if (!TryGetValue(attributes, name, out var value))
         {
             return null;
         }
@@ -70,7 +70,7 @@ internal static class HomeAssistantAttributeReader
 
     public static bool? GetBoolean(IReadOnlyDictionary<string, JsonElement> attributes, string name)
     {
-        if (!attributes.TryGetValue(name, out var value))
+        if (!TryGetValue(attributes, name, out var value))
         {
             return null;
         }
@@ -90,7 +90,7 @@ internal static class HomeAssistantAttributeReader
         IReadOnlyDictionary<string, JsonElement> attributes,
         string name)
     {
-        if (!attributes.TryGetValue(name, out var value) || value.ValueKind != JsonValueKind.Array)
+        if (!TryGetValue(attributes, name, out var value) || value.ValueKind != JsonValueKind.Array)
         {
             return Array.Empty<string>();
         }
@@ -120,5 +120,21 @@ internal static class HomeAssistantAttributeReader
     private static bool IsFinite(double value)
     {
         return !double.IsNaN(value) && !double.IsInfinity(value);
+    }
+
+    internal static bool TryGetValue(IReadOnlyDictionary<string, JsonElement> attributes, string name, out JsonElement value)
+    {
+        if (attributes.TryGetValue(name, out value)) return true;
+        foreach (var attribute in attributes)
+        {
+            if (string.Equals(attribute.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = attribute.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 }
