@@ -53,7 +53,7 @@ public sealed class HomeAssistantIntegrationClient
         string entryId,
         CancellationToken cancellationToken = default)
     {
-        return _rest.SendAsync<HomeAssistantIntegrationOperationResult>(
+        return _rest.SendHomeAssistantAsync<HomeAssistantIntegrationOperationResult>(
             HttpMethod.Post,
             "api/config/config_entries/entry/" + Escape(entryId, nameof(entryId)) + "/reload",
             null,
@@ -83,7 +83,7 @@ public sealed class HomeAssistantIntegrationClient
         string entryId,
         CancellationToken cancellationToken = default)
     {
-        return _rest.SendAsync<JsonElement>(
+        return _rest.SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
             "api/config/config_entries/flow",
             new Dictionary<string, object?>
@@ -104,7 +104,7 @@ public sealed class HomeAssistantIntegrationClient
             throw new ArgumentNullException(nameof(input));
         }
 
-        return _rest.SendAsync<JsonElement>(
+        return _rest.SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
             "api/config/config_entries/flow/" + Escape(flowId, nameof(flowId)),
             input,

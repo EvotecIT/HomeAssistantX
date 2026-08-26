@@ -36,6 +36,19 @@ public sealed class RestClientContractTests
     }
 
     [Fact]
+    public async Task RawGenericResponsesRemainCaseInsensitiveForConsumerDtos()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var response = await client.Rest.SendAsync<ConsumerResponse>(
+            HttpMethod.Get,
+            "api/test/raw-dto");
+
+        Assert.Equal(1, response.Value);
+    }
+
+    [Fact]
     public async Task FluentServiceCallProducesTheHomeAssistantRestContract()
     {
         using var server = new TestHomeAssistantServer();
@@ -216,5 +229,10 @@ public sealed class RestClientContractTests
             Interlocked.Increment(ref _recoveryCount);
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         }
+    }
+
+    private sealed class ConsumerResponse
+    {
+        public int Value { get; set; }
     }
 }

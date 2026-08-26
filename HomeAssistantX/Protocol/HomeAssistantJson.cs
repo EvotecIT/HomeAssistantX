@@ -13,6 +13,11 @@ internal static class HomeAssistantJson
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    public static JsonSerializerOptions RawSerializerOptions { get; } = new(SerializerOptions)
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     public static JsonElement Clone(JsonElement value)
     {
         return value.Clone();

@@ -97,6 +97,9 @@ internal sealed partial class TestHomeAssistantServer
                     "{\"location_name\":\"Test Home\",\"Location_Name\":\"Case-distinct extension\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}")
                     .ConfigureAwait(false);
                 break;
+            case "GET /api/test/raw-dto":
+                await WriteHttpResponseAsync(stream, 200, "{\"value\":1}").ConfigureAwait(false);
+                break;
             case "GET /api/components":
                 await WriteHttpResponseAsync(stream, 200, "[\"api\",\"websocket_api\",\"recorder\"]").ConfigureAwait(false);
                 break;

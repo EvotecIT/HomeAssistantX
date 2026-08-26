@@ -11,13 +11,13 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets the loaded Home Assistant components.</summary>
     public async Task<IReadOnlyList<string>> GetComponentsAsync(CancellationToken cancellationToken = default)
     {
-        return await SendAsync<string[]>(HttpMethod.Get, "api/components", null, cancellationToken).ConfigureAwait(false);
+        return await SendHomeAssistantAsync<string[]>(HttpMethod.Get, "api/components", null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Gets the event types and current listener counts.</summary>
     public async Task<IReadOnlyList<HomeAssistantEventType>> GetEventTypesAsync(CancellationToken cancellationToken = default)
     {
-        return await SendAsync<HomeAssistantEventType[]>(HttpMethod.Get, "api/events", null, cancellationToken)
+        return await SendHomeAssistantAsync<HomeAssistantEventType[]>(HttpMethod.Get, "api/events", null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -46,7 +46,7 @@ public sealed partial class HomeAssistantRestClient
         AddFlag(parameters, "no_attributes", query.NoAttributes);
         AddFlag(parameters, "significant_changes_only", query.SignificantChangesOnly);
 
-        var response = await SendAsync<HomeAssistantState[][]>(
+        var response = await SendHomeAssistantAsync<HomeAssistantState[][]>(
             HttpMethod.Get,
             AppendQuery(path, parameters),
             null,
@@ -73,7 +73,7 @@ public sealed partial class HomeAssistantRestClient
             parameters.Add(new KeyValuePair<string, string?>("entity", query.EntityId));
         }
 
-        return await SendAsync<HomeAssistantLogbookEntry[]>(
+        return await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
             HttpMethod.Get,
             AppendQuery(path, parameters),
             null,
@@ -95,7 +95,7 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets all calendar entities.</summary>
     public async Task<IReadOnlyList<HomeAssistantCalendar>> GetCalendarsAsync(CancellationToken cancellationToken = default)
     {
-        return await SendAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
+        return await SendHomeAssistantAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -118,7 +118,7 @@ public sealed partial class HomeAssistantRestClient
                 new KeyValuePair<string, string?>("start", FormatTimestamp(start)),
                 new KeyValuePair<string, string?>("end", FormatTimestamp(end))
             });
-        return await SendAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
+        return await SendHomeAssistantAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -133,7 +133,7 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentNullException(nameof(update));
         }
 
-        return SendAsync<HomeAssistantState>(
+        return SendHomeAssistantAsync<HomeAssistantState>(
             HttpMethod.Post,
             "api/states/" + EscapePath(entityId),
             update,
@@ -143,7 +143,7 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Deletes a state representation from Home Assistant.</summary>
     public Task<JsonElement> DeleteStateAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        return SendAsync<JsonElement>(
+        return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Delete,
             "api/states/" + EscapePath(entityId),
             null,
@@ -156,7 +156,7 @@ public sealed partial class HomeAssistantRestClient
         IReadOnlyDictionary<string, object?>? eventData = null,
         CancellationToken cancellationToken = default)
     {
-        return SendAsync<JsonElement>(
+        return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
             "api/events/" + EscapePath(eventType),
             eventData ?? new Dictionary<string, object?>(),
@@ -186,7 +186,7 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Checks whether the active Home Assistant configuration is valid.</summary>
     public Task<HomeAssistantConfigurationCheck> CheckConfigurationAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync<HomeAssistantConfigurationCheck>(
+        return SendHomeAssistantAsync<HomeAssistantConfigurationCheck>(
             HttpMethod.Post,
             "api/config/core/check_config",
             new Dictionary<string, object?>(),
@@ -203,7 +203,7 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentNullException(nameof(request));
         }
 
-        return SendAsync<JsonElement>(HttpMethod.Post, "api/intent/handle", request, cancellationToken);
+        return SendHomeAssistantAsync<JsonElement>(HttpMethod.Post, "api/intent/handle", request, cancellationToken);
     }
 
     /// <summary>Processes text through the Home Assistant conversation API.</summary>
@@ -219,7 +219,7 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentException("Conversation text is required.", nameof(text));
         }
 
-        return SendAsync<JsonElement>(
+        return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
             "api/conversation/process",
             BuildConversationPayload(text, language, agentId, conversationId),
