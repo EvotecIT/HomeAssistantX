@@ -102,14 +102,16 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
-    public void CalendarInputRejectsMixedInvalidOrNonPositiveRangesBeforeNetworkUse()
+    public void CalendarInputAcceptsOffsetTransitionsAndRejectsInvalidRangesBeforeNetworkUse()
     {
         var instant = new DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
         Assert.Throws<ArgumentOutOfRangeException>(() => HomeAssistantCalendarEventInput.Timed(instant, instant, "Invalid"));
-        Assert.Throws<ArgumentException>(() => HomeAssistantCalendarEventInput.Timed(
-            instant,
-            instant.AddHours(2).ToOffset(TimeSpan.FromHours(1)),
-            "Mixed offsets"));
+        var crossingOffset = HomeAssistantCalendarEventInput.Timed(
+            new DateTimeOffset(2026, 11, 1, 1, 30, 0, TimeSpan.FromHours(-4)),
+            new DateTimeOffset(2026, 11, 1, 2, 30, 0, TimeSpan.FromHours(-5)),
+            "Offset transition");
+        Assert.EndsWith("-04:00", crossingOffset.Start, StringComparison.Ordinal);
+        Assert.EndsWith("-05:00", crossingOffset.End, StringComparison.Ordinal);
         Assert.Throws<ArgumentException>(() => HomeAssistantCalendarEventInput.AllDay("26-08-2026", "2026-08-27", "Invalid"));
         Assert.Throws<ArgumentOutOfRangeException>(() => HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-27", "Invalid"));
         var input = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Invalid recurrence");

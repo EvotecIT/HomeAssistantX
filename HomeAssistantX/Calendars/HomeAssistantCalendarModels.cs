@@ -49,11 +49,6 @@ public sealed class HomeAssistantCalendarEventInput
         {
             throw new ArgumentOutOfRangeException(nameof(end), "The event end must be after its start.");
         }
-        if (start.Offset != end.Offset)
-        {
-            throw new ArgumentException("Timed event boundaries must use the same UTC offset.", nameof(end));
-        }
-
         return new HomeAssistantCalendarEventInput(start.ToString("O", CultureInfo.InvariantCulture), end.ToString("O", CultureInfo.InvariantCulture), summary);
     }
 
