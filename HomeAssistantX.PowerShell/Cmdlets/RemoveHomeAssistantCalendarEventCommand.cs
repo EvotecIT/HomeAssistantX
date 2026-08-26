@@ -33,6 +33,7 @@ public sealed class RemoveHomeAssistantCalendarEventCommand : HomeAssistantCmdle
             RecurrenceId = RecurrenceId,
             RecurrenceRange = RecurrenceRange
         };
+        reference.Validate();
         if (ShouldProcess(EntityId + "/" + Uid, "Delete Home Assistant calendar event"))
         {
             await Client.Calendars.DeleteEventAsync(EntityId, reference, CancelToken).ConfigureAwait(false);

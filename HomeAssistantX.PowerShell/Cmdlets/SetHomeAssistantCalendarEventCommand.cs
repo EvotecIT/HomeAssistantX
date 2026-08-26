@@ -85,6 +85,17 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
         input.Location = Location;
         input.RecurrenceRule = RecurrenceRule;
 
+        HomeAssistantCalendarEventReference? reference = null;
+        if (update)
+        {
+            reference = new HomeAssistantCalendarEventReference(Uid)
+            {
+                RecurrenceId = RecurrenceId,
+                RecurrenceRange = RecurrenceRange
+            };
+            reference.Validate();
+        }
+
         var action = update ? "Update Home Assistant calendar event" : "Create Home Assistant calendar event";
         if (!ShouldProcess(EntityId + (update ? "/" + Uid : string.Empty), action))
         {
@@ -97,10 +108,6 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
             return;
         }
 
-        await Client.Calendars.UpdateEventAsync(EntityId, new HomeAssistantCalendarEventReference(Uid)
-        {
-            RecurrenceId = RecurrenceId,
-            RecurrenceRange = RecurrenceRange
-        }, input, CancelToken).ConfigureAwait(false);
+        await Client.Calendars.UpdateEventAsync(EntityId, reference!, input, CancelToken).ConfigureAwait(false);
     }
 }

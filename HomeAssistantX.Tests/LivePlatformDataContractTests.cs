@@ -116,6 +116,10 @@ public sealed class LivePlatformDataContractTests
         Assert.Throws<ArgumentOutOfRangeException>(() => HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-27", "Invalid"));
         var input = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Invalid recurrence");
         Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=SECONDLY");
+        Assert.Throws<ArgumentException>(() => new HomeAssistantCalendarEventReference("event-1") { RecurrenceRange = "THISANDFUTURE" }.Validate());
+        Assert.Throws<ArgumentException>(() => new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "THIS" }.Validate());
+        var recurrence = new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "thisandfuture" };
+        recurrence.Validate();
     }
 
     [Fact]

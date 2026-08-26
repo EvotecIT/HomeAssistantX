@@ -361,7 +361,9 @@ try {
     foreach ($invalidPlatformData in @(
         { Set-HomeAssistantLabel -LabelId security -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCategory -Scope automation -CategoryId comfort -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-27 -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-27 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceRange THISANDFUTURE -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-28 -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceId 20260827 -RecurrenceRange THIS -WhatIf -ErrorAction Stop }
     )) {
         $rejected = $false
         try { $null = & $invalidPlatformData } catch { $rejected = $true }

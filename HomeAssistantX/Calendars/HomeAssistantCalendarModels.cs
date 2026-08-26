@@ -144,8 +144,21 @@ public sealed class HomeAssistantCalendarEventReference
 
     public string? RecurrenceRange { get; set; }
 
+    /// <summary>Validates recurrence targeting before an update or delete is dispatched.</summary>
+    public void Validate()
+    {
+        if (RecurrenceId is not null && string.IsNullOrWhiteSpace(RecurrenceId))
+            throw new ArgumentException("A supplied recurrence identifier cannot be empty.", nameof(RecurrenceId));
+        if (RecurrenceRange is null) return;
+        if (string.IsNullOrWhiteSpace(RecurrenceId))
+            throw new ArgumentException("RecurrenceRange requires RecurrenceId.", nameof(RecurrenceRange));
+        if (!string.Equals(RecurrenceRange, "THISANDFUTURE", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The supported recurrence range is THISANDFUTURE.", nameof(RecurrenceRange));
+    }
+
     internal void AddTo(IDictionary<string, object?> payload)
     {
+        Validate();
         payload["uid"] = Uid;
         if (RecurrenceId is not null)
         {
@@ -154,7 +167,7 @@ public sealed class HomeAssistantCalendarEventReference
 
         if (RecurrenceRange is not null)
         {
-            payload["recurrence_range"] = RecurrenceRange;
+            payload["recurrence_range"] = "THISANDFUTURE";
         }
     }
 }
