@@ -208,7 +208,7 @@ public sealed class HomeAssistantLabel
     public double? ModifiedAtEpochSeconds { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>A Home Assistant category within an explicit registry scope.</summary>
@@ -230,7 +230,7 @@ public sealed class HomeAssistantCategory
     public double? ModifiedAtEpochSeconds { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>Fields used to create a Home Assistant label.</summary>

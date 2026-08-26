@@ -11,6 +11,18 @@ namespace HomeAssistantX.Tests;
 public sealed class LivePlatformDataContractTests
 {
     [Fact]
+    public void NewPlatformExtensionDataPreservesCaseDistinctUnknownFields()
+    {
+        var notification = JsonSerializer.Deserialize<HomeAssistantPersistentNotification>(
+            "{\"notification_id\":\"notice\",\"message\":\"Ready\",\"future\":1,\"Future\":2}");
+
+        Assert.NotNull(notification);
+        Assert.Equal(2, notification.AdditionalData.Count);
+        Assert.Equal(1, notification.AdditionalData["future"].GetInt32());
+        Assert.Equal(2, notification.AdditionalData["Future"].GetInt32());
+    }
+
+    [Fact]
     public async Task PersistentNotificationsReadSendDismissAndStreamWithoutPolling()
     {
         using var server = new TestHomeAssistantServer();
