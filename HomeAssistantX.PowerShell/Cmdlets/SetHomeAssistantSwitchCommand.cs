@@ -1,4 +1,4 @@
-using System.Management.Automation;
+﻿using System.Management.Automation;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Services;
 
@@ -19,6 +19,11 @@ public sealed class SetHomeAssistantSwitchCommand : HomeAssistantTargetCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        if (!Enum.IsDefined(typeof(HomeAssistantPowerAction), Power))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Power), Power, "Unsupported switch power action.");
+        }
+
         var target = await ResolveTargetAsync("switch").ConfigureAwait(false);
         if (!ShouldProcess(target.Description, "Set switch power to " + Power))
         {
@@ -29,7 +34,8 @@ public sealed class SetHomeAssistantSwitchCommand : HomeAssistantTargetCmdlet
         {
             HomeAssistantPowerAction.On => await Client.Controls.Switches.TurnOnAsync(target.Target, CancelToken).ConfigureAwait(false),
             HomeAssistantPowerAction.Off => await Client.Controls.Switches.TurnOffAsync(target.Target, CancelToken).ConfigureAwait(false),
-            _ => await Client.Controls.Switches.ToggleAsync(target.Target, CancelToken).ConfigureAwait(false)
+            HomeAssistantPowerAction.Toggle => await Client.Controls.Switches.ToggleAsync(target.Target, CancelToken).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(Power), Power, "Unsupported switch power action.")
         };
         WriteObject(result);
     }

@@ -79,6 +79,11 @@ Each typed command has target parameter sets for entity, device, area, floor,
 and joined entity pipeline input. It validates common values and uses
 `ShouldProcess`. Lock operations use high confirmation impact.
 
+Climate target ranges require both low and high values and are mutually
+exclusive with `-Temperature`. Media-player `-Power Off` and `-Power Toggle`
+are standalone operations; use `-Power On` or omit `-Power` when applying
+playback, source, mute, volume, or content changes in the same command.
+
 `Invoke-HomeAssistantAction` remains the extensible path for a custom action or
 field that does not belong in a common typed command:
 

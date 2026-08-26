@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Registries;
@@ -62,7 +62,7 @@ public sealed class HomeAssistantInventoryClient
 
     public HomeAssistantEntityInfo ResolveEntity(HomeAssistantInventorySnapshot snapshot, string idOrName)
     {
-        return ResolveUnique(snapshot.Entities, idOrName, x => x.EntityId, x => x.Name, null, "entity");
+        return ResolveUnique(snapshot.Entities, idOrName, x => x.EntityId, x => x.Name, x => x.Aliases, "entity");
     }
 
     private static HomeAssistantInventorySnapshot Build(
@@ -171,7 +171,8 @@ public sealed class HomeAssistantInventoryClient
         return new HomeAssistantEntityInfo
         {
             EntityId = entityId,
-            Name = FirstNonEmpty(entry?.Name, friendlyName, entry?.OriginalName, entityId),
+            Name = FirstNonEmpty(friendlyName, entry?.Name, entry?.OriginalName, entityId),
+            Aliases = entry?.Aliases ?? Array.Empty<string>(),
             Domain = GetDomain(entityId),
             State = state?.State,
             DeviceId = device?.Id,
@@ -205,7 +206,16 @@ public sealed class HomeAssistantInventoryClient
 
         if (query.Entity is { Count: > 0 })
         {
-            entities = entities.Where(x => query.Entity.Any(value => Matches(x.EntityId, value) || Matches(x.Name, value)));
+            var selectedEntityIds = new HashSet<string>(
+                query.Entity.Select(value => ResolveUnique(
+                    snapshot.Entities,
+                    value,
+                    x => x.EntityId,
+                    x => x.Name,
+                    x => x.Aliases,
+                    "entity")).Select(x => x.EntityId),
+                StringComparer.OrdinalIgnoreCase);
+            entities = entities.Where(x => selectedEntityIds.Contains(x.EntityId));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Name))

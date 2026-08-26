@@ -1,4 +1,4 @@
-using System.Management.Automation;
+﻿using System.Management.Automation;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Services;
 
@@ -45,6 +45,11 @@ public sealed class SetHomeAssistantLightCommand : HomeAssistantTargetCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        if (!Enum.IsDefined(typeof(HomeAssistantPowerAction), Power))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Power), Power, "Unsupported light power action.");
+        }
+
         var target = await ResolveTargetAsync("light").ConfigureAwait(false);
         if (Power == HomeAssistantPowerAction.Off
             && (BrightnessPercent.HasValue || ColorTemperatureKelvin.HasValue || RgbColor is not null || !string.IsNullOrWhiteSpace(Effect)))
@@ -67,9 +72,11 @@ public sealed class SetHomeAssistantLightCommand : HomeAssistantTargetCmdlet
             case HomeAssistantPowerAction.Off:
                 result = await Client.Controls.Lights.TurnOffAsync(target.Target, transition, CancelToken).ConfigureAwait(false);
                 break;
-            default:
+            case HomeAssistantPowerAction.Toggle:
                 result = await Client.Controls.Lights.ToggleAsync(target.Target, CreateOptions(transition), CancelToken).ConfigureAwait(false);
                 break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(Power), Power, "Unsupported light power action.");
         }
 
         WriteObject(result);

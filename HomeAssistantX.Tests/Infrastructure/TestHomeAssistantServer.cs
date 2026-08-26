@@ -520,7 +520,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"id\":\"device-1\",\"area_id\":\"kitchen\",\"name\":\"Kitchen Sensor\",\"manufacturer\":\"Evotec\",\"config_entries\":[\"entry-1\"]}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/entity_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"device_class\":\"temperature\"},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"device_class\":\"temperature\"},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"aliases\":[\"Island fixture\"],\"has_entity_name\":true}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get":
                 await session.SendResultAsync(id, ParseJson("{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);

@@ -68,11 +68,30 @@ public sealed class HomeAssistantLightOptions
 
     internal void Apply(HomeAssistantX.Services.HomeAssistantServiceCall call)
     {
-        if (BrightnessPercent.HasValue) call.WithData("brightness_pct", BrightnessPercent.Value);
-        if (ColorTemperatureKelvin.HasValue) call.WithData("color_temp_kelvin", ColorTemperatureKelvin.Value);
-        if (RgbColor is not null) call.WithData("rgb_color", RgbColor);
-        if (!string.IsNullOrWhiteSpace(Effect)) call.WithData("effect", Effect);
-        if (Transition.HasValue) call.WithData("transition", Transition.Value.TotalSeconds);
+        if (BrightnessPercent.HasValue)
+        {
+            call.WithData("brightness_pct", BrightnessPercent.Value);
+        }
+
+        if (ColorTemperatureKelvin.HasValue)
+        {
+            call.WithData("color_temp_kelvin", ColorTemperatureKelvin.Value);
+        }
+
+        if (RgbColor is not null)
+        {
+            call.WithData("rgb_color", RgbColor);
+        }
+
+        if (!string.IsNullOrWhiteSpace(Effect))
+        {
+            call.WithData("effect", Effect);
+        }
+
+        if (Transition.HasValue)
+        {
+            call.WithData("transition", Transition.Value.TotalSeconds);
+        }
     }
 }
 
@@ -100,6 +119,30 @@ public sealed class HomeAssistantClimateOptions
     }
 
     internal bool HasTemperature => Temperature.HasValue || TargetTemperatureLow.HasValue || TargetTemperatureHigh.HasValue;
+
+    internal void Validate()
+    {
+        ControlValidation.Finite(Temperature, nameof(Temperature));
+        ControlValidation.Finite(TargetTemperatureLow, nameof(TargetTemperatureLow));
+        ControlValidation.Finite(TargetTemperatureHigh, nameof(TargetTemperatureHigh));
+
+        var hasLow = TargetTemperatureLow.HasValue;
+        var hasHigh = TargetTemperatureHigh.HasValue;
+        if (hasLow != hasHigh)
+        {
+            throw new ArgumentException("TargetTemperatureLow and TargetTemperatureHigh must be supplied together.");
+        }
+
+        if (Temperature.HasValue && hasLow)
+        {
+            throw new ArgumentException("Temperature cannot be combined with a target temperature range.");
+        }
+
+        if (hasLow && TargetTemperatureLow!.Value > TargetTemperatureHigh!.Value)
+        {
+            throw new ArgumentException("TargetTemperatureLow cannot be greater than TargetTemperatureHigh.");
+        }
+    }
 }
 
 /// <summary>Typed media-player changes that may be applied in one logical operation.</summary>
@@ -130,9 +173,19 @@ internal static class ControlValidation
 {
     public static double? Percent(double? value, string name)
     {
-        if (value.HasValue && (value.Value < 0 || value.Value > 100))
+        if (value.HasValue && (!IsFinite(value.Value) || value.Value < 0 || value.Value > 100))
         {
             throw new ArgumentOutOfRangeException(name, "The value must be between 0 and 100.");
+        }
+
+        return value;
+    }
+
+    public static double? Finite(double? value, string name)
+    {
+        if (value.HasValue && !IsFinite(value.Value))
+        {
+            throw new ArgumentOutOfRangeException(name, "The value must be a finite number.");
         }
 
         return value;
@@ -166,5 +219,10 @@ internal static class ControlValidation
         }
 
         return value?.ToArray();
+    }
+
+    private static bool IsFinite(double value)
+    {
+        return !double.IsNaN(value) && !double.IsInfinity(value);
     }
 }

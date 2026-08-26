@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using HomeAssistantX.Models;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Services;
@@ -79,6 +79,8 @@ public sealed class HomeAssistantEntityInfo
     public string EntityId { get; internal set; } = string.Empty;
 
     public string Name { get; internal set; } = string.Empty;
+
+    public IReadOnlyList<string> Aliases { get; internal set; } = Array.Empty<string>();
 
     public string Domain { get; internal set; } = string.Empty;
 

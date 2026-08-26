@@ -1,4 +1,4 @@
-using System.Management.Automation;
+﻿using System.Management.Automation;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Services;
 
@@ -56,6 +56,21 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
             && !Humidity.HasValue)
         {
             throw new ArgumentException("Specify at least one climate value.");
+        }
+
+        if (TargetTemperatureLow.HasValue != TargetTemperatureHigh.HasValue)
+        {
+            throw new ArgumentException("TargetTemperatureLow and TargetTemperatureHigh must be supplied together.");
+        }
+
+        if (Temperature.HasValue && TargetTemperatureLow.HasValue)
+        {
+            throw new ArgumentException("Temperature cannot be combined with a target temperature range.");
+        }
+
+        if (TargetTemperatureLow.HasValue && TargetTemperatureLow.Value > TargetTemperatureHigh!.Value)
+        {
+            throw new ArgumentException("TargetTemperatureLow cannot be greater than TargetTemperatureHigh.");
         }
 
         var options = new HomeAssistantClimateOptions

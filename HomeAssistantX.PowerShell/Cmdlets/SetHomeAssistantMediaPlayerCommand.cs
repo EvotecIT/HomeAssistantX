@@ -1,4 +1,4 @@
-using System.Management.Automation;
+﻿using System.Management.Automation;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Services;
 
@@ -61,6 +61,16 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         if (string.IsNullOrWhiteSpace(MediaContentId) != string.IsNullOrWhiteSpace(MediaContentType))
         {
             throw new ArgumentException("MediaContentId and MediaContentType must be supplied together.");
+        }
+
+        var hasNonPowerOperation = Playback.HasValue
+            || VolumePercent.HasValue
+            || Muted.HasValue
+            || !string.IsNullOrWhiteSpace(Source)
+            || !string.IsNullOrWhiteSpace(MediaContentId);
+        if (Power is HomeAssistantPowerAction.Off or HomeAssistantPowerAction.Toggle && hasNonPowerOperation)
+        {
+            throw new ArgumentException("Power Off and Toggle cannot be combined with other media-player operations.");
         }
 
         var options = new HomeAssistantMediaPlayerOptions

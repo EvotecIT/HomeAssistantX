@@ -1,4 +1,4 @@
-#if NET10_0
+﻿#if NET10_0
 using System.Text.Json;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Exceptions;
@@ -31,6 +31,8 @@ public sealed class InventoryAndControlsContractTests
         Assert.Equal("Kitchen", light.AreaName);
         Assert.Equal("Ground", light.FloorName);
         Assert.Equal("Kitchen Sensor", light.DeviceName);
+        Assert.Equal("Kitchen light", light.Name);
+        Assert.Equal("Island fixture", Assert.Single(light.Aliases));
         Assert.Equal("test", light.IntegrationDomain);
         Assert.Equal("Test integration", light.IntegrationTitle);
         Assert.Equal("off", light.State);
@@ -61,6 +63,10 @@ public sealed class InventoryAndControlsContractTests
         Assert.Equal(kitchen.AreaId, kitchenByAlias.AreaId);
         Assert.Equal("ground", floorByAlias.FloorId);
         Assert.Equal("light.kitchen", Assert.Single(entities).EntityId);
+        Assert.Equal("light.kitchen", Assert.Single(await client.Inventory.GetEntitiesAsync(new HomeAssistantEntityQuery
+        {
+            Entity = new[] { "Island fixture" }
+        })).EntityId);
         Assert.Throws<HomeAssistantLookupException>(() => client.Inventory.ResolveEntity(snapshot, "Missing light"));
     }
 
@@ -79,6 +85,14 @@ public sealed class InventoryAndControlsContractTests
 
         Assert.Contains("light.kitchen", exception.Message);
         Assert.Contains("switch.kitchen", exception.Message);
+        await Assert.ThrowsAsync<HomeAssistantLookupException>(() => client.Inventory.GetEntitiesAsync(new HomeAssistantEntityQuery
+        {
+            Entity = new[] { "Kitchen light" }
+        }));
+        await Assert.ThrowsAsync<HomeAssistantLookupException>(() => client.Inventory.GetEntitiesAsync(new HomeAssistantEntityQuery
+        {
+            Entity = new[] { "light.kitchen", "Missing light" }
+        }));
     }
 
     [Fact]
@@ -161,6 +175,69 @@ public sealed class InventoryAndControlsContractTests
         Assert.Null(server.LastServiceCallBody);
     }
 
+    [Fact]
+    public async Task InvalidEnumValuesFailBeforeAnyServiceCall()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("lock.front_door");
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.Locks.ActAsync(
+            target,
+            (HomeAssistantLockAction)99));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.Covers.ActAsync(
+            HomeAssistantTarget.ForEntity("cover.kitchen"),
+            (HomeAssistantCoverAction)99));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions { Power = (HomeAssistantPowerAction)99 }));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions { Playback = (HomeAssistantMediaPlaybackAction)99 }));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task ClimateShapeValidationFailsBeforeAnyServiceCall()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("climate.kitchen");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { TargetTemperatureLow = 18 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { Temperature = 21, TargetTemperatureLow = 18, TargetTemperatureHigh = 24 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { TargetTemperatureLow = 24, TargetTemperatureHigh = 18 }));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { Temperature = double.NaN }));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task ContradictoryMediaOperationsFailBeforeAnyServiceCall()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions
+            {
+                Power = HomeAssistantPowerAction.Off,
+                Playback = HomeAssistantMediaPlaybackAction.Play
+            }));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
     [Theory]
     [InlineData(-1)]
     [InlineData(101)]
@@ -168,6 +245,14 @@ public sealed class InventoryAndControlsContractTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantLightOptions { BrightnessPercent = value });
         Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantMediaPlayerOptions { VolumePercent = value });
+    }
+
+    [Fact]
+    public void TypedPercentValuesRejectNonFiniteInput()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantLightOptions { BrightnessPercent = double.NaN });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantMediaPlayerOptions { VolumePercent = double.PositiveInfinity });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantClimateOptions { Humidity = double.NegativeInfinity });
     }
 }
 #endif

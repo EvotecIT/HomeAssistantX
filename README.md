@@ -129,9 +129,10 @@ Home Assistant calls a physical location an **area**. `-Room` is accepted as an
 alias where it helps interactive use. Entity area assignment follows Home
 Assistant: an entity's own area wins; otherwise it inherits its device's area.
 
-Discovery objects retain both friendly names and native IDs. A name must match
-exactly one object. Ambiguous names fail with candidate IDs so a script never
-controls an arbitrary device.
+Discovery objects retain Home Assistant's full friendly names, registry aliases,
+and native IDs. Every explicit `-Entity` value must resolve exactly once;
+ambiguous or missing names fail with candidate IDs instead of producing a
+partial selection.
 
 ### See what an entity can do
 
@@ -173,6 +174,12 @@ Typed commands validate common values, expose PowerShell completion for enums,
 resolve friendly targets, and support `-WhatIf` / `-Confirm`. Lock operations
 use high confirmation impact. The calling application or script still owns its
 authorization policy for consequential actions.
+
+Range-based climate calls require both low and high temperatures and cannot be
+combined with a scalar temperature. Media-player `Off` and `Toggle` are
+standalone power operations; combine additional playback, source, or volume
+changes with `Power On` or omit `Power` so later actions cannot reverse a
+requested shutdown.
 
 ### Keep explicit connections when you need them
 

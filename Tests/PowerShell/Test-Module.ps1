@@ -210,6 +210,32 @@ try {
         throw 'WhatIf invoked the typed light control.'
     }
 
+    $invalidClimateRejected = $false
+    try {
+        $null = Set-HomeAssistantClimate -Area Kitchen -TargetTemperatureLow 18 -Confirm:$false -ErrorAction Stop
+    } catch {
+        $invalidClimateRejected = $true
+    }
+    if (-not $invalidClimateRejected) {
+        throw 'The climate cmdlet accepted an incomplete target temperature range.'
+    }
+
+    $invalidMediaRejected = $false
+    try {
+        $null = Set-HomeAssistantMediaPlayer -Area Kitchen -Power Off -Playback Play -Confirm:$false -ErrorAction Stop
+    } catch {
+        $invalidMediaRejected = $true
+    }
+    if (-not $invalidMediaRejected) {
+        throw 'The media-player cmdlet accepted contradictory power and playback operations.'
+    }
+
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+        throw 'Invalid typed-control input invoked a Home Assistant action.'
+    }
+
     $null = Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -Confirm:$false
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
