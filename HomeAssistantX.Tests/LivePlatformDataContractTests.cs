@@ -75,6 +75,8 @@ public sealed class LivePlatformDataContractTests
         Assert.Equal("calendar.home", Assert.Single(await client.Calendars.GetAsync()).EntityId);
         var restEvent = Assert.Single(await client.Calendars.GetEventsAsync("calendar.home", start, end));
         Assert.Equal(18, restEvent.Start!.DateTime!.Value.Hour);
+        Assert.Equal(1, restEvent.Start.AdditionalData["future"].GetInt32());
+        Assert.Equal(2, restEvent.Start.AdditionalData["Future"].GetInt32());
 
         var updateReceived = new TaskCompletionSource<HomeAssistantCalendarEventUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = await client.Calendars.SubscribeAsync("calendar.home", start, end, (update, _) =>
@@ -141,7 +143,8 @@ public sealed class LivePlatformDataContractTests
         using var client = TestClientFactory.Create(server);
 
         var snapshot = await client.Registries.GetSnapshotAsync();
-        Assert.Equal("security", Assert.Single(snapshot.Labels).LabelId);
+        Assert.Contains(snapshot.Labels, label => label.LabelId == "security");
+        Assert.Contains(snapshot.Labels, label => label.LabelId == "security-name");
 
         var created = await client.Registries.CreateLabelAsync(new HomeAssistantLabelCreate("Security")
         {

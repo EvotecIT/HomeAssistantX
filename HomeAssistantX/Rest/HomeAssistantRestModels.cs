@@ -151,7 +151,7 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
                 : null,
             AdditionalData = root.EnumerateObject()
                 .Where(property => property.Name != "date" && property.Name != "dateTime")
-                .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.Ordinal)
         };
     }
 

@@ -17,6 +17,7 @@ public sealed class RemoveHomeAssistantNotificationCommand : HomeAssistantCmdlet
 
     /// <summary>Dismisses every current persistent notification.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "All")]
+    [ValidateSwitchPresent]
     public SwitchParameter All { get; set; }
 
     protected override async Task ProcessRecordAsync()

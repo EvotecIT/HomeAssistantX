@@ -26,14 +26,17 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
 
     /// <summary>Installs a Home Assistant Core update through Supervisor.</summary>
     [Parameter(Mandatory = true, ParameterSetName = CoreParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Core { get; set; }
 
     /// <summary>Installs a Supervisor update.</summary>
     [Parameter(Mandatory = true, ParameterSetName = SupervisorParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Supervisor { get; set; }
 
     /// <summary>Installs a Home Assistant OS update.</summary>
     [Parameter(Mandatory = true, ParameterSetName = OperatingSystemParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter OperatingSystem { get; set; }
 
     /// <summary>Supervisor app/add-on slug to update.</summary>

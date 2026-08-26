@@ -26,14 +26,17 @@ public sealed class GetHomeAssistantInfoCommand : HomeAssistantCmdlet
 
     /// <summary>Returns discovered operational capabilities and their availability.</summary>
     [Parameter(Mandatory = true, ParameterSetName = CapabilitiesParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Capabilities { get; set; }
 
     /// <summary>Returns the streamed Core system-health snapshot.</summary>
     [Parameter(Mandatory = true, ParameterSetName = HealthParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Health { get; set; }
 
     /// <summary>Returns Supervisor and Home Assistant OS information when available.</summary>
     [Parameter(Mandatory = true, ParameterSetName = SupervisorParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Supervisor { get; set; }
 
     protected override async Task ProcessRecordAsync()

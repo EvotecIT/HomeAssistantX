@@ -103,6 +103,16 @@ foreach ($entry in $parameterSetContracts.GetEnumerator()) {
     }
 }
 
+foreach ($command in Get-Command -Module $importedModuleName) {
+    foreach ($parameter in $command.Parameters.Values) {
+        $isMandatorySelector = $parameter.ParameterType -eq [System.Management.Automation.SwitchParameter] -and
+            @($parameter.ParameterSets.Values | Where-Object IsMandatory).Count -gt 0
+        if ($isMandatorySelector -and -not ($parameter.Attributes | Where-Object { $_.GetType().Name -eq 'ValidateSwitchPresentAttribute' })) {
+            throw "$($command.Name) -$($parameter.Name) is a mandatory selector switch without false-value validation."
+        }
+    }
+}
+
 $mediaParameters = (Get-Command -Name Set-HomeAssistantMediaPlayer).Parameters
 foreach ($name in 'Power', 'Playback', 'VolumePercent', 'VolumeStep', 'Muted', 'Source', 'SoundMode', 'Shuffle', 'Repeat', 'SeekSeconds', 'ClearPlaylist', 'JoinMember', 'Unjoin', 'MediaContentId', 'MediaContentType', 'Enqueue', 'Announce', 'MediaExtra') {
     if (-not $mediaParameters.ContainsKey($name)) {
@@ -271,6 +281,17 @@ try {
     }
 
     $info = Get-HomeAssistantInfo
+
+    $falseSelectorRejected = $false
+    try {
+        Remove-HomeAssistantNotification -All:$false -WhatIf -ErrorAction Stop
+    } catch {
+        $falseSelectorRejected = $true
+    }
+    if (-not $falseSelectorRejected) {
+        throw 'A destructive parameter set accepted its mandatory selector switch as an explicit false value.'
+    }
+
     $floors = @(Get-HomeAssistantFloor)
     $areas = @(Get-HomeAssistantArea -Floor Ground)
     $devices = @(Get-HomeAssistantDevice -Area Kitchen)
@@ -310,7 +331,7 @@ try {
     if ($calendars.Count -ne 1 -or $calendars[0].EntityId -ne 'calendar.home') { throw 'Calendar discovery was not returned.' }
     if ($calendarEvents.Count -ne 1 -or $calendarEvents[0].Summary -ne 'Dinner') { throw 'Calendar events were not returned.' }
     if ($calendarUpdates.Count -ne 1 -or $calendarUpdates[0].Events[0].Uid -ne 'event-1') { throw 'Calendar event streaming did not return an event list.' }
-    if ($labels.Count -ne 1 -or $labels[0].LabelId -ne 'security') { throw 'Label discovery was not returned.' }
+    if ($labels.Count -ne 2 -or -not ($labels | Where-Object LabelId -EQ 'security')) { throw 'Label discovery was not returned.' }
     if ($categories.Count -ne 1 -or $categories[0].CategoryId -ne 'comfort') { throw 'Scoped category discovery was not returned.' }
 
     $diagnosticPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')

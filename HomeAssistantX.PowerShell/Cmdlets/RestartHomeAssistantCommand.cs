@@ -24,11 +24,13 @@ public sealed class RestartHomeAssistantCommand : HomeAssistantCmdlet
 
     /// <summary>Restarts Supervisor.</summary>
     [Parameter(Mandatory = true, ParameterSetName = SupervisorParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Supervisor { get; set; }
 
     /// <summary>Reboots the Home Assistant host system. <c>Host</c> is an alias.</summary>
     [Parameter(Mandatory = true, ParameterSetName = HostParameterSet)]
     [Alias("Host")]
+    [ValidateSwitchPresent]
     public SwitchParameter HostSystem { get; set; }
 
     /// <summary>Restarts the specified Supervisor app/add-on.</summary>

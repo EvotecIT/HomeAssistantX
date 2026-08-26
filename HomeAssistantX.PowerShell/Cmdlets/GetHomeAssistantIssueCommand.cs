@@ -24,6 +24,7 @@ public sealed class GetHomeAssistantIssueCommand : HomeAssistantCmdlet
 
     /// <summary>Returns Supervisor resolution issues.</summary>
     [Parameter(Mandatory = true, ParameterSetName = SupervisorParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Supervisor { get; set; }
 
     /// <summary>Includes Repairs issues currently marked as ignored.</summary>

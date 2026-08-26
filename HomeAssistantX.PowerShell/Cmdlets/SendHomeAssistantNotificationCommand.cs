@@ -14,6 +14,7 @@ public sealed class SendHomeAssistantNotificationCommand : HomeAssistantTargetCm
 
     /// <summary>Creates a notification stored in the Home Assistant interface.</summary>
     [Parameter(Mandatory = true, ParameterSetName = PersistentParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Persistent { get; set; }
 
     /// <summary>Notification message.</summary>

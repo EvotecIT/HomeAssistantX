@@ -955,7 +955,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\",\"labels\":[\"security\"]}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/label_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"label_id\":\"security\",\"name\":\"Security\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"label_id\":\"security\",\"name\":\"Safety\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300},{\"label_id\":\"security-name\",\"name\":\"Security\",\"color\":null,\"description\":\"Identifier collision fixture\",\"icon\":null,\"created_at\":1787731200,\"modified_at\":1787731300}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/label_registry/create":
             case "config/label_registry/update":

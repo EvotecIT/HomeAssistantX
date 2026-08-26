@@ -198,11 +198,26 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         IEnumerable<Registries.HomeAssistantLabel> labels,
         string value)
     {
-        var matches = labels.Where(label => string.Equals(label.LabelId, value, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(label.Name, value, StringComparison.OrdinalIgnoreCase)).ToArray();
-        return matches.Length switch
+        var materialized = labels.ToArray();
+        var nativeMatches = materialized
+            .Where(label => string.Equals(label.LabelId, value, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (nativeMatches.Length == 1)
         {
-            1 => matches[0],
+            return nativeMatches[0];
+        }
+
+        if (nativeMatches.Length > 1)
+        {
+            throw new HomeAssistantLookupException("More than one Home Assistant label has the native ID '" + value + "'.");
+        }
+
+        var nameMatches = materialized
+            .Where(label => string.Equals(label.Name, value, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return nameMatches.Length switch
+        {
+            1 => nameMatches[0],
             0 => throw new HomeAssistantLookupException("No Home Assistant label matches '" + value + "'."),
             _ => throw new HomeAssistantLookupException("More than one Home Assistant label matches '" + value + "'. Use a native label ID.")
         };
