@@ -32,6 +32,11 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentException("Power Off and Toggle cannot be combined with other media-player operations.", nameof(options));
         }
 
+        if (!string.IsNullOrWhiteSpace(options.MediaContentId) && options.Playback.HasValue)
+        {
+            throw new ArgumentException("Media content cannot be combined with a separate playback action.", nameof(options));
+        }
+
         var powerAction = options.Power.HasValue ? PowerAction(options.Power.Value) : null;
         var playbackAction = options.Playback.HasValue ? PlaybackAction(options.Playback.Value) : null;
         if (powerAction is null && playbackAction is null && !hasNonPowerOperation)
@@ -43,11 +48,6 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         if (powerAction is not null)
         {
             results.Add(await CallAsync(powerAction, target, null, cancellationToken).ConfigureAwait(false));
-        }
-
-        if (playbackAction is not null)
-        {
-            results.Add(await CallAsync(playbackAction, target, null, cancellationToken).ConfigureAwait(false));
         }
 
         if (options.VolumePercent.HasValue)
@@ -70,6 +70,11 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             results.Add(await CallAsync("play_media", target, call => call
                 .WithData("media_content_id", options.MediaContentId)
                 .WithData("media_content_type", options.MediaContentType), cancellationToken).ConfigureAwait(false));
+        }
+
+        if (playbackAction is not null)
+        {
+            results.Add(await CallAsync(playbackAction, target, null, cancellationToken).ConfigureAwait(false));
         }
 
         return results;

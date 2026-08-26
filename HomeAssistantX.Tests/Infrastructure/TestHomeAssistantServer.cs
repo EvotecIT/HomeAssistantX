@@ -15,6 +15,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private readonly CancellationTokenSource _source = new();
     private readonly ConcurrentDictionary<int, SocketSession> _sessions = new();
     private readonly ConcurrentDictionary<string, string> _lastWebSocketCommands = new(StringComparer.Ordinal);
+    private readonly ConcurrentQueue<string> _serviceCallBodies = new();
     private readonly Task _acceptTask;
     private readonly object _stateGate = new();
     private string _statesJson = DefaultStatesJson;
@@ -56,9 +57,14 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? LastServiceCallBody { get; private set; }
 
+    public IReadOnlyList<string> ServiceCallBodies => _serviceCallBodies.ToArray();
+
     public void ClearLastServiceCall()
     {
         LastServiceCallBody = null;
+        while (_serviceCallBodies.TryDequeue(out _))
+        {
+        }
     }
 
     public string? LastRequestBody { get; private set; }
@@ -488,6 +494,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 return;
             case "call_service":
                 LastServiceCallBody = command.GetRawText();
+                _serviceCallBodies.Enqueue(LastServiceCallBody);
                 await session.SendResultAsync(id, new Dictionary<string, object?>
                 {
                     ["context"] = new Dictionary<string, object?> { ["id"] = "service-context" },
@@ -520,10 +527,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"id\":\"device-1\",\"area_id\":\"kitchen\",\"name\":\"Kitchen Sensor\",\"manufacturer\":\"Evotec\",\"config_entries\":[\"entry-1\"]}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/entity_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"list_only\":{\"source\":\"partial\"}},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"},{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\"}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/entity_registry/get_entries":
-                await session.SendResultAsync(id, ParseJson("{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true,\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"light.kitchen\":{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"aliases\":[null,\"Island fixture\"],\"capabilities\":{}},\"sensor.disabled_temperature\":{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}}}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true,\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"light.kitchen\":{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"aliases\":[null,\"Island fixture\"],\"capabilities\":{},\"extended_only\":true},\"sensor.disabled_temperature\":{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"sensor.legacy_disabled\":{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}}}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get":
                 await session.SendResultAsync(id, ParseJson("{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);

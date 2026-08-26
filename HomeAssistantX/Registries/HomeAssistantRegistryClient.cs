@@ -63,9 +63,22 @@ public sealed class HomeAssistantRegistryClient
             ?? throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response could not be decoded.");
 
         return partialEntries.Select(partial =>
-            extendedEntries.TryGetValue(partial.EntityId, out var extended) && extended is not null
-                ? extended
-                : partial).ToArray();
+        {
+            if (!extendedEntries.TryGetValue(partial.EntityId, out var extended) || extended is null)
+            {
+                return partial;
+            }
+
+            foreach (var pair in partial.AdditionalData)
+            {
+                if (!extended.AdditionalData.ContainsKey(pair.Key))
+                {
+                    extended.AdditionalData[pair.Key] = pair.Value;
+                }
+            }
+
+            return extended;
+        }).ToArray();
     }
 
     private static IReadOnlyList<T> DeserializeArray<T>(JsonElement value, string name)

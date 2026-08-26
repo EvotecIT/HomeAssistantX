@@ -240,6 +240,23 @@ try {
         throw 'The media-player cmdlet accepted contradictory power and playback operations.'
     }
 
+    foreach ($invalidControl in @(
+        { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCover -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop }
+    )) {
+        $invalidEnumRejected = $false
+        try {
+            $null = & $invalidControl
+        } catch {
+            $invalidEnumRejected = $true
+        }
+        if (-not $invalidEnumRejected) {
+            throw 'A typed-control cmdlet accepted an undefined enum value under WhatIf.'
+        }
+    }
+
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {

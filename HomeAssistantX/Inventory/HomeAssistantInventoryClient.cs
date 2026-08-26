@@ -344,6 +344,11 @@ public sealed class HomeAssistantInventoryClient
             return entry.Name;
         }
 
+        if (!entry.HasEntityName)
+        {
+            return FirstNonEmptyOrNull(entry.OriginalName, entry.EntityId);
+        }
+
         var deviceName = device is null
             ? null
             : FirstNonEmptyOrNull(device.NameByUser, device.Name, device.Model);

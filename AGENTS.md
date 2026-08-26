@@ -2,9 +2,9 @@
 
 ## Ownership
 
-HomeAssistantX owns reusable Home Assistant protocol behavior: authentication, REST and WebSocket transport, command correlation, events, subscriptions, reconnect, reconciliation, generic JSON models, diagnostics, and classified failures.
+HomeAssistantX owns reusable Home Assistant protocol behavior: authentication, REST and WebSocket transport, command correlation, events, subscriptions, reconnect, reconciliation, generic JSON models, diagnostics, classified failures, joined Home Assistant inventory, runtime action metadata, and Home Assistant-native typed service payloads for common domains.
 
-Consumers own credential persistence, normalized device/domain models, action safety policy, presentation, and product behavior. Do not add CasaRay-, Tactra-, or UI-specific models to this repository.
+Consumers own credential persistence, provider-neutral normalized device/domain models, per-product authorization and action safety policy, presentation, and product behavior. Protocol-level validation that rejects payloads Home Assistant cannot accept or contradictory multi-call sequences remains reusable behavior in this repository. Do not add CasaRay-, Tactra-, or UI-specific models to this repository.
 
 ## Compatibility
 

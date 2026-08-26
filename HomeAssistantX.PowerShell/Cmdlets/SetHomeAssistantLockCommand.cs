@@ -24,6 +24,11 @@ public sealed class SetHomeAssistantLockCommand : HomeAssistantTargetCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        if (!Enum.IsDefined(typeof(HomeAssistantLockAction), Action))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Action), Action, "Unsupported lock action.");
+        }
+
         var target = await ResolveTargetAsync("lock").ConfigureAwait(false);
         if (ShouldProcess(target.Description, Action.ToString()))
         {

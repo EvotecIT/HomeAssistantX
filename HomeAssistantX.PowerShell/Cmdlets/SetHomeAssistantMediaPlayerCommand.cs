@@ -47,6 +47,16 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
 
     protected override async Task ProcessRecordAsync()
     {
+        if (Power.HasValue && !Enum.IsDefined(typeof(HomeAssistantPowerAction), Power.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Power), Power.Value, "Unsupported media-player power action.");
+        }
+
+        if (Playback.HasValue && !Enum.IsDefined(typeof(HomeAssistantMediaPlaybackAction), Playback.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Playback), Playback.Value, "Unsupported media-player playback action.");
+        }
+
         if (!Power.HasValue
             && !Playback.HasValue
             && !VolumePercent.HasValue
@@ -71,6 +81,11 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         if (Power is HomeAssistantPowerAction.Off or HomeAssistantPowerAction.Toggle && hasNonPowerOperation)
         {
             throw new ArgumentException("Power Off and Toggle cannot be combined with other media-player operations.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(MediaContentId) && Playback.HasValue)
+        {
+            throw new ArgumentException("Media content cannot be combined with a separate playback action.");
         }
 
         var options = new HomeAssistantMediaPlayerOptions

@@ -37,6 +37,11 @@ public sealed class SetHomeAssistantCoverCommand : HomeAssistantTargetCmdlet
             throw new ArgumentException("Specify exactly one of -Action, -PositionPercent, or -TiltPositionPercent.");
         }
 
+        if (Action.HasValue && !Enum.IsDefined(typeof(HomeAssistantCoverAction), Action.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Action), Action.Value, "Unsupported cover action.");
+        }
+
         var target = await ResolveTargetAsync("cover").ConfigureAwait(false);
         var operation = Action.HasValue ? Action.Value.ToString() : PositionPercent.HasValue ? "Set position" : "Set tilt position";
         if (!ShouldProcess(target.Description, operation))

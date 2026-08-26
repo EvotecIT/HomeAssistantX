@@ -179,7 +179,8 @@ Range-based climate calls require both low and high temperatures and cannot be
 combined with a scalar temperature. Media-player `Off` and `Toggle` are
 standalone power operations; combine additional playback, source, or volume
 changes with `Power On` or omit `Power` so later actions cannot reverse a
-requested shutdown.
+requested shutdown. Starting media content is already a playback operation, so
+content and a separate `Playback` action cannot be combined in one call.
 
 ### Keep explicit connections when you need them
 

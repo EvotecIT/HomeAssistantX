@@ -23,6 +23,7 @@ public sealed class InventoryAndControlsContractTests
         var device = Assert.Single(snapshot.Devices);
         var light = Assert.Single(snapshot.Entities, x => x.EntityId == "light.kitchen");
         var disabledTemperature = Assert.Single(snapshot.Entities, x => x.EntityId == "sensor.disabled_temperature");
+        var legacyDisabled = Assert.Single(snapshot.Entities, x => x.EntityId == "sensor.legacy_disabled");
         var temperature = Assert.Single(snapshot.Entities, x => x.EntityId == "sensor.kitchen_temperature");
         var action = Assert.Single(snapshot.Actions, x => x.Domain == "light" && x.Action == "turn_on");
         var field = Assert.Single(action.Fields);
@@ -38,6 +39,10 @@ public sealed class InventoryAndControlsContractTests
         Assert.Contains("Island fixture", light.Aliases);
         Assert.Equal("Kitchen Sensor Temperature", disabledTemperature.Name);
         Assert.Contains(disabledTemperature.Name, disabledTemperature.Aliases);
+        Assert.Equal("Kitchen legacy temperature", legacyDisabled.Name);
+        Assert.Contains(legacyDisabled.Name, legacyDisabled.Aliases);
+        Assert.True(light.RegistryEntry!.AdditionalData.ContainsKey("list_only"));
+        Assert.True(light.RegistryEntry.AdditionalData.ContainsKey("extended_only"));
         Assert.Equal("temperature", temperature.RegistryEntry!.DeviceClass);
         Assert.Equal("test", light.IntegrationDomain);
         Assert.Equal("Test integration", light.IntegrationTitle);
@@ -240,8 +245,42 @@ public sealed class InventoryAndControlsContractTests
                 Power = HomeAssistantPowerAction.Off,
                 Playback = HomeAssistantMediaPlaybackAction.Play
             }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions
+            {
+                MediaContentId = "media-source://example",
+                MediaContentType = "music",
+                Playback = HomeAssistantMediaPlaybackAction.Play
+            }));
 
         Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task MediaPlayerAppliesSettingsBeforePlayback()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions
+            {
+                Power = HomeAssistantPowerAction.On,
+                VolumePercent = 25,
+                Muted = false,
+                Source = "HDMI",
+                Playback = HomeAssistantMediaPlaybackAction.Play
+            });
+
+        var services = server.ServiceCallBodies.Select(body =>
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.GetProperty("service").GetString();
+        }).ToArray();
+
+        Assert.Equal(new[] { "turn_on", "volume_set", "volume_mute", "select_source", "media_play" }, services);
     }
 
     [Theory]
