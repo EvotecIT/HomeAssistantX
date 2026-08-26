@@ -192,4 +192,7 @@ public sealed class HomeAssistantRegistrySnapshot
     public IReadOnlyList<HomeAssistantEntityRegistryEntry> Entities { get; set; } = Array.Empty<HomeAssistantEntityRegistryEntry>();
 
     public IReadOnlyList<HomeAssistantConfigEntry> ConfigEntries { get; set; } = Array.Empty<HomeAssistantConfigEntry>();
+
+    /// <summary>Whether configuration-entry enrichment was available to the current Home Assistant user.</summary>
+    public bool IsConfigEntryEnrichmentAvailable { get; set; } = true;
 }

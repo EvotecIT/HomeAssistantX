@@ -43,13 +43,15 @@ public sealed class SetHomeAssistantLightCommand : HomeAssistantTargetCmdlet
     [ValidateRange(0d, 6553d)]
     public double? TransitionSeconds { get; set; }
 
-    protected override async Task ProcessRecordAsync()
+    protected override async Task ProcessTargetRecordAsync()
     {
         if (!Enum.IsDefined(typeof(HomeAssistantPowerAction), Power))
         {
             throw new ArgumentOutOfRangeException(nameof(Power), Power, "Unsupported light power action.");
         }
 
+        var transition = TransitionSeconds.HasValue ? TimeSpan.FromSeconds(TransitionSeconds.Value) : (TimeSpan?)null;
+        var options = CreateOptions(transition);
         var target = await ResolveTargetAsync("light").ConfigureAwait(false);
         if (Power == HomeAssistantPowerAction.Off
             && (BrightnessPercent.HasValue || ColorTemperatureKelvin.HasValue || RgbColor is not null || !string.IsNullOrWhiteSpace(Effect)))
@@ -62,18 +64,17 @@ public sealed class SetHomeAssistantLightCommand : HomeAssistantTargetCmdlet
             return;
         }
 
-        var transition = TransitionSeconds.HasValue ? TimeSpan.FromSeconds(TransitionSeconds.Value) : (TimeSpan?)null;
         HomeAssistantServiceCallResult result;
         switch (Power)
         {
             case HomeAssistantPowerAction.On:
-                result = await Client.Controls.Lights.TurnOnAsync(target.Target, CreateOptions(transition), CancelToken).ConfigureAwait(false);
+                result = await Client.Controls.Lights.TurnOnAsync(target.Target, options, CancelToken).ConfigureAwait(false);
                 break;
             case HomeAssistantPowerAction.Off:
                 result = await Client.Controls.Lights.TurnOffAsync(target.Target, transition, CancelToken).ConfigureAwait(false);
                 break;
             case HomeAssistantPowerAction.Toggle:
-                result = await Client.Controls.Lights.ToggleAsync(target.Target, CreateOptions(transition), CancelToken).ConfigureAwait(false);
+                result = await Client.Controls.Lights.ToggleAsync(target.Target, options, CancelToken).ConfigureAwait(false);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(Power), Power, "Unsupported light power action.");

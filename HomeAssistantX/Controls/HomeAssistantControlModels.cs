@@ -49,13 +49,31 @@ public sealed class HomeAssistantLightOptions
     public int? ColorTemperatureKelvin
     {
         get => _colorTemperatureKelvin;
-        set => _colorTemperatureKelvin = ControlValidation.Positive(value, nameof(ColorTemperatureKelvin));
+        set
+        {
+            var validated = ControlValidation.Positive(value, nameof(ColorTemperatureKelvin));
+            if (validated.HasValue && _rgbColor is not null)
+            {
+                throw new ArgumentException("ColorTemperatureKelvin and RgbColor cannot be combined.", nameof(ColorTemperatureKelvin));
+            }
+
+            _colorTemperatureKelvin = validated;
+        }
     }
 
     public IReadOnlyList<int>? RgbColor
     {
         get => _rgbColor;
-        set => _rgbColor = ControlValidation.Rgb(value, nameof(RgbColor));
+        set
+        {
+            var validated = ControlValidation.Rgb(value, nameof(RgbColor));
+            if (validated is not null && _colorTemperatureKelvin.HasValue)
+            {
+                throw new ArgumentException("RgbColor and ColorTemperatureKelvin cannot be combined.", nameof(RgbColor));
+            }
+
+            _rgbColor = validated;
+        }
     }
 
     public string? Effect { get; set; }

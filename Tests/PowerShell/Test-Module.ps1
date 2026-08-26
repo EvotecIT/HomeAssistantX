@@ -124,9 +124,81 @@ try {
         if (-not [object]::ReferenceEquals($connection, (Get-HomeAssistantConnection))) {
             throw 'Connect-HomeAssistant -NoDefault replaced the runspace default.'
         }
+
+        $defaultLights = @($connection | Get-HomeAssistantEntity -Area Kitchen -Domain light)
+        $secondaryLights = @($secondaryConnection | Get-HomeAssistantEntity -Area Kitchen -Domain light)
+        $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
+            throw 'Could not reset the mixed-connection action baseline.'
+        }
+        $mixedConnectionsRejected = $false
+        try {
+            $null = @($defaultLights + $secondaryLights) | Set-HomeAssistantLight -Power Off -Confirm:$false -ErrorAction Stop
+        } catch {
+            $mixedConnectionsRejected = $true
+        }
+        if (-not $mixedConnectionsRejected) {
+            throw 'A typed-control pipeline accepted entities from different Home Assistant connections.'
+        }
+        $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+            throw 'A mixed-connection pipeline invoked a Home Assistant action before rejection.'
+        }
+
+        $connection | Disconnect-HomeAssistant
+        $connection = $null
+        $null = $secondaryLights | Set-HomeAssistantLight -Power Off -Confirm:$false
+        $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        $provenanceCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+        if ($provenanceCall.service -ne 'turn_off' -or @($provenanceCall.target.entity_id)[0] -ne 'light.kitchen') {
+            throw 'Piped entities did not retain their non-default source connection.'
+        }
+
+        $connection = Connect-HomeAssistant -Uri $uri -AccessToken 'test-access-token'
+        $defaultConnection = $connection
+        $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
+            throw 'Could not reset the connection-provenance action baseline.'
+        }
+
+        $mismatchedConnectionRejected = $false
+        try {
+            $null = $secondaryLights | Set-HomeAssistantLight -Connection $connection -Power Off -Confirm:$false -ErrorAction Stop
+        } catch {
+            $mismatchedConnectionRejected = $true
+        }
+        if (-not $mismatchedConnectionRejected) {
+            throw 'A piped entity accepted a different explicit Home Assistant connection.'
+        }
+        $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+            throw 'A mismatched piped entity connection invoked a Home Assistant action.'
+        }
     } finally {
-        $secondaryConnection | Disconnect-HomeAssistant
+        if (-not $secondaryConnection.IsDisposed) {
+            $secondaryConnection | Disconnect-HomeAssistant
+        }
     }
+    $disposedProvenanceRejected = $false
+    try {
+        $null = $secondaryLights | Set-HomeAssistantLight -Power Off -WhatIf -ErrorAction Stop
+    } catch {
+        $disposedProvenanceRejected = $true
+    }
+    if (-not $disposedProvenanceRejected) {
+        throw 'A typed-control WhatIf preview accepted a disposed source connection.'
+    }
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+        throw 'A disposed provenance connection invoked a Home Assistant action.'
+    }
+
     $info = Get-HomeAssistantInfo
     $floors = @(Get-HomeAssistantFloor)
     $areas = @(Get-HomeAssistantArea -Floor Ground)
@@ -241,6 +313,7 @@ try {
     }
 
     foreach ($invalidControl in @(
+        { Set-HomeAssistantLight -Area Kitchen -ColorTemperatureKelvin 3000 -RgbColor 10, 20, 30 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCover -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },

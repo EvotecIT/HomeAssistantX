@@ -58,7 +58,8 @@ public sealed class GetHomeAssistantEntityCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        var entities = await Client.Inventory.GetEntitiesAsync(new HomeAssistantEntityQuery
+        var connection = ActiveConnection;
+        var entities = await connection.Client.Inventory.GetEntitiesAsync(new HomeAssistantEntityQuery
         {
             Entity = Entity,
             Name = Name,
@@ -70,6 +71,12 @@ public sealed class GetHomeAssistantEntityCommand : HomeAssistantCmdlet
             IncludeDisabled = IncludeDisabled,
             IncludeHidden = IncludeHidden
         }, CancelToken).ConfigureAwait(false);
+
+        foreach (var entity in entities)
+        {
+            HomeAssistantEntityProvenance.Set(entity, connection);
+        }
+
         WriteObject(entities, true);
     }
 }

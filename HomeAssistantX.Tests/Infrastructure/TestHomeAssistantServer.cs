@@ -95,6 +95,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public bool SendStateChangeBeforeSnapshot { get; set; }
 
+    public string? ConfigEntriesErrorCode { get; set; }
+
     public bool OmitSystemHealthFinish { get; set; }
 
     public bool IgnoreUnsubscribeAcknowledgement { get; set; }
@@ -533,6 +535,13 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true,\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"light.kitchen\":{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"aliases\":[null,\"Island fixture\"],\"capabilities\":{},\"extended_only\":true},\"sensor.disabled_temperature\":{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"sensor.legacy_disabled\":{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}}}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get":
+                if (!string.IsNullOrWhiteSpace(ConfigEntriesErrorCode))
+                {
+                    var errorCode = ConfigEntriesErrorCode!;
+                    await session.SendErrorAsync(id, errorCode, "Configuration entries unavailable", errorCode, _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
                 await session.SendResultAsync(id, ParseJson("{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get_single":

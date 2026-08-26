@@ -17,7 +17,7 @@ public sealed class SetHomeAssistantSwitchCommand : HomeAssistantTargetCmdlet
     [Parameter(Mandatory = true)]
     public HomeAssistantPowerAction Power { get; set; }
 
-    protected override async Task ProcessRecordAsync()
+    protected override async Task ProcessTargetRecordAsync()
     {
         if (!Enum.IsDefined(typeof(HomeAssistantPowerAction), Power))
         {

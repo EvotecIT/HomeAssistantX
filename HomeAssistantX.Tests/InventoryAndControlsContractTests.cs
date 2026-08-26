@@ -258,6 +258,34 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task InventoryRemainsReadableWithoutConfigEntryPrivileges()
+    {
+        using var server = new TestHomeAssistantServer { ConfigEntriesErrorCode = "unauthorized" };
+        using var client = TestClientFactory.Create(server);
+
+        var snapshot = await client.Inventory.GetSnapshotAsync();
+        var light = Assert.Single(snapshot.Entities, entity => entity.EntityId == "light.kitchen");
+
+        Assert.Equal("Kitchen light", light.Name);
+        Assert.Equal("Kitchen", light.AreaName);
+        Assert.Null(light.IntegrationDomain);
+        Assert.Empty(snapshot.Registries.ConfigEntries);
+        Assert.False(snapshot.Registries.IsConfigEntryEnrichmentAvailable);
+    }
+
+    [Fact]
+    public async Task InventoryDoesNotHideUnrelatedConfigEntryFailures()
+    {
+        using var server = new TestHomeAssistantServer { ConfigEntriesErrorCode = "temporary_failure" };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantCommandException>(
+            () => client.Inventory.GetSnapshotAsync());
+
+        Assert.Equal("temporary_failure", exception.Code);
+    }
+
+    [Fact]
     public async Task MediaPlayerAppliesSettingsBeforePlayback()
     {
         using var server = new TestHomeAssistantServer();
@@ -298,6 +326,21 @@ public sealed class InventoryAndControlsContractTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantLightOptions { BrightnessPercent = double.NaN });
         Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantMediaPlayerOptions { VolumePercent = double.PositiveInfinity });
         Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantClimateOptions { Humidity = double.NegativeInfinity });
+    }
+
+    [Fact]
+    public void LightColorRepresentationsAreMutuallyExclusiveInEitherAssignmentOrder()
+    {
+        Assert.Throws<ArgumentException>(() => new HomeAssistantLightOptions
+        {
+            ColorTemperatureKelvin = 3000,
+            RgbColor = new[] { 10, 20, 30 }
+        });
+        Assert.Throws<ArgumentException>(() => new HomeAssistantLightOptions
+        {
+            RgbColor = new[] { 10, 20, 30 },
+            ColorTemperatureKelvin = 3000
+        });
     }
 }
 #endif

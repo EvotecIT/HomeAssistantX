@@ -8,6 +8,7 @@ namespace HomeAssistantX.PowerShell;
 /// <summary>Resolves friendly entity, device, area, and floor targets through the joined inventory.</summary>
 public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
 {
+    private readonly List<HomeAssistantEntityInfo> _pipelineEntities = new();
     protected const string InputObjectParameterSet = "InputObject";
     protected const string EntityParameterSet = "Entity";
     protected const string AreaParameterSet = "Area";
@@ -43,11 +44,36 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
     [ValidateNotNullOrEmpty]
     public string[] Floor { get; set; } = Array.Empty<string>();
 
+    protected sealed override Task ProcessRecordAsync()
+    {
+        if (ParameterSetName == InputObjectParameterSet)
+        {
+            _pipelineEntities.AddRange(InputObject);
+            return Task.CompletedTask;
+        }
+
+        return ProcessTargetRecordAsync();
+    }
+
+    protected sealed override Task EndProcessingAsync()
+    {
+        if (_pipelineEntities.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        InputObject = _pipelineEntities.ToArray();
+        return ProcessTargetRecordAsync();
+    }
+
+    protected abstract Task ProcessTargetRecordAsync();
+
     protected async Task<ResolvedHomeAssistantTarget> ResolveTargetAsync(string expectedDomain)
     {
         if (ParameterSetName == InputObjectParameterSet)
         {
             ValidateDomains(InputObject, expectedDomain);
+            BindInputConnection(InputObject);
             var ids = InputObject.Select(x => x.EntityId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             return new ResolvedHomeAssistantTarget(HomeAssistantTarget.ForEntity(ids), ids.Length + " " + expectedDomain + " entities (" + string.Join(", ", ids) + ")", ids.Length);
         }
@@ -82,6 +108,48 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
             }
             default:
                 throw new InvalidOperationException("A Home Assistant entity, device, area, or floor target is required.");
+        }
+    }
+
+    private void BindInputConnection(IEnumerable<HomeAssistantEntityInfo> entities)
+    {
+        var explicitConnection = MyInvocation.BoundParameters.ContainsKey(nameof(Connection)) ? Connection : null;
+        HomeAssistantConnection? sourceConnection = null;
+
+        foreach (var entity in entities)
+        {
+            if (!HomeAssistantEntityProvenance.TryGet(entity, out var entityConnection))
+            {
+                if (explicitConnection is null)
+                {
+                    throw new InvalidOperationException(
+                        "The piped entity has no HomeAssistantX connection provenance. Pass the source connection with -Connection.");
+                }
+
+                continue;
+            }
+
+            if (explicitConnection is not null && !ReferenceEquals(explicitConnection, entityConnection))
+            {
+                throw new InvalidOperationException(
+                    "The explicit Home Assistant connection does not match the connection that produced the piped entity.");
+            }
+
+            if (sourceConnection is not null && !ReferenceEquals(sourceConnection, entityConnection))
+            {
+                throw new InvalidOperationException("Piped entities from different Home Assistant connections cannot be combined in one action.");
+            }
+
+            sourceConnection = entityConnection;
+        }
+
+        Connection = explicitConnection ?? sourceConnection
+            ?? throw new InvalidOperationException("A Home Assistant connection is required for the piped entities.");
+        if (Connection.IsDisposed)
+        {
+            throw new ObjectDisposedException(
+                nameof(HomeAssistantConnection),
+                "The Home Assistant connection associated with the piped entities is disposed.");
         }
     }
 

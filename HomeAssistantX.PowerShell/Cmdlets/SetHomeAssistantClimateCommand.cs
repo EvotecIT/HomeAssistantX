@@ -45,7 +45,7 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
     [ValidateRange(0d, 100d)]
     public double? Humidity { get; set; }
 
-    protected override async Task ProcessRecordAsync()
+    protected override async Task ProcessTargetRecordAsync()
     {
         ValidateFinite(Temperature, nameof(Temperature));
         ValidateFinite(TargetTemperatureLow, nameof(TargetTemperatureLow));

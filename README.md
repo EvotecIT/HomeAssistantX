@@ -134,6 +134,12 @@ and native IDs. Every explicit `-Entity` value must resolve exactly once;
 ambiguous or missing names fail with candidate IDs instead of producing a
 partial selection.
 
+Entity, device, area, and floor discovery remains available to non-administrator
+users. When Home Assistant denies administrator-only configuration-entry
+enrichment, the joined inventory reports
+`IsConfigEntryEnrichmentAvailable = false` and leaves integration details empty
+instead of failing otherwise permitted entity reads.
+
 ### See what an entity can do
 
 ```powershell
@@ -181,6 +187,8 @@ standalone power operations; combine additional playback, source, or volume
 changes with `Power On` or omit `Power` so later actions cannot reverse a
 requested shutdown. Starting media content is already a playback operation, so
 content and a separate `Playback` action cannot be combined in one call.
+Light color temperature and RGB are alternative representations and cannot be
+sent together.
 
 ### Keep explicit connections when you need them
 
@@ -197,11 +205,18 @@ $lab = Connect-HomeAssistant -Uri 'https://lab.example.net' `
 
 $home | Get-HomeAssistantEntity -Domain light
 $lab  | Get-HomeAssistantEntity -Domain light
+$lab  | Get-HomeAssistantEntity -Domain light |
+    Set-HomeAssistantLight -Power Off
 $lab  | Disconnect-HomeAssistant
 
 # Disconnects the current runspace default
 Disconnect-HomeAssistant
 ```
+
+Entities emitted by the module retain their source connection for typed-control
+pipeline use. Passing a different explicit `-Connection`, combining entities
+from different homes in one action, or piping an entity without provenance and
+without `-Connection` fails before dispatch.
 
 ### Use the generic escape hatch for custom actions
 

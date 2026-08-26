@@ -45,7 +45,7 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
     [ValidateNotNullOrEmpty]
     public string? MediaContentType { get; set; }
 
-    protected override async Task ProcessRecordAsync()
+    protected override async Task ProcessTargetRecordAsync()
     {
         if (Power.HasValue && !Enum.IsDefined(typeof(HomeAssistantPowerAction), Power.Value))
         {

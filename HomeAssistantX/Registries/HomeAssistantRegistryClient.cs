@@ -21,7 +21,7 @@ public sealed class HomeAssistantRegistryClient
         var floorsTask = _webSocket.RequestAsync("config/floor_registry/list", null, cancellationToken);
         var devicesTask = _webSocket.RequestAsync("config/device_registry/list", null, cancellationToken);
         var partialEntitiesTask = _webSocket.RequestAsync("config/entity_registry/list", null, cancellationToken);
-        var configEntriesTask = _webSocket.RequestAsync("config_entries/get", null, cancellationToken);
+        var configEntriesTask = GetConfigEntriesAsync(cancellationToken);
         await Task.WhenAll(areasTask, floorsTask, devicesTask, partialEntitiesTask, configEntriesTask).ConfigureAwait(false);
 
         var partialEntities = DeserializeArray<HomeAssistantEntityRegistryEntry>(
@@ -40,14 +40,30 @@ public sealed class HomeAssistantRegistryClient
             entities = DeserializeExtendedEntities(extendedEntities, partialEntities);
         }
 
+        var configEntries = await configEntriesTask.ConfigureAwait(false);
         return new HomeAssistantRegistrySnapshot
         {
             Areas = DeserializeArray<HomeAssistantArea>(await areasTask.ConfigureAwait(false), "area registry"),
             Floors = DeserializeArray<HomeAssistantFloor>(await floorsTask.ConfigureAwait(false), "floor registry"),
             Devices = DeserializeArray<HomeAssistantDeviceRegistryEntry>(await devicesTask.ConfigureAwait(false), "device registry"),
             Entities = entities,
-            ConfigEntries = DeserializeConfigEntries(await configEntriesTask.ConfigureAwait(false))
+            ConfigEntries = configEntries.Entries,
+            IsConfigEntryEnrichmentAvailable = configEntries.IsAvailable
         };
+    }
+
+    private async Task<ConfigEntryLoadResult> GetConfigEntriesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var value = await _webSocket.RequestAsync("config_entries/get", null, cancellationToken).ConfigureAwait(false);
+            return new ConfigEntryLoadResult(DeserializeConfigEntries(value), true);
+        }
+        catch (HomeAssistantCommandException exception)
+            when (string.Equals(exception.Code, "unauthorized", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ConfigEntryLoadResult(Array.Empty<HomeAssistantConfigEntry>(), false);
+        }
     }
 
     private static IReadOnlyList<HomeAssistantEntityRegistryEntry> DeserializeExtendedEntities(
@@ -101,5 +117,18 @@ public sealed class HomeAssistantRegistryClient
         }
 
         throw new HomeAssistantProtocolException("The Home Assistant configuration-entry registry response had an unexpected shape.");
+    }
+
+    private sealed class ConfigEntryLoadResult
+    {
+        public ConfigEntryLoadResult(IReadOnlyList<HomeAssistantConfigEntry> entries, bool isAvailable)
+        {
+            Entries = entries;
+            IsAvailable = isAvailable;
+        }
+
+        public IReadOnlyList<HomeAssistantConfigEntry> Entries { get; }
+
+        public bool IsAvailable { get; }
     }
 }

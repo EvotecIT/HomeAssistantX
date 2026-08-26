@@ -27,9 +27,14 @@ multiple homes, retain explicit connections and use `-NoDefault`:
 ```powershell
 $lab = Connect-HomeAssistant -Uri 'https://lab.example.net' `
     -AccessToken $labToken -Name Lab -NoDefault
-$lab | Get-HomeAssistantEntity
+$lab | Get-HomeAssistantEntity -Domain light |
+    Set-HomeAssistantLight -Power Off
 $lab | Disconnect-HomeAssistant
 ```
+
+Discovery entities retain the connection that produced them. Typed-control
+pipeline input uses that connection even when it is not the runspace default,
+and rejects a mismatched explicit `-Connection` or a mixed-home batch.
 
 For an application-owned OAuth lifecycle, pass an
 `IHomeAssistantAccessTokenProvider` with `-AccessTokenProvider`.
@@ -52,7 +57,9 @@ effective area, floor, registry metadata, and raw source objects. Effective area
 uses the entity's direct assignment first and its device's area otherwise.
 
 Friendly names and native IDs are both accepted. Exact ambiguity raises an
-error listing candidate IDs.
+error listing candidate IDs. Non-administrator users can still read entities;
+if configuration-entry enrichment is denied, integration details are empty and
+the registry snapshot exposes `IsConfigEntryEnrichmentAvailable = false`.
 
 ## Action discovery and typed controls
 
@@ -84,6 +91,7 @@ exclusive with `-Temperature`. Media-player `-Power Off` and `-Power Toggle`
 are standalone operations; use `-Power On` or omit `-Power` when applying
 playback, source, mute, volume, or content changes in the same command. Content
 launch and `-Playback` are mutually exclusive because both start playback.
+`-ColorTemperatureKelvin` and `-RgbColor` are also mutually exclusive.
 
 `Invoke-HomeAssistantAction` remains the extensible path for a custom action or
 field that does not belong in a common typed command:

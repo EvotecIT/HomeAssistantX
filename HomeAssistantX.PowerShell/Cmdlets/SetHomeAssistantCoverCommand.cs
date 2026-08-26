@@ -29,7 +29,7 @@ public sealed class SetHomeAssistantCoverCommand : HomeAssistantTargetCmdlet
     [ValidateRange(0d, 100d)]
     public double? TiltPositionPercent { get; set; }
 
-    protected override async Task ProcessRecordAsync()
+    protected override async Task ProcessTargetRecordAsync()
     {
         var operationCount = (Action.HasValue ? 1 : 0) + (PositionPercent.HasValue ? 1 : 0) + (TiltPositionPercent.HasValue ? 1 : 0);
         if (operationCount != 1)
