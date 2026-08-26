@@ -15,16 +15,6 @@ public enum HomeAssistantCoverAction
     Toggle
 }
 
-public enum HomeAssistantMediaPlaybackAction
-{
-    Play,
-    Pause,
-    PlayPause,
-    Stop,
-    Next,
-    Previous
-}
-
 public enum HomeAssistantLockAction
 {
     Lock,
@@ -161,30 +151,6 @@ public sealed class HomeAssistantClimateOptions
             throw new ArgumentException("TargetTemperatureLow cannot be greater than TargetTemperatureHigh.");
         }
     }
-}
-
-/// <summary>Typed media-player changes that may be applied in one logical operation.</summary>
-public sealed class HomeAssistantMediaPlayerOptions
-{
-    private double? _volumePercent;
-
-    public HomeAssistantPowerAction? Power { get; set; }
-
-    public HomeAssistantMediaPlaybackAction? Playback { get; set; }
-
-    public double? VolumePercent
-    {
-        get => _volumePercent;
-        set => _volumePercent = ControlValidation.Percent(value, nameof(VolumePercent));
-    }
-
-    public bool? Muted { get; set; }
-
-    public string? Source { get; set; }
-
-    public string? MediaContentId { get; set; }
-
-    public string? MediaContentType { get; set; }
 }
 
 internal static class ControlValidation

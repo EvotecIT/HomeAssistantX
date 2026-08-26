@@ -1,0 +1,371 @@
+using HomeAssistantX.Models;
+
+namespace HomeAssistantX.Controls;
+
+/// <summary>Features exposed through a Home Assistant <c>media_player</c> entity.</summary>
+[Flags]
+public enum HomeAssistantMediaPlayerFeature : long
+{
+    None = 0,
+    Pause = 1,
+    Seek = 2,
+    VolumeSet = 4,
+    VolumeMute = 8,
+    PreviousTrack = 16,
+    NextTrack = 32,
+    TurnOn = 128,
+    TurnOff = 256,
+    PlayMedia = 512,
+    VolumeStep = 1024,
+    SelectSource = 2048,
+    Stop = 4096,
+    ClearPlaylist = 8192,
+    Play = 16384,
+    ShuffleSet = 32768,
+    SelectSoundMode = 65536,
+    BrowseMedia = 131072,
+    RepeatSet = 262144,
+    Grouping = 524288,
+    MediaAnnounce = 1048576,
+    MediaEnqueue = 2097152,
+    SearchMedia = 4194304
+}
+
+public enum HomeAssistantMediaPlayerState
+{
+    Other,
+    Unknown,
+    Unavailable,
+    Off,
+    On,
+    Idle,
+    Playing,
+    Paused,
+    Buffering,
+    Standby
+}
+
+public enum HomeAssistantMediaPlaybackAction
+{
+    Play,
+    Pause,
+    PlayPause,
+    Stop,
+    Next,
+    Previous
+}
+
+public enum HomeAssistantMediaVolumeStepAction
+{
+    Up,
+    Down
+}
+
+public enum HomeAssistantMediaRepeatMode
+{
+    Off,
+    One,
+    All
+}
+
+public enum HomeAssistantMediaEnqueueMode
+{
+    Add,
+    Next,
+    Play,
+    Replace
+}
+
+/// <summary>Options supported by Home Assistant's <c>media_player.play_media</c> action.</summary>
+public sealed class HomeAssistantPlayMediaOptions
+{
+    public HomeAssistantMediaEnqueueMode? Enqueue { get; set; }
+
+    public bool? Announce { get; set; }
+
+    public IReadOnlyDictionary<string, object?>? Extra { get; set; }
+}
+
+/// <summary>Typed media-player changes that may be applied in one logical operation.</summary>
+public sealed class HomeAssistantMediaPlayerOptions
+{
+    private double? _volumePercent;
+
+    public HomeAssistantPowerAction? Power { get; set; }
+
+    public HomeAssistantMediaPlaybackAction? Playback { get; set; }
+
+    public double? VolumePercent
+    {
+        get => _volumePercent;
+        set => _volumePercent = ControlValidation.Percent(value, nameof(VolumePercent));
+    }
+
+    public bool? Muted { get; set; }
+
+    public string? Source { get; set; }
+
+    public string? SoundMode { get; set; }
+
+    public bool? Shuffle { get; set; }
+
+    public HomeAssistantMediaRepeatMode? Repeat { get; set; }
+
+    public string? MediaContentId { get; set; }
+
+    public string? MediaContentType { get; set; }
+
+    public HomeAssistantMediaEnqueueMode? Enqueue { get; set; }
+
+    public bool? Announce { get; set; }
+
+    public IReadOnlyDictionary<string, object?>? MediaExtra { get; set; }
+}
+
+/// <summary>A typed view of one raw Home Assistant media-player state.</summary>
+public sealed class HomeAssistantMediaPlayerStatus
+{
+    private HomeAssistantMediaPlayerStatus(HomeAssistantState rawState)
+    {
+        RawState = rawState;
+    }
+
+    public HomeAssistantState RawState { get; }
+
+    public string EntityId => RawState.EntityId;
+
+    public string RawStateValue => RawState.State;
+
+    public HomeAssistantMediaPlayerState State { get; private set; }
+
+    public string? FriendlyName { get; private set; }
+
+    public string? DeviceClass { get; private set; }
+
+    public HomeAssistantMediaPlayerFeature SupportedFeatures { get; private set; }
+
+    public double? VolumeLevel { get; private set; }
+
+    public double? VolumePercent => VolumeLevel.HasValue ? VolumeLevel.Value * 100d : null;
+
+    public double? VolumeStep { get; private set; }
+
+    public bool? IsVolumeMuted { get; private set; }
+
+    public string? Source { get; private set; }
+
+    public IReadOnlyList<string> Sources { get; private set; } = Array.Empty<string>();
+
+    public string? SoundMode { get; private set; }
+
+    public IReadOnlyList<string> SoundModes { get; private set; } = Array.Empty<string>();
+
+    public string? MediaContentId { get; private set; }
+
+    public string? MediaContentType { get; private set; }
+
+    public TimeSpan? MediaDuration { get; private set; }
+
+    public TimeSpan? MediaPosition { get; private set; }
+
+    public DateTimeOffset? MediaPositionUpdatedAt { get; private set; }
+
+    public string? MediaTitle { get; private set; }
+
+    public string? MediaArtist { get; private set; }
+
+    public string? MediaAlbumName { get; private set; }
+
+    public string? MediaAlbumArtist { get; private set; }
+
+    public long? MediaTrack { get; private set; }
+
+    public string? MediaSeriesTitle { get; private set; }
+
+    public string? MediaSeason { get; private set; }
+
+    public string? MediaEpisode { get; private set; }
+
+    public string? MediaChannel { get; private set; }
+
+    public string? MediaPlaylist { get; private set; }
+
+    public string? AppId { get; private set; }
+
+    public string? AppName { get; private set; }
+
+    public bool? Shuffle { get; private set; }
+
+    public string? Repeat { get; private set; }
+
+    public IReadOnlyList<string> GroupMembers { get; private set; } = Array.Empty<string>();
+
+    public string? MediaImageUrl { get; private set; }
+
+    public string? EntityPicture { get; private set; }
+
+    public string? EntityPictureLocal { get; private set; }
+
+    public string? Manufacturer { get; private set; }
+
+    public string? ModelName { get; private set; }
+
+    public bool IsAvailable => State != HomeAssistantMediaPlayerState.Unavailable;
+
+    public bool Supports(HomeAssistantMediaPlayerFeature feature)
+    {
+        return feature != HomeAssistantMediaPlayerFeature.None
+            && (SupportedFeatures & feature) == feature;
+    }
+
+    /// <summary>Estimates playback position using HA's last position timestamp and caps it to known duration.</summary>
+    public TimeSpan? GetEstimatedPosition(DateTimeOffset now)
+    {
+        if (!MediaPosition.HasValue)
+        {
+            return null;
+        }
+
+        var positionSeconds = MediaPosition.Value.TotalSeconds;
+        if (State == HomeAssistantMediaPlayerState.Playing && MediaPositionUpdatedAt.HasValue)
+        {
+            var elapsed = now - MediaPositionUpdatedAt.Value;
+            if (elapsed > TimeSpan.Zero)
+            {
+                positionSeconds = Math.Min(
+                    TimeSpan.MaxValue.TotalSeconds,
+                    positionSeconds + elapsed.TotalSeconds);
+            }
+        }
+
+        if (MediaDuration.HasValue && positionSeconds > MediaDuration.Value.TotalSeconds)
+        {
+            return MediaDuration.Value;
+        }
+
+        return positionSeconds < 0
+            ? TimeSpan.Zero
+            : TimeSpan.FromSeconds(positionSeconds);
+    }
+
+    public Uri? ResolveArtworkUri(Uri homeAssistantBaseUri)
+    {
+        if (homeAssistantBaseUri is null)
+        {
+            throw new ArgumentNullException(nameof(homeAssistantBaseUri));
+        }
+
+        var value = MediaImageUrl ?? EntityPictureLocal ?? EntityPicture;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
+            ? absolute!
+            : new Uri(homeAssistantBaseUri, value!.TrimStart('/'));
+    }
+
+    public static HomeAssistantMediaPlayerStatus FromState(HomeAssistantState state)
+    {
+        if (state is null)
+        {
+            throw new ArgumentNullException(nameof(state));
+        }
+
+        if (!string.Equals(state.Domain, "media_player", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("A media_player entity state is required.", nameof(state));
+        }
+
+        var attributes = state.Attributes;
+        var duration = HomeAssistantAttributeReader.GetDouble(attributes, "media_duration");
+        var position = HomeAssistantAttributeReader.GetDouble(attributes, "media_position");
+        return new HomeAssistantMediaPlayerStatus(state)
+        {
+            State = ParseState(state.State ?? string.Empty),
+            FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name"),
+            DeviceClass = HomeAssistantAttributeReader.GetString(attributes, "device_class"),
+            SupportedFeatures = (HomeAssistantMediaPlayerFeature)(HomeAssistantAttributeReader.GetInt64(attributes, "supported_features") ?? 0),
+            VolumeLevel = HomeAssistantAttributeReader.GetDouble(attributes, "volume_level"),
+            VolumeStep = HomeAssistantAttributeReader.GetDouble(attributes, "volume_step"),
+            IsVolumeMuted = HomeAssistantAttributeReader.GetBoolean(attributes, "is_volume_muted"),
+            Source = HomeAssistantAttributeReader.GetString(attributes, "source"),
+            Sources = HomeAssistantAttributeReader.GetStringList(attributes, "source_list"),
+            SoundMode = HomeAssistantAttributeReader.GetString(attributes, "sound_mode"),
+            SoundModes = HomeAssistantAttributeReader.GetStringList(attributes, "sound_mode_list"),
+            MediaContentId = HomeAssistantAttributeReader.GetString(attributes, "media_content_id"),
+            MediaContentType = HomeAssistantAttributeReader.GetString(attributes, "media_content_type"),
+            MediaDuration = ToTimeSpan(duration),
+            MediaPosition = ToTimeSpan(position),
+            MediaPositionUpdatedAt = HomeAssistantAttributeReader.GetDateTimeOffset(attributes, "media_position_updated_at"),
+            MediaTitle = HomeAssistantAttributeReader.GetString(attributes, "media_title"),
+            MediaArtist = HomeAssistantAttributeReader.GetString(attributes, "media_artist"),
+            MediaAlbumName = HomeAssistantAttributeReader.GetString(attributes, "media_album_name"),
+            MediaAlbumArtist = HomeAssistantAttributeReader.GetString(attributes, "media_album_artist"),
+            MediaTrack = HomeAssistantAttributeReader.GetInt64(attributes, "media_track"),
+            MediaSeriesTitle = HomeAssistantAttributeReader.GetString(attributes, "media_series_title"),
+            MediaSeason = HomeAssistantAttributeReader.GetString(attributes, "media_season"),
+            MediaEpisode = HomeAssistantAttributeReader.GetString(attributes, "media_episode"),
+            MediaChannel = HomeAssistantAttributeReader.GetString(attributes, "media_channel"),
+            MediaPlaylist = HomeAssistantAttributeReader.GetString(attributes, "media_playlist"),
+            AppId = HomeAssistantAttributeReader.GetString(attributes, "app_id"),
+            AppName = HomeAssistantAttributeReader.GetString(attributes, "app_name"),
+            Shuffle = HomeAssistantAttributeReader.GetBoolean(attributes, "shuffle"),
+            Repeat = HomeAssistantAttributeReader.GetString(attributes, "repeat"),
+            GroupMembers = HomeAssistantAttributeReader.GetStringList(attributes, "group_members"),
+            MediaImageUrl = HomeAssistantAttributeReader.GetString(attributes, "media_image_url"),
+            EntityPicture = HomeAssistantAttributeReader.GetString(attributes, "entity_picture"),
+            EntityPictureLocal = HomeAssistantAttributeReader.GetString(attributes, "entity_picture_local"),
+            Manufacturer = HomeAssistantAttributeReader.GetString(attributes, "manufacturer"),
+            ModelName = HomeAssistantAttributeReader.GetString(attributes, "model_name")
+        };
+    }
+
+    private static HomeAssistantMediaPlayerState ParseState(string state)
+    {
+        return state.ToLowerInvariant() switch
+        {
+            "unknown" => HomeAssistantMediaPlayerState.Unknown,
+            "unavailable" => HomeAssistantMediaPlayerState.Unavailable,
+            "off" => HomeAssistantMediaPlayerState.Off,
+            "on" => HomeAssistantMediaPlayerState.On,
+            "idle" => HomeAssistantMediaPlayerState.Idle,
+            "playing" => HomeAssistantMediaPlayerState.Playing,
+            "paused" => HomeAssistantMediaPlayerState.Paused,
+            "buffering" => HomeAssistantMediaPlayerState.Buffering,
+            "standby" => HomeAssistantMediaPlayerState.Standby,
+            _ => HomeAssistantMediaPlayerState.Other
+        };
+    }
+
+    private static TimeSpan? ToTimeSpan(double? seconds)
+    {
+        return seconds.HasValue
+            && seconds.Value >= 0
+            && seconds.Value <= TimeSpan.MaxValue.TotalSeconds
+                ? TimeSpan.FromSeconds(seconds.Value)
+                : null;
+    }
+}
+
+public sealed class HomeAssistantMediaPlayerStateChange
+{
+    internal HomeAssistantMediaPlayerStateChange(
+        string entityId,
+        HomeAssistantMediaPlayerStatus? previous,
+        HomeAssistantMediaPlayerStatus? current)
+    {
+        EntityId = entityId;
+        Previous = previous;
+        Current = current;
+    }
+
+    public string EntityId { get; }
+
+    public HomeAssistantMediaPlayerStatus? Previous { get; }
+
+    public HomeAssistantMediaPlayerStatus? Current { get; }
+
+    public bool IsRemoval => Current is null;
+}

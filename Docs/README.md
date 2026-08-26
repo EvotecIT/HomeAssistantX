@@ -76,6 +76,9 @@ Invokes any Home Assistant action with one target-oriented set of parameters.
 ### [Invoke-HomeAssistantApp](Invoke-HomeAssistantApp.md)
 Runs one explicit lifecycle operation for a Supervisor-managed Home Assistant app.
 
+### [Invoke-HomeAssistantRemote](Invoke-HomeAssistantRemote.md)
+Controls a Home Assistant remote, including sending, learning, and deleting commands.
+
 ### [New-HomeAssistantBackup](New-HomeAssistantBackup.md)
 Creates a full Supervisor backup with optional compression, location, and database exclusion.
 
@@ -98,7 +101,7 @@ Controls lights with typed power, brightness, color, effect, and transition para
 Locks, unlocks, or opens a lock with high-impact confirmation.
 
 ### [Set-HomeAssistantMediaPlayer](Set-HomeAssistantMediaPlayer.md)
-Sets common media-player power, playback, volume, mute, source, and content values.
+Controls media-player power, playback, volume, source, grouping, queueing, and content.
 
 ### [Set-HomeAssistantSwitch](Set-HomeAssistantSwitch.md)
 Turns switches on, off, or toggles them through a resolved Home Assistant target.

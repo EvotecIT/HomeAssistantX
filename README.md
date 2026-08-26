@@ -39,7 +39,7 @@ raw access for custom integrations.
   inventory
 - exact friendly-name or native-ID resolution with ambiguity errors instead of
   silent guesses
-- typed light, switch, climate, cover, media-player, and lock controls
+- typed light, switch, climate, cover, media-player, remote, and lock controls
 - runtime action discovery, including descriptions, fields, examples, defaults,
   and selectors supplied by Home Assistant and installed integrations
 - the documented Home Assistant REST API: state, history, logbook, actions,
@@ -68,7 +68,7 @@ set.
 | Discover floors and rooms | `Get-HomeAssistantFloor`, `Get-HomeAssistantArea` | `client.Inventory` |
 | Discover devices and joined entities | `Get-HomeAssistantDevice`, `Get-HomeAssistantEntity` | `client.Inventory` |
 | Inspect available actions and fields | `Get-HomeAssistantAction` | `client.Services.GetActionsAsync` |
-| Control common domains | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Set-HomeAssistantLock` | `client.Controls` |
+| Control common domains | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Invoke-HomeAssistantRemote`, `Set-HomeAssistantLock` | `client.Controls` |
 | Invoke integration-specific actions | `Invoke-HomeAssistantAction` | `client.Services` |
 | Receive notifications | `Receive-HomeAssistantEvent` | `client.Events`, `client.States` |
 | Inspect and troubleshoot | `Get-HomeAssistantInfo`, `Get-HomeAssistantLog`, `Get-HomeAssistantIssue`, `Get-HomeAssistantTrace`, `Export-HomeAssistantDiagnostic` | `client.Operations` |
@@ -174,6 +174,12 @@ Set-HomeAssistantSwitch -Area Utility -Power On
 Set-HomeAssistantClimate -Entity 'Downstairs thermostat' -HvacMode heat -Temperature 21.5
 Set-HomeAssistantCover -Entity 'Kitchen blind' -PositionPercent 60
 Set-HomeAssistantMediaPlayer -Area LivingRoom -VolumePercent 30 -Playback Play
+Set-HomeAssistantMediaPlayer -Entity media_player.kitchen `
+    -MediaContentId 'media-source://media_source/local/dinner.mp3' `
+    -MediaContentType music -Announce
+Invoke-HomeAssistantRemote -Entity remote.harmony -Action TurnOn -Activity 'Watch TV'
+Invoke-HomeAssistantRemote -Entity remote.living_room `
+    -Action SendCommand -Command Power -RepeatCount 2 -WhatIf
 Set-HomeAssistantLock -Entity lock.front_door -Action Unlock -WhatIf
 ```
 
@@ -187,7 +193,10 @@ combined with a scalar temperature. Media-player `Off` and `Toggle` are
 standalone power operations; combine additional playback, source, or volume
 changes with `Power On` or omit `Power` so later actions cannot reverse a
 requested shutdown. Starting media content is already a playback operation, so
-content and a separate `Playback` action cannot be combined in one call.
+content and a separate `Playback` or `SeekSeconds` action cannot be combined in
+one call. Queue placement and announcement playback are alternative Home
+Assistant modes. Remote power, send, learn, and delete operations share one
+typed command whose parameters are validated for the selected action.
 Light color temperature and RGB are alternative representations and cannot be
 sent together.
 
@@ -326,6 +335,13 @@ var result = await client.Controls.Lights.TurnOnAsync(
 `client.Controls` exposes focused clients for lights, switches, climate,
 covers, media players, and locks. `client.Services` retains the generic fluent
 action builder for every other domain and custom integration.
+
+Typed controls use WebSocket calls by default. Hosts that deliberately keep
+commands on the REST transport can set
+`HomeAssistantClientOptions.ControlServiceCallTransport` to
+`HomeAssistantServiceCallTransport.Rest`; the same typed validation and payload
+ownership apply on either transport. Explicit `Services.CallAsync` and
+`Services.CallRestAsync` calls continue to select their named transport.
 
 ### Receive state changes
 

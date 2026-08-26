@@ -1,6 +1,7 @@
 ﻿using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Diagnostics;
+using HomeAssistantX.Services;
 
 namespace HomeAssistantX.Tests.Infrastructure;
 
@@ -15,6 +16,7 @@ internal static class TestClientFactory
         IHomeAssistantAccessTokenProvider? accessTokenProvider = null,
         int maximumCoalescedWebSocketMessages = 4096,
         bool enableWebSocketMessageCoalescing = true,
+        HomeAssistantServiceCallTransport controlServiceCallTransport = HomeAssistantServiceCallTransport.WebSocket,
         IHomeAssistantDiagnosticsSink? diagnostics = null)
     {
         var options = new HomeAssistantClientOptions(
@@ -29,7 +31,8 @@ internal static class TestClientFactory
             SubscriptionBufferCapacity = subscriptionBufferCapacity,
             MaximumRestResponseBytes = maximumRestResponseBytes,
             MaximumCoalescedWebSocketMessages = maximumCoalescedWebSocketMessages,
-            EnableWebSocketMessageCoalescing = enableWebSocketMessageCoalescing
+            EnableWebSocketMessageCoalescing = enableWebSocketMessageCoalescing,
+            ControlServiceCallTransport = controlServiceCallTransport
         };
         if (diagnostics is not null)
         {

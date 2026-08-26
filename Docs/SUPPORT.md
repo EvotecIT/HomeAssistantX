@@ -35,7 +35,7 @@ All endpoints currently listed in the official REST API reference have named met
 | Event and service/action catalogs | First class / extensible | Action definitions and fields are typed; raw selectors, targets, responses, and unknown integration data are preserved |
 | History and logbook | First class | Time ranges, entity filters, and history performance flags are supported |
 | State list/read/create/update/delete | First class | State writes alter HA's state representation; they do not control the device |
-| Service/action calls | First class / extensible | Fluent entity, device, area, floor, and label targets; optional response data preserved |
+| Service/action calls | First class / extensible | Fluent entity, device, area, floor, and label targets; optional response data preserved; typed controls can select WebSocket or REST at client configuration time |
 | Fire event | Extensible | Named method with open event-data object |
 | Camera proxy | First class | Bounded binary response |
 | Calendars and calendar events | First class | Timed and all-day boundaries supported |
@@ -123,7 +123,11 @@ fallback, resolves friendly names/aliases or native IDs, rejects ambiguous
 matches, and retains raw objects for forward compatibility.
 
 `Controls` provides typed standard calls for lights, switches, climate, covers,
-media players, and locks. These are validated service builders, not a second
+media players, remotes, and locks. Media-player coverage includes state and
+feature decoding, playback position, artwork, source and sound-mode lists,
+queue/announcement playback, grouping, seek, repeat, shuffle, and playlist
+operations. Remote coverage includes state/activity decoding plus typed power,
+send, learn, and delete operations. These are validated service builders, not a second
 product device model; runtime action discovery and the generic service client
 remain available for every integration-defined action.
 

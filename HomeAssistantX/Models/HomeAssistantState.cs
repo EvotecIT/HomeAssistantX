@@ -13,6 +13,7 @@ public sealed class HomeAssistantState
     public string State { get; set; } = string.Empty;
 
     [JsonPropertyName("attributes")]
+    [JsonConverter(typeof(HomeAssistantAttributeDictionaryConverter))]
     public Dictionary<string, JsonElement> Attributes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     [JsonPropertyName("last_changed")]

@@ -44,6 +44,7 @@ $expectedCommands = @(
     'Install-HomeAssistantUpdate',
     'Invoke-HomeAssistantAction',
     'Invoke-HomeAssistantApp',
+    'Invoke-HomeAssistantRemote',
     'New-HomeAssistantBackup',
     'Receive-HomeAssistantEvent',
     'Restart-HomeAssistant',
@@ -66,6 +67,7 @@ $parameterSetContracts = @{
     'Get-HomeAssistantInfo'       = @('Capabilities', 'Health', 'Overview', 'Supervisor')
     'Install-HomeAssistantUpdate' = @('App', 'Core', 'Entity', 'OperatingSystem', 'Supervisor')
     'Invoke-HomeAssistantAction'  = @('Area', 'Data', 'Device', 'Entity', 'Floor', 'Label')
+    'Invoke-HomeAssistantRemote'  = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
     'Restart-HomeAssistant'       = @('App', 'Core', 'Host', 'Integration', 'Supervisor')
     'Set-HomeAssistantClimate'    = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
     'Set-HomeAssistantCover'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
@@ -81,7 +83,21 @@ foreach ($entry in $parameterSetContracts.GetEnumerator()) {
     }
 }
 
-foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'New-HomeAssistantBackup', 'Restart-HomeAssistant', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSwitch') {
+$mediaParameters = (Get-Command -Name Set-HomeAssistantMediaPlayer).Parameters
+foreach ($name in 'Power', 'Playback', 'VolumePercent', 'VolumeStep', 'Muted', 'Source', 'SoundMode', 'Shuffle', 'Repeat', 'SeekSeconds', 'ClearPlaylist', 'JoinMember', 'Unjoin', 'MediaContentId', 'MediaContentType', 'Enqueue', 'Announce', 'MediaExtra') {
+    if (-not $mediaParameters.ContainsKey($name)) {
+        throw "Set-HomeAssistantMediaPlayer is missing the $name parameter."
+    }
+}
+
+$remoteParameters = (Get-Command -Name Invoke-HomeAssistantRemote).Parameters
+foreach ($name in 'Action', 'Activity', 'Command', 'RemoteDevice', 'RepeatCount', 'DelaySeconds', 'HoldSeconds', 'CommandType', 'Alternative', 'TimeoutSeconds') {
+    if (-not $remoteParameters.ContainsKey($name)) {
+        throw "Invoke-HomeAssistantRemote is missing the $name parameter."
+    }
+}
+
+foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Restart-HomeAssistant', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSwitch') {
     if (-not (Get-Command -Name $name).Parameters.ContainsKey('WhatIf')) {
         throw "$name must support ShouldProcess/WhatIf."
     }
@@ -336,12 +352,50 @@ try {
         throw 'The media-player cmdlet accepted contradictory power and playback operations.'
     }
 
+    foreach ($invalidMedia in @(
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaContentId test -MediaContentType music -Enqueue Add -Announce -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent 30 -VolumeStep Up -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaExtra @{ provider = 'value' } -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent ([double]::NaN) -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -JoinMember light.kitchen -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaContentId test -MediaContentType music -MediaExtra @{ 1 = 'value' } -WhatIf -ErrorAction Stop }
+    )) {
+        $invalidMediaShapeRejected = $false
+        try {
+            $null = & $invalidMedia
+        } catch {
+            $invalidMediaShapeRejected = $true
+        }
+        if (-not $invalidMediaShapeRejected) {
+            throw 'The media-player cmdlet accepted an invalid typed operation shape under WhatIf.'
+        }
+    }
+
+    foreach ($invalidRemote in @(
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action SendCommand -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action DeleteCommand -Command Power -TimeoutSeconds 10 -WhatIf -ErrorAction Stop }
+    )) {
+        $invalidRemoteShapeRejected = $false
+        try {
+            $null = & $invalidRemote
+        } catch {
+            $invalidRemoteShapeRejected = $true
+        }
+        if (-not $invalidRemoteShapeRejected) {
+            throw 'The remote cmdlet accepted an invalid typed operation shape under WhatIf.'
+        }
+    }
+
     foreach ($invalidControl in @(
         { Set-HomeAssistantLight -Area Kitchen -ColorTemperatureKelvin 3000 -RgbColor 10, 20, 30 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCover -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumeStep 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -Repeat 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -Enqueue 99 -MediaContentId test -MediaContentType music -WhatIf -ErrorAction Stop },
         { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -EntityId update.home_assistant_core_update -Version ' ' -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -Core -Version ' ' -WhatIf -ErrorAction Stop }

@@ -77,6 +77,7 @@ public static class PackageContract
     {
         options.EnableWebSocketMessageCoalescing = true;
         options.MaximumCoalescedWebSocketMessages = 512;
+        options.ControlServiceCallTransport = HomeAssistantServiceCallTransport.Rest;
     }
 
     public static async Task<HomeAssistantCapabilityReport> ReadAsync(
@@ -119,6 +120,34 @@ public static class PackageContract
             return await client.Controls.Lights.TurnOnAsync(
                 HomeAssistantTarget.ForArea(areaId),
                 new HomeAssistantLightOptions { BrightnessPercent = 45 },
+                cancellationToken);
+        }
+    }
+
+    public static async Task<HomeAssistantMediaPlayerStatus> ReadMediaAsync(
+        Uri uri,
+        string token,
+        string entityId,
+        CancellationToken cancellationToken)
+    {
+        using (var client = HomeAssistantClient.Create(uri, token))
+        {
+            return await client.Controls.MediaPlayers.GetAsync(entityId, cancellationToken);
+        }
+    }
+
+    public static async Task<HomeAssistantServiceCallResult> SendRemoteAsync(
+        Uri uri,
+        string token,
+        string entityId,
+        CancellationToken cancellationToken)
+    {
+        using (var client = HomeAssistantClient.Create(uri, token))
+        {
+            return await client.Controls.Remotes.SendCommandsAsync(
+                HomeAssistantTarget.ForEntity(entityId),
+                new[] { "Power" },
+                new HomeAssistantRemoteSendOptions { RepeatCount = 2 },
                 cancellationToken);
         }
     }

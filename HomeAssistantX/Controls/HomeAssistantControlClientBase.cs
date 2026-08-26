@@ -22,6 +22,6 @@ public abstract class HomeAssistantControlClientBase
     {
         var call = HomeAssistantServiceCall.Create(Domain, action).ForTarget(target);
         configure?.Invoke(call);
-        return Services.CallAsync(call, cancellationToken);
+        return Services.CallControlAsync(call, cancellationToken);
     }
 }

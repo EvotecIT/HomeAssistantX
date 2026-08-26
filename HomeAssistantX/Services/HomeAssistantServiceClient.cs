@@ -11,11 +11,16 @@ public sealed class HomeAssistantServiceClient
 {
     private readonly HomeAssistantRestClient _rest;
     private readonly HomeAssistantWebSocketClient _webSocket;
+    private readonly HomeAssistantServiceCallTransport _controlTransport;
 
-    internal HomeAssistantServiceClient(HomeAssistantRestClient rest, HomeAssistantWebSocketClient webSocket)
+    internal HomeAssistantServiceClient(
+        HomeAssistantRestClient rest,
+        HomeAssistantWebSocketClient webSocket,
+        HomeAssistantServiceCallTransport controlTransport)
     {
         _rest = rest;
         _webSocket = webSocket;
+        _controlTransport = controlTransport;
     }
 
     public Task<JsonElement> GetCatalogAsync(CancellationToken cancellationToken = default)
@@ -108,6 +113,18 @@ public sealed class HomeAssistantServiceClient
         CancellationToken cancellationToken = default)
     {
         return _rest.CallServiceAsync(call, cancellationToken);
+    }
+
+    internal Task<HomeAssistantServiceCallResult> CallControlAsync(
+        HomeAssistantServiceCall call,
+        CancellationToken cancellationToken)
+    {
+        return _controlTransport switch
+        {
+            HomeAssistantServiceCallTransport.WebSocket => CallAsync(call, cancellationToken),
+            HomeAssistantServiceCallTransport.Rest => CallRestAsync(call, cancellationToken),
+            _ => throw new InvalidOperationException("The configured typed-control transport is not supported.")
+        };
     }
 
     private static HomeAssistantActionDefinition ParseAction(string domain, string action, JsonElement value)
