@@ -94,7 +94,7 @@ internal sealed partial class TestHomeAssistantServer
                 break;
             case "GET /api/config":
                 await WriteHttpResponseAsync(stream, 200,
-                    "{\"location_name\":\"Test Home\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}")
+                    "{\"location_name\":\"Test Home\",\"Location_Name\":\"Case-distinct extension\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}")
                     .ConfigureAwait(false);
                 break;
             case "GET /api/components":

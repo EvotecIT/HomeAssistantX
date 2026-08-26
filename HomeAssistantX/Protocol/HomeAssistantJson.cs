@@ -7,7 +7,7 @@ internal static class HomeAssistantJson
 {
     public static JsonSerializerOptions SerializerOptions { get; } = new()
     {
-        PropertyNameCaseInsensitive = true,
+        PropertyNameCaseInsensitive = false,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull

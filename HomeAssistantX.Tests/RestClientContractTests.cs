@@ -23,6 +23,7 @@ public sealed class RestClientContractTests
         Assert.Equal("API running.", status.Message);
         Assert.True(status.AdditionalData["custom_api_field"].GetBoolean());
         Assert.Equal("Test Home", configuration.LocationName);
+        Assert.Equal("Case-distinct extension", configuration.AdditionalData["Location_Name"].GetString());
         Assert.Equal(42, configuration.AdditionalData["custom_field"].GetInt32());
         Assert.Equal(2, states.Count);
         Assert.Equal("sensor", temperature.Domain);
