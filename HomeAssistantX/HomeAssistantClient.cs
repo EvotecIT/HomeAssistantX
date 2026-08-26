@@ -1,8 +1,10 @@
 ﻿using System.Net.Http;
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
+using HomeAssistantX.Controls;
 using HomeAssistantX.Events;
 using HomeAssistantX.Operations;
+using HomeAssistantX.Inventory;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
@@ -27,6 +29,8 @@ public sealed class HomeAssistantClient : IDisposable
         Services = new HomeAssistantServiceClient(Rest, WebSocket);
         Events = new HomeAssistantEventClient(WebSocket);
         Registries = new HomeAssistantRegistryClient(WebSocket);
+        Inventory = new HomeAssistantInventoryClient(Registries, States, Services);
+        Controls = new HomeAssistantControlsClient(Services);
         System = new HomeAssistantSystemClient(WebSocket);
         Operations = new HomeAssistantOperationsClient(Rest, WebSocket, States, Services);
         Supervisor = HomeAssistantSupervisorClient.CreateViaCore(Rest, WebSocket);
@@ -45,6 +49,12 @@ public sealed class HomeAssistantClient : IDisposable
     public HomeAssistantEventClient Events { get; }
 
     public HomeAssistantRegistryClient Registries { get; }
+
+    /// <summary>Provides a joined, queryable view of the house and its available actions.</summary>
+    public HomeAssistantInventoryClient Inventory { get; }
+
+    /// <summary>Provides typed controls for common Home Assistant domains.</summary>
+    public HomeAssistantControlsClient Controls { get; }
 
     /// <summary>Provides documented Home Assistant system, validation, target, and authentication commands.</summary>
     public HomeAssistantSystemClient System { get; }

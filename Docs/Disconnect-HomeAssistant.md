@@ -6,30 +6,30 @@ schema: 2.0.0
 ---
 # Disconnect-HomeAssistant
 ## SYNOPSIS
-Closes and disposes an explicit Home Assistant connection.
+Closes the supplied connection or the current runspace default.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Disconnect-HomeAssistant -Connection <HomeAssistantConnection> [<CommonParameters>]
+Disconnect-HomeAssistant [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Closes and disposes an explicit Home Assistant connection.
+Closes the supplied connection or the current runspace default.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-$ha | Disconnect-HomeAssistant
+Disconnect-HomeAssistant
 ```
 
-Closes both transports and disposes the connection.
+Closes both transports, removes the runspace default, and disposes the connection.
 
 ## PARAMETERS
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -37,7 +37,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

@@ -1,123 +1,160 @@
 # HomeAssistantX PowerShell
 
-The HomeAssistantX module is a thin, task-oriented shell over the same .NET
-client used by applications. Windows PowerShell 5.1 loads the `net472` binary.
-PowerShell 7 uses the portable `netstandard2.0` payload on Windows, macOS, and
-Linux; a `net10.0` build is also validated for current hosts and direct binary
-consumers.
+The HomeAssistantX module is a thin task-oriented shell over the .NET client.
+Windows PowerShell 5.1 loads the `net472` binary. PowerShell 7 uses the portable
+`netstandard2.0` payload on Windows, macOS, and Linux; `net10.0` is also built
+and validated for current hosts and direct binary consumers.
 
 ## Connection model
 
-`Connect-HomeAssistant` validates both REST and WebSocket access and returns an
-explicit `HomeAssistantConnection`. Every other command requires that object
-through `-Connection` or the pipeline. The module does not keep a process-wide
-default connection.
+`Connect-HomeAssistant` validates REST and WebSocket access, returns a
+`HomeAssistantConnection`, and stores it as the current runspace default.
+Commands use an explicit pipeline/`-Connection` value first, then the default.
 
 ```powershell
-$token = Get-Secret HomeAssistantToken -AsPlainText
-$home = Connect-HomeAssistant -Uri 'https://home.example.net' `
-    -AccessToken $token -Name 'Home'
+Connect-HomeAssistant -Uri 'https://home.example.net' `
+    -AccessToken $token -Name Home | Out-Null
 
-$home | Get-HomeAssistantInfo
-$home | Disconnect-HomeAssistant
+Get-HomeAssistantInfo
+Get-HomeAssistantConnection
+Disconnect-HomeAssistant
 ```
+
+Defaults are isolated by runspace. Background jobs and parallel runspaces do
+not inherit a connection. A new default disposes the previous default. For
+multiple homes, retain explicit connections and use `-NoDefault`:
+
+```powershell
+$lab = Connect-HomeAssistant -Uri 'https://lab.example.net' `
+    -AccessToken $labToken -Name Lab -NoDefault
+$lab | Get-HomeAssistantEntity -Domain light |
+    Set-HomeAssistantLight -Power Off
+$lab | Disconnect-HomeAssistant
+```
+
+Discovery entities retain the connection that produced them. Typed-control
+pipeline input uses that connection even when it is not the runspace default,
+and rejects a mismatched explicit `-Connection` or a mixed-home batch.
 
 For an application-owned OAuth lifecycle, pass an
-`IHomeAssistantAccessTokenProvider` with `-AccessTokenProvider` instead of a
-token string.
+`IHomeAssistantAccessTokenProvider` with `-AccessTokenProvider`.
 
-## Command design
+## Discovery workflow
 
-The module groups commands by operator task. Parameter sets select a target or
-data source; they do not multiply the command count for every integration,
-domain, app, or update type.
-
-| Task | Command | Important parameter sets |
-| --- | --- | --- |
-| Connect and disconnect | `Connect-HomeAssistant`, `Disconnect-HomeAssistant` | `Token`, `Provider` |
-| Inspect the installation | `Get-HomeAssistantInfo` | `Overview`, `Capabilities`, `Health`, `Supervisor` |
-| Read current and historical state | `Get-HomeAssistantEntity`, `Get-HomeAssistantHistory` | entity, domain, all |
-| Receive notifications | `Receive-HomeAssistantEvent` | `Event`, `Entity`, `All` |
-| Invoke any Core action | `Invoke-HomeAssistantAction` | `Data`, `Entity`, `Device`, `Area`, `Floor`, `Label` |
-| Inspect logs | `Get-HomeAssistantLog` | `SystemLog`, `Legacy`, `Core`, `Supervisor`, `Host`, `App` |
-| Troubleshoot Core | `Get-HomeAssistantIssue`, `Get-HomeAssistantTrace`, `Export-HomeAssistantDiagnostic`, `Test-HomeAssistantConfiguration` | Core Repairs, trace list/run, config-entry/device diagnostic |
-| Inspect integrations | `Get-HomeAssistantIntegration` | all, id, domain |
-| Inspect Supervisor | `Get-HomeAssistantApp`, `Get-HomeAssistantBackup`, `Get-HomeAssistantJob` | optional exact identifiers |
-| Discover and install updates | `Get-HomeAssistantUpdate`, `Install-HomeAssistantUpdate` | entity, Core, Supervisor, OS, app |
-| Operate apps | `Invoke-HomeAssistantApp` | one `Action` enum instead of six lifecycle cmdlets |
-| Back up or restart | `New-HomeAssistantBackup`, `Restart-HomeAssistant` | Core, Supervisor, host, app, integration |
-
-Use `Get-Help <command> -Full` for generated parameter and output details.
-
-## Generic actions
-
-Home Assistant's domain/action catalog is extensible, so the module does not
-attempt to generate hundreds of commands such as `Set-Light` or
-`Open-Cover`. `Invoke-HomeAssistantAction` keeps the native model visible and
-provides mutually exclusive target parameter sets:
+Start with the house, then narrow to a room, device, or entity:
 
 ```powershell
-$home | Invoke-HomeAssistantAction -Domain climate -Action set_temperature `
-    -EntityId climate.downstairs -Data @{ temperature = 21.5 } -WhatIf
-
-$home | Invoke-HomeAssistantAction light turn_off -FloorId ground_floor
+Get-HomeAssistantFloor
+Get-HomeAssistantArea -Floor 'Ground Floor'
+Get-HomeAssistantDevice -Area Kitchen
+Get-HomeAssistantEntity -Area Kitchen
+Get-HomeAssistantEntity -Area Kitchen -Domain light
 ```
 
-`-Service` is accepted as an alias for `-Action` for users familiar with the
-older Home Assistant terminology.
+An area is Home Assistant's physical room/location object; `-Room` is an alias.
+Joined entities expose friendly/native names, live state and attributes, device,
+effective area, floor, registry metadata, and raw source objects. Effective area
+uses the entity's direct assignment first and its device's area otherwise.
+
+Friendly names and native IDs are both accepted. Exact ambiguity raises an
+error listing candidate IDs. Non-administrator users can still read entities;
+if configuration-entry enrichment is denied, integration details are empty and
+the registry snapshot exposes `IsConfigEntryEnrichmentAvailable = false`.
+
+## Action discovery and typed controls
+
+Home Assistant supplies the action catalog at runtime, including custom
+integration fields:
+
+```powershell
+Get-HomeAssistantAction -Entity 'Kitchen light'
+(Get-HomeAssistantAction -Domain light -Action turn_on).Fields
+```
+
+Common domains have typed task-level commands:
+
+```powershell
+Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -WhatIf
+Set-HomeAssistantSwitch -Device 'Coffee machine' -Power Off
+Set-HomeAssistantClimate -Entity climate.downstairs -Temperature 21.5 -HvacMode heat
+Set-HomeAssistantCover -Entity cover.kitchen -PositionPercent 60
+Set-HomeAssistantMediaPlayer -Area LivingRoom -VolumePercent 30 -Playback Play
+Set-HomeAssistantLock -Entity lock.front_door -Action Unlock -WhatIf
+```
+
+Each typed command has target parameter sets for entity, device, area, floor,
+and joined entity pipeline input. It validates common values and uses
+`ShouldProcess`. Lock operations use high confirmation impact.
+
+Climate target ranges require both low and high values and are mutually
+exclusive with `-Temperature`. Media-player `-Power Off` and `-Power Toggle`
+are standalone operations; use `-Power On` or omit `-Power` when applying
+playback, source, mute, volume, or content changes in the same command. Content
+launch and `-Playback` are mutually exclusive because both start playback.
+`-ColorTemperatureKelvin` and `-RgbColor` are also mutually exclusive.
+
+`Invoke-HomeAssistantAction` remains the extensible path for a custom action or
+field that does not belong in a common typed command:
+
+```powershell
+Invoke-HomeAssistantAction vacuum send_command `
+    -EntityId vacuum.downstairs `
+    -Data @{ command = 'clean_spot'; params = @{ repeats = 2 } } `
+    -WhatIf
+```
+
+`-Service` is accepted as an alias for `-Action`.
+
+## Command map
+
+| Task | Commands |
+| --- | --- |
+| Connect | `Connect-HomeAssistant`, `Get-HomeAssistantConnection`, `Disconnect-HomeAssistant` |
+| Discover the house | `Get-HomeAssistantFloor`, `Get-HomeAssistantArea`, `Get-HomeAssistantDevice`, `Get-HomeAssistantEntity` |
+| Discover and invoke actions | `Get-HomeAssistantAction`, `Invoke-HomeAssistantAction` |
+| Typed everyday controls | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Set-HomeAssistantLock` |
+| Read current/history | `Get-HomeAssistantEntity`, `Get-HomeAssistantHistory` |
+| Receive notifications | `Receive-HomeAssistantEvent` |
+| Inspect the installation | `Get-HomeAssistantInfo` |
+| Inspect logs and Repairs | `Get-HomeAssistantLog`, `Get-HomeAssistantIssue` |
+| Troubleshoot | `Get-HomeAssistantTrace`, `Export-HomeAssistantDiagnostic`, `Test-HomeAssistantConfiguration`, `Get-HomeAssistantIntegration` |
+| Inspect Supervisor | `Get-HomeAssistantApp`, `Get-HomeAssistantBackup`, `Get-HomeAssistantJob` |
+| Update and operate apps | `Get-HomeAssistantUpdate`, `Install-HomeAssistantUpdate`, `Invoke-HomeAssistantApp` |
+| Back up or restart | `New-HomeAssistantBackup`, `Restart-HomeAssistant` |
+
+Use `Get-Help <command> -Full` for generated parameter, input, output, and
+example details.
 
 ## Events and automation
 
 `Receive-HomeAssistantEvent` uses a WebSocket subscription and emits events as
-they arrive. It runs until canceled or until the connection fails after its
-configured reconnect policy.
+they arrive:
 
 ```powershell
-$home | Receive-HomeAssistantEvent -EventType call_service |
-    Where-Object { $_.Origin -eq 'LOCAL' }
+Receive-HomeAssistantEvent -EventType call_service |
+    Where-Object Origin -EQ LOCAL
 
-$nextDoorChange = $home | Receive-HomeAssistantEvent `
+$nextDoorChange = Receive-HomeAssistantEvent `
     -EntityId binary_sensor.front_door -Count 1 -TimeoutSeconds 60
 ```
 
-For unattended automation, catch the typed HomeAssistantX exceptions and let
-the host decide whether authentication failures require token refresh or user
-reauthorization.
+Open-ended streams run until canceled. `-Count` and `-TimeoutSeconds` provide a
+bounded wait. Subscription cleanup remains bounded when a command is stopped.
 
-## Safety boundaries
+## Safety and Supervisor boundaries
 
-The following commands implement `SupportsShouldProcess`:
+Mutation cmdlets implement `SupportsShouldProcess`; use `-WhatIf` in discovery
+and deployment scripts. A custom integration can define semantics that the
+generic action command cannot infer, so callers still own allowlists and
+authorization policy.
 
-- `Export-HomeAssistantDiagnostic`
-- `Install-HomeAssistantUpdate`
-- `Invoke-HomeAssistantAction`
-- `Invoke-HomeAssistantApp`
-- `New-HomeAssistantBackup`
-- `Restart-HomeAssistant`
+Supervisor commands use Home Assistant Core's administrator-only
+`supervisor/api` WebSocket proxy and `/api/hassio` log proxy. They require Home
+Assistant OS or a supervised installation and suitable permissions.
 
-Use `-WhatIf` in discovery and deployment scripts before allowing a mutation.
-High-impact Supervisor operations prompt according to PowerShell's confirmation
-preference. A generic Home Assistant action cannot infer whether a custom
-integration considers an operation dangerous, so callers remain responsible
-for their own allowlists and confirmation policy.
+Destructive restore, wipe, recovery, host shutdown, and arbitrary package
+installation do not have convenience cmdlets. Advanced .NET callers can use the
+bounded raw Supervisor surface when they deliberately own those risks.
 
-`New-HomeAssistantBackup -Password` accepts a `SecureString`. HomeAssistantX
-does not log or persist tokens, passwords, logs, or diagnostic payloads.
-
-## Supervisor availability
-
-The normal connection uses Home Assistant Core's administrator-only
-`supervisor/api` WebSocket proxy and the authenticated `/api/hassio` log proxy.
-This keeps one explicit connection for normal operator scripts. Supervisor
-commands require Home Assistant OS or a supervised installation and sufficient
-permissions; they do not work on Container or Core-only installations.
-
-The .NET API also exposes a separate direct Supervisor bearer-token client for
-code running in trusted local app/add-on contexts. The PowerShell module does
-not ask users to mix that credential with the Core connection.
-
-Routine inventory, logs, jobs, backups, updates, restarts, and app lifecycle
-are modeled. Destructive restore, wipe, recovery, host shutdown, and arbitrary
-package installation do not receive convenience cmdlets. Advanced .NET callers
-can use the bounded raw Supervisor surface when they deliberately own those
-risks.
+HomeAssistantX does not log or persist tokens, passwords, logs, diagnostics, or
+house inventory.

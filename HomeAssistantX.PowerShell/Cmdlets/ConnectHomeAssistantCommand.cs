@@ -3,11 +3,11 @@ using HomeAssistantX.Authentication;
 
 namespace HomeAssistantX.PowerShell;
 
-/// <summary>Creates and verifies an explicit Home Assistant connection.</summary>
+/// <summary>Creates, verifies, and optionally stores the runspace's default Home Assistant connection.</summary>
 /// <example>
 ///   <summary>Connect with a token held in a variable</summary>
-///   <code>$ha = Connect-HomeAssistant -Uri 'https://home.example.net' -AccessToken $token -Name 'Home'</code>
-///   <para>Validates REST and WebSocket access and returns an explicit connection.</para>
+///   <code>Connect-HomeAssistant -Uri 'https://home.example.net' -AccessToken $token -Name 'Home' | Out-Null</code>
+///   <para>Validates REST and WebSocket access and stores the connection as the runspace default.</para>
 /// </example>
 [Cmdlet(VerbsCommunications.Connect, "HomeAssistant", DefaultParameterSetName = TokenParameterSet)]
 [OutputType(typeof(HomeAssistantConnection))]
@@ -37,8 +37,13 @@ public sealed class ConnectHomeAssistantCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string? Name { get; set; }
 
+    /// <summary>Returns the connection without replacing the current runspace default.</summary>
+    [Parameter]
+    public SwitchParameter NoDefault { get; set; }
+
     protected override async Task ProcessRecordAsync()
     {
+        var runspaceId = NoDefault ? (Guid?)null : HomeAssistantSession.GetCurrentRunspaceId();
         var connection = ParameterSetName == ProviderParameterSet
             ? HomeAssistantConnection.Create(Uri, AccessTokenProvider, Name)
             : HomeAssistantConnection.Create(Uri, AccessToken, Name);
@@ -46,6 +51,11 @@ public sealed class ConnectHomeAssistantCommand : AsyncPSCmdlet
         {
             await connection.Client.Rest.CheckApiAsync(CancelToken).ConfigureAwait(false);
             await connection.Client.WebSocket.ConnectAsync(CancelToken).ConfigureAwait(false);
+            if (runspaceId.HasValue)
+            {
+                HomeAssistantSession.Set(runspaceId.Value, connection);
+            }
+
             WriteObject(connection);
         }
         catch

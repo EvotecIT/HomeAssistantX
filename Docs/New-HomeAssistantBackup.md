@@ -11,7 +11,7 @@ Creates a full Supervisor backup with optional compression, location, and databa
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-HomeAssistantBackup [[-Name] <string>] -Connection <HomeAssistantConnection> [-Password <securestring>] [-Compressed <bool>] [-Location <string>] [-ExcludeDatabase] [-Background] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-HomeAssistantBackup [[-Name] <string>] [-Password <securestring>] [-Compressed <bool>] [-Location <string>] [-ExcludeDatabase] [-Background] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -61,7 +61,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -69,7 +69,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

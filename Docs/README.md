@@ -11,22 +11,37 @@ Task-oriented PowerShell access to Home Assistant Core and Supervisor through Ho
 
 ## HomeAssistantX Cmdlets
 ### [Connect-HomeAssistant](Connect-HomeAssistant.md)
-Creates and verifies an explicit Home Assistant connection.
+Creates, verifies, and optionally stores the runspace's default Home Assistant connection.
 
 ### [Disconnect-HomeAssistant](Disconnect-HomeAssistant.md)
-Closes and disposes an explicit Home Assistant connection.
+Closes the supplied connection or the current runspace default.
 
 ### [Export-HomeAssistantDiagnostic](Export-HomeAssistantDiagnostic.md)
 Downloads Home Assistant-redacted diagnostics for a configuration entry or one device.
 
+### [Get-HomeAssistantAction](Get-HomeAssistantAction.md)
+Lists Home Assistant actions and their runtime-provided field descriptions.
+
 ### [Get-HomeAssistantApp](Get-HomeAssistantApp.md)
 Gets installed Supervisor-managed Home Assistant apps.
+
+### [Get-HomeAssistantArea](Get-HomeAssistantArea.md)
+Lists Home Assistant areas (rooms), optionally within a floor.
 
 ### [Get-HomeAssistantBackup](Get-HomeAssistantBackup.md)
 Gets backups from a Supervisor-managed Home Assistant installation.
 
+### [Get-HomeAssistantConnection](Get-HomeAssistantConnection.md)
+Gets the default Home Assistant connection for the current PowerShell runspace.
+
+### [Get-HomeAssistantDevice](Get-HomeAssistantDevice.md)
+Lists Home Assistant devices, optionally filtered by area or floor.
+
 ### [Get-HomeAssistantEntity](Get-HomeAssistantEntity.md)
-Gets current entity states by identifier, domain, or all entities.
+Gets joined entities by name, identifier, domain, device, area, or floor.
+
+### [Get-HomeAssistantFloor](Get-HomeAssistantFloor.md)
+Lists Home Assistant floors with their joined areas, devices, and entities.
 
 ### [Get-HomeAssistantHistory](Get-HomeAssistantHistory.md)
 Gets recorder history for one or more entity identifiers.
@@ -69,6 +84,24 @@ Streams Home Assistant events without polling until canceled.
 
 ### [Restart-HomeAssistant](Restart-HomeAssistant.md)
 Restarts Core, Supervisor, host, an app, or reloads one integration.
+
+### [Set-HomeAssistantClimate](Set-HomeAssistantClimate.md)
+Sets common climate values with typed parameters instead of raw action data.
+
+### [Set-HomeAssistantCover](Set-HomeAssistantCover.md)
+Moves covers with a typed action, position, or tilt position.
+
+### [Set-HomeAssistantLight](Set-HomeAssistantLight.md)
+Controls lights with typed power, brightness, color, effect, and transition parameters.
+
+### [Set-HomeAssistantLock](Set-HomeAssistantLock.md)
+Locks, unlocks, or opens a lock with high-impact confirmation.
+
+### [Set-HomeAssistantMediaPlayer](Set-HomeAssistantMediaPlayer.md)
+Sets common media-player power, playback, volume, mute, source, and content values.
+
+### [Set-HomeAssistantSwitch](Set-HomeAssistantSwitch.md)
+Turns switches on, off, or toggles them through a resolved Home Assistant target.
 
 ### [Test-HomeAssistantConfiguration](Test-HomeAssistantConfiguration.md)
 Validates the active Home Assistant configuration without restarting Core.

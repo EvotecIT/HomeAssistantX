@@ -11,7 +11,7 @@ Gets recorder history for one or more entity identifiers.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Get-HomeAssistantHistory [-EntityId] <string[]> -Connection <HomeAssistantConnection> [-StartTime <DateTimeOffset>] [-EndTime <DateTimeOffset>] [-MinimalResponse] [-NoAttributes] [-SignificantChangesOnly] [<CommonParameters>]
+Get-HomeAssistantHistory [-EntityId] <string[]> [-StartTime <DateTimeOffset>] [-EndTime <DateTimeOffset>] [-MinimalResponse] [-NoAttributes] [-SignificantChangesOnly] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -29,7 +29,7 @@ Returns recorder history without polling the current state endpoint.
 ## PARAMETERS
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -37,7 +37,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

@@ -25,9 +25,14 @@ $expectedCommands = @(
     'Connect-HomeAssistant',
     'Disconnect-HomeAssistant',
     'Export-HomeAssistantDiagnostic',
+    'Get-HomeAssistantAction',
     'Get-HomeAssistantApp',
+    'Get-HomeAssistantArea',
     'Get-HomeAssistantBackup',
+    'Get-HomeAssistantConnection',
+    'Get-HomeAssistantDevice',
     'Get-HomeAssistantEntity',
+    'Get-HomeAssistantFloor',
     'Get-HomeAssistantHistory',
     'Get-HomeAssistantInfo',
     'Get-HomeAssistantIntegration',
@@ -42,6 +47,12 @@ $expectedCommands = @(
     'New-HomeAssistantBackup',
     'Receive-HomeAssistantEvent',
     'Restart-HomeAssistant',
+    'Set-HomeAssistantClimate',
+    'Set-HomeAssistantCover',
+    'Set-HomeAssistantLight',
+    'Set-HomeAssistantLock',
+    'Set-HomeAssistantMediaPlayer',
+    'Set-HomeAssistantSwitch',
     'Test-HomeAssistantConfiguration'
 )
 $importedModuleName = (Get-Command -Name Connect-HomeAssistant -ErrorAction Stop).ModuleName
@@ -56,6 +67,12 @@ $parameterSetContracts = @{
     'Install-HomeAssistantUpdate' = @('App', 'Core', 'Entity', 'OperatingSystem', 'Supervisor')
     'Invoke-HomeAssistantAction'  = @('Area', 'Data', 'Device', 'Entity', 'Floor', 'Label')
     'Restart-HomeAssistant'       = @('App', 'Core', 'Host', 'Integration', 'Supervisor')
+    'Set-HomeAssistantClimate'    = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
+    'Set-HomeAssistantCover'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
+    'Set-HomeAssistantLight'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
+    'Set-HomeAssistantLock'       = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
+    'Set-HomeAssistantMediaPlayer' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
+    'Set-HomeAssistantSwitch'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
 }
 foreach ($entry in $parameterSetContracts.GetEnumerator()) {
     $sets = @((Get-Command -Name $entry.Key).ParameterSets.Name | Sort-Object)
@@ -64,7 +81,7 @@ foreach ($entry in $parameterSetContracts.GetEnumerator()) {
     }
 }
 
-foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'New-HomeAssistantBackup', 'Restart-HomeAssistant') {
+foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'New-HomeAssistantBackup', 'Restart-HomeAssistant', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSwitch') {
     if (-not (Get-Command -Name $name).Parameters.ContainsKey('WhatIf')) {
         throw "$name must support ShouldProcess/WhatIf."
     }
@@ -101,8 +118,94 @@ try {
     }
 
     $connection = Connect-HomeAssistant -Uri $uri -AccessToken 'test-access-token'
-    $info = $connection | Get-HomeAssistantInfo
-    $entities = @($connection | Get-HomeAssistantEntity)
+    $defaultConnection = Get-HomeAssistantConnection
+    $secondaryConnection = Connect-HomeAssistant -Uri $uri -AccessToken 'test-access-token' -Name Secondary -NoDefault
+    try {
+        if (-not [object]::ReferenceEquals($connection, (Get-HomeAssistantConnection))) {
+            throw 'Connect-HomeAssistant -NoDefault replaced the runspace default.'
+        }
+
+        $defaultLights = @($connection | Get-HomeAssistantEntity -Area Kitchen -Domain light)
+        $secondaryLights = @($secondaryConnection | Get-HomeAssistantEntity -Area Kitchen -Domain light)
+        $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
+            throw 'Could not reset the mixed-connection action baseline.'
+        }
+        $mixedConnectionsRejected = $false
+        try {
+            $null = @($defaultLights + $secondaryLights) | Set-HomeAssistantLight -Power Off -Confirm:$false -ErrorAction Stop
+        } catch {
+            $mixedConnectionsRejected = $true
+        }
+        if (-not $mixedConnectionsRejected) {
+            throw 'A typed-control pipeline accepted entities from different Home Assistant connections.'
+        }
+        $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+            throw 'A mixed-connection pipeline invoked a Home Assistant action before rejection.'
+        }
+
+        $connection | Disconnect-HomeAssistant
+        $connection = $null
+        $null = $secondaryLights | Set-HomeAssistantLight -Power Off -Confirm:$false
+        $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        $provenanceCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+        if ($provenanceCall.service -ne 'turn_off' -or @($provenanceCall.target.entity_id)[0] -ne 'light.kitchen') {
+            throw 'Piped entities did not retain their non-default source connection.'
+        }
+
+        $connection = Connect-HomeAssistant -Uri $uri -AccessToken 'test-access-token'
+        $defaultConnection = $connection
+        $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
+            throw 'Could not reset the connection-provenance action baseline.'
+        }
+
+        $mismatchedConnectionRejected = $false
+        try {
+            $null = $secondaryLights | Set-HomeAssistantLight -Connection $connection -Power Off -Confirm:$false -ErrorAction Stop
+        } catch {
+            $mismatchedConnectionRejected = $true
+        }
+        if (-not $mismatchedConnectionRejected) {
+            throw 'A piped entity accepted a different explicit Home Assistant connection.'
+        }
+        $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+            throw 'A mismatched piped entity connection invoked a Home Assistant action.'
+        }
+    } finally {
+        if (-not $secondaryConnection.IsDisposed) {
+            $secondaryConnection | Disconnect-HomeAssistant
+        }
+    }
+    $disposedProvenanceRejected = $false
+    try {
+        $null = $secondaryLights | Set-HomeAssistantLight -Power Off -WhatIf -ErrorAction Stop
+    } catch {
+        $disposedProvenanceRejected = $true
+    }
+    if (-not $disposedProvenanceRejected) {
+        throw 'A typed-control WhatIf preview accepted a disposed source connection.'
+    }
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+        throw 'A disposed provenance connection invoked a Home Assistant action.'
+    }
+
+    $info = Get-HomeAssistantInfo
+    $floors = @(Get-HomeAssistantFloor)
+    $areas = @(Get-HomeAssistantArea -Floor Ground)
+    $devices = @(Get-HomeAssistantDevice -Area Kitchen)
+    $entities = @(Get-HomeAssistantEntity)
+    $kitchenLights = @(Get-HomeAssistantEntity -Area Kitchen -Domain light)
+    $lightActions = @(Get-HomeAssistantAction -Entity 'Kitchen light')
     $logs = @($connection | Get-HomeAssistantLog)
     $integrations = @($connection | Get-HomeAssistantIntegration)
     $apps = @($connection | Get-HomeAssistantApp)
@@ -111,7 +214,13 @@ try {
     $configuration = $connection | Test-HomeAssistantConfiguration
 
     if ($info.Version -ne '2026.8.3') { throw 'Core information was not returned.' }
+    if (-not [object]::ReferenceEquals($connection, $defaultConnection)) { throw 'Connect-HomeAssistant did not establish the runspace default.' }
+    if ($floors.Count -ne 1 -or $floors[0].Name -ne 'Ground') { throw 'Floor discovery did not return the joined floor.' }
+    if ($areas.Count -ne 1 -or $areas[0].Name -ne 'Kitchen') { throw 'Area discovery did not resolve the floor name.' }
+    if ($devices.Count -ne 1 -or $devices[0].Name -ne 'Kitchen Sensor') { throw 'Device discovery did not resolve the area name.' }
     if ($entities.Count -ne 2) { throw 'Entity enumeration did not use the live loopback contract.' }
+    if ($kitchenLights.Count -ne 1 -or $kitchenLights[0].EntityId -ne 'light.kitchen') { throw 'Joined entity discovery did not find the kitchen light.' }
+    if (-not ($lightActions | Where-Object Action -EQ turn_on)) { throw 'Action discovery did not return the light action catalog.' }
     if ($logs.Count -ne 1) { throw 'Structured system logs were not returned.' }
     if ($integrations.Count -ne 1) { throw 'Configuration entries were not returned.' }
     if ($apps.Count -ne 1) { throw 'Supervisor apps were not returned.' }
@@ -161,6 +270,91 @@ try {
         throw 'The entity target parameter set produced the wrong target.'
     }
 
+    $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
+        throw 'Could not reset the typed-control action baseline.'
+    }
+    $null = Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -WhatIf
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+        throw 'WhatIf invoked the typed light control.'
+    }
+
+    $invalidClimateRejected = $false
+    try {
+        $null = Set-HomeAssistantClimate -Area Kitchen -TargetTemperatureLow 18 -Confirm:$false -ErrorAction Stop
+    } catch {
+        $invalidClimateRejected = $true
+    }
+    if (-not $invalidClimateRejected) {
+        throw 'The climate cmdlet accepted an incomplete target temperature range.'
+    }
+
+    $nonFiniteClimateRejected = $false
+    try {
+        $null = Set-HomeAssistantClimate -Area Kitchen -Temperature ([double]::NaN) -WhatIf -ErrorAction Stop
+    } catch {
+        $nonFiniteClimateRejected = $true
+    }
+    if (-not $nonFiniteClimateRejected) {
+        throw 'The climate cmdlet accepted a non-finite temperature under WhatIf.'
+    }
+
+    $invalidMediaRejected = $false
+    try {
+        $null = Set-HomeAssistantMediaPlayer -Area Kitchen -Power Off -Playback Play -Confirm:$false -ErrorAction Stop
+    } catch {
+        $invalidMediaRejected = $true
+    }
+    if (-not $invalidMediaRejected) {
+        throw 'The media-player cmdlet accepted contradictory power and playback operations.'
+    }
+
+    foreach ($invalidControl in @(
+        { Set-HomeAssistantLight -Area Kitchen -ColorTemperatureKelvin 3000 -RgbColor 10, 20, 30 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCover -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop }
+    )) {
+        $invalidEnumRejected = $false
+        try {
+            $null = & $invalidControl
+        } catch {
+            $invalidEnumRejected = $true
+        }
+        if (-not $invalidEnumRejected) {
+            throw 'A typed-control cmdlet accepted an undefined enum value under WhatIf.'
+        }
+    }
+
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+        throw 'Invalid typed-control input invoked a Home Assistant action.'
+    }
+
+    $null = Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedLightCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedLightCall.domain -ne 'light' -or $typedLightCall.service -ne 'turn_on' -or $typedLightCall.service_data.brightness_pct -ne 45) {
+        throw 'The typed light cmdlet produced the wrong action payload.'
+    }
+    if (@($typedLightCall.target.area_id)[0] -ne 'kitchen') {
+        throw 'The typed light cmdlet did not resolve the friendly area name.'
+    }
+
+    $null = $kitchenLights | Set-HomeAssistantLight -Power Off -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $pipelineLightCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if (@($pipelineLightCall.target.entity_id)[0] -ne 'light.kitchen' -or $pipelineLightCall.service -ne 'turn_off') {
+        throw 'The typed light cmdlet did not accept joined entity pipeline input.'
+    }
+
     $server.StandardInput.WriteLine('CLEAR_LAST_SUPERVISOR_COMMAND')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SUPERVISOR_COMMAND_CLEARED') {
@@ -182,11 +376,20 @@ try {
     $eventJob = Start-Job -ScriptBlock {
         param($ModuleAssembly, $HomeAssistantUri)
         Import-Module -Name $ModuleAssembly -Force -ErrorAction Stop
+        $unexpectedDefault = $false
+        try {
+            $null = Get-HomeAssistantConnection -ErrorAction Stop
+            $unexpectedDefault = $true
+        } catch {
+        }
+        if ($unexpectedDefault) {
+            throw 'A default Home Assistant connection leaked into another runspace.'
+        }
         $eventConnection = Connect-HomeAssistant -Uri $HomeAssistantUri -AccessToken 'test-access-token'
         try {
-            $eventConnection | Receive-HomeAssistantEvent -EntityId light.kitchen -Count 1 -TimeoutSeconds 10
+            Receive-HomeAssistantEvent -EntityId light.kitchen -Count 1 -TimeoutSeconds 10
         } finally {
-            $eventConnection | Disconnect-HomeAssistant
+            Disconnect-HomeAssistant
         }
     } -ArgumentList $resolvedModulePath, $uri.AbsoluteUri
     try {
@@ -230,10 +433,36 @@ try {
         Remove-Job -Job $eventJob -Force -ErrorAction SilentlyContinue
     }
 
+    $cleanupJob = Start-Job -ScriptBlock {
+        param($ModuleAssembly, $HomeAssistantUri)
+        Import-Module -Name $ModuleAssembly -Force -ErrorAction Stop
+        $replacedConnection = Connect-HomeAssistant -Uri $HomeAssistantUri -AccessToken 'test-access-token'
+        $cleanupConnection = Connect-HomeAssistant -Uri $HomeAssistantUri -AccessToken 'test-access-token'
+        if (-not $replacedConnection.IsDisposed -or -not [object]::ReferenceEquals($cleanupConnection, (Get-HomeAssistantConnection))) {
+            throw 'Replacing the runspace default did not dispose the previous default cleanly.'
+        }
+        $moduleName = (Get-Command -Name Connect-HomeAssistant -ErrorAction Stop).ModuleName
+        Remove-Module -Name $moduleName -Force -ErrorAction Stop
+        $cleanupConnection.IsDisposed
+    } -ArgumentList $resolvedModulePath, $uri.AbsoluteUri
+    try {
+        $null = Wait-Job -Job $cleanupJob -Timeout 15
+        if ($cleanupJob.State -ne 'Completed') {
+            throw "The module cleanup contract did not complete. State: $($cleanupJob.State)"
+        }
+        $cleanupResult = @(Receive-Job -Job $cleanupJob -ErrorAction Stop)
+        if ($cleanupResult.Count -ne 1 -or $cleanupResult[0] -ne $true) {
+            throw 'Removing the binary module did not dispose its runspace default connection.'
+        }
+    } finally {
+        Stop-Job -Job $cleanupJob -ErrorAction SilentlyContinue
+        Remove-Job -Job $cleanupJob -Force -ErrorAction SilentlyContinue
+    }
+
     "PASS $($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)"
 } finally {
     if ($null -ne $connection) {
-        $connection | Disconnect-HomeAssistant
+        Disconnect-HomeAssistant
     }
     if (-not $server.HasExited) {
         $server.StandardInput.WriteLine('EXIT')

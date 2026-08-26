@@ -11,7 +11,7 @@ Validates the active Home Assistant configuration without restarting Core.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Test-HomeAssistantConfiguration -Connection <HomeAssistantConnection> [<CommonParameters>]
+Test-HomeAssistantConfiguration [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -29,7 +29,7 @@ Returns Home Assistant's validation result without restarting Core.
 ## PARAMETERS
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -37,7 +37,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

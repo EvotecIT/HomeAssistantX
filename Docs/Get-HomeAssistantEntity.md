@@ -6,44 +6,49 @@ schema: 2.0.0
 ---
 # Get-HomeAssistantEntity
 ## SYNOPSIS
-Gets current entity states by identifier, domain, or all entities.
+Gets joined entities by name, identifier, domain, device, area, or floor.
 
 ## SYNTAX
-### All (Default)
+### __AllParameterSets
 ```powershell
-Get-HomeAssistantEntity -Connection <HomeAssistantConnection> [-All] [<CommonParameters>]
-```
-
-### Entity
-```powershell
-Get-HomeAssistantEntity [-EntityId] <string[]> -Connection <HomeAssistantConnection> [<CommonParameters>]
-```
-
-### Domain
-```powershell
-Get-HomeAssistantEntity -Domain <string> -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantEntity [[-Entity] <string[]>] [-Name <string>] [-Domain <string>] [-Device <string>] [-Area <string>] [-Floor <string>] [-AvailableOnly] [-IncludeDisabled] [-IncludeHidden] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Gets current entity states by identifier, domain, or all entities.
+Gets joined entities by name, identifier, domain, device, area, or floor.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-$ha | Get-HomeAssistantEntity -Domain light
+Get-HomeAssistantEntity -Area Kitchen -Domain light
 ```
 
-Filters the current state snapshot to the light domain.
 
 ## PARAMETERS
 
-### -All
-Returns all current entity states. This is the default behavior.
+### -Area
+Area name, alias, or native ID. Room is an alias.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: Room
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -AvailableOnly
+Returns only entities that currently have a state other than unavailable.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: All
+Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
@@ -55,48 +60,128 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
-Parameter Sets: All, Entity, Domain
+Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
-### -Domain
-Entity domain to filter, such as light or sensor.
+### -Device
+Device friendly name or native ID.
 
 ```yaml
 Type: String
-Parameter Sets: Domain
+Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -EntityId
-One or more exact entity identifiers.
+### -Domain
+Entity domain, such as light or sensor.
 
 ```yaml
-Type: String[]
-Parameter Sets: Entity
+Type: String
+Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Entity
+One or more exact entity friendly names or native IDs.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: EntityId
+Possible values:
+
+Required: False
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Floor
+Floor name, alias, or native ID.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IncludeDisabled
+Includes registry entries disabled by Home Assistant, an integration, or a user.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IncludeHidden
+Includes registry entries hidden by Home Assistant, an integration, or a user.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Name
+Text contained in the entity friendly name.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -111,7 +196,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `HomeAssistantX.Models.HomeAssistantState`
+- `HomeAssistantX.Inventory.HomeAssistantEntityInfo`
 
 ## RELATED LINKS
 

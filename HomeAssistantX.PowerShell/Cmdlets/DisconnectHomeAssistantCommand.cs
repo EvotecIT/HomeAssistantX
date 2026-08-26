@@ -2,18 +2,20 @@ using System.Management.Automation;
 
 namespace HomeAssistantX.PowerShell;
 
-/// <summary>Closes and disposes an explicit Home Assistant connection.</summary>
+/// <summary>Closes the supplied connection or the current runspace default.</summary>
 /// <example>
-///   <summary>Disconnect an explicit session</summary>
-///   <code>$ha | Disconnect-HomeAssistant</code>
-///   <para>Closes both transports and disposes the connection.</para>
+///   <summary>Disconnect the current runspace default</summary>
+///   <code>Disconnect-HomeAssistant</code>
+///   <para>Closes both transports, removes the runspace default, and disposes the connection.</para>
 /// </example>
 [Cmdlet(VerbsCommunications.Disconnect, "HomeAssistant")]
 public sealed class DisconnectHomeAssistantCommand : HomeAssistantCmdlet
 {
     protected override Task ProcessRecordAsync()
     {
-        Connection.Dispose();
+        var connection = ActiveConnection;
+        HomeAssistantSession.Clear(CurrentRunspaceId, connection);
+        connection.Dispose();
         return Task.CompletedTask;
     }
 }

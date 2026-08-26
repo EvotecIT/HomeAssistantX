@@ -29,6 +29,41 @@ public sealed class HomeAssistantServiceClient
         return _webSocket.RequestAsync("get_services", null, cancellationToken);
     }
 
+    /// <summary>Gets a flattened, typed action catalog while preserving every raw definition.</summary>
+    public async Task<IReadOnlyList<HomeAssistantActionDefinition>> GetActionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var catalog = await GetCatalogWebSocketAsync(cancellationToken).ConfigureAwait(false);
+        if (catalog.ValueKind != JsonValueKind.Object)
+        {
+            throw new Exceptions.HomeAssistantProtocolException("The Home Assistant action catalog was not an object.");
+        }
+
+        var actions = new List<HomeAssistantActionDefinition>();
+        foreach (var domain in catalog.EnumerateObject())
+        {
+            if (domain.Value.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            foreach (var action in domain.Value.EnumerateObject())
+            {
+                if (action.Value.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                actions.Add(ParseAction(domain.Name, action.Name, action.Value));
+            }
+        }
+
+        return actions
+            .OrderBy(x => x.Domain, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Action, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     public async Task<HomeAssistantServiceCallResult> CallAsync(
         HomeAssistantServiceCall call,
         CancellationToken cancellationToken = default)
@@ -64,5 +99,74 @@ public sealed class HomeAssistantServiceClient
         CancellationToken cancellationToken = default)
     {
         return _rest.CallServiceAsync(call, cancellationToken);
+    }
+
+    private static HomeAssistantActionDefinition ParseAction(string domain, string action, JsonElement value)
+    {
+        var fields = new List<HomeAssistantActionFieldDefinition>();
+        if (value.TryGetProperty("fields", out var rawFields) && rawFields.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var field in rawFields.EnumerateObject())
+            {
+                fields.Add(ParseField(field.Name, field.Value));
+            }
+        }
+
+        return new HomeAssistantActionDefinition
+        {
+            Domain = domain,
+            Action = action,
+            Name = GetString(value, "name") ?? action,
+            Description = GetString(value, "description"),
+            Fields = fields,
+            Target = CloneProperty(value, "target"),
+            Response = CloneProperty(value, "response"),
+            Raw = value.Clone()
+        };
+    }
+
+    private static HomeAssistantActionFieldDefinition ParseField(string field, JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            return new HomeAssistantActionFieldDefinition
+            {
+                Field = field,
+                Name = field,
+                Raw = value.Clone()
+            };
+        }
+
+        return new HomeAssistantActionFieldDefinition
+        {
+            Field = field,
+            Name = GetString(value, "name") ?? field,
+            Description = GetString(value, "description"),
+            Required = GetBoolean(value, "required"),
+            Advanced = GetBoolean(value, "advanced"),
+            Default = CloneProperty(value, "default"),
+            Example = CloneProperty(value, "example"),
+            Selector = CloneProperty(value, "selector"),
+            Raw = value.Clone()
+        };
+    }
+
+    private static string? GetString(JsonElement value, string name)
+    {
+        return value.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+    }
+
+    private static bool GetBoolean(JsonElement value, string name)
+    {
+        return value.TryGetProperty(name, out var property)
+            && (property.ValueKind == JsonValueKind.True || property.ValueKind == JsonValueKind.False)
+            && property.GetBoolean();
+    }
+
+    private static JsonElement? CloneProperty(JsonElement value, string name)
+    {
+        return value.TryGetProperty(name, out var property) ? property.Clone() : null;
     }
 }

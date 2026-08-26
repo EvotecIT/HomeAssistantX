@@ -162,7 +162,7 @@ namespace HomeAssistantX.DevelopmentModuleLoadContext
                     )
 
                     $Mode = 'AllowList'
-                    $RequestedTypes = @('HomeAssistantX.PowerShell.HomeAssistantConnection', 'HomeAssistantX.PowerShell.HomeAssistantLogLine', 'HomeAssistantX.PowerShell.HomeAssistantAppAction', 'HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider', 'HomeAssistantX.Authentication.StaticAccessTokenProvider', 'HomeAssistantX.Operations.HomeAssistantCapabilityAvailability')
+                    $RequestedTypes = @('HomeAssistantX.PowerShell.HomeAssistantConnection', 'HomeAssistantX.PowerShell.HomeAssistantLogLine', 'HomeAssistantX.PowerShell.HomeAssistantAppAction', 'HomeAssistantX.Inventory.HomeAssistantEntityInfo', 'HomeAssistantX.Services.HomeAssistantActionDefinition', 'HomeAssistantX.Controls.HomeAssistantPowerAction', 'HomeAssistantX.Controls.HomeAssistantCoverAction', 'HomeAssistantX.Controls.HomeAssistantMediaPlaybackAction', 'HomeAssistantX.Controls.HomeAssistantLockAction', 'HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider', 'HomeAssistantX.Authentication.StaticAccessTokenProvider', 'HomeAssistantX.Operations.HomeAssistantCapabilityAvailability')
                     $RequestedAssemblies = @()
 
                     if ($null -eq $ModuleAssembly) {
@@ -451,7 +451,7 @@ namespace HomeAssistantX.DevelopmentModuleLoadContext
                     param([Parameter(Mandatory = $true)][string] $LibraryDirectory)
 
                     $Mode = 'AllowList'
-                    $RequestedTypes = @('HomeAssistantX.PowerShell.HomeAssistantConnection', 'HomeAssistantX.PowerShell.HomeAssistantLogLine', 'HomeAssistantX.PowerShell.HomeAssistantAppAction', 'HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider', 'HomeAssistantX.Authentication.StaticAccessTokenProvider', 'HomeAssistantX.Operations.HomeAssistantCapabilityAvailability')
+                    $RequestedTypes = @('HomeAssistantX.PowerShell.HomeAssistantConnection', 'HomeAssistantX.PowerShell.HomeAssistantLogLine', 'HomeAssistantX.PowerShell.HomeAssistantAppAction', 'HomeAssistantX.Inventory.HomeAssistantEntityInfo', 'HomeAssistantX.Services.HomeAssistantActionDefinition', 'HomeAssistantX.Controls.HomeAssistantPowerAction', 'HomeAssistantX.Controls.HomeAssistantCoverAction', 'HomeAssistantX.Controls.HomeAssistantMediaPlaybackAction', 'HomeAssistantX.Controls.HomeAssistantLockAction', 'HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider', 'HomeAssistantX.Authentication.StaticAccessTokenProvider', 'HomeAssistantX.Operations.HomeAssistantCapabilityAvailability')
                     $RequestedAssemblies = @()
                     $IgnoredLibraryFileNames = @()
 
@@ -803,6 +803,6 @@ namespace HomeAssistantX.DevelopmentModuleLoadContext
 
 # PowerForge script payload end
 $FunctionsToExport = @()
-$CmdletsToExport = @('Connect-HomeAssistant', 'Disconnect-HomeAssistant', 'Export-HomeAssistantDiagnostic', 'Get-HomeAssistantApp', 'Get-HomeAssistantBackup', 'Get-HomeAssistantEntity', 'Get-HomeAssistantHistory', 'Get-HomeAssistantInfo', 'Get-HomeAssistantIntegration', 'Get-HomeAssistantIssue', 'Get-HomeAssistantJob', 'Get-HomeAssistantLog', 'Get-HomeAssistantTrace', 'Get-HomeAssistantUpdate', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'New-HomeAssistantBackup', 'Receive-HomeAssistantEvent', 'Restart-HomeAssistant', 'Test-HomeAssistantConfiguration')
+$CmdletsToExport = @('Connect-HomeAssistant', 'Disconnect-HomeAssistant', 'Export-HomeAssistantDiagnostic', 'Get-HomeAssistantAction', 'Get-HomeAssistantApp', 'Get-HomeAssistantArea', 'Get-HomeAssistantBackup', 'Get-HomeAssistantConnection', 'Get-HomeAssistantDevice', 'Get-HomeAssistantEntity', 'Get-HomeAssistantFloor', 'Get-HomeAssistantHistory', 'Get-HomeAssistantInfo', 'Get-HomeAssistantIntegration', 'Get-HomeAssistantIssue', 'Get-HomeAssistantJob', 'Get-HomeAssistantLog', 'Get-HomeAssistantTrace', 'Get-HomeAssistantUpdate', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'New-HomeAssistantBackup', 'Receive-HomeAssistantEvent', 'Restart-HomeAssistant', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSwitch', 'Test-HomeAssistantConfiguration')
 $AliasesToExport = @()
 Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport

@@ -31,7 +31,7 @@ All endpoints currently listed in the official REST API reference have named met
 | Endpoint family | Status | Notes |
 | --- | --- | --- |
 | API status, configuration, components | First class | Stable models preserve unknown fields |
-| Event and service/action catalogs | First class / extensible | Event summary is typed; service schemas remain JSON because integrations define them |
+| Event and service/action catalogs | First class / extensible | Action definitions and fields are typed; raw selectors, targets, responses, and unknown integration data are preserved |
 | History and logbook | First class | Time ranges, entity filters, and history performance flags are supported |
 | State list/read/create/update/delete | First class | State writes alter HA's state representation; they do not control the device |
 | Service/action calls | First class / extensible | Fluent entity, device, area, floor, and label targets; optional response data preserved |
@@ -107,13 +107,28 @@ reuses a Core bearer token against another origin.
 ## PowerShell
 
 The binary module supports Windows PowerShell 5.1 and PowerShell 7. It exposes
-21 task-level cmdlets over the .NET engine, an explicit pipeline-capable
-connection, target-oriented parameter sets, WebSocket event streaming, and
-`ShouldProcess` for mutations. See [POWERSHELL.md](POWERSHELL.md).
+task-level cmdlets over the .NET engine, a runspace-local default plus explicit
+pipeline-capable connections, joined inventory discovery, typed controls,
+target-oriented parameter sets, WebSocket event streaming, and `ShouldProcess`
+for mutations. See [POWERSHELL.md](POWERSHELL.md).
 
 ## Registries and platform boundaries
 
-`Registries.GetSnapshotAsync` provides typed area, floor, device, entity, and config-entry data used by CasaRay-class consumers. Most of those registry commands are frontend-facing Home Assistant commands rather than the stable external API documented alongside the Core WebSocket commands. They are therefore compatibility-sensitive even though they are covered by loopback and live tests.
+`Registries.GetSnapshotAsync` provides raw typed area, floor, device, entity, and
+config-entry data. `Inventory.GetSnapshotAsync` joins those registries with live
+states and the runtime action catalog. It applies Home Assistant's entity-area
+fallback, resolves friendly names/aliases or native IDs, rejects ambiguous
+matches, and retains raw objects for forward compatibility.
+
+`Controls` provides typed standard calls for lights, switches, climate, covers,
+media players, and locks. These are validated service builders, not a second
+product device model; runtime action discovery and the generic service client
+remain available for every integration-defined action.
+
+Most registry commands are frontend-facing Home Assistant commands rather than
+the stable external API documented alongside the Core WebSocket commands. They
+are therefore compatibility-sensitive even though loopback and live tests cover
+them.
 
 The following boundaries are intentional:
 
@@ -123,7 +138,7 @@ The following boundaries are intentional:
 | Native companion-app registration and webhook lifecycle | Raw / future adapter | Different lifecycle from the Core client; should not distort the base transport |
 | HACS/custom repository package installation | Not modeled | Not a stable Core package-management contract; Supervisor apps are supported separately |
 | Energy preferences and media browsers | Raw | Schemas evolve independently; consumers can use protected raw commands until a reusable model earns ownership here |
-| Device-domain normalization | Consumer-owned | CasaRay/Tactra map raw HA state into their own normalized product models |
+| Product device-domain normalization | Consumer-owned | CasaRay/Tactra map joined HA inventory into their own product models and safety/UI policy |
 | HomeKit protocol/bridge | Out of scope | Separate protocol and credential model; not part of HomeAssistantX |
 
 ## Evidence

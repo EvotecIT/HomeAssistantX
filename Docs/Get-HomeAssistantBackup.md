@@ -11,7 +11,7 @@ Gets backups from a Supervisor-managed Home Assistant installation.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Get-HomeAssistantBackup -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantBackup [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -29,7 +29,7 @@ Returns backup metadata without downloading backup content.
 ## PARAMETERS
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -37,7 +37,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

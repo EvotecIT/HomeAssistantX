@@ -20,7 +20,8 @@ HomeAssistantX should remain one dependency-light package. New packages are just
 
 ## Explicit non-goals
 
-- Reimplementing Home Assistant entity domains as a second source of truth.
+- Mirroring every Home Assistant domain and integration action as static types;
+  the runtime action catalog remains the source of truth beyond common controls.
 - Owning application credential storage or UI authorization callbacks.
 - Folding HomeKit or product-specific normalized device models into the Core package.
 - Generating one PowerShell cmdlet for every Home Assistant domain, action, integration, or app.

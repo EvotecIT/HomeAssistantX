@@ -79,7 +79,7 @@ public sealed class RestartHomeAssistantCommand : HomeAssistantCmdlet
                     HostParameterSet => HomeAssistantSupervisorRestartTarget.Host,
                     _ => HomeAssistantSupervisorRestartTarget.Core
                 };
-                target = supervisorTarget + " on " + Connection;
+                target = supervisorTarget + " on " + ActiveConnection;
                 action = supervisorTarget == HomeAssistantSupervisorRestartTarget.Host ? "Reboot" : "Restart";
                 if (!ShouldProcess(target, action))
                 {

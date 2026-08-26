@@ -11,32 +11,32 @@ Invokes any Home Assistant action with one target-oriented set of parameters.
 ## SYNTAX
 ### Data (Default)
 ```powershell
-Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -Connection <HomeAssistantConnection> [-Data <hashtable>] [-ReturnResponse] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> [-Data <hashtable>] [-ReturnResponse] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Entity
 ```powershell
-Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -EntityId <string[]> -Connection <HomeAssistantConnection> [-Data <hashtable>] [-ReturnResponse] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -EntityId <string[]> [-Data <hashtable>] [-ReturnResponse] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Device
 ```powershell
-Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -DeviceId <string[]> -Connection <HomeAssistantConnection> [-Data <hashtable>] [-ReturnResponse] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -DeviceId <string[]> [-Data <hashtable>] [-ReturnResponse] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Area
 ```powershell
-Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -AreaId <string[]> -Connection <HomeAssistantConnection> [-Data <hashtable>] [-ReturnResponse] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -AreaId <string[]> [-Data <hashtable>] [-ReturnResponse] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Floor
 ```powershell
-Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -FloorId <string[]> -Connection <HomeAssistantConnection> [-Data <hashtable>] [-ReturnResponse] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -FloorId <string[]> [-Data <hashtable>] [-ReturnResponse] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Label
 ```powershell
-Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -LabelId <string[]> -Connection <HomeAssistantConnection> [-Data <hashtable>] [-ReturnResponse] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-HomeAssistantAction [-Domain] <string> [-Action] <string> -LabelId <string[]> [-Data <hashtable>] [-ReturnResponse] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -86,7 +86,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -94,7 +94,7 @@ Parameter Sets: Data, Entity, Device, Area, Floor, Label
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

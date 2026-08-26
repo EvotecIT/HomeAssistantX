@@ -11,9 +11,12 @@ if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri) || string.IsNullO
 using var client = HomeAssistantClient.Create(baseUri, accessToken);
 var api = await client.Rest.CheckApiAsync();
 var configuration = await client.Rest.GetConfigurationAsync();
-var states = await client.States.GetAllAsync();
-await client.WebSocket.ConnectAsync();
-await client.WebSocket.PingAsync();
+var inventory = await client.Inventory.GetSnapshotAsync();
+var availableLights = inventory.Entities
+    .Where(entity => entity.Domain == "light" && entity.IsAvailable)
+    .ToArray();
 
-Console.WriteLine($"{api.Message} Home Assistant {configuration.Version}; {states.Count} entity states; WebSocket healthy.");
+Console.WriteLine($"{api.Message} Home Assistant {configuration.Version}");
+Console.WriteLine($"{inventory.Floors.Count} floors, {inventory.Areas.Count} areas, {inventory.Devices.Count} devices, {inventory.Entities.Count} entities");
+Console.WriteLine($"{availableLights.Length} available lights and {inventory.Actions.Count} registered actions");
 return 0;

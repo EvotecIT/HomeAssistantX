@@ -6,30 +6,30 @@ schema: 2.0.0
 ---
 # Connect-HomeAssistant
 ## SYNOPSIS
-Creates and verifies an explicit Home Assistant connection.
+Creates, verifies, and optionally stores the runspace's default Home Assistant connection.
 
 ## SYNTAX
 ### Token (Default)
 ```powershell
-Connect-HomeAssistant [-Uri] <uri> -AccessToken <string> [-Name <string>] [<CommonParameters>]
+Connect-HomeAssistant [-Uri] <uri> -AccessToken <string> [-Name <string>] [-NoDefault] [<CommonParameters>]
 ```
 
 ### Provider
 ```powershell
-Connect-HomeAssistant [-Uri] <uri> -AccessTokenProvider <IHomeAssistantAccessTokenProvider> [-Name <string>] [<CommonParameters>]
+Connect-HomeAssistant [-Uri] <uri> -AccessTokenProvider <IHomeAssistantAccessTokenProvider> [-Name <string>] [-NoDefault] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Creates and verifies an explicit Home Assistant connection.
+Creates, verifies, and optionally stores the runspace's default Home Assistant connection.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-$ha = Connect-HomeAssistant -Uri 'https://home.example.net' -AccessToken $token -Name 'Home'
+Connect-HomeAssistant -Uri 'https://home.example.net' -AccessToken $token -Name 'Home' | Out-Null
 ```
 
-Validates REST and WebSocket access and returns an explicit connection.
+Validates REST and WebSocket access and stores the connection as the runspace default.
 
 ## PARAMETERS
 
@@ -70,6 +70,22 @@ Friendly connection name used in output and confirmation messages.
 
 ```yaml
 Type: String
+Parameter Sets: Token, Provider
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NoDefault
+Returns the connection without replacing the current runspace default.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: Token, Provider
 Aliases: None
 Possible values:

@@ -11,12 +11,12 @@ Gets all Supervisor jobs or one job by identifier.
 ## SYNTAX
 ### All (Default)
 ```powershell
-Get-HomeAssistantJob -Connection <HomeAssistantConnection> [-All] [<CommonParameters>]
+Get-HomeAssistantJob [-All] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Id
 ```powershell
-Get-HomeAssistantJob [-Id] <string> -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantJob [-Id] <string> [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -50,7 +50,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -58,7 +58,7 @@ Parameter Sets: All, Id
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)
