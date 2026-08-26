@@ -271,7 +271,8 @@ public sealed class WebSocketContractTests
         Assert.Equal("Kitchen", Assert.Single(registry.Areas).Name);
         Assert.Equal("Ground", Assert.Single(registry.Floors).Name);
         Assert.Equal("Evotec", Assert.Single(registry.Devices).Manufacturer);
-        Assert.Equal("sensor.kitchen_temperature", Assert.Single(registry.Entities).EntityId);
+        Assert.Contains(registry.Entities, entity => entity.EntityId == "sensor.kitchen_temperature");
+        Assert.Contains(registry.Entities, entity => entity.EntityId == "light.kitchen");
         Assert.Equal("loaded", Assert.Single(registry.ConfigEntries).State);
 
         using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));

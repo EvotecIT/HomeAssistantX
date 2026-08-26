@@ -393,7 +393,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("{\"location_name\":\"Test Home\",\"version\":\"2026.8.3\",\"components\":[\"api\"]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "get_services":
-                await session.SendResultAsync(id, ParseJson("{\"light\":{\"turn_on\":{\"name\":\"Turn on\"}}}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("{\"light\":{\"turn_on\":{\"name\":\"Turn on\",\"description\":\"Turns on a light.\",\"fields\":{\"brightness_pct\":{\"name\":\"Brightness\",\"description\":\"Brightness percentage.\",\"required\":false,\"example\":45,\"selector\":{\"number\":{\"min\":0,\"max\":100}}}},\"target\":{\"entity\":[{\"domain\":\"light\"}]}},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}},\"switch\":{\"turn_on\":{\"name\":\"Turn on\"},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}}}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "get_panels":
                 await session.SendResultAsync(id, ParseJson("{\"lovelace\":{\"title\":\"Overview\"}}"), false, _source.Token).ConfigureAwait(false);
@@ -511,16 +511,16 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     .ConfigureAwait(false);
                 return;
             case "config/area_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"floor_id\":\"ground\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\"}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/floor_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"floor_id\":\"ground\",\"name\":\"Ground\",\"level\":0}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"floor_id\":\"ground\",\"name\":\"Ground\",\"aliases\":[\"Downstairs\"],\"level\":0}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/device_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"id\":\"device-1\",\"area_id\":\"kitchen\",\"name\":\"Kitchen Sensor\",\"manufacturer\":\"Evotec\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"id\":\"device-1\",\"area_id\":\"kitchen\",\"name\":\"Kitchen Sensor\",\"manufacturer\":\"Evotec\",\"config_entries\":[\"entry-1\"]}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/entity_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"device_class\":\"temperature\"},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\"}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get":
                 await session.SendResultAsync(id, ParseJson("{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);

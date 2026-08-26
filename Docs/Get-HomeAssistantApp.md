@@ -11,7 +11,7 @@ Gets installed Supervisor-managed Home Assistant apps.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Get-HomeAssistantApp [[-App] <string>] -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantApp [[-App] <string>] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -45,7 +45,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -53,7 +53,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

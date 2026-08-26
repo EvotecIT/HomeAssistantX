@@ -11,12 +11,12 @@ Downloads Home Assistant-redacted diagnostics for a configuration entry or one d
 ## SYNTAX
 ### ConfigEntry (Default)
 ```powershell
-Export-HomeAssistantDiagnostic [-EntryId] <string> [-Path] <string> -Connection <HomeAssistantConnection> [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
+Export-HomeAssistantDiagnostic [-EntryId] <string> [-Path] <string> [-Force] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Device
 ```powershell
-Export-HomeAssistantDiagnostic [-EntryId] <string> [-Path] <string> -DeviceId <string> -Connection <HomeAssistantConnection> [-Force] [-WhatIf] [-Confirm] [<CommonParameters>]
+Export-HomeAssistantDiagnostic [-EntryId] <string> [-Path] <string> -DeviceId <string> [-Force] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -34,7 +34,7 @@ Writes the diagnostic atomically after Home Assistant applies its redaction.
 ## PARAMETERS
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -42,7 +42,7 @@ Parameter Sets: ConfigEntry, Device
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

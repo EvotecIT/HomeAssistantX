@@ -11,6 +11,9 @@ public sealed class HomeAssistantArea
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
+    [JsonPropertyName("aliases")]
+    public string[] Aliases { get; set; } = Array.Empty<string>();
+
     [JsonPropertyName("floor_id")]
     public string? FloorId { get; set; }
 
@@ -28,6 +31,9 @@ public sealed class HomeAssistantFloor
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("aliases")]
+    public string[] Aliases { get; set; } = Array.Empty<string>();
 
     [JsonPropertyName("level")]
     public int? Level { get; set; }
@@ -79,6 +85,15 @@ public sealed class HomeAssistantEntityRegistryEntry
 
     [JsonPropertyName("platform")]
     public string? Platform { get; set; }
+
+    [JsonPropertyName("config_entry_id")]
+    public string? ConfigEntryId { get; set; }
+
+    [JsonPropertyName("device_class")]
+    public string? DeviceClass { get; set; }
+
+    [JsonPropertyName("capabilities")]
+    public JsonElement Capabilities { get; set; }
 
     [JsonPropertyName("device_id")]
     public string? DeviceId { get; set; }

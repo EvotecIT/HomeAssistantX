@@ -11,32 +11,32 @@ Gets structured system-log entries or bounded Core, Supervisor, host, and app lo
 ## SYNTAX
 ### SystemLog (Default)
 ```powershell
-Get-HomeAssistantLog -Connection <HomeAssistantConnection> [-SystemLog] [<CommonParameters>]
+Get-HomeAssistantLog [-SystemLog] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Legacy
 ```powershell
-Get-HomeAssistantLog -LegacyErrorLog -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantLog -LegacyErrorLog [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Core
 ```powershell
-Get-HomeAssistantLog -Core -Connection <HomeAssistantConnection> [-Tail <int>] [<CommonParameters>]
+Get-HomeAssistantLog -Core [-Tail <int>] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Supervisor
 ```powershell
-Get-HomeAssistantLog -Supervisor -Connection <HomeAssistantConnection> [-Tail <int>] [<CommonParameters>]
+Get-HomeAssistantLog -Supervisor [-Tail <int>] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Host
 ```powershell
-Get-HomeAssistantLog -HostSystem -Connection <HomeAssistantConnection> [-Tail <int>] [<CommonParameters>]
+Get-HomeAssistantLog -HostSystem [-Tail <int>] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### App
 ```powershell
-Get-HomeAssistantLog -App <string> -Connection <HomeAssistantConnection> [-Tail <int>] [<CommonParameters>]
+Get-HomeAssistantLog -App <string> [-Tail <int>] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -70,7 +70,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -78,7 +78,7 @@ Parameter Sets: SystemLog, Legacy, Core, Supervisor, Host, App
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

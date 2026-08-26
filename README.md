@@ -1,32 +1,24 @@
-# HomeAssistantX - Home Assistant for .NET
+# HomeAssistantX - Home Assistant for .NET and PowerShell
 
-HomeAssistantX is a typed, event-driven .NET client for the Home Assistant REST
-and WebSocket APIs. It owns authentication, transport, subscriptions,
-reconnection, and protocol-safe escape hatches so applications do not need to
-build a second Home Assistant client for every product.
+HomeAssistantX is a typed, event-driven Home Assistant client for .NET and
+PowerShell. It connects the native Home Assistant hierarchy—floors, areas,
+devices, entities, states, and actions—so applications and scripts can discover
+an unfamiliar house before operating it.
 
-The package targets .NET Framework 4.7.2, .NET Standard 2.0, and .NET 10.
+The same engine owns REST, WebSocket notifications, authentication, reconnect,
+troubleshooting, Supervisor operations, typed everyday controls, and protected
+raw access for custom integrations.
 
 ## 📦 NuGet Package
 
-HomeAssistantX is built and validated as one NuGet package. The first public
-NuGet.org release has not been published yet; use a project reference or a
-locally packed package for now.
+[![nuget downloads](https://img.shields.io/nuget/dt/HomeAssistantX?label=nuget%20downloads)](https://www.nuget.org/packages/HomeAssistantX)
+[![nuget version](https://img.shields.io/nuget/v/HomeAssistantX)](https://www.nuget.org/packages/HomeAssistantX)
 
 ## 💻 PowerShell Module
 
-HomeAssistantX also ships a thin binary PowerShell module for Windows
-PowerShell 5.1 and PowerShell 7 on Windows, macOS, and Linux. It exposes 21
-task-oriented commands over the same .NET engine instead of creating one
-cmdlet per Home Assistant service.
-
-The first PowerShell Gallery release has not been published yet. A source
-checkout can build and install the module locally with:
-
-```powershell
-./Build/Build-Module.ps1 -RunMode Build
-Import-Module HomeAssistantX
-```
+[![powershell gallery version](https://img.shields.io/powershellgallery/v/HomeAssistantX.svg)](https://www.powershellgallery.com/packages/HomeAssistantX)
+[![powershell gallery platforms](https://img.shields.io/powershellgallery/p/HomeAssistantX.svg)](https://www.powershellgallery.com/packages/HomeAssistantX)
+[![powershell gallery downloads](https://img.shields.io/powershellgallery/dt/HomeAssistantX.svg)](https://www.powershellgallery.com/packages/HomeAssistantX)
 
 ## 🛠️ Project Information
 
@@ -43,136 +35,275 @@ Import-Module HomeAssistantX
 
 ## What it covers
 
-- the documented Home Assistant Core REST API, including states, history,
-  logbook, services/actions, events, templates, calendars, cameras, intents,
-  and conversations
-- authenticated WebSocket commands with concurrent request correlation,
-  fragmented-message handling, and bounded message sizes
-- state and event notifications without polling
-- reconnect-safe state subscriptions with initial-snapshot race handling and
-  missed-change reconciliation
-- fluent service/action calls targeting entities, devices, areas, floors, and
-  labels
-- OAuth authorization, code exchange, refresh, refresh-token revocation, and
-  host-owned secure token persistence
-- area, floor, device, entity, and configuration-entry registry snapshots
-- system logs, Repairs issues, system health, diagnostics, traces,
-  configuration-entry operations, and update discovery
-- Supervisor and Home Assistant OS information, logs, jobs, backups, apps,
-  updates, restarts, and protected raw access
-- typed system helpers plus raw REST and WebSocket access for custom or
-  fast-moving integration APIs
+- joined floor, area, device, entity, live-state, integration, and action
+  inventory
+- exact friendly-name or native-ID resolution with ambiguity errors instead of
+  silent guesses
+- typed light, switch, climate, cover, media-player, and lock controls
+- runtime action discovery, including descriptions, fields, examples, defaults,
+  and selectors supplied by Home Assistant and installed integrations
+- the documented Home Assistant REST API: state, history, logbook, actions,
+  events, templates, calendars, cameras, intents, and conversations
+- WebSocket events and reconnect-safe state notifications without polling
+- OAuth authorization, refresh, revocation, and host-owned token persistence
+- logs, Repairs, system health, diagnostics, traces, integrations, and updates
+- Home Assistant OS and Supervisor information, logs, jobs, backups, apps,
+  updates, and restarts
+- Windows PowerShell 5.1 and PowerShell 7 on Windows, macOS, and Linux
 - .NET Framework 4.7.2, .NET Standard 2.0, and .NET 10 from one package
 
-The exact coverage and intentional limits are maintained in the
-[Home Assistant support matrix](https://github.com/EvotecIT/HomeAssistantX/blob/main/Docs/SUPPORT.md).
+The endpoint-by-endpoint contract is maintained in the
+[Home Assistant support matrix](Docs/SUPPORT.md).
 
-## .NET entry points
+## PowerShell and C# entry points
 
-`HomeAssistantClient` is the main entry point. Its focused clients expose the
-same authenticated connection without mixing transport code into application
-models.
+PowerShell cmdlets are thin task-oriented surfaces over the .NET engine. The
+generated [command reference](Docs/README.md) covers every command and parameter
+set.
 
-| Task | C# entry point | Transport |
+| Task | PowerShell | C# owner |
 | --- | --- | --- |
-| Check the instance and read configuration | `client.Rest.CheckApiAsync`, `GetConfigurationAsync` | REST |
-| Read, create, update, or delete state representations | `client.States` | REST / WebSocket |
-| Receive state changes without polling | `client.States.SubscribeAsync` | WebSocket |
-| Subscribe to events or triggers | `client.Events.SubscribeAsync`, `SubscribeTriggerAsync` | WebSocket |
-| Discover and call services/actions | `client.Services` | REST / WebSocket |
-| Read areas, floors, devices, entities, and config entries | `client.Registries.GetSnapshotAsync` | WebSocket |
-| Inspect logs, health, Repairs, integrations, traces, updates, and diagnostics | `client.Operations` | REST / WebSocket |
-| Inspect or administer Supervisor, OS, apps, backups, and jobs | `client.Supervisor` | Core proxy / Supervisor API |
-| Validate configuration, inspect targets, sign paths, or process conversation | `client.System` | WebSocket |
-| Use a documented REST endpoint directly | `client.Rest` | REST |
-| Use an integration-specific command | `client.Rest.SendAsync`, `client.WebSocket.RequestAsync` | REST / WebSocket |
-| Run OAuth authorization and token lifecycle | `HomeAssistantOAuthClient` | HTTP |
+| Connect and keep a runspace default | `Connect-HomeAssistant`, `Get-HomeAssistantConnection` | `HomeAssistantConnection`, `HomeAssistantClient` |
+| Discover floors and rooms | `Get-HomeAssistantFloor`, `Get-HomeAssistantArea` | `client.Inventory` |
+| Discover devices and joined entities | `Get-HomeAssistantDevice`, `Get-HomeAssistantEntity` | `client.Inventory` |
+| Inspect available actions and fields | `Get-HomeAssistantAction` | `client.Services.GetActionsAsync` |
+| Control common domains | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Set-HomeAssistantLock` | `client.Controls` |
+| Invoke integration-specific actions | `Invoke-HomeAssistantAction` | `client.Services` |
+| Receive notifications | `Receive-HomeAssistantEvent` | `client.Events`, `client.States` |
+| Inspect and troubleshoot | `Get-HomeAssistantInfo`, `Get-HomeAssistantLog`, `Get-HomeAssistantIssue`, `Get-HomeAssistantTrace`, `Export-HomeAssistantDiagnostic` | `client.Operations` |
+| Inspect Supervisor and OS | `Get-HomeAssistantApp`, `Get-HomeAssistantBackup`, `Get-HomeAssistantJob`, `Get-HomeAssistantUpdate` | `client.Supervisor` |
+| Use evolving/custom APIs | `Invoke-HomeAssistantAction -Data` | `client.Rest.SendAsync`, `client.WebSocket.RequestAsync` |
 
-HomeAssistantX is the reusable protocol owner. Product applications should map
-provider data into their own device, room, policy, and UI models:
+HomeAssistantX owns the Home Assistant protocol and joined provider inventory.
+Applications still map that data into their own product models and safety/UI
+policy:
 
 ```text
-Home Assistant data -> HomeAssistantX -> product mapper -> normalized model -> application/UI
+Home Assistant -> HomeAssistantX -> product mapper -> application model -> UI
 ```
 
-## 📦 Installation & Package Information
+## 📦 Installation
 
-### Use a source checkout
-
-```bash
-# From a directory containing sibling MyApp and HomeAssistantX folders:
-dotnet add ./MyApp/MyApp.csproj reference ./HomeAssistantX/HomeAssistantX/HomeAssistantX.csproj
-```
-
-### Build and consume a local package
-
-```powershell
-dotnet pack HomeAssistantX/HomeAssistantX.csproj `
-    --configuration Release `
-    --output ./artifacts/packages
-
-dotnet add <path-to-consumer.csproj> package HomeAssistantX `
-    --source ./artifacts/packages
-```
-
-After the first public release, the normal installation command will be:
+### .NET
 
 ```bash
 dotnet add package HomeAssistantX
 ```
 
-### Package information
+### PowerShell
 
-- **Package:** `HomeAssistantX`
-- **Public release:** pending
-- **Target frameworks:** .NET Framework 4.7.2, .NET Standard 2.0, and .NET 10
-- **License:** MIT
-- **Native or platform-specific dependencies:** none
-- **Compatibility dependencies:** older targets use the required .NET JSON,
-  channels, HTTP, and reference-assembly compatibility packages
-- **PowerShell module:** implemented for Windows PowerShell 5.1 and PowerShell 7; public release pending
+```powershell
+Install-Module -Name HomeAssistantX -AllowClobber -Force
+```
 
-## 🚀 Quick Start
+| Package detail | Value |
+| --- | --- |
+| NuGet / PowerShell name | `HomeAssistantX` |
+| .NET targets | `net472`, `netstandard2.0`, `net10.0` |
+| PowerShell hosts | Windows PowerShell 5.1, PowerShell 7 |
+| Native dependencies | None |
+| License | MIT |
 
-Store the Home Assistant URL and a long-lived access token outside source
-control, then create one client for the application lifetime:
+## 🚀 PowerShell quick start
+
+### Connect and discover an unfamiliar house
+
+`Connect-HomeAssistant` validates REST and WebSocket access, returns the
+connection, and stores it as the default for the current PowerShell runspace.
+Other commands use that default when `-Connection` is omitted.
+
+```powershell
+$token = (Get-Content -LiteralPath $env:HOME_ASSISTANT_TOKEN_FILE -Raw).Trim()
+Connect-HomeAssistant -Uri 'https://home.example.net' -AccessToken $token | Out-Null
+
+Get-HomeAssistantInfo
+Get-HomeAssistantFloor
+Get-HomeAssistantArea
+Get-HomeAssistantArea -Floor 'Ground Floor'
+Get-HomeAssistantDevice -Area Kitchen
+Get-HomeAssistantEntity -Area Kitchen
+Get-HomeAssistantEntity -Area Kitchen -Domain light
+```
+
+Home Assistant calls a physical location an **area**. `-Room` is accepted as an
+alias where it helps interactive use. Entity area assignment follows Home
+Assistant: an entity's own area wins; otherwise it inherits its device's area.
+
+Discovery objects retain both friendly names and native IDs. A name must match
+exactly one object. Ambiguous names fail with candidate IDs so a script never
+controls an arbitrary device.
+
+### See what an entity can do
+
+```powershell
+$actions = Get-HomeAssistantAction -Entity 'Kitchen light'
+$actions | Select-Object Domain, Action, Name, Description
+
+$turnOn = Get-HomeAssistantAction -Domain light -Action turn_on
+$turnOn.Fields | Select-Object Field, Name, Description, Required, Example, Selector
+```
+
+The action catalog comes from the connected Home Assistant instance. It
+therefore includes actions and fields registered by custom integrations, not
+only the domains known when HomeAssistantX was built.
+
+### Use typed everyday controls
+
+```powershell
+# Every light in the Kitchen area
+Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -WhatIf
+Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -Confirm:$false
+
+# One light by friendly name or entity ID
+Set-HomeAssistantLight -Entity 'Kitchen island' -Power Off
+Set-HomeAssistantLight -Entity light.kitchen_island -Power On -RgbColor 255,180,90
+
+# Discovery objects can flow directly into typed controls
+Get-HomeAssistantEntity -Area Kitchen -Domain light |
+    Set-HomeAssistantLight -Power Off
+
+Set-HomeAssistantSwitch -Area Utility -Power On
+Set-HomeAssistantClimate -Entity 'Downstairs thermostat' -HvacMode heat -Temperature 21.5
+Set-HomeAssistantCover -Entity 'Kitchen blind' -PositionPercent 60
+Set-HomeAssistantMediaPlayer -Area LivingRoom -VolumePercent 30 -Playback Play
+Set-HomeAssistantLock -Entity lock.front_door -Action Unlock -WhatIf
+```
+
+Typed commands validate common values, expose PowerShell completion for enums,
+resolve friendly targets, and support `-WhatIf` / `-Confirm`. Lock operations
+use high confirmation impact. The calling application or script still owns its
+authorization policy for consequential actions.
+
+### Keep explicit connections when you need them
+
+The default is runspace-local, not process-wide. Jobs and parallel runspaces do
+not inherit it. Explicit pipeline use remains available, and `-NoDefault` is
+useful when working with more than one home. Establishing another default
+disposes the previous default connection; a `-NoDefault` connection remains
+caller-owned:
+
+```powershell
+$home = Get-HomeAssistantConnection
+$lab = Connect-HomeAssistant -Uri 'https://lab.example.net' `
+    -AccessToken $labToken -Name Lab -NoDefault
+
+$home | Get-HomeAssistantEntity -Domain light
+$lab  | Get-HomeAssistantEntity -Domain light
+$lab  | Disconnect-HomeAssistant
+
+# Disconnects the current runspace default
+Disconnect-HomeAssistant
+```
+
+### Use the generic escape hatch for custom actions
+
+Typed commands cover the common domains. `Invoke-HomeAssistantAction` remains
+the direct path for integration-specific actions and uncommon fields discovered
+with `Get-HomeAssistantAction`:
+
+```powershell
+Get-HomeAssistantAction -Domain vacuum
+
+Invoke-HomeAssistantAction vacuum send_command `
+    -EntityId vacuum.downstairs `
+    -Data @{ command = 'clean_spot'; params = @{ repeats = 2 } } `
+    -WhatIf
+```
+
+### Receive notifications without polling
+
+```powershell
+Receive-HomeAssistantEvent -EventType automation_triggered
+
+$nextChange = Receive-HomeAssistantEvent `
+    -EntityId light.kitchen, lock.front_door `
+    -Count 1 -TimeoutSeconds 30
+```
+
+The command holds a bounded WebSocket subscription until it is canceled or its
+count/timeout is reached. Reconnect-safe state subscriptions are also available
+through the .NET `client.States` API.
+
+### Troubleshoot and administer
+
+```powershell
+Get-HomeAssistantInfo -Capabilities
+Get-HomeAssistantInfo -Health
+Get-HomeAssistantLog | Where-Object Level -In Error, Warning
+Get-HomeAssistantIssue
+Get-HomeAssistantIntegration -Domain mqtt
+Get-HomeAssistantTrace automation morning_lights
+Test-HomeAssistantConfiguration
+Export-HomeAssistantDiagnostic entry_id ./diagnostic.json
+
+# Home Assistant OS / Supervised installation and suitable permissions required
+Get-HomeAssistantInfo -Supervisor
+Get-HomeAssistantApp
+Get-HomeAssistantBackup
+Get-HomeAssistantUpdate -AvailableOnly
+```
+
+Logs and diagnostics may contain sensitive installation information. Treat the
+output as confidential and review it before sharing.
+
+## 🚀 .NET quick start
+
+### Discover floors, rooms, devices, and entities
 
 ```csharp
 using HomeAssistantX;
+using HomeAssistantX.Inventory;
 
-var baseUrl = Environment.GetEnvironmentVariable("HOME_ASSISTANT_URL");
-var accessToken = Environment.GetEnvironmentVariable("HOME_ASSISTANT_TOKEN");
+var baseUri = new Uri(Environment.GetEnvironmentVariable("HOME_ASSISTANT_URL")!);
+var token = Environment.GetEnvironmentVariable("HOME_ASSISTANT_TOKEN")!;
 
-if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri)
-    || string.IsNullOrWhiteSpace(accessToken))
+using var client = HomeAssistantClient.Create(baseUri, token);
+var inventory = await client.Inventory.GetSnapshotAsync();
+
+foreach (var floor in inventory.Floors)
 {
-    throw new InvalidOperationException(
-        "Set HOME_ASSISTANT_URL and HOME_ASSISTANT_TOKEN before connecting.");
+    Console.WriteLine($"{floor.Name}: {floor.Areas.Count} areas");
 }
 
-using var client = HomeAssistantClient.Create(baseUri, accessToken);
+var kitchenLights = await client.Inventory.GetEntitiesAsync(
+    new HomeAssistantEntityQuery
+    {
+        Area = "Kitchen",
+        Domain = "light",
+        AvailableOnly = true
+    });
 
-var api = await client.Rest.CheckApiAsync();
-var configuration = await client.Rest.GetConfigurationAsync();
-var states = await client.States.GetAllAsync();
-
-await client.WebSocket.ConnectAsync();
-await client.WebSocket.PingAsync();
-
-Console.WriteLine(
-    $"{api.Message} {configuration.LocationName}: {states.Count} entity states");
+foreach (var light in kitchenLights)
+{
+    Console.WriteLine($"{light.Name} [{light.EntityId}] = {light.State}");
+}
 ```
 
-For production applications, implement
-`IHomeAssistantAccessTokenProvider` over Keychain, Credential Manager, or
-another platform credential store instead of keeping tokens in configuration
-files.
+The joined snapshot contains raw registry/state objects as well as the resolved
+view, so consumers can use new or integration-specific fields without waiting
+for another model.
 
-## Receive changes without polling
+### Use typed controls
 
-The state client subscribes before loading its initial snapshot. It buffers
-changes that race the snapshot, restores the subscription after a disconnect,
-and reports state changes missed while the connection was unavailable.
+```csharp
+using HomeAssistantX.Controls;
+using HomeAssistantX.Services;
+
+var kitchen = client.Inventory.ResolveArea(inventory, "Kitchen");
+var result = await client.Controls.Lights.TurnOnAsync(
+    HomeAssistantTarget.ForArea(kitchen.AreaId),
+    new HomeAssistantLightOptions
+    {
+        BrightnessPercent = 45,
+        Transition = TimeSpan.FromSeconds(1)
+    });
+```
+
+`client.Controls` exposes focused clients for lights, switches, climate,
+covers, media players, and locks. `client.Services` retains the generic fluent
+action builder for every other domain and custom integration.
+
+### Receive state changes
 
 ```csharp
 using HomeAssistantX.States;
@@ -181,244 +312,72 @@ using var subscription = await client.States.SubscribeAsync(
     HomeAssistantStateFilter.ForDomains("light", "switch", "lock"),
     (change, cancellationToken) =>
     {
-        Console.WriteLine(
-            $"{change.EntityId}: {change.CurrentState?.State ?? "removed"}");
+        Console.WriteLine($"{change.EntityId}: {change.CurrentState?.State ?? "removed"}");
         return Task.CompletedTask;
     });
 
 await subscription.Completion;
 ```
 
-Use `client.Events.SubscribeAsync(...)` for any Home Assistant event type.
-Subscriptions have bounded buffers, a completion task, and explicit cleanup
-through `StopAsync` or `Dispose`.
+The state client subscribes before loading its initial snapshot, buffers changes
+that race the snapshot, reconnects, and reports changes missed while disconnected.
 
-## Call services/actions
+## Authentication and raw access
 
-The fluent request builder keeps Home Assistant's domain/service model visible
-while making multi-kind targets straightforward:
+For production applications, implement `IHomeAssistantAccessTokenProvider` over
+Keychain, Credential Manager, or another platform credential store.
+`HomeAssistantOAuthClient` builds authorization URLs, exchanges codes, refreshes
+access tokens, and revokes refresh tokens. HomeAssistantX does not log or persist
+credentials.
 
-```csharp
-using HomeAssistantX.Services;
-
-var call = HomeAssistantServiceCall.Create("light", "turn_on")
-    .ForArea("kitchen")
-    .WithData("brightness_pct", 45);
-
-var result = await client.Services.CallAsync(call);        // WebSocket
-// var result = await client.Services.CallRestAsync(call); // REST
-```
-
-Applications remain responsible for authorization and confirmation around
-consequential actions such as unlocking, disarming, opening a gate, or opening
-a garage door.
-
-## Read history, templates, and camera data
-
-The typed REST surface covers the endpoint families documented by Home
-Assistant Core:
-
-```csharp
-using HomeAssistantX.Rest;
-
-var history = await client.Rest.GetHistoryAsync(
-    new HomeAssistantHistoryQuery("sensor.outdoor_temperature")
-    {
-        StartTime = DateTimeOffset.UtcNow.AddHours(-24),
-        MinimalResponse = true,
-        SignificantChangesOnly = true
-    });
-
-var rendered = await client.Rest.RenderTemplateAsync(
-    "{{ states('sensor.outdoor_temperature') }}");
-
-var cameraBytes = await client.Rest.GetCameraImageAsync("camera.front_door");
-```
-
-State writes through `/api/states` change Home Assistant's state
-representation. They do not control the physical device. Use a service/action
-call when the intent is to operate a device.
-
-## OAuth and token refresh
-
-`HomeAssistantOAuthClient` supports:
-
-- building the authorization URI with caller-provided anti-forgery state
-- exchanging an authorization code
-- refreshing access tokens
-- revoking a refresh token and its derived access tokens
-- separating credential rejection from transient HTTP and connection failures
-
-`RefreshingAccessTokenProvider` serializes concurrent refresh attempts and
-invokes a host callback after refresh so replacement tokens can be persisted in
-the platform's secure store. HomeAssistantX does not log or persist tokens.
-
-An application still owns its OAuth callback, redirect URI registration, state
-validation, and secure credential storage.
-
-## Raw escape hatches
-
-Custom integrations and frontend commands often evolve faster than a reusable
-model. Raw access remains available without bypassing authentication, timeout,
-same-origin, error-classification, or response-size protections:
+Custom REST and WebSocket calls retain authentication, same-origin checks,
+timeouts, bounded response sizes, and classified failures:
 
 ```csharp
 var preferences = await client.WebSocket.RequestAsync("energy/get_prefs");
-var snapshot = await client.Rest.GetBytesAsync(
-    "api/camera_proxy/camera.front_door");
+var image = await client.Rest.GetBytesAsync("api/camera_proxy/camera.front_door");
 ```
 
-Authenticated absolute REST URLs are accepted only when their scheme, host,
-and port match the configured Home Assistant instance. This prevents forwarding
-a bearer token to another origin.
+## Boundaries
 
-Unknown JSON fields and entity attributes are preserved so a Home Assistant
-update or custom integration does not require an immediate package release.
+- Supervisor features require Home Assistant OS or a supervised installation
+  and suitable permissions.
+- State writes through `/api/states` change Home Assistant's state
+  representation; they do not control the physical device.
+- Restore, wipe, recovery, and host shutdown are not convenience operations.
+- Unexpected authentication failures are surfaced to the host; there is no
+  hidden infinite retry loop.
+- HomeKit uses a different protocol and credential model.
+- Product-specific device normalization, UI, and action policy stay in the
+  consuming application.
 
-## Connection behavior and diagnostics
+See [Docs/SUPPORT.md](Docs/SUPPORT.md) for precise coverage and
+[Docs/ROADMAP.md](Docs/ROADMAP.md) for open work.
 
-`HomeAssistantClientOptions` controls request and connection timeouts,
-keep-alive intervals, reconnect delays, subscription capacity, and maximum REST
-or WebSocket message sizes. Defaults are bounded and can be lowered by the
-host.
-
-Failures are classified for callers:
-
-- `HomeAssistantAuthenticationException` - invalid or rejected credentials
-- `HomeAssistantConnectionException` - timeouts, transport failures, transient
-  OAuth responses, or interrupted response streams
-- `HomeAssistantProtocolException` - invalid or unexpected protocol data
-- `HomeAssistantCommandException` - a Home Assistant command or REST request
-  was rejected
-
-Implement `IHomeAssistantDiagnosticsSink` to receive connection, reconnect, and
-protocol diagnostics without coupling the library to a logging framework.
-
-## PowerShell quick start
-
-Connections are explicit objects. This makes multiple Home Assistant instances
-safe in one session and keeps cmdlets pipeline-friendly without hidden global
-state:
-
-```powershell
-$token = (Get-Content -LiteralPath $env:HOME_ASSISTANT_TOKEN_FILE -Raw).Trim()
-$ha = Connect-HomeAssistant -Uri 'https://home.example.net' -AccessToken $token
-
-$ha | Get-HomeAssistantInfo
-$ha | Get-HomeAssistantEntity -Domain light
-$ha | Get-HomeAssistantLog | Where-Object Level -In Error, Warning
-$ha | Get-HomeAssistantIssue
-$ha | Get-HomeAssistantUpdate -AvailableOnly
-```
-
-The command model is intentionally small. Parameter sets express the target or
-source while one cmdlet owns one task:
-
-```powershell
-# One action command for any Home Assistant domain/action and target kind
-$ha | Invoke-HomeAssistantAction light turn_on -AreaId kitchen `
-    -Data @{ brightness_pct = 45 } -WhatIf
-
-# One log command for structured Core logs or bounded Supervisor-managed logs
-$ha | Get-HomeAssistantLog
-$ha | Get-HomeAssistantLog -Core -Tail 200
-$ha | Get-HomeAssistantLog -App 'example_app' -Tail 100
-
-# One update command for update entities and Supervisor-managed targets
-$ha | Install-HomeAssistantUpdate -EntityId update.example -WhatIf
-$ha | Install-HomeAssistantUpdate -Core -WhatIf
-```
-
-Mutating commands support `-WhatIf` and `-Confirm`. High-impact operations such
-as updates, restarts, host reboots, and app lifecycle changes use high confirm
-impact. Applications and scripts still need domain-specific policy for actions
-such as unlocking, disarming, or opening access points.
-
-### Notifications without polling
-
-`Receive-HomeAssistantEvent` holds a WebSocket subscription open until the
-pipeline is stopped. It can stream one event type, all events, or state changes
-for selected entities:
-
-```powershell
-$ha | Receive-HomeAssistantEvent -EventType automation_triggered
-$ha | Receive-HomeAssistantEvent -EntityId 'light.kitchen', 'lock.front_door'
-$nextChange = $ha | Receive-HomeAssistantEvent -EntityId 'light.kitchen' `
-    -Count 1 -TimeoutSeconds 30
-```
-
-Press Ctrl+C to cancel an open-ended stream, or use `-Count` and
-`-TimeoutSeconds` for a bounded wait. The cmdlet performs bounded subscription
-cleanup and does not poll the REST API.
-
-### Troubleshooting and administration
-
-```powershell
-$ha | Get-HomeAssistantInfo -Capabilities
-$ha | Get-HomeAssistantInfo -Health
-$ha | Test-HomeAssistantConfiguration
-$ha | Get-HomeAssistantIntegration -Domain mqtt
-$ha | Get-HomeAssistantTrace automation morning_lights
-$ha | Export-HomeAssistantDiagnostic entry_id ./diagnostic.json
-
-# Home Assistant OS / Supervised installations, administrator access required
-$ha | Get-HomeAssistantInfo -Supervisor
-$ha | Get-HomeAssistantJob
-$ha | Get-HomeAssistantBackup
-```
-
-Diagnostics and logs may contain sensitive installation information. Treat
-their output as confidential and avoid attaching it unreviewed to issues.
-
-See the [PowerShell command guide](Docs/POWERSHELL.md) for the complete command
-map and parameter-set design.
-
-## Current boundaries
-
-HomeAssistantX intentionally does not claim every API carrying the Home
-Assistant name:
-
-- WebSocket coalesced message arrays are not enabled yet.
-- Unexpected HTTP 401 responses are surfaced; the host decides whether to
-  refresh or reauthorize instead of entering a hidden retry loop.
-- mDNS instance discovery and native companion-app registration/webhooks are
-  future adapters.
-- Supervisor and Home Assistant OS operations require a supervised/OS
-  installation and suitable administrator privileges. They are unavailable on
-  Home Assistant Container and Core installations.
-- The library models routine read, backup, update, restart, and app lifecycle
-  operations. Restore, wipe, recovery, and host shutdown intentionally remain
-  outside the convenience API.
-- HomeKit is a separate protocol and credential model.
-- Product-specific device normalization belongs in the consuming application.
-
-See [Docs/SUPPORT.md](Docs/SUPPORT.md) for the endpoint-by-endpoint status and
-[Docs/ROADMAP.md](Docs/ROADMAP.md) for work planned before a stable release.
-
-## 🧪 Build and Test
+## 🧪 Build and test
 
 ```powershell
 dotnet restore HomeAssistantX.slnx
 dotnet build HomeAssistantX.slnx --configuration Release --no-restore
 dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build
 dotnet pack HomeAssistantX/HomeAssistantX.csproj --configuration Release --no-build
-./Tests/PowerShell/Test-Module.ps1 -AssemblyPath ./HomeAssistantX.PowerShell/bin/Release/net10.0/HomeAssistantX.PowerShell.dll
+./Tests/PowerShell/Test-Module.ps1 `
+    -AssemblyPath ./HomeAssistantX.PowerShell/bin/Release/net10.0/HomeAssistantX.PowerShell.dll
 ```
 
-The contract suite uses a real loopback HTTP/WebSocket peer. It covers OAuth
-forms and transport failures, fragmented messages, concurrent out-of-order
-responses, state changes racing the initial snapshot, cancellation,
-disconnect/reconnect, and missed-state reconciliation on .NET Framework 4.7.2
-and .NET 10.
+The contract suite uses a real loopback HTTP/WebSocket peer and runs on .NET
+Framework 4.7.2 and .NET 10. It proves transport framing, concurrency,
+cancellation, reconnect, joined discovery, target resolution, typed payloads,
+runspace defaults, `-WhatIf`, and PowerShell 5.1/7 behavior.
 
-Optional read-only live tests use `HOME_ASSISTANT_URL` and
-`HOME_ASSISTANT_TOKEN`. They validate a real instance without calling services
-or changing the home.
+Optional live tests use `HOME_ASSISTANT_URL` and `HOME_ASSISTANT_TOKEN`. They
+read the actual installation without calling actions or changing the home.
 
-## 📖 Documentation & Support
+## 📖 Documentation and support
 
+- [Generated PowerShell command reference](Docs/README.md)
+- [PowerShell design guide](Docs/POWERSHELL.md)
 - [Home Assistant support matrix](Docs/SUPPORT.md)
-- [PowerShell command guide](Docs/POWERSHELL.md)
 - [Roadmap](Docs/ROADMAP.md)
 - [Runnable .NET example](HomeAssistantX.Examples/Program.cs)
 - [Issues](https://github.com/EvotecIT/HomeAssistantX/issues)

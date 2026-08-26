@@ -11,17 +11,17 @@ Streams Home Assistant events without polling until canceled.
 ## SYNTAX
 ### Event (Default)
 ```powershell
-Receive-HomeAssistantEvent [-EventType] <string> -Connection <HomeAssistantConnection> [-Count <Int32>] [-TimeoutSeconds <Int32>] [<CommonParameters>]
+Receive-HomeAssistantEvent [-EventType] <string> [-Count <Int32>] [-TimeoutSeconds <Int32>] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Entity
 ```powershell
-Receive-HomeAssistantEvent [-EntityId] <string[]> -Connection <HomeAssistantConnection> [-Count <Int32>] [-TimeoutSeconds <Int32>] [<CommonParameters>]
+Receive-HomeAssistantEvent [-EntityId] <string[]> [-Count <Int32>] [-TimeoutSeconds <Int32>] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### All
 ```powershell
-Receive-HomeAssistantEvent -All -Connection <HomeAssistantConnection> [-Count <Int32>] [-TimeoutSeconds <Int32>] [<CommonParameters>]
+Receive-HomeAssistantEvent -All [-Count <Int32>] [-TimeoutSeconds <Int32>] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -55,7 +55,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -63,7 +63,7 @@ Parameter Sets: Event, Entity, All
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

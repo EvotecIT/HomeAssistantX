@@ -11,22 +11,22 @@ Gets Core configuration, discovered capabilities, system health, or Supervisor i
 ## SYNTAX
 ### Overview (Default)
 ```powershell
-Get-HomeAssistantInfo -Connection <HomeAssistantConnection> [-Overview] [<CommonParameters>]
+Get-HomeAssistantInfo [-Overview] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Capabilities
 ```powershell
-Get-HomeAssistantInfo -Capabilities -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantInfo -Capabilities [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Health
 ```powershell
-Get-HomeAssistantInfo -Health -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantInfo -Health [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Supervisor
 ```powershell
-Get-HomeAssistantInfo -Supervisor -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantInfo -Supervisor [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -60,7 +60,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -68,7 +68,7 @@ Parameter Sets: Overview, Capabilities, Health, Supervisor
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

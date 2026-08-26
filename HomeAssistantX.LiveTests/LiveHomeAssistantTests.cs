@@ -36,6 +36,7 @@ public sealed class LiveHomeAssistantTests
         var displayRegistry = await client.System.GetEntityRegistryForDisplayAsync();
         var signedPath = await client.System.SignPathAsync("/api/");
         var registries = await client.Registries.GetSnapshotAsync();
+        var inventory = await client.Inventory.GetSnapshotAsync();
         var capabilities = await client.Operations.GetCapabilitiesAsync();
         var integrations = await client.Operations.Integrations.GetAllAsync();
         var updates = await client.Operations.Updates.GetAllAsync();
@@ -103,6 +104,9 @@ public sealed class LiveHomeAssistantTests
         Assert.Equal(System.Text.Json.JsonValueKind.Array, serviceCatalog.ValueKind);
         Assert.NotEmpty(registries.Entities);
         Assert.NotEmpty(registries.Devices);
+        Assert.NotEmpty(inventory.Entities);
+        Assert.NotEmpty(inventory.Actions);
+        Assert.All(restStates, state => Assert.Contains(inventory.Entities, entity => entity.EntityId == state.EntityId));
         Assert.Equal(configuration.Version, capabilities.CoreVersion);
         Assert.NotEmpty(integrations);
         Assert.Equal(System.Text.Json.JsonValueKind.Null, pong.ValueKind);
@@ -112,11 +116,12 @@ public sealed class LiveHomeAssistantTests
         Assert.Equal(System.Text.Json.JsonValueKind.Object, panels.ValueKind);
         Assert.Equal(System.Text.Json.JsonValueKind.Object, displayRegistry.ValueKind);
         Assert.StartsWith("/api/", signedPath);
-        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, registry entities={3}, event types={4}, updates={5}, system log entries={6}, repairs={7}, diagnostic handlers={8}, Supervisor apps={9}, backups={10}",
+        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}",
             configuration.Version,
             restStates.Count,
             webSocketStates.Count,
-            registries.Entities.Count,
+            inventory.Entities.Count,
+            inventory.Actions.Count,
             eventTypes.Count,
             updates.Count,
             systemLog.Count,

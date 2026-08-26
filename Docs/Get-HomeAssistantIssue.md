@@ -11,12 +11,12 @@ Gets Core repairs issues or Supervisor resolution issues.
 ## SYNTAX
 ### Core (Default)
 ```powershell
-Get-HomeAssistantIssue -Connection <HomeAssistantConnection> [-Core] [-IncludeIgnored] [<CommonParameters>]
+Get-HomeAssistantIssue [-Core] [-IncludeIgnored] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Supervisor
 ```powershell
-Get-HomeAssistantIssue -Supervisor -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantIssue -Supervisor [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -34,7 +34,7 @@ Returns non-ignored Core Repairs issues by default.
 ## PARAMETERS
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -42,7 +42,7 @@ Parameter Sets: Core, Supervisor
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

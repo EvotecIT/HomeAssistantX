@@ -11,12 +11,12 @@ Gets update entities or Supervisor component and app updates.
 ## SYNTAX
 ### Entity (Default)
 ```powershell
-Get-HomeAssistantUpdate -Connection <HomeAssistantConnection> [-Entity] [-AvailableOnly] [<CommonParameters>]
+Get-HomeAssistantUpdate [-Entity] [-AvailableOnly] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Supervisor
 ```powershell
-Get-HomeAssistantUpdate -Supervisor -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantUpdate -Supervisor [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -50,7 +50,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -58,7 +58,7 @@ Parameter Sets: Entity, Supervisor
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

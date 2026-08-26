@@ -11,27 +11,27 @@ Installs an update entity or a Supervisor-managed Core, OS, Supervisor, or app u
 ## SYNTAX
 ### Entity (Default)
 ```powershell
-Install-HomeAssistantUpdate [-EntityId] <string> -Connection <HomeAssistantConnection> [-Version <string>] [-Backup <Boolean>] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Install-HomeAssistantUpdate [-EntityId] <string> [-Version <string>] [-Backup <Boolean>] [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Core
 ```powershell
-Install-HomeAssistantUpdate -Core -Connection <HomeAssistantConnection> [-Version <string>] [-Backup <Boolean>] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Install-HomeAssistantUpdate -Core [-Version <string>] [-Backup <Boolean>] [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Supervisor
 ```powershell
-Install-HomeAssistantUpdate -Supervisor -Connection <HomeAssistantConnection> [-Version <string>] [-Backup <Boolean>] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Install-HomeAssistantUpdate -Supervisor [-Version <string>] [-Backup <Boolean>] [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### OperatingSystem
 ```powershell
-Install-HomeAssistantUpdate -OperatingSystem -Connection <HomeAssistantConnection> [-Version <string>] [-Backup <Boolean>] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Install-HomeAssistantUpdate -OperatingSystem [-Version <string>] [-Backup <Boolean>] [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### App
 ```powershell
-Install-HomeAssistantUpdate -App <string> -Connection <HomeAssistantConnection> [-Version <string>] [-Backup <Boolean>] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Install-HomeAssistantUpdate -App <string> [-Version <string>] [-Backup <Boolean>] [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -81,7 +81,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -89,7 +89,7 @@ Parameter Sets: Entity, Core, Supervisor, OperatingSystem, App
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

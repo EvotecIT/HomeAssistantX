@@ -53,7 +53,10 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using HomeAssistantX;
+using HomeAssistantX.Controls;
+using HomeAssistantX.Inventory;
 using HomeAssistantX.Operations;
+using HomeAssistantX.Services;
 using HomeAssistantX.Supervisor;
 
 public static class PackageContract
@@ -68,6 +71,37 @@ public static class PackageContract
             var capabilities = await client.Operations.GetCapabilitiesAsync(cancellationToken);
             await client.Supervisor.GetAppsAsync(cancellationToken);
             return capabilities;
+        }
+    }
+
+    public static async Task<HomeAssistantInventorySnapshot> DiscoverAsync(
+        Uri uri,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        using (var client = HomeAssistantClient.Create(uri, token))
+        {
+            var inventory = await client.Inventory.GetSnapshotAsync(cancellationToken);
+            await client.Inventory.GetEntitiesAsync(
+                new HomeAssistantEntityQuery { Area = "Kitchen", Domain = "light" },
+                cancellationToken);
+            await client.Services.GetActionsAsync(cancellationToken);
+            return inventory;
+        }
+    }
+
+    public static async Task<HomeAssistantServiceCallResult> TurnOnAsync(
+        Uri uri,
+        string token,
+        string areaId,
+        CancellationToken cancellationToken)
+    {
+        using (var client = HomeAssistantClient.Create(uri, token))
+        {
+            return await client.Controls.Lights.TurnOnAsync(
+                HomeAssistantTarget.ForArea(areaId),
+                new HomeAssistantLightOptions { BrightnessPercent = 45 },
+                cancellationToken);
         }
     }
 }

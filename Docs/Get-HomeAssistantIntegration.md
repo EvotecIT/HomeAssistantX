@@ -11,17 +11,17 @@ Gets Home Assistant configuration entries by identifier, domain, or all integrat
 ## SYNTAX
 ### All (Default)
 ```powershell
-Get-HomeAssistantIntegration -Connection <HomeAssistantConnection> [-All] [<CommonParameters>]
+Get-HomeAssistantIntegration [-All] [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Id
 ```powershell
-Get-HomeAssistantIntegration [-EntryId] <string> -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantIntegration [-EntryId] <string> [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Domain
 ```powershell
-Get-HomeAssistantIntegration -Domain <string> -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantIntegration -Domain <string> [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -55,7 +55,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -63,7 +63,7 @@ Parameter Sets: All, Id, Domain
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

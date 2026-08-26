@@ -11,27 +11,27 @@ Restarts Core, Supervisor, host, an app, or reloads one integration.
 ## SYNTAX
 ### Core (Default)
 ```powershell
-Restart-HomeAssistant -Connection <HomeAssistantConnection> [-Core] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Restart-HomeAssistant [-Core] [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Supervisor
 ```powershell
-Restart-HomeAssistant -Supervisor -Connection <HomeAssistantConnection> [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Restart-HomeAssistant -Supervisor [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Host
 ```powershell
-Restart-HomeAssistant -HostSystem -Connection <HomeAssistantConnection> [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Restart-HomeAssistant -HostSystem [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### App
 ```powershell
-Restart-HomeAssistant -App <string> -Connection <HomeAssistantConnection> [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Restart-HomeAssistant -App <string> [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Integration
 ```powershell
-Restart-HomeAssistant -IntegrationId <string> -Connection <HomeAssistantConnection> [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Restart-HomeAssistant -IntegrationId <string> [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -65,7 +65,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -73,7 +73,7 @@ Parameter Sets: Core, Supervisor, Host, App, Integration
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

@@ -45,7 +45,7 @@ public sealed class NewHomeAssistantBackupCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        var target = string.IsNullOrWhiteSpace(Name) ? Connection.ToString() : Name!;
+        var target = string.IsNullOrWhiteSpace(Name) ? ActiveConnection.ToString() : Name!;
         if (!ShouldProcess(target, "Create full Home Assistant backup"))
         {
             return;

@@ -56,3 +56,12 @@ public sealed class HomeAssistantCommandException : HomeAssistantException
 
     public string? TranslationKey { get; }
 }
+
+/// <summary>Raised when a friendly Home Assistant identifier cannot be resolved safely.</summary>
+public sealed class HomeAssistantLookupException : HomeAssistantException
+{
+    public HomeAssistantLookupException(string message)
+        : base(message)
+    {
+    }
+}

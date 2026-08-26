@@ -11,12 +11,12 @@ Gets automation or script trace summaries, or one complete trace run.
 ## SYNTAX
 ### List (Default)
 ```powershell
-Get-HomeAssistantTrace [-Domain] <string> [-ItemId] <string> -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantTrace [-Domain] <string> [-ItemId] <string> [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Run
 ```powershell
-Get-HomeAssistantTrace [-Domain] <string> [-ItemId] <string> -RunId <string> -Connection <HomeAssistantConnection> [<CommonParameters>]
+Get-HomeAssistantTrace [-Domain] <string> [-ItemId] <string> -RunId <string> [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -34,7 +34,7 @@ Returns trace summaries; add RunId to retrieve one complete run.
 ## PARAMETERS
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -42,7 +42,7 @@ Parameter Sets: List, Run
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)

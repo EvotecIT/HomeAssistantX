@@ -11,7 +11,7 @@ Runs one explicit lifecycle operation for a Supervisor-managed Home Assistant ap
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-HomeAssistantApp [-App] <string> [-Action] <HomeAssistantAppAction> -Connection <HomeAssistantConnection> [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-HomeAssistantApp [-App] <string> [-Action] <HomeAssistantAppAction> [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -61,7 +61,7 @@ Accept wildcard characters: False
 ```
 
 ### -Connection
-Explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
+Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
@@ -69,7 +69,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)
