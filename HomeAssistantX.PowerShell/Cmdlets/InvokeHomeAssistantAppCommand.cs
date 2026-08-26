@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Text.Json;
 using HomeAssistantX.Supervisor;
 
 namespace HomeAssistantX.PowerShell;
@@ -10,6 +11,7 @@ namespace HomeAssistantX.PowerShell;
 ///   <para>Uses one lifecycle action enum instead of a cmdlet per app operation.</para>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "HomeAssistantApp", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.High)]
+[OutputType(typeof(JsonElement))]
 public sealed class InvokeHomeAssistantAppCommand : HomeAssistantCmdlet
 {
     /// <summary>Supervisor app/add-on slug.</summary>

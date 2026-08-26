@@ -113,6 +113,19 @@ foreach ($command in Get-Command -Module $importedModuleName) {
     }
 }
 
+$operationalOutputTypeContracts = @{
+    'Install-HomeAssistantUpdate' = @('HomeAssistantServiceCallResult', 'JsonElement')
+    'Invoke-HomeAssistantApp' = @('JsonElement')
+    'Restart-HomeAssistant' = @('HomeAssistantIntegrationOperationResult', 'JsonElement')
+}
+foreach ($entry in $operationalOutputTypeContracts.GetEnumerator()) {
+    $actualTypes = @((Get-Command -Name $entry.Key).OutputType.Type.Name | Sort-Object)
+    $expectedTypes = @($entry.Value | Sort-Object)
+    if (($actualTypes -join '|') -ne ($expectedTypes -join '|')) {
+        throw "Unexpected output types for $($entry.Key): $($actualTypes -join ', ')"
+    }
+}
+
 $mediaParameters = (Get-Command -Name Set-HomeAssistantMediaPlayer).Parameters
 foreach ($name in 'Power', 'Playback', 'VolumePercent', 'VolumeStep', 'Muted', 'Source', 'SoundMode', 'Shuffle', 'Repeat', 'SeekSeconds', 'ClearPlaylist', 'JoinMember', 'Unjoin', 'MediaContentId', 'MediaContentType', 'Enqueue', 'Announce', 'MediaExtra') {
     if (-not $mediaParameters.ContainsKey($name)) {

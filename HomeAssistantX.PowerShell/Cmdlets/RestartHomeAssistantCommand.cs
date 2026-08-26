@@ -1,4 +1,6 @@
 using System.Management.Automation;
+using System.Text.Json;
+using HomeAssistantX.Operations;
 using HomeAssistantX.Supervisor;
 
 namespace HomeAssistantX.PowerShell;
@@ -10,6 +12,8 @@ namespace HomeAssistantX.PowerShell;
 ///   <para>Shows the restart target and requires no change while WhatIf is present.</para>
 /// </example>
 [Cmdlet(VerbsLifecycle.Restart, "HomeAssistant", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.High, DefaultParameterSetName = CoreParameterSet)]
+[OutputType(typeof(HomeAssistantIntegrationOperationResult))]
+[OutputType(typeof(JsonElement))]
 public sealed class RestartHomeAssistantCommand : HomeAssistantCmdlet
 {
     private const string CoreParameterSet = "Core";

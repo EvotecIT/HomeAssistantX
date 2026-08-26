@@ -1,5 +1,7 @@
 using System.Management.Automation;
 using HomeAssistantX.Models;
+using System.Text.Json;
+using HomeAssistantX.Services;
 using HomeAssistantX.Supervisor;
 
 namespace HomeAssistantX.PowerShell;
@@ -11,6 +13,8 @@ namespace HomeAssistantX.PowerShell;
 ///   <para>Shows the high-impact operation without installing the update.</para>
 /// </example>
 [Cmdlet(VerbsLifecycle.Install, "HomeAssistantUpdate", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.High, DefaultParameterSetName = EntityParameterSet)]
+[OutputType(typeof(HomeAssistantServiceCallResult))]
+[OutputType(typeof(JsonElement))]
 public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
 {
     private const string EntityParameterSet = "Entity";
