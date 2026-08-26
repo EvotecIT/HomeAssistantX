@@ -5,7 +5,7 @@ using HomeAssistantX.WebSockets;
 
 namespace HomeAssistantX.Registries;
 
-/// <summary>Loads Home Assistant area, floor, device, entity, and configuration-entry registries.</summary>
+/// <summary>Loads and manages Home Assistant registries.</summary>
 public sealed class HomeAssistantRegistryClient
 {
     private readonly HomeAssistantWebSocketClient _webSocket;
@@ -22,7 +22,8 @@ public sealed class HomeAssistantRegistryClient
         var devicesTask = _webSocket.RequestAsync("config/device_registry/list", null, cancellationToken);
         var partialEntitiesTask = _webSocket.RequestAsync("config/entity_registry/list", null, cancellationToken);
         var configEntriesTask = GetConfigEntriesAsync(cancellationToken);
-        await Task.WhenAll(areasTask, floorsTask, devicesTask, partialEntitiesTask, configEntriesTask).ConfigureAwait(false);
+        var labelsTask = GetLabelsAsync(cancellationToken);
+        await Task.WhenAll(areasTask, floorsTask, devicesTask, partialEntitiesTask, configEntriesTask, labelsTask).ConfigureAwait(false);
 
         var partialEntities = DeserializeArray<HomeAssistantEntityRegistryEntry>(
             await partialEntitiesTask.ConfigureAwait(false),
@@ -49,8 +50,121 @@ public sealed class HomeAssistantRegistryClient
             Devices = DeserializeArray<HomeAssistantDeviceRegistryEntry>(await devicesTask.ConfigureAwait(false), "device registry", cancellationToken),
             Entities = entities,
             ConfigEntries = configEntries.Entries,
+            Labels = await labelsTask.ConfigureAwait(false),
             IsConfigEntryEnrichmentAvailable = configEntries.IsAvailable
         };
+    }
+
+    public async Task<IReadOnlyList<HomeAssistantLabel>> GetLabelsAsync(CancellationToken cancellationToken = default)
+    {
+        var value = await _webSocket.RequestAsync("config/label_registry/list", null, cancellationToken).ConfigureAwait(false);
+        return DeserializeArray<HomeAssistantLabel>(value, "label registry", cancellationToken);
+    }
+
+    public async Task<HomeAssistantLabel> CreateLabelAsync(
+        HomeAssistantLabelCreate label,
+        CancellationToken cancellationToken = default)
+    {
+        if (label is null)
+        {
+            throw new ArgumentNullException(nameof(label));
+        }
+
+        var payload = new Dictionary<string, object?> { ["name"] = label.Name };
+        AddOptional(payload, "color", label.Color);
+        AddOptional(payload, "description", label.Description);
+        AddOptional(payload, "icon", label.Icon);
+        return DeserializeObject<HomeAssistantLabel>(
+            await _webSocket.RequestAsync("config/label_registry/create", payload, cancellationToken).ConfigureAwait(false),
+            "created label",
+            cancellationToken);
+    }
+
+    public async Task<HomeAssistantLabel> UpdateLabelAsync(
+        string labelId,
+        HomeAssistantLabelUpdate update,
+        CancellationToken cancellationToken = default)
+    {
+        HomeAssistantRegistryValidation.Require(labelId, nameof(labelId));
+        if (update is null)
+        {
+            throw new ArgumentNullException(nameof(update));
+        }
+
+        var payload = BeginUpdate("label_id", labelId, update.GetChanges(), nameof(update));
+        return DeserializeObject<HomeAssistantLabel>(
+            await _webSocket.RequestAsync("config/label_registry/update", payload, cancellationToken).ConfigureAwait(false),
+            "updated label",
+            cancellationToken);
+    }
+
+    public Task DeleteLabelAsync(string labelId, CancellationToken cancellationToken = default)
+    {
+        HomeAssistantRegistryValidation.Require(labelId, nameof(labelId));
+        return IgnoreResultAsync("config/label_registry/delete", new Dictionary<string, object?> { ["label_id"] = labelId }, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<HomeAssistantCategory>> GetCategoriesAsync(
+        string scope,
+        CancellationToken cancellationToken = default)
+    {
+        HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        var value = await _webSocket.RequestAsync("config/category_registry/list", new Dictionary<string, object?>
+        {
+            ["scope"] = scope
+        }, cancellationToken).ConfigureAwait(false);
+        return DeserializeArray<HomeAssistantCategory>(value, "category registry", cancellationToken);
+    }
+
+    public async Task<HomeAssistantCategory> CreateCategoryAsync(
+        string scope,
+        HomeAssistantCategoryCreate category,
+        CancellationToken cancellationToken = default)
+    {
+        HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        if (category is null)
+        {
+            throw new ArgumentNullException(nameof(category));
+        }
+
+        var payload = new Dictionary<string, object?> { ["scope"] = scope, ["name"] = category.Name };
+        AddOptional(payload, "icon", category.Icon);
+        return DeserializeObject<HomeAssistantCategory>(
+            await _webSocket.RequestAsync("config/category_registry/create", payload, cancellationToken).ConfigureAwait(false),
+            "created category",
+            cancellationToken);
+    }
+
+    public async Task<HomeAssistantCategory> UpdateCategoryAsync(
+        string scope,
+        string categoryId,
+        HomeAssistantCategoryUpdate update,
+        CancellationToken cancellationToken = default)
+    {
+        HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
+        if (update is null)
+        {
+            throw new ArgumentNullException(nameof(update));
+        }
+
+        var payload = BeginUpdate("category_id", categoryId, update.GetChanges(), nameof(update));
+        payload["scope"] = scope;
+        return DeserializeObject<HomeAssistantCategory>(
+            await _webSocket.RequestAsync("config/category_registry/update", payload, cancellationToken).ConfigureAwait(false),
+            "updated category",
+            cancellationToken);
+    }
+
+    public Task DeleteCategoryAsync(string scope, string categoryId, CancellationToken cancellationToken = default)
+    {
+        HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
+        return IgnoreResultAsync("config/category_registry/delete", new Dictionary<string, object?>
+        {
+            ["scope"] = scope,
+            ["category_id"] = categoryId
+        }, cancellationToken);
     }
 
     private async Task<ConfigEntryLoadResult> GetConfigEntriesAsync(CancellationToken cancellationToken)
@@ -111,6 +225,53 @@ public sealed class HomeAssistantRegistryClient
             value,
             "The Home Assistant " + name + " response could not be decoded.",
             cancellationToken: cancellationToken);
+    }
+
+    private static T DeserializeObject<T>(
+        JsonElement value,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        return HomeAssistantJson.DeserializeResponse<T>(
+            value,
+            "The Home Assistant " + name + " response could not be decoded.",
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task IgnoreResultAsync(
+        string command,
+        IReadOnlyDictionary<string, object?> payload,
+        CancellationToken cancellationToken)
+    {
+        await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static Dictionary<string, object?> BeginUpdate(
+        string idName,
+        string id,
+        IReadOnlyDictionary<string, object?> changes,
+        string parameterName)
+    {
+        if (changes.Count == 0)
+        {
+            throw new ArgumentException("At least one registry field must be changed.", parameterName);
+        }
+
+        var payload = new Dictionary<string, object?> { [idName] = id };
+        foreach (var pair in changes)
+        {
+            payload[pair.Key] = pair.Value;
+        }
+
+        return payload;
+    }
+
+    private static void AddOptional(IDictionary<string, object?> payload, string name, string? value)
+    {
+        if (value is not null)
+        {
+            payload[name] = value;
+        }
     }
 
     private static IReadOnlyList<HomeAssistantConfigEntry> DeserializeConfigEntries(

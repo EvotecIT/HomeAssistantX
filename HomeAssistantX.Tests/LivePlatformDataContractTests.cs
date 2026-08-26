@@ -1,0 +1,183 @@
+#if NET10_0
+using System.Text.Json;
+using HomeAssistantX.Calendars;
+using HomeAssistantX.Notifications;
+using HomeAssistantX.Registries;
+using HomeAssistantX.Services;
+using HomeAssistantX.Tests.Infrastructure;
+
+namespace HomeAssistantX.Tests;
+
+public sealed class LivePlatformDataContractTests
+{
+    [Fact]
+    public async Task PersistentNotificationsReadSendDismissAndStreamWithoutPolling()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var current = await client.Notifications.GetPersistentAsync();
+        Assert.Equal("notice-1", Assert.Single(current).NotificationId);
+        Assert.Equal("fixture", current[0].AdditionalData["source"].GetString());
+
+        var updateReceived = new TaskCompletionSource<HomeAssistantPersistentNotificationUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((update, _) =>
+        {
+            updateReceived.TrySetResult(update);
+            return Task.CompletedTask;
+        });
+        var update = await updateReceived.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(HomeAssistantPersistentNotificationUpdateType.Current, update.Type);
+        Assert.Equal("Door open", update.Notifications["notice-1"].Message);
+
+        await client.Notifications.CreatePersistentAsync("Window open", "Security", "window-open");
+        AssertServiceCall(server, "persistent_notification", "create", data =>
+        {
+            Assert.Equal("Window open", data.GetProperty("message").GetString());
+            Assert.Equal("window-open", data.GetProperty("notification_id").GetString());
+        });
+
+        await client.Notifications.SendAsync(HomeAssistantTarget.ForArea("kitchen"), "Dinner is ready", "Kitchen");
+        using (var body = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody)))
+        {
+            Assert.Equal("notify", body.RootElement.GetProperty("domain").GetString());
+            Assert.Equal("send_message", body.RootElement.GetProperty("service").GetString());
+            Assert.Equal("kitchen", body.RootElement.GetProperty("target").GetProperty("area_id")[0].GetString());
+        }
+
+        await client.Notifications.DismissPersistentAsync("window-open");
+        AssertServiceCall(server, "persistent_notification", "dismiss", data =>
+            Assert.Equal("window-open", data.GetProperty("notification_id").GetString()));
+        await client.Notifications.DismissAllPersistentAsync();
+        AssertServiceCall(server, "persistent_notification", "dismiss_all", data => Assert.Equal(JsonValueKind.Undefined, data.ValueKind));
+    }
+
+    [Fact]
+    public async Task CalendarReadsWritesAndStreamsTimedAndAllDayEvents()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero);
+        var end = start.AddDays(2);
+
+        Assert.Equal("calendar.home", Assert.Single(await client.Calendars.GetAsync()).EntityId);
+        var restEvent = Assert.Single(await client.Calendars.GetEventsAsync("calendar.home", start, end));
+        Assert.Equal(18, restEvent.Start!.DateTime!.Value.Hour);
+
+        var updateReceived = new TaskCompletionSource<HomeAssistantCalendarEventUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.Calendars.SubscribeAsync("calendar.home", start, end, (update, _) =>
+        {
+            updateReceived.TrySetResult(update);
+            return Task.CompletedTask;
+        });
+        var streamed = Assert.Single((await updateReceived.Task.WaitAsync(TimeSpan.FromSeconds(2))).Events);
+        Assert.Equal("event-1", streamed.Uid);
+        Assert.Equal("FREQ=WEEKLY", streamed.RecurrenceRule);
+        Assert.Equal(18, streamed.Start!.DateTime!.Value.Hour);
+
+        var timed = HomeAssistantCalendarEventInput.Timed(start.AddHours(10), start.AddHours(11), "Planning");
+        timed.Description = "Weekly planning";
+        timed.RecurrenceRule = "FREQ=WEEKLY";
+        await client.Calendars.CreateEventAsync("calendar.home", timed);
+        using (var create = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("calendar/event/create"))))
+        {
+            var eventData = create.RootElement.GetProperty("event");
+            Assert.Equal("Planning", eventData.GetProperty("summary").GetString());
+            Assert.Contains("T10:00:00", eventData.GetProperty("start").GetString());
+            Assert.Equal("FREQ=WEEKLY", eventData.GetProperty("rrule").GetString());
+        }
+
+        var allDay = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Holiday");
+        var reference = new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "THISANDFUTURE" };
+        await client.Calendars.UpdateEventAsync("calendar.home", reference, allDay);
+        using (var update = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("calendar/event/update"))))
+        {
+            Assert.Equal("2026-08-27", update.RootElement.GetProperty("event").GetProperty("start").GetString());
+            Assert.Equal("THISANDFUTURE", update.RootElement.GetProperty("recurrence_range").GetString());
+        }
+
+        await client.Calendars.DeleteEventAsync("calendar.home", reference);
+        using var delete = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("calendar/event/delete")));
+        Assert.Equal("event-1", delete.RootElement.GetProperty("uid").GetString());
+    }
+
+    [Fact]
+    public void CalendarInputRejectsMixedInvalidOrNonPositiveRangesBeforeNetworkUse()
+    {
+        var instant = new DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
+        Assert.Throws<ArgumentOutOfRangeException>(() => HomeAssistantCalendarEventInput.Timed(instant, instant, "Invalid"));
+        Assert.Throws<ArgumentException>(() => HomeAssistantCalendarEventInput.Timed(
+            instant,
+            instant.AddHours(2).ToOffset(TimeSpan.FromHours(1)),
+            "Mixed offsets"));
+        Assert.Throws<ArgumentException>(() => HomeAssistantCalendarEventInput.AllDay("26-08-2026", "2026-08-27", "Invalid"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-27", "Invalid"));
+        var input = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Invalid recurrence");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=SECONDLY");
+    }
+
+    [Fact]
+    public async Task RegistrySnapshotIncludesLabelsAndScopedCategoryCrudPreservesTriStateUpdates()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var snapshot = await client.Registries.GetSnapshotAsync();
+        Assert.Equal("security", Assert.Single(snapshot.Labels).LabelId);
+
+        var created = await client.Registries.CreateLabelAsync(new HomeAssistantLabelCreate("Security")
+        {
+            Color = "red",
+            Icon = "mdi:shield"
+        });
+        Assert.Equal("security", created.LabelId);
+
+        await client.Registries.UpdateLabelAsync("security", new HomeAssistantLabelUpdate().WithColor(null).WithDescription("Safety devices"));
+        using (var labelUpdate = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("config/label_registry/update"))))
+        {
+            Assert.Equal(JsonValueKind.Null, labelUpdate.RootElement.GetProperty("color").ValueKind);
+            Assert.False(labelUpdate.RootElement.TryGetProperty("icon", out _));
+        }
+        await client.Registries.DeleteLabelAsync("security");
+
+        Assert.Equal("comfort", Assert.Single(await client.Registries.GetCategoriesAsync("automation")).CategoryId);
+        await client.Registries.CreateCategoryAsync("automation", new HomeAssistantCategoryCreate("Comfort") { Icon = "mdi:sofa" });
+        await client.Registries.UpdateCategoryAsync("automation", "comfort", new HomeAssistantCategoryUpdate().WithIcon(null));
+        using (var categoryUpdate = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("config/category_registry/update"))))
+        {
+            Assert.Equal("automation", categoryUpdate.RootElement.GetProperty("scope").GetString());
+            Assert.Equal(JsonValueKind.Null, categoryUpdate.RootElement.GetProperty("icon").ValueKind);
+        }
+        await client.Registries.DeleteCategoryAsync("automation", "comfort");
+    }
+
+    [Fact]
+    public async Task EmptyRegistryUpdatesFailBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Registries.UpdateLabelAsync("security", new HomeAssistantLabelUpdate()));
+        Assert.Null(server.GetLastWebSocketCommand("config/label_registry/update"));
+    }
+
+    [Fact]
+    public async Task EmptyNotificationTargetFailsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Notifications.SendAsync(HomeAssistantTarget.Create(), "Message"));
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    private static void AssertServiceCall(TestHomeAssistantServer server, string domain, string service, Action<JsonElement> assertData)
+    {
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
+        Assert.Equal(domain, body.RootElement.GetProperty("domain").GetString());
+        Assert.Equal(service, body.RootElement.GetProperty("service").GetString());
+        var data = body.RootElement.TryGetProperty("service_data", out var serviceData) ? serviceData : default;
+        assertData(data);
+    }
+}
+#endif

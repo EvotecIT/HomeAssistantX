@@ -708,6 +708,24 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ["response"] = new Dictionary<string, object?> { ["accepted"] = true }
                 }, false, _source.Token).ConfigureAwait(false);
                 return;
+            case "persistent_notification/get":
+                await session.SendResultAsync(id, ParseJson("[{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\",\"source\":\"fixture\"}]"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "persistent_notification/subscribe":
+                session.SubscriptionIds.Add(id);
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\"}}}"), _source.Token).ConfigureAwait(false);
+                return;
+            case "calendar/event/create":
+            case "calendar/event/update":
+            case "calendar/event/delete":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
+            case "calendar/event/subscribe":
+                session.SubscriptionIds.Add(id);
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson("[{\"summary\":\"Dinner\",\"start\":\"2026-08-26T18:00:00+02:00\",\"end\":\"2026-08-26T20:00:00+02:00\",\"uid\":\"event-1\",\"rrule\":\"FREQ=WEEKLY\"}]"), _source.Token).ConfigureAwait(false);
+                return;
             case "test/error":
                 await session.SendErrorAsync(id, "service_validation_error", "Option is not supported.", "unsupported_option", _source.Token)
                     .ConfigureAwait(false);
@@ -934,7 +952,27 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     _source.Token).ConfigureAwait(false);
                 return;
             case "config/area_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\",\"labels\":[\"security\"]}]"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/label_registry/list":
+                await session.SendResultAsync(id, ParseJson("[{\"label_id\":\"security\",\"name\":\"Security\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300}]"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/label_registry/create":
+            case "config/label_registry/update":
+                await session.SendResultAsync(id, ParseJson("{\"label_id\":\"security\",\"name\":\"Security\",\"color\":null,\"description\":\"Safety devices\",\"icon\":\"mdi:shield\"}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/label_registry/delete":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/category_registry/list":
+                await session.SendResultAsync(id, ParseJson("[{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"icon\":\"mdi:sofa\",\"created_at\":1787731200,\"modified_at\":1787731300}]"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/category_registry/create":
+            case "config/category_registry/update":
+                await session.SendResultAsync(id, ParseJson("{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"icon\":null}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/category_registry/delete":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/floor_registry/list":
                 await session.SendResultAsync(id, ParseJson("[{\"floor_id\":\"ground\",\"name\":\"Ground\",\"aliases\":[\"Downstairs\"],\"level\":0}]"), false, _source.Token).ConfigureAwait(false);

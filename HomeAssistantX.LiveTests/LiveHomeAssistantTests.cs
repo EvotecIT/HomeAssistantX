@@ -36,6 +36,7 @@ public sealed class LiveHomeAssistantTests
         var displayRegistry = await client.System.GetEntityRegistryForDisplayAsync();
         var signedPath = await client.System.SignPathAsync("/api/");
         var registries = await client.Registries.GetSnapshotAsync();
+        var automationCategories = await client.Registries.GetCategoriesAsync("automation");
         var inventory = await client.Inventory.GetSnapshotAsync();
         var mediaPlayers = await client.Controls.MediaPlayers.GetAllAsync();
         var remotes = await client.Controls.Remotes.GetAllAsync();
@@ -58,9 +59,36 @@ public sealed class LiveHomeAssistantTests
             });
         }
 
+        var calendars = Array.Empty<HomeAssistantCalendar>();
+        var calendarEventCount = 0;
         if (components.Contains("calendar", StringComparer.OrdinalIgnoreCase))
         {
-            _ = await client.Rest.GetCalendarsAsync();
+            calendars = (await client.Calendars.GetAsync()).ToArray();
+            if (calendars.Length > 0)
+            {
+                var rangeStart = DateTimeOffset.Now;
+                var rangeEnd = rangeStart.AddDays(30);
+                calendarEventCount = (await client.Calendars.GetEventsAsync(calendars[0].EntityId, rangeStart, rangeEnd)).Count;
+                var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using var calendarSubscription = await client.Calendars.SubscribeAsync(
+                    calendars[0].EntityId,
+                    rangeStart,
+                    rangeEnd,
+                    (_, _) => { received.TrySetResult(true); return Task.CompletedTask; });
+                await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                await calendarSubscription.StopAsync();
+            }
+        }
+
+        var persistentNotificationCount = 0;
+        if (components.Contains("persistent_notification", StringComparer.OrdinalIgnoreCase))
+        {
+            persistentNotificationCount = (await client.Notifications.GetPersistentAsync()).Count;
+            var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var notificationSubscription = await client.Notifications.SubscribePersistentAsync(
+                (_, _) => { received.TrySetResult(true); return Task.CompletedTask; });
+            await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await notificationSubscription.StopAsync();
         }
 
         IReadOnlyList<HomeAssistantSystemLogEntry> systemLog = Array.Empty<HomeAssistantSystemLogEntry>();
@@ -122,7 +150,7 @@ public sealed class LiveHomeAssistantTests
         Assert.Equal(System.Text.Json.JsonValueKind.Object, panels.ValueKind);
         Assert.Equal(System.Text.Json.JsonValueKind.Object, displayRegistry.ValueKind);
         Assert.StartsWith("/api/", signedPath);
-        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}, media players={12}, remotes={13}",
+        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}, media players={12}, remotes={13}, labels={14}, automation categories={15}, calendars={16}, sampled calendar events={17}, persistent notifications={18}",
             configuration.Version,
             restStates.Count,
             webSocketStates.Count,
@@ -136,7 +164,12 @@ public sealed class LiveHomeAssistantTests
             supervisorApps,
             supervisorBackups,
             mediaPlayers.Count,
-            remotes.Count);
+            remotes.Count,
+            registries.Labels.Count,
+            automationCategories.Count,
+            calendars.Length,
+            calendarEventCount,
+            persistentNotificationCount);
     }
 }
 

@@ -4,69 +4,64 @@ Module Name: HomeAssistantX
 online version: https://github.com/EvotecIT/HomeAssistantX
 schema: 2.0.0
 ---
-# Set-HomeAssistantLock
+# Send-HomeAssistantNotification
 ## SYNOPSIS
-Locks, unlocks, or opens a lock with high-impact confirmation.
+Sends a persistent notification or a message to selected notify entities.
 
 ## SYNTAX
 ### Entity (Default)
 ```powershell
-Set-HomeAssistantLock [-Entity] <string[]> -Action <HomeAssistantLockAction> [-Code <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Send-HomeAssistantNotification [-Entity] <string[]> -Message <string> [-Title <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### Persistent
+```powershell
+Send-HomeAssistantNotification -Persistent -Message <string> [-Title <string>] [-NotificationId <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### InputObject
 ```powershell
-Set-HomeAssistantLock -Action <HomeAssistantLockAction> -InputObject <HomeAssistantEntityInfo[]> [-Code <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Send-HomeAssistantNotification -Message <string> -InputObject <HomeAssistantEntityInfo[]> [-Title <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Area
 ```powershell
-Set-HomeAssistantLock [-Area] <string[]> -Action <HomeAssistantLockAction> [-Code <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Send-HomeAssistantNotification [-Area] <string[]> -Message <string> [-Title <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Device
 ```powershell
-Set-HomeAssistantLock [-Device] <string[]> -Action <HomeAssistantLockAction> [-Code <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Send-HomeAssistantNotification [-Device] <string[]> -Message <string> [-Title <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Floor
 ```powershell
-Set-HomeAssistantLock [-Floor] <string[]> -Action <HomeAssistantLockAction> [-Code <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Send-HomeAssistantNotification [-Floor] <string[]> -Message <string> [-Title <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Label
 ```powershell
-Set-HomeAssistantLock [-Label] <string[]> -Action <HomeAssistantLockAction> [-Code <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Send-HomeAssistantNotification [-Label] <string[]> -Message <string> [-Title <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Locks, unlocks, or opens a lock with high-impact confirmation.
+Sends a persistent notification or a message to selected notify entities.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Set-HomeAssistantLock -Entity lock.front_door -Action Unlock -WhatIf
+Send-HomeAssistantNotification -Persistent -Message 'Garage is open' -Title Security
+```
+
+
+### EXAMPLE 2
+```powershell
+Send-HomeAssistantNotification -Area Kitchen -Message 'Dinner is ready' -WhatIf
 ```
 
 
 ## PARAMETERS
-
-### -Action
-Locks, unlocks, or opens the selected locks.
-
-```yaml
-Type: HomeAssistantLockAction
-Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
-Aliases: None
-Possible values: Lock, Unlock, Open
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
 
 ### -Area
 One or more area names, aliases, or native area IDs. Room is an alias.
@@ -84,28 +79,12 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Code
-Optional device code required by some locks.
-
-```yaml
-Type: String
-Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -Connection
 Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
 
 ```yaml
 Type: HomeAssistantConnection
-Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
+Parameter Sets: Entity, Persistent, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -191,6 +170,70 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Message
+Notification message.
+
+```yaml
+Type: String
+Parameter Sets: Entity, Persistent, InputObject, Area, Device, Floor, Label
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NotificationId
+Stable persistent notification ID. Reusing it updates the existing notification.
+
+```yaml
+Type: String
+Parameter Sets: Persistent
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Persistent
+Creates a notification stored in the Home Assistant interface.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Persistent
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Title
+Optional notification title.
+
+```yaml
+Type: String
+Parameter Sets: Entity, Persistent, InputObject, Area, Device, Floor, Label
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

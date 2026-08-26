@@ -29,6 +29,9 @@ $expectedCommands = @(
     'Get-HomeAssistantApp',
     'Get-HomeAssistantArea',
     'Get-HomeAssistantBackup',
+    'Get-HomeAssistantCalendar',
+    'Get-HomeAssistantCalendarEvent',
+    'Get-HomeAssistantCategory',
     'Get-HomeAssistantConnection',
     'Get-HomeAssistantDevice',
     'Get-HomeAssistantEntity',
@@ -38,7 +41,9 @@ $expectedCommands = @(
     'Get-HomeAssistantIntegration',
     'Get-HomeAssistantIssue',
     'Get-HomeAssistantJob',
+    'Get-HomeAssistantLabel',
     'Get-HomeAssistantLog',
+    'Get-HomeAssistantNotification',
     'Get-HomeAssistantTrace',
     'Get-HomeAssistantUpdate',
     'Install-HomeAssistantUpdate',
@@ -46,10 +51,20 @@ $expectedCommands = @(
     'Invoke-HomeAssistantApp',
     'Invoke-HomeAssistantRemote',
     'New-HomeAssistantBackup',
+    'Receive-HomeAssistantCalendarEvent',
     'Receive-HomeAssistantEvent',
+    'Receive-HomeAssistantNotification',
+    'Remove-HomeAssistantCalendarEvent',
+    'Remove-HomeAssistantCategory',
+    'Remove-HomeAssistantLabel',
+    'Remove-HomeAssistantNotification',
     'Restart-HomeAssistant',
+    'Send-HomeAssistantNotification',
+    'Set-HomeAssistantCalendarEvent',
+    'Set-HomeAssistantCategory',
     'Set-HomeAssistantClimate',
     'Set-HomeAssistantCover',
+    'Set-HomeAssistantLabel',
     'Set-HomeAssistantLight',
     'Set-HomeAssistantLock',
     'Set-HomeAssistantMediaPlayer',
@@ -67,14 +82,19 @@ $parameterSetContracts = @{
     'Get-HomeAssistantInfo'       = @('Capabilities', 'Health', 'Overview', 'Supervisor')
     'Install-HomeAssistantUpdate' = @('App', 'Core', 'Entity', 'OperatingSystem', 'Supervisor')
     'Invoke-HomeAssistantAction'  = @('Area', 'Data', 'Device', 'Entity', 'Floor', 'Label')
-    'Invoke-HomeAssistantRemote'  = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
+    'Invoke-HomeAssistantRemote'  = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Remove-HomeAssistantNotification' = @('All', 'Id')
+    'Send-HomeAssistantNotification' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label', 'Persistent')
+    'Set-HomeAssistantCalendarEvent' = @('CreateAllDay', 'CreateTimed', 'UpdateAllDay', 'UpdateTimed')
+    'Set-HomeAssistantCategory'   = @('Create', 'Update')
+    'Set-HomeAssistantLabel'      = @('Create', 'Update')
     'Restart-HomeAssistant'       = @('App', 'Core', 'Host', 'Integration', 'Supervisor')
-    'Set-HomeAssistantClimate'    = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
-    'Set-HomeAssistantCover'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
-    'Set-HomeAssistantLight'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
-    'Set-HomeAssistantLock'       = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
-    'Set-HomeAssistantMediaPlayer' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
-    'Set-HomeAssistantSwitch'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject')
+    'Set-HomeAssistantClimate'    = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantCover'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantLight'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantLock'       = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantMediaPlayer' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantSwitch'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
 }
 foreach ($entry in $parameterSetContracts.GetEnumerator()) {
     $sets = @((Get-Command -Name $entry.Key).ParameterSets.Name | Sort-Object)
@@ -97,7 +117,7 @@ foreach ($name in 'Action', 'Activity', 'Command', 'RemoteDevice', 'RepeatCount'
     }
 }
 
-foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Restart-HomeAssistant', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSwitch') {
+foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSwitch') {
     if (-not (Get-Command -Name $name).Parameters.ContainsKey('WhatIf')) {
         throw "$name must support ShouldProcess/WhatIf."
     }
@@ -263,6 +283,13 @@ try {
     $backups = @($connection | Get-HomeAssistantBackup)
     $supervisorOverview = $connection | Get-HomeAssistantInfo -Supervisor
     $configuration = $connection | Test-HomeAssistantConfiguration
+    $notifications = @(Get-HomeAssistantNotification)
+    $notificationUpdates = @(Receive-HomeAssistantNotification -Count 1 -TimeoutSeconds 5)
+    $calendars = @(Get-HomeAssistantCalendar)
+    $calendarEvents = @(Get-HomeAssistantCalendarEvent -EntityId calendar.home -StartTime '2026-08-26T00:00:00Z' -EndTime '2026-08-28T00:00:00Z')
+    $calendarUpdates = @(Receive-HomeAssistantCalendarEvent -EntityId calendar.home -StartTime '2026-08-26T00:00:00Z' -EndTime '2026-08-28T00:00:00Z' -Count 1 -TimeoutSeconds 5)
+    $labels = @(Get-HomeAssistantLabel)
+    $categories = @(Get-HomeAssistantCategory -Scope automation)
 
     if ($info.Version -ne '2026.8.3') { throw 'Core information was not returned.' }
     if (-not [object]::ReferenceEquals($connection, $defaultConnection)) { throw 'Connect-HomeAssistant did not establish the runspace default.' }
@@ -278,6 +305,13 @@ try {
     if ($backups.Count -ne 1) { throw 'Supervisor backups were not returned.' }
     if ($supervisorOverview.CoreVersion -ne '2026.8.3') { throw 'Supervisor installation overview was not returned.' }
     if (-not $configuration.IsValid) { throw 'Configuration validation failed.' }
+    if ($notifications.Count -ne 1 -or $notifications[0].NotificationId -ne 'notice-1') { throw 'Persistent notifications were not returned.' }
+    if ($notificationUpdates.Count -ne 1 -or $notificationUpdates[0].RawType -ne 'current') { throw 'Persistent notification streaming did not return its current snapshot.' }
+    if ($calendars.Count -ne 1 -or $calendars[0].EntityId -ne 'calendar.home') { throw 'Calendar discovery was not returned.' }
+    if ($calendarEvents.Count -ne 1 -or $calendarEvents[0].Summary -ne 'Dinner') { throw 'Calendar events were not returned.' }
+    if ($calendarUpdates.Count -ne 1 -or $calendarUpdates[0].Events[0].Uid -ne 'event-1') { throw 'Calendar event streaming did not return an event list.' }
+    if ($labels.Count -ne 1 -or $labels[0].LabelId -ne 'security') { throw 'Label discovery was not returned.' }
+    if ($categories.Count -ne 1 -or $categories[0].CategoryId -ne 'comfort') { throw 'Scoped category discovery was not returned.' }
 
     $diagnosticPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')
     try {
@@ -301,6 +335,43 @@ try {
     $serviceBaseline = $server.StandardOutput.ReadLine()
     if ($serviceBaseline -ne 'SERVICE_CALL_CLEARED') {
         throw "Could not establish the action-call baseline. Received: $serviceBaseline"
+    }
+
+    $null = Send-HomeAssistantNotification -Persistent -Message 'Garage is open' -Title Security -WhatIf
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+        throw 'Notification WhatIf invoked a Home Assistant action.'
+    }
+
+    $null = Send-HomeAssistantNotification -Persistent -Message 'Garage is open' -Title Security -NotificationId garage-open -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $notificationCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($notificationCall.domain -ne 'persistent_notification' -or $notificationCall.service -ne 'create' -or $notificationCall.service_data.notification_id -ne 'garage-open') {
+        throw 'The notification cmdlet produced the wrong action payload.'
+    }
+
+    $updatedLabel = Set-HomeAssistantLabel -LabelId security -ClearColor -Description 'Safety devices' -Confirm:$false
+    if ($updatedLabel.LabelId -ne 'security' -or $null -ne $updatedLabel.Color) { throw 'The label update contract was not returned.' }
+    $updatedCategory = Set-HomeAssistantCategory -Scope automation -CategoryId comfort -ClearIcon -Confirm:$false
+    if ($updatedCategory.CategoryId -ne 'comfort' -or $null -ne $updatedCategory.Icon) { throw 'The category update contract was not returned.' }
+    $null = Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Holiday -StartDate 2026-08-27 -EndDate 2026-08-28 -Confirm:$false
+
+    foreach ($invalidPlatformData in @(
+        { Set-HomeAssistantLabel -LabelId security -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCategory -Scope automation -CategoryId comfort -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-27 -WhatIf -ErrorAction Stop }
+    )) {
+        $rejected = $false
+        try { $null = & $invalidPlatformData } catch { $rejected = $true }
+        if (-not $rejected) { throw 'Invalid platform-data input was accepted under WhatIf.' }
+    }
+
+    $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
+        throw 'Could not reset the action baseline after notification validation.'
     }
 
     $actionCmdlet = [HomeAssistantX.PowerShell.InvokeHomeAssistantActionCommand]::new()
@@ -340,6 +411,7 @@ try {
         throw 'Could not reset the typed-control action baseline.'
     }
     $null = Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -WhatIf
+    $null = Set-HomeAssistantLight -Label Security -Power On -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {

@@ -34,6 +34,11 @@ Set-HomeAssistantCover [-Device] <string[]> [-Action <HomeAssistantCoverAction>]
 Set-HomeAssistantCover [-Floor] <string[]> [-Action <HomeAssistantCoverAction>] [-PositionPercent <Double>] [-TiltPositionPercent <Double>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### Label
+```powershell
+Set-HomeAssistantCover [-Label] <string[]> [-Action <HomeAssistantCoverAction>] [-PositionPercent <Double>] [-TiltPositionPercent <Double>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
 Moves covers with a typed action, position, or tilt position.
 
@@ -52,7 +57,7 @@ Opens, closes, stops, or toggles the selected covers.
 
 ```yaml
 Type: HomeAssistantCoverAction
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values: Open, Close, Stop, Toggle
 
@@ -84,7 +89,7 @@ Optional explicit session returned by Connect-HomeAssistant. It also accepts pip
 
 ```yaml
 Type: HomeAssistantConnection
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -159,12 +164,28 @@ Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
+### -Label
+One or more label names or native label IDs.
+
+```yaml
+Type: String[]
+Parameter Sets: Label
+Aliases: LabelId
+Possible values:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -PositionPercent
 Cover position from 0 through 100 percent.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -180,7 +201,7 @@ Cover tilt position from 0 through 100 percent.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 

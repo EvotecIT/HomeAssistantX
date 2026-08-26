@@ -14,6 +14,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
     protected const string AreaParameterSet = "Area";
     protected const string DeviceParameterSet = "Device";
     protected const string FloorParameterSet = "Floor";
+    protected const string LabelParameterSet = "Label";
 
     /// <summary>Joined entities accepted from <c>Get-HomeAssistantEntity</c>.</summary>
     [Parameter(Mandatory = true, ValueFromPipeline = true, ParameterSetName = InputObjectParameterSet)]
@@ -43,6 +44,12 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
     [Alias("FloorId")]
     [ValidateNotNullOrEmpty]
     public string[] Floor { get; set; } = Array.Empty<string>();
+
+    /// <summary>One or more label names or native label IDs.</summary>
+    [Parameter(Mandatory = true, Position = 0, ParameterSetName = LabelParameterSet)]
+    [Alias("LabelId")]
+    [ValidateNotNullOrEmpty]
+    public string[] Label { get; set; } = Array.Empty<string>();
 
     protected sealed override Task ProcessRecordAsync()
     {
@@ -105,6 +112,20 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
                 var floors = Floor.Select(value => Client.Inventory.ResolveFloor(snapshot, value)).ToArray();
                 var count = CountEntities(floors.SelectMany(x => x.Entities), expectedDomain);
                 return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithFloors(floors.Select(x => x.FloorId).ToArray()), Describe("floors", floors.Select(x => x.Name), count), count);
+            }
+            case LabelParameterSet:
+            {
+                var labels = snapshot.Registries.Labels;
+                var resolved = Label.Select(value => ResolveLabel(labels, value)).ToArray();
+                var labelIds = resolved.Select(x => x.LabelId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var matching = snapshot.Entities.Count(entity => IsSelectedByLabel(snapshot, entity, labelIds)
+                    && string.Equals(entity.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase));
+                if (matching == 0)
+                {
+                    throw new HomeAssistantLookupException("The selected labels contain no '" + expectedDomain + "' entities.");
+                }
+
+                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithLabels(labelIds), Describe("labels", resolved.Select(x => x.Name), matching), matching);
             }
             default:
                 throw new InvalidOperationException("A Home Assistant entity, device, area, or floor target is required.");
@@ -171,6 +192,44 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         }
 
         return count;
+    }
+
+    private static Registries.HomeAssistantLabel ResolveLabel(
+        IEnumerable<Registries.HomeAssistantLabel> labels,
+        string value)
+    {
+        var matches = labels.Where(label => string.Equals(label.LabelId, value, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(label.Name, value, StringComparison.OrdinalIgnoreCase)).ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new HomeAssistantLookupException("No Home Assistant label matches '" + value + "'."),
+            _ => throw new HomeAssistantLookupException("More than one Home Assistant label matches '" + value + "'. Use a native label ID.")
+        };
+    }
+
+    private static bool IsSelectedByLabel(
+        HomeAssistantInventorySnapshot snapshot,
+        HomeAssistantEntityInfo entity,
+        IReadOnlyCollection<string> labelIds)
+    {
+        if (entity.RegistryEntry?.Labels.Any(labelIds.Contains) == true)
+        {
+            return true;
+        }
+
+        if (entity.DeviceId is not null
+            && snapshot.Devices.FirstOrDefault(device => string.Equals(device.DeviceId, entity.DeviceId, StringComparison.OrdinalIgnoreCase))
+                is { } device
+            && device.Raw.Labels.Any(labelIds.Contains))
+        {
+            return true;
+        }
+
+        return entity.AreaId is not null
+            && snapshot.Areas.FirstOrDefault(area => string.Equals(area.AreaId, entity.AreaId, StringComparison.OrdinalIgnoreCase))
+                is { } area
+            && area.Raw.Labels.Any(labelIds.Contains);
     }
 
     private static string Describe(string kind, IEnumerable<string> names, int count)

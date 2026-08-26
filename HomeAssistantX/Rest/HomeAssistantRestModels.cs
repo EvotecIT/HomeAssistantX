@@ -67,6 +67,7 @@ public sealed class HomeAssistantCalendar
 }
 
 /// <summary>A date or date-time boundary returned for a calendar event.</summary>
+[JsonConverter(typeof(HomeAssistantCalendarBoundaryJsonConverter))]
 public sealed class HomeAssistantCalendarBoundary
 {
     [JsonPropertyName("date")]
@@ -97,8 +98,83 @@ public sealed class HomeAssistantCalendarEvent
     [JsonPropertyName("location")]
     public string? Location { get; set; }
 
+    [JsonPropertyName("uid")]
+    public string? Uid { get; set; }
+
+    [JsonPropertyName("recurrence_id")]
+    public string? RecurrenceId { get; set; }
+
+    [JsonPropertyName("rrule")]
+    public string? RecurrenceRule { get; set; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
+}
+
+internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter<HomeAssistantCalendarBoundary>
+{
+    public override HomeAssistantCalendarBoundary? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var value = reader.GetString();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return new HomeAssistantCalendarBoundary();
+            }
+
+            if (DateTime.TryParseExact(
+                value,
+                "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out _))
+            {
+                return new HomeAssistantCalendarBoundary { Date = value };
+            }
+
+            if (DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dateTime))
+            {
+                return new HomeAssistantCalendarBoundary { DateTime = dateTime };
+            }
+
+            return new HomeAssistantCalendarBoundary { Date = value };
+        }
+
+        using var document = JsonDocument.ParseValue(ref reader);
+        var root = document.RootElement;
+        return new HomeAssistantCalendarBoundary
+        {
+            Date = root.TryGetProperty("date", out var date) && date.ValueKind == JsonValueKind.String ? date.GetString() : null,
+            DateTime = root.TryGetProperty("dateTime", out var dateTimeValue) && dateTimeValue.ValueKind == JsonValueKind.String
+                ? dateTimeValue.GetDateTimeOffset()
+                : null,
+            AdditionalData = root.EnumerateObject()
+                .Where(property => property.Name != "date" && property.Name != "dateTime")
+                .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, HomeAssistantCalendarBoundary value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        if (value.Date is not null)
+        {
+            writer.WriteString("date", value.Date);
+        }
+        else if (value.DateTime is not null)
+        {
+            writer.WriteString("dateTime", value.DateTime.Value);
+        }
+
+        foreach (var pair in value.AdditionalData)
+        {
+            writer.WritePropertyName(pair.Key);
+            pair.Value.WriteTo(writer);
+        }
+
+        writer.WriteEndObject();
+    }
 }
 
 /// <summary>An entry returned by the Home Assistant logbook API.</summary>
