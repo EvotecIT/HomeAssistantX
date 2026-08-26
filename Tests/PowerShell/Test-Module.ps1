@@ -323,6 +323,7 @@ try {
     $calendarEvents = @(Get-HomeAssistantCalendarEvent -EntityId calendar.home -StartTime '2026-08-26T00:00:00Z' -EndTime '2026-08-28T00:00:00Z')
     $calendarUpdates = @(Receive-HomeAssistantCalendarEvent -EntityId calendar.home -StartTime '2026-08-26T00:00:00Z' -EndTime '2026-08-28T00:00:00Z' -Count 1 -TimeoutSeconds 5)
     $labels = @(Get-HomeAssistantLabel)
+    $labelByNativeId = @(Get-HomeAssistantLabel -Label Security)
     $categories = @(Get-HomeAssistantCategory -Scope automation)
 
     if ($info.Version -ne '2026.8.3') { throw 'Core information was not returned.' }
@@ -345,6 +346,7 @@ try {
     if ($calendarEvents.Count -ne 1 -or $calendarEvents[0].Summary -ne 'Dinner') { throw 'Calendar events were not returned.' }
     if ($calendarUpdates.Count -ne 1 -or $calendarUpdates[0].Events[0].Uid -ne 'event-1') { throw 'Calendar event streaming did not return an event list.' }
     if ($labels.Count -ne 2 -or -not ($labels | Where-Object LabelId -EQ 'security')) { throw 'Label discovery was not returned.' }
+    if ($labelByNativeId.Count -ne 1 -or $labelByNativeId[0].LabelId -ne 'security') { throw 'A native label ID did not take precedence over a colliding friendly name.' }
     if ($categories.Count -ne 1 -or $categories[0].CategoryId -ne 'comfort') { throw 'Scoped category discovery was not returned.' }
 
     $diagnosticPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')

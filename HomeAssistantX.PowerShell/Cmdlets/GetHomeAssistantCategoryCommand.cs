@@ -24,8 +24,12 @@ public sealed class GetHomeAssistantCategoryCommand : HomeAssistantCmdlet
         var categories = await Client.Registries.GetCategoriesAsync(Scope, CancelToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(Category))
         {
-            categories = categories.Where(value => string.Equals(value.CategoryId, Category, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value.Name, Category, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var nativeMatches = categories
+                .Where(value => string.Equals(value.CategoryId, Category, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            categories = nativeMatches.Length > 0
+                ? nativeMatches
+                : categories.Where(value => string.Equals(value.Name, Category, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
         WriteObject(categories, true);

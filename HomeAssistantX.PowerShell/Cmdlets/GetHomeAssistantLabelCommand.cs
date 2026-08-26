@@ -20,8 +20,12 @@ public sealed class GetHomeAssistantLabelCommand : HomeAssistantCmdlet
         var labels = await Client.Registries.GetLabelsAsync(CancelToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(Label))
         {
-            labels = labels.Where(value => string.Equals(value.LabelId, Label, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value.Name, Label, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var nativeMatches = labels
+                .Where(value => string.Equals(value.LabelId, Label, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            labels = nativeMatches.Length > 0
+                ? nativeMatches
+                : labels.Where(value => string.Equals(value.Name, Label, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
         WriteObject(labels, true);
