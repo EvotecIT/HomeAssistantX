@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="HomeAssistantX/HomeAssistantX.csproj" />
+  <Project Path="HomeAssistantX.PowerShell/HomeAssistantX.PowerShell.csproj" />
   <Project Path="HomeAssistantX.Examples/HomeAssistantX.Examples.csproj" />
   <Project Path="HomeAssistantX.LiveTests/HomeAssistantX.LiveTests.csproj" />
   <Project Path="HomeAssistantX.Tests/HomeAssistantX.Tests.csproj" />

@@ -147,7 +147,7 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
-    public async Task CancellationCannotAbandonSubscriptionCleanupAfterStopBegins()
+    public async Task CancellationBoundsTheCallerWithoutAbandoningSubscriptionCleanup()
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
@@ -159,15 +159,33 @@ public sealed class WebSocketContractTests
         using var cancellation = new CancellationTokenSource();
         var stop = subscription.StopAsync(cancellation.Token);
         cancellation.Cancel();
-        Assert.False(stop.IsCompleted);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stop);
 
         server.ReleasePausedSubscription();
-        await WithTimeoutAsync(stop);
+        await WithTimeoutAsync(server.WaitForUnsubscribeAsync());
+        await WithTimeoutAsync(subscription.StopAsync());
 
         Assert.Equal(1, server.UnsubscribeCommandCount);
         Assert.Equal(0, server.InvalidUnsubscribeCommandCount);
         Assert.Equal(server.LastSubscriptionSessionId, server.LastUnsubscribeSessionId);
         await subscription.Completion;
+    }
+
+    [Fact]
+    public async Task StopCallerIsBoundedWhenTheServerNeverAcknowledgesUnsubscribe()
+    {
+        using var server = new TestHomeAssistantServer { IgnoreUnsubscribeAcknowledgement = true };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+
+        var stop = subscription.StopAsync(cancellation.Token);
+        await WithTimeoutAsync(server.WaitForUnsubscribeAsync());
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stop);
+        await WithTimeoutAsync(subscription.Completion);
+
+        Assert.Equal(1, server.UnsubscribeCommandCount);
+        Assert.Equal(0, server.InvalidUnsubscribeCommandCount);
     }
 
     [Fact]

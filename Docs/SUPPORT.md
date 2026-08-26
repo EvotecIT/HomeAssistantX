@@ -1,6 +1,6 @@
 # Home Assistant support matrix
 
-This matrix was checked against the official Home Assistant developer documentation on 25 August 2026. “Core coverage” means the documented external [REST API](https://developers.home-assistant.io/docs/api/rest/), [WebSocket API](https://developers.home-assistant.io/docs/api/websocket/), [Authentication API](https://developers.home-assistant.io/docs/auth_api/), and [Conversation API](https://developers.home-assistant.io/docs/intent_conversation_api/). It does not mean every private frontend command, custom integration endpoint, Supervisor endpoint, or device-domain model.
+This matrix was checked against the official Home Assistant developer documentation and current frontend contracts on 26 August 2026. “Core coverage” means the documented external [REST API](https://developers.home-assistant.io/docs/api/rest/), [WebSocket API](https://developers.home-assistant.io/docs/api/websocket/), [Authentication API](https://developers.home-assistant.io/docs/auth_api/), and [Conversation API](https://developers.home-assistant.io/docs/intent_conversation_api/). Frontend operational commands and the [Supervisor API](https://developers.home-assistant.io/docs/api/supervisor/endpoints/) are marked separately because their compatibility and privilege boundaries differ.
 
 ## Status language
 
@@ -64,6 +64,53 @@ All endpoints currently listed in the official REST API reference have named met
 | Other/custom commands | Raw | `RequestAsync` and `SubscribeAsync` |
 | Coalesced message feature | Not supported | Do not enable `coalesce_messages`; array-frame decoding and negotiation are still required |
 
+## Operations and troubleshooting
+
+These APIs are grouped under `client.Operations`. Stable fields are typed while
+open-ended Home Assistant payloads remain `JsonElement`.
+
+| Capability | Status | Public surface |
+| --- | --- | --- |
+| Capability discovery | First class | `GetCapabilitiesAsync` reports available, unavailable, and permission-dependent capabilities |
+| Structured system log | First class | `Logs.GetSystemLogAsync`; legacy plaintext endpoint remains separate |
+| Repairs | First class / extensible | List issues, include ignored issues, get issue data, set ignored state |
+| System health | Extensible | Collects the streamed `system_health/info` response into a bounded snapshot |
+| Configuration entries | First class / extensible | List/filter/get, reload, enable/disable, start user-initiated reconfiguration, and continue an existing flow |
+| Automation and script traces | First class / extensible | List summaries, retrieve one run, inspect related contexts |
+| Update entities | First class | Discover update states, release notes, and invoke `update.install` |
+| Diagnostics | First class / binary | List diagnostic handlers and download redacted config-entry or device diagnostics |
+
+## Supervisor and Home Assistant OS
+
+`client.Supervisor` supports two transports: the administrator-only Core
+frontend proxy for normal remote clients and a separate direct Supervisor
+bearer-token client for trusted app/add-on contexts.
+
+| Capability | Status | Notes |
+| --- | --- | --- |
+| Supervisor and Core information | First class / extensible | `GetInfoAsync` models Supervisor component health/version, `GetOverviewAsync` models the combined installation, and Core-specific data remains extensible |
+| Available updates | First class | Core, Supervisor, OS, and installed app targets |
+| Apps/add-ons | First class / extensible | List/get plus install, update, start, stop, restart, and uninstall |
+| Backups | First class / extensible | List and create full backups, including compression, location, password, database exclusion, and background mode |
+| Jobs | First class / extensible | List recent jobs and retrieve one job |
+| Resolution issues | Extensible | Supervisor resolution payload preserved |
+| Logs | First class | Bounded Core, Supervisor, host, and app plaintext log retrieval |
+| Restarts and updates | First class | Explicit typed targets with caller-owned confirmation |
+| Raw endpoint | Protected raw | Root-relative paths only, authenticated transport, bounded response, error classification |
+| Restore, wipe, recovery, shutdown | Deliberately unmodeled | Destructive recovery operations require an explicitly owned raw call and policy |
+
+Supervisor capabilities require Home Assistant OS or a supervised installation
+and suitable permissions. They are unavailable on Container and Core-only
+installations. The direct transport uses a separate credential and never
+reuses a Core bearer token against another origin.
+
+## PowerShell
+
+The binary module supports Windows PowerShell 5.1 and PowerShell 7. It exposes
+21 task-level cmdlets over the .NET engine, an explicit pipeline-capable
+connection, target-oriented parameter sets, WebSocket event streaming, and
+`ShouldProcess` for mutations. See [POWERSHELL.md](POWERSHELL.md).
+
 ## Registries and platform boundaries
 
 `Registries.GetSnapshotAsync` provides typed area, floor, device, entity, and config-entry data used by CasaRay-class consumers. Most of those registry commands are frontend-facing Home Assistant commands rather than the stable external API documented alongside the Core WebSocket commands. They are therefore compatibility-sensitive even though they are covered by loopback and live tests.
@@ -74,8 +121,8 @@ The following boundaries are intentional:
 | --- | --- | --- |
 | Instance discovery over mDNS | Not supported yet | Cross-platform discovery deserves an optional adapter or a dependency-free implementation; manual URL entry works today |
 | Native companion-app registration and webhook lifecycle | Raw / future adapter | Different lifecycle from the Core client; should not distort the base transport |
-| Supervisor and Home Assistant OS administration APIs | Out of scope | Different privilege and deployment boundary |
-| Custom integrations, energy preferences, media browsers, backups | Raw | Schemas evolve independently; consumers can use protected raw commands until a reusable model earns ownership here |
+| HACS/custom repository package installation | Not modeled | Not a stable Core package-management contract; Supervisor apps are supported separately |
+| Energy preferences and media browsers | Raw | Schemas evolve independently; consumers can use protected raw commands until a reusable model earns ownership here |
 | Device-domain normalization | Consumer-owned | CasaRay/Tactra map raw HA state into their own normalized product models |
 | HomeKit protocol/bridge | Out of scope | Separate protocol and credential model; not part of HomeAssistantX |
 
@@ -83,4 +130,4 @@ The following boundaries are intentional:
 
 The normal contract suite runs against a real loopback HTTP/WebSocket peer, including authentication, fragmented frames, out-of-order responses, bounded bodies, OAuth refresh concurrency, subscription failure, reconnect, and missed-state reconciliation. It runs on .NET Framework 4.7.2 and .NET 10.
 
-The optional live suite is read-only. It validates the configured real instance's API status, configuration, components, event and service catalogs, state REST/WebSocket parity, panels, registries, signed paths, subscription setup, and recent history when the recorder is loaded. It does not call services, fire events, create tokens, expose entities, or otherwise mutate the home.
+The optional live suite is read-only. It validates the configured real instance's API status, configuration, components, event and service catalogs, state REST/WebSocket parity, panels, registries, signed paths, subscription setup, recent history when the recorder is loaded, operational capability discovery, system logs, Repairs, diagnostics handlers, configuration entries, update discovery, and accessible Supervisor inventory. It does not call services, fire events, create tokens, install updates, restart components, create backups, expose entities, or otherwise mutate the home.

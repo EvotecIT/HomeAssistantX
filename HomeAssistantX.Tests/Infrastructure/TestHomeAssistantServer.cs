@@ -26,7 +26,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _failNextSubscription;
     private TaskCompletionSource<bool>? _pausedSubscriptionReceived;
     private TaskCompletionSource<bool>? _pausedSubscriptionRelease;
+    private TaskCompletionSource<bool>? _pausedSubscriptionActivated;
     private readonly TaskCompletionSource<bool> _unsubscribeReceived =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource<bool> _systemHealthEventsSent =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _unsubscribeCommandCount;
     private int _invalidUnsubscribeCommandCount;
@@ -53,6 +56,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? LastServiceCallBody { get; private set; }
 
+    public void ClearLastServiceCall()
+    {
+        LastServiceCallBody = null;
+    }
+
     public string? LastRequestBody { get; private set; }
 
     public string? LastRequestPath { get; private set; }
@@ -74,7 +82,21 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         return _lastWebSocketCommands.TryGetValue(commandType, out var command) ? command : null;
     }
 
+    public void ClearLastWebSocketCommand(string commandType)
+    {
+        _lastWebSocketCommands.TryRemove(commandType, out _);
+    }
+
     public bool SendStateChangeBeforeSnapshot { get; set; }
+
+    public bool OmitSystemHealthFinish { get; set; }
+
+    public bool IgnoreUnsubscribeAcknowledgement { get; set; }
+
+    public Task WaitForSystemHealthEventsAsync()
+    {
+        return _systemHealthEventsSent.Task;
+    }
 
     public void SetStates(string json)
     {
@@ -99,6 +121,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         _pausedSubscriptionReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pausedSubscriptionRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pausedSubscriptionActivated = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     public Task WaitForPausedSubscriptionAsync()
@@ -113,12 +136,18 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             ?? throw new InvalidOperationException("No subscription pause is configured.")).TrySetResult(true);
     }
 
+    public Task WaitForPausedSubscriptionActivationAsync()
+    {
+        return (_pausedSubscriptionActivated
+            ?? throw new InvalidOperationException("No subscription activation is configured.")).Task;
+    }
+
     public Task WaitForUnsubscribeAsync()
     {
         return _unsubscribeReceived.Task;
     }
 
-    public async Task PublishStateChangeAsync(
+    public async Task<int> PublishStateChangeAsync(
         string entityId,
         string? oldStateJson,
         string? newStateJson,
@@ -130,10 +159,12 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             ["old_state"] = ParseOptional(oldStateJson),
             ["new_state"] = ParseOptional(newStateJson)
         };
+        var recipients = 0;
         foreach (var session in _sessions.Values)
         {
             if (session.StateSubscriptionId is int subscriptionId)
             {
+                recipients++;
                 await session.SendAsync(new Dictionary<string, object?>
                 {
                     ["id"] = subscriptionId,
@@ -154,6 +185,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 }, cancellationToken).ConfigureAwait(false);
             }
         }
+
+        return recipients;
     }
 
     public async Task DropWebSocketsAsync()
@@ -426,6 +459,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ? id
                     : session.StateSubscriptionId;
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                _pausedSubscriptionActivated?.TrySetResult(true);
                 return;
             case "unsubscribe_events":
                 var unsubscribeSubscriptionId = command.GetProperty("subscription").GetInt32();
@@ -443,6 +477,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 else
                 {
                     Interlocked.Increment(ref _invalidUnsubscribeCommandCount);
+                }
+
+                if (IgnoreUnsubscribeAcknowledgement)
+                {
+                    return;
                 }
 
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
@@ -484,13 +523,85 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\"}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get":
-                await session.SendResultAsync(id, ParseJson("{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"state\":\"loaded\"}]}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config_entries/get_single":
+                await session.SendResultAsync(id, ParseJson("{\"config_entry\":{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true}}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config_entries/disable":
+                await session.SendResultAsync(id, ParseJson("{\"require_restart\":false}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "system_log/list":
+                await session.SendResultAsync(id, ParseJson("[{\"name\":\"homeassistant.components.test\",\"message\":[\"Test warning\"],\"level\":\"WARNING\",\"source\":[\"homeassistant/components/test/__init__.py\",42],\"exception\":\"test exception\",\"count\":2,\"timestamp\":1787680800,\"first_occurred\":1787680700}]"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "repairs/list_issues":
+                await session.SendResultAsync(id, ParseJson("{\"issues\":[{\"domain\":\"test\",\"issue_id\":\"warning-1\",\"active\":true,\"is_fixable\":true,\"severity\":\"warning\",\"ignored\":false,\"created\":\"2026-08-25T10:00:00Z\"},{\"domain\":\"test\",\"issue_id\":\"ignored-1\",\"active\":true,\"is_fixable\":false,\"severity\":\"warning\",\"ignored\":true,\"created\":\"2026-08-25T09:00:00Z\"}]}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "repairs/get_issue_data":
+                await session.SendResultAsync(id, ParseJson("{\"issue_data\":{\"summary\":\"Test repair\"}}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "repairs/ignore_issue":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
+            case "diagnostics/list":
+                await session.SendResultAsync(id, ParseJson("[{\"domain\":\"test\",\"handlers\":{\"config_entry\":true,\"device\":true}}]"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "trace/list":
+                await session.SendResultAsync(id, ParseJson("[{\"domain\":\"automation\",\"item_id\":\"night\",\"run_id\":\"run-1\",\"state\":\"stopped\",\"script_execution\":\"error\",\"last_step\":\"action/0\",\"error\":\"Test failure\",\"timestamp\":{\"start\":\"2026-08-25T10:00:00Z\",\"finish\":\"2026-08-25T10:00:01Z\"}}]"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "trace/get":
+                await session.SendResultAsync(id, ParseJson("{\"domain\":\"automation\",\"item_id\":\"night\",\"run_id\":\"run-1\",\"state\":\"stopped\",\"trace\":{\"action/0\":[{\"path\":\"action/0\",\"error\":\"Test failure\"}]}}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "update/release_notes":
+                await session.SendResultAsync(id, "Test release notes", false, _source.Token).ConfigureAwait(false);
+                return;
+            case "system_health/info":
+                session.SubscriptionIds.Add(id);
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"initial\",\"data\":{\"homeassistant\":{\"info\":{\"version\":\"2026.8.3\",\"installation_type\":\"Home Assistant OS\",\"hassio\":true}}}}"), _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"update\",\"success\":true,\"domain\":\"homeassistant\",\"key\":\"python_version\",\"data\":\"3.14.1\"}"), _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"update\",\"success\":false,\"domain\":\"test\",\"key\":\"api\",\"error\":{\"msg\":\"Unavailable\"}}"), _source.Token).ConfigureAwait(false);
+                _systemHealthEventsSent.TrySetResult(true);
+                if (!OmitSystemHealthFinish)
+                {
+                    await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"finish\"}"), _source.Token).ConfigureAwait(false);
+                }
+                return;
+            case "supervisor/api":
+                await HandleSupervisorWebSocketCommandAsync(session, id, command).ConfigureAwait(false);
                 return;
             default:
                 await session.SendResultAsync(id, new Dictionary<string, object?> { ["echo_type"] = type }, false, _source.Token)
                     .ConfigureAwait(false);
                 return;
         }
+    }
+
+    private async Task HandleSupervisorWebSocketCommandAsync(SocketSession session, int id, JsonElement command)
+    {
+        var endpoint = command.GetProperty("endpoint").GetString();
+        object response = endpoint switch
+        {
+            "/supervisor/info" => ParseJson("{\"version\":\"2026.08.0\",\"version_latest\":\"2026.08.1\",\"update_available\":true,\"arch\":\"amd64\",\"channel\":\"stable\",\"healthy\":true,\"supported\":true,\"timezone\":\"Europe/Warsaw\"}"),
+            "/info" => ParseJson("{\"supervisor\":\"2026.08.0\",\"homeassistant\":\"2026.8.3\",\"hassos\":\"17.0\",\"hostname\":\"test-host\",\"operating_system\":\"Home Assistant OS\",\"machine\":\"generic-x86-64\",\"arch\":\"amd64\",\"supported\":true,\"channel\":\"stable\",\"state\":\"running\",\"features\":[\"reboot\"]}"),
+            "/core/info" => ParseJson("{\"version\":\"2026.8.3\",\"version_latest\":\"2026.8.4\",\"update_available\":true}"),
+            "/available_updates" => ParseJson("{\"available_updates\":[{\"update_type\":\"core\",\"version_latest\":\"2026.8.4\",\"panel_path\":\"/update-available/core\"}]}"),
+            "/addons" => ParseJson("{\"addons\":[{\"slug\":\"test_app\",\"name\":\"Test app\",\"version\":\"1.0.0\",\"version_latest\":\"1.1.0\",\"state\":\"started\",\"update_available\":true,\"repository\":\"core\"}]}"),
+            "/backups" => ParseJson("{\"backups\":[{\"slug\":\"backup-1\",\"date\":\"2026-08-25T08:00:00Z\",\"name\":\"Before update\",\"type\":\"full\",\"size\":42.5,\"protected\":true,\"compressed\":true,\"location\":null,\"content\":{\"homeassistant\":true}}]}"),
+            "/jobs/info" => ParseJson("{\"ignore_conditions\":[],\"jobs\":[{\"uuid\":\"job-1\",\"name\":\"backup_manager_full_backup\",\"reference\":\"backup-1\",\"progress\":100,\"stage\":\"done\",\"done\":true,\"extra\":null}]}"),
+            "/jobs/job-1" => ParseJson("{\"uuid\":\"job-1\",\"name\":\"backup_manager_full_backup\",\"reference\":\"backup-1\",\"progress\":100,\"stage\":\"done\",\"done\":true,\"extra\":null}"),
+            "/resolution/info" => ParseJson("{\"issues\":[{\"uuid\":\"resolution-1\",\"type\":\"unsupported\",\"context\":\"system\"}],\"suggestions\":[],\"checks\":[]}"),
+            "/backups/new/full" => ParseJson("{\"slug\":\"backup-new\",\"job_id\":\"job-new\"}"),
+            _ when endpoint is not null && (endpoint.EndsWith("/restart", StringComparison.Ordinal)
+                || endpoint.EndsWith("/reboot", StringComparison.Ordinal)
+                || endpoint.EndsWith("/update", StringComparison.Ordinal)
+                || endpoint.EndsWith("/install", StringComparison.Ordinal)
+                || endpoint.EndsWith("/start", StringComparison.Ordinal)
+                || endpoint.EndsWith("/stop", StringComparison.Ordinal)
+                || endpoint.EndsWith("/uninstall", StringComparison.Ordinal)) => ParseJson("{}"),
+            _ => ParseJson("{}")
+        };
+        await session.SendResultAsync(id, response, false, _source.Token).ConfigureAwait(false);
     }
 
     private string GetStates()
@@ -681,6 +792,19 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ["time_fired"] = DateTimeOffset.UtcNow,
                     ["context"] = new Dictionary<string, object?> { ["id"] = "buffered-event" }
                 }
+            }, cancellationToken);
+        }
+
+        public Task SendSubscriptionEventAsync(
+            int subscriptionId,
+            JsonElement payload,
+            CancellationToken cancellationToken)
+        {
+            return SendAsync(new Dictionary<string, object?>
+            {
+                ["id"] = subscriptionId,
+                ["type"] = "event",
+                ["event"] = payload
             }, cancellationToken);
         }
 

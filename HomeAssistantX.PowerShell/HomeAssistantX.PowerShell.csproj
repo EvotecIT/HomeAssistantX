@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net472;netstandard2.0;net10.0</TargetFrameworks>
+    <AssemblyName>HomeAssistantX.PowerShell</AssemblyName>
+    <RootNamespace>HomeAssistantX.PowerShell</RootNamespace>
+    <Description>Task-oriented PowerShell cmdlets for HomeAssistantX.</Description>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HomeAssistantX\HomeAssistantX.csproj" />
+    <PackageReference Include="PowerShellStandard.Library" Version="5.1.1" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Target Name="RemovePowerShellRuntimeAssemblies" AfterTargets="Build">
+    <Delete Files="$(OutDir)System.Management.Automation.dll" />
+    <Delete Files="$(OutDir)System.Management.dll" />
+  </Target>
+</Project>

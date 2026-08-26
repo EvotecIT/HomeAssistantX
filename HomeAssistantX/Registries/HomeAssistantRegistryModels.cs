@@ -119,8 +119,41 @@ public sealed class HomeAssistantConfigEntry
     [JsonPropertyName("title")]
     public string? Title { get; set; }
 
+    [JsonPropertyName("source")]
+    public string? Source { get; set; }
+
     [JsonPropertyName("state")]
     public string? State { get; set; }
+
+    [JsonPropertyName("supports_options")]
+    public bool SupportsOptions { get; set; }
+
+    [JsonPropertyName("supports_remove_device")]
+    public bool SupportsRemoveDevice { get; set; }
+
+    [JsonPropertyName("supports_unload")]
+    public bool SupportsUnload { get; set; }
+
+    [JsonPropertyName("supports_reconfigure")]
+    public bool SupportsReconfigure { get; set; }
+
+    [JsonPropertyName("pref_disable_new_entities")]
+    public bool PreferDisableNewEntities { get; set; }
+
+    [JsonPropertyName("pref_disable_polling")]
+    public bool PreferDisablePolling { get; set; }
+
+    [JsonPropertyName("disabled_by")]
+    public string? DisabledBy { get; set; }
+
+    [JsonPropertyName("reason")]
+    public string? Reason { get; set; }
+
+    [JsonPropertyName("error_reason_translation_key")]
+    public string? ErrorReasonTranslationKey { get; set; }
+
+    [JsonPropertyName("error_reason_translation_placeholders")]
+    public Dictionary<string, string>? ErrorReasonTranslationPlaceholders { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
