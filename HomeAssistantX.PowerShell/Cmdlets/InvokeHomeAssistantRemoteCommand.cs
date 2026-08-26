@@ -89,6 +89,14 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
         ValidateFiniteDuration(HoldSeconds, nameof(HoldSeconds), allowZero: true);
         ValidateFiniteDuration(TimeoutSeconds, nameof(TimeoutSeconds), allowZero: false);
         ValidateShape();
+        var learningTimeout = ToDuration(TimeoutSeconds);
+        if (learningTimeout.HasValue
+            && TimeSpan.FromSeconds(Math.Ceiling(learningTimeout.Value.TotalSeconds)) >= Client.Options.RequestTimeout)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(TimeoutSeconds),
+                $"TimeoutSeconds must be shorter than the configured request timeout of {Client.Options.RequestTimeout.TotalSeconds:g} seconds.");
+        }
 
         var target = await ResolveTargetAsync("remote").ConfigureAwait(false);
         if (!ShouldProcess(target.Description, Action.ToString()))
@@ -123,7 +131,7 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
                     Commands = Command,
                     CommandType = CommandType,
                     Alternative = Alternative,
-                    Timeout = ToDuration(TimeoutSeconds)
+                    Timeout = learningTimeout
                 },
                 CancelToken).ConfigureAwait(false),
             HomeAssistantRemoteAction.DeleteCommand => await Client.Controls.Remotes.DeleteCommandsAsync(

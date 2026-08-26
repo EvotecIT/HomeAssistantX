@@ -8,14 +8,15 @@ public sealed class HomeAssistantControlsClient
 {
     internal HomeAssistantControlsClient(
         HomeAssistantServiceClient services,
-        HomeAssistantStateClient states)
+        HomeAssistantStateClient states,
+        TimeSpan requestTimeout)
     {
         Lights = new HomeAssistantLightClient(services);
         Switches = new HomeAssistantSwitchClient(services);
         Climate = new HomeAssistantClimateClient(services);
         Covers = new HomeAssistantCoverClient(services);
         MediaPlayers = new HomeAssistantMediaPlayerClient(services, states);
-        Remotes = new HomeAssistantRemoteClient(services, states);
+        Remotes = new HomeAssistantRemoteClient(services, states, requestTimeout);
         Locks = new HomeAssistantLockClient(services);
     }
 

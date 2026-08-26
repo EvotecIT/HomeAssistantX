@@ -56,16 +56,22 @@ internal static class HomeAssistantAttributeReader
             return integer;
         }
 
+        if (value.ValueKind == JsonValueKind.String
+            && long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out integer))
+        {
+            return integer;
+        }
+
         var number = GetDouble(attributes, name);
         if (!number.HasValue
             || number.Value < long.MinValue
-            || number.Value > long.MaxValue
+            || number.Value >= 9223372036854775808d
             || Math.Truncate(number.Value) != number.Value)
         {
             return null;
         }
 
-        return checked((long)number.Value);
+        return (long)number.Value;
     }
 
     public static bool? GetBoolean(IReadOnlyDictionary<string, JsonElement> attributes, string name)

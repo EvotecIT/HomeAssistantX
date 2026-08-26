@@ -57,6 +57,20 @@ public sealed class MediaAndRemoteContractTests
         Assert.Null(status.GetEstimatedPosition(DateTimeOffset.UtcNow));
     }
 
+    [Theory]
+    [InlineData("9223372036854775808")]
+    [InlineData("\"9223372036854775808\"")]
+    public void TypedStatusTreatsOutOfRangeInt64AttributesAsAbsent(string value)
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"remote.bad\",\"state\":\"on\",\"attributes\":{" +
+            "\"supported_features\":" + value + "}}");
+
+        var status = HomeAssistantRemoteStatus.FromState(raw);
+
+        Assert.Equal(HomeAssistantRemoteFeature.None, status.SupportedFeatures);
+    }
+
     [Fact]
     public void MediaStatusSkipsBlankArtworkBeforeSelectingFallback()
     {
@@ -274,7 +288,7 @@ public sealed class MediaAndRemoteContractTests
     public async Task RemoteActionsMapPowerSendLearnAndDeleteParameterContracts()
     {
         using var server = new TestHomeAssistantServer();
-        using var client = TestClientFactory.Create(server);
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(30));
         var target = HomeAssistantTarget.ForEntity("remote.living_room");
 
         await client.Controls.Remotes.SetPowerAsync(target, HomeAssistantPowerAction.On, "Watch TV");
@@ -313,6 +327,20 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal("ir", learnData.GetProperty("command_type").GetString());
         Assert.True(learnData.GetProperty("alternative").GetBoolean());
         Assert.Equal(15, learnData.GetProperty("timeout").GetInt32());
+    }
+
+    [Fact]
+    public async Task RemoteLearningTimeoutMustFitInsideTheTransportDeadline()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(10));
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            client.Controls.Remotes.LearnCommandsAsync(
+                HomeAssistantTarget.ForEntity("remote.living_room"),
+                new HomeAssistantRemoteLearnOptions { Timeout = TimeSpan.FromSeconds(10) }));
+
+        Assert.Empty(server.ServiceCallBodies);
     }
 
     [Fact]

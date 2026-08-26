@@ -9,13 +9,16 @@ namespace HomeAssistantX.Controls;
 public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
 {
     private readonly HomeAssistantStateClient _states;
+    private readonly TimeSpan _requestTimeout;
 
     internal HomeAssistantRemoteClient(
         HomeAssistantServiceClient services,
-        HomeAssistantStateClient states)
+        HomeAssistantStateClient states,
+        TimeSpan requestTimeout)
         : base(services, "remote")
     {
         _states = states;
+        _requestTimeout = requestTimeout;
     }
 
     public async Task<HomeAssistantRemoteStatus> GetAsync(
@@ -119,6 +122,8 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         HomeAssistantRemoteLearnOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        ValidateLearningTimeout(options?.Timeout, _requestTimeout, nameof(options));
+
         string? commandType = null;
         if (options?.CommandType.HasValue == true)
         {
@@ -170,6 +175,20 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
                 }
             },
             cancellationToken);
+    }
+
+    internal static void ValidateLearningTimeout(
+        TimeSpan? learningTimeout,
+        TimeSpan requestTimeout,
+        string parameterName)
+    {
+        if (learningTimeout.HasValue
+            && TimeSpan.FromSeconds(Math.Ceiling(learningTimeout.Value.TotalSeconds)) >= requestTimeout)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                $"The remote learning timeout must be shorter than the configured request timeout of {requestTimeout.TotalSeconds:g} seconds.");
+        }
     }
 
     public Task<HomeAssistantServiceCallResult> DeleteCommandsAsync(
