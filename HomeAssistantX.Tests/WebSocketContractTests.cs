@@ -1,6 +1,7 @@
 ﻿#if NET10_0
 using System.Collections.Concurrent;
 using System.Text.Json;
+using HomeAssistantX.Authentication;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
@@ -9,6 +10,81 @@ namespace HomeAssistantX.Tests;
 
 public sealed class WebSocketContractTests
 {
+    [Fact]
+    public async Task ConnectNegotiatesCoalescingAsFirstCommandAndRoutesBatchedMessages()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var result = await client.WebSocket.RequestAsync("test/coalesced");
+
+        Assert.Equal("coalesced", result.GetProperty("value").GetString());
+        using var featureCommand = JsonDocument.Parse(
+            Assert.IsType<string>(server.GetLastWebSocketCommand("supported_features")));
+        Assert.Equal(1, featureCommand.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal(
+            1,
+            featureCommand.RootElement
+                .GetProperty("features")
+                .GetProperty("coalesce_messages")
+                .GetInt32());
+    }
+
+    [Fact]
+    public async Task CoalescedBatchCountIsBoundedIndependentlyFromFrameBytes()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(
+            server,
+            maximumCoalescedWebSocketMessages: 1);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/coalesced"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("message-count limit", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task CoalescedBatchRejectsValuesThatAreNotMessages()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/malformed_coalesced"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("non-message value", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task RejectedOAuthTokenRefreshesBeforeOpeningAFreshWebSocketSession()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RequiredAccessToken = "refreshed-access-token"
+        };
+        using var oauth = new HomeAssistantOAuthClient(server.BaseUri);
+        using var provider = new RefreshingAccessTokenProvider(
+            oauth,
+            new Uri("https://app.example.net/"),
+            new HomeAssistantOAuthTokens
+            {
+                AccessToken = "locally-unexpired-but-rejected",
+                RefreshToken = "oauth-refresh-token",
+                ExpiresInSeconds = 1800,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(20)
+            });
+        using var client = TestClientFactory.Create(server, accessTokenProvider: provider);
+
+        var result = await client.WebSocket.PingAsync();
+
+        Assert.Equal(JsonValueKind.Null, result.ValueKind);
+        Assert.Equal(1, server.OAuthTokenRequestCount);
+        Assert.Equal(2, server.WebSocketConnectionCount);
+    }
+
     [Fact]
     public async Task AuthenticatesPingsAndReassemblesFragmentedResponses()
     {

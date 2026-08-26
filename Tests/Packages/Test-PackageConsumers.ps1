@@ -53,6 +53,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using HomeAssistantX;
+using HomeAssistantX.Authentication;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Inventory;
 using HomeAssistantX.Operations;
@@ -61,6 +63,22 @@ using HomeAssistantX.Supervisor;
 
 public static class PackageContract
 {
+    public static RefreshingAccessTokenProvider CreateRefreshProvider(
+        HomeAssistantOAuthClient oauth,
+        Uri clientId,
+        HomeAssistantOAuthTokens tokens)
+    {
+        IHomeAssistantAccessTokenRecovery recovery =
+            new RefreshingAccessTokenProvider(oauth, clientId, tokens);
+        return (RefreshingAccessTokenProvider)recovery;
+    }
+
+    public static void ConfigureCoalescedTransport(HomeAssistantClientOptions options)
+    {
+        options.EnableWebSocketMessageCoalescing = true;
+        options.MaximumCoalescedWebSocketMessages = 512;
+    }
+
     public static async Task<HomeAssistantCapabilityReport> ReadAsync(
         Uri uri,
         string token,

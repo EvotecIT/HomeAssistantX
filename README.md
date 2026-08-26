@@ -45,7 +45,8 @@ raw access for custom integrations.
 - the documented Home Assistant REST API: state, history, logbook, actions,
   events, templates, calendars, cameras, intents, and conversations
 - WebSocket events and reconnect-safe state notifications without polling
-- OAuth authorization, refresh, revocation, and host-owned token persistence
+- OAuth authorization, proactive and rejection-triggered refresh, revocation,
+  and host-owned token persistence
 - logs, Repairs, system health, diagnostics, traces, integrations, and updates
 - Home Assistant OS and Supervisor information, logs, jobs, backups, apps,
   updates, and restarts
@@ -347,14 +348,26 @@ that race the snapshot, reconnects, and reports changes missed while disconnecte
 
 ## Authentication and raw access
 
-For production applications, implement `IHomeAssistantAccessTokenProvider` over
-Keychain, Credential Manager, or another platform credential store.
-`HomeAssistantOAuthClient` builds authorization URLs, exchanges codes, refreshes
-access tokens, and revokes refresh tokens. HomeAssistantX does not log or persist
-credentials.
+For production applications, keep OAuth tokens in Keychain, Credential Manager,
+or another platform credential store. `HomeAssistantOAuthClient` builds
+authorization URLs, exchanges codes, refreshes access tokens, and revokes
+refresh tokens. `RefreshingAccessTokenProvider` refreshes shortly before expiry
+and once when Home Assistant unexpectedly rejects an otherwise unexpired access
+token. Concurrent requests share the same refresh, and the host-provided
+persistence callback receives the replacement before it becomes active.
+
+REST requests retry once after HTTP 401. A rejected WebSocket token is refreshed
+and authenticated on a new socket because Home Assistant closes the rejected
+session. `StaticAccessTokenProvider` does not retry rejected long-lived tokens;
+the authentication failure is returned to the caller. Custom providers can opt
+into the same one-retry policy by implementing
+`IHomeAssistantAccessTokenRecovery`. HomeAssistantX does not log or persist
+credentials itself.
 
 Custom REST and WebSocket calls retain authentication, same-origin checks,
-timeouts, bounded response sizes, and classified failures:
+timeouts, bounded response sizes, and classified failures. WebSocket connections
+negotiate Home Assistant message coalescing as command 1 and bound each received
+batch by both bytes and message count:
 
 ```csharp
 var preferences = await client.WebSocket.RequestAsync("energy/get_prefs");
@@ -368,8 +381,9 @@ var image = await client.Rest.GetBytesAsync("api/camera_proxy/camera.front_door"
 - State writes through `/api/states` change Home Assistant's state
   representation; they do not control the physical device.
 - Restore, wipe, recovery, and host shutdown are not convenience operations.
-- Unexpected authentication failures are surfaced to the host; there is no
-  hidden infinite retry loop.
+- Refresh-capable providers make one recovery attempt after a rejected access
+  token. Static tokens and failed refreshes surface an authentication failure;
+  there is no hidden infinite retry loop.
 - HomeKit uses a different protocol and credential model.
 - Product-specific device normalization, UI, and action policy stay in the
   consuming application.

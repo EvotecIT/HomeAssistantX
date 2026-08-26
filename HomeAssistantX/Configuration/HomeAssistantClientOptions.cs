@@ -28,6 +28,12 @@ public sealed class HomeAssistantClientOptions
 
     public int MaximumWebSocketMessageBytes { get; set; } = 64 * 1024 * 1024;
 
+    /// <summary>Maximum number of messages accepted in one Home Assistant coalesced WebSocket batch.</summary>
+    public int MaximumCoalescedWebSocketMessages { get; set; } = 4096;
+
+    /// <summary>Enables Home Assistant WebSocket message coalescing during feature negotiation.</summary>
+    public bool EnableWebSocketMessageCoalescing { get; set; } = true;
+
     public int MaximumRestResponseBytes { get; set; } = 64 * 1024 * 1024;
 
     public int SubscriptionBufferCapacity { get; set; } = 256;
@@ -54,6 +60,11 @@ public sealed class HomeAssistantClientOptions
         if (MaximumRestResponseBytes < 1024)
         {
             throw new ArgumentOutOfRangeException(nameof(MaximumRestResponseBytes));
+        }
+
+        if (MaximumCoalescedWebSocketMessages < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(MaximumCoalescedWebSocketMessages));
         }
 
         if (SubscriptionBufferCapacity < 1)

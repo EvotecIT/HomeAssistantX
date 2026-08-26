@@ -1,7 +1,10 @@
 ﻿namespace HomeAssistantX.Authentication;
 
 /// <summary>Refreshes expiring Home Assistant OAuth tokens and delegates secure persistence to the host.</summary>
-public sealed class RefreshingAccessTokenProvider : IHomeAssistantAccessTokenProvider, IDisposable
+public sealed class RefreshingAccessTokenProvider :
+    IHomeAssistantAccessTokenProvider,
+    IHomeAssistantAccessTokenRecovery,
+    IDisposable
 {
     private readonly HomeAssistantOAuthClient _oauth;
     private readonly Uri _clientId;
@@ -31,40 +34,79 @@ public sealed class RefreshingAccessTokenProvider : IHomeAssistantAccessTokenPro
     public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        if (HasUsableAccessToken(_tokens))
+        var tokens = Volatile.Read(ref _tokens);
+        if (HasUsableAccessToken(tokens))
         {
-            return _tokens.AccessToken;
+            return tokens.AccessToken;
         }
 
         await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             ThrowIfDisposed();
-            if (HasUsableAccessToken(_tokens))
+            tokens = Volatile.Read(ref _tokens);
+            if (HasUsableAccessToken(tokens))
             {
-                return _tokens.AccessToken;
+                return tokens.AccessToken;
             }
 
-            if (string.IsNullOrWhiteSpace(_tokens.RefreshToken))
-            {
-                throw new Exceptions.HomeAssistantAuthenticationException(
-                    "The OAuth access token expired and no refresh token is available.");
-            }
-
-            var refreshed = await _oauth.RefreshAsync(_clientId, _tokens.RefreshToken!, cancellationToken)
-                .ConfigureAwait(false);
-            if (_persistTokens is not null)
-            {
-                await _persistTokens(refreshed, cancellationToken).ConfigureAwait(false);
-            }
-
-            _tokens = refreshed;
-            return refreshed.AccessToken;
+            return await RefreshUnderGateAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _refreshGate.Release();
         }
+    }
+
+    /// <summary>Refreshes a server-rejected token once while coalescing concurrent recovery attempts.</summary>
+    public async Task RecoverAccessTokenAsync(
+        string rejectedAccessToken,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(rejectedAccessToken))
+        {
+            throw new ArgumentException("A rejected access token is required.", nameof(rejectedAccessToken));
+        }
+
+        await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            if (!string.Equals(
+                Volatile.Read(ref _tokens).AccessToken,
+                rejectedAccessToken,
+                StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            await RefreshUnderGateAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _refreshGate.Release();
+        }
+    }
+
+    private async Task<string> RefreshUnderGateAsync(CancellationToken cancellationToken)
+    {
+        var tokens = Volatile.Read(ref _tokens);
+        if (string.IsNullOrWhiteSpace(tokens.RefreshToken))
+        {
+            throw new Exceptions.HomeAssistantAuthenticationException(
+                "The OAuth access token cannot be refreshed because no refresh token is available.");
+        }
+
+        var refreshed = await _oauth.RefreshAsync(_clientId, tokens.RefreshToken!, cancellationToken)
+            .ConfigureAwait(false);
+        if (_persistTokens is not null)
+        {
+            await _persistTokens(refreshed, cancellationToken).ConfigureAwait(false);
+        }
+
+        Volatile.Write(ref _tokens, refreshed);
+        return refreshed.AccessToken;
     }
 
     private static bool HasUsableAccessToken(HomeAssistantOAuthTokens tokens)

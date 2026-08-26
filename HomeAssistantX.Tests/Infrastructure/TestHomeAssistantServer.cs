@@ -36,6 +36,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _invalidUnsubscribeCommandCount;
     private int _lastSubscriptionSessionId;
     private int _lastUnsubscribeSessionId;
+    private int _authenticatedRequestCount;
+    private int _unauthorizedRequestCount;
+    private string _requiredAccessToken = AccessToken;
     private int _disposed;
 
     public TestHomeAssistantServer()
@@ -52,6 +55,24 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public Uri BaseUri { get; }
 
     public int WebSocketConnectionCount => Volatile.Read(ref _connectionCount);
+
+    public int AuthenticatedRequestCount => Volatile.Read(ref _authenticatedRequestCount);
+
+    public int UnauthorizedRequestCount => Volatile.Read(ref _unauthorizedRequestCount);
+
+    public string RequiredAccessToken
+    {
+        get => Volatile.Read(ref _requiredAccessToken);
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new ArgumentException("A required access token is required.", nameof(value));
+            }
+
+            Volatile.Write(ref _requiredAccessToken, value);
+        }
+    }
 
     public string? LastAuthorization { get; private set; }
 
@@ -330,7 +351,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 var valid = root.TryGetProperty("type", out var type)
                     && type.GetString() == "auth"
                     && root.TryGetProperty("access_token", out var token)
-                    && token.GetString() == AccessToken;
+                    && token.GetString() == RequiredAccessToken;
                 if (!valid)
                 {
                     await session.SendAsync(new Dictionary<string, object?>
@@ -385,6 +406,14 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         _lastWebSocketCommands[type] = command.GetRawText();
         switch (type)
         {
+            case "supported_features":
+                session.MessageCoalescingEnabled = command.TryGetProperty("features", out var features)
+                    && features.ValueKind == JsonValueKind.Object
+                    && features.TryGetProperty("coalesce_messages", out var coalesce)
+                    && coalesce.TryGetInt32(out var coalesceVersion)
+                    && coalesceVersion == 1;
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
             case "ping":
                 await session.SendAsync(new Dictionary<string, object?> { ["id"] = id, ["type"] = "pong" }, _source.Token)
                     .ConfigureAwait(false);
@@ -518,6 +547,51 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             case "test/fast":
                 await session.SendResultAsync(id, new Dictionary<string, object?> { ["value"] = "fast" }, false, _source.Token)
                     .ConfigureAwait(false);
+                return;
+            case "test/coalesced":
+                if (!session.MessageCoalescingEnabled)
+                {
+                    await session.SendErrorAsync(
+                        id,
+                        "not_supported",
+                        "Message coalescing was not enabled.",
+                        "not_supported",
+                        _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["type"] = "test_notice",
+                            ["value"] = "before-result"
+                        },
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = id,
+                            ["type"] = "result",
+                            ["success"] = true,
+                            ["result"] = new Dictionary<string, object?> { ["value"] = "coalesced" }
+                        }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/malformed_coalesced":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = id,
+                            ["type"] = "result",
+                            ["success"] = true,
+                            ["result"] = null
+                        },
+                        42
+                    },
+                    _source.Token).ConfigureAwait(false);
                 return;
             case "config/area_registry/list":
                 await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\"}]"), false, _source.Token).ConfigureAwait(false);
@@ -738,6 +812,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
         public int? StateSubscriptionId { get; set; }
 
+        public bool MessageCoalescingEnabled { get; set; }
+
         public HashSet<int> SubscriptionIds { get; } = new();
 
         public async Task<string> ReceiveAsync(CancellationToken cancellationToken)
@@ -830,6 +906,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         public Task SendAsync(object payload, CancellationToken cancellationToken)
         {
             return SendAsync(payload, cancellationToken, false);
+        }
+
+        public Task SendCoalescedAsync(object[] payloads, CancellationToken cancellationToken)
+        {
+            return SendAsync(payloads, cancellationToken, false);
         }
 
         private async Task SendAsync(object payload, CancellationToken cancellationToken, bool fragmented)

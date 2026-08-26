@@ -70,6 +70,44 @@ public sealed partial class HomeAssistantWebSocketClient
     {
         using var document = JsonDocument.Parse(message);
         var root = document.RootElement;
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            RouteMessage(root);
+            return;
+        }
+
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            throw new HomeAssistantProtocolException(
+                "Home Assistant returned a WebSocket payload that was neither a message nor a coalesced batch.");
+        }
+
+        var messageCount = root.GetArrayLength();
+        if (messageCount > _options.MaximumCoalescedWebSocketMessages)
+        {
+            throw new HomeAssistantProtocolException(
+                "A Home Assistant coalesced WebSocket batch exceeded the configured message-count limit.");
+        }
+
+        foreach (var item in root.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                throw new HomeAssistantProtocolException(
+                    "A Home Assistant coalesced WebSocket batch contained a non-message value.");
+            }
+
+            _ = GetRequiredString(item, "type");
+        }
+
+        foreach (var item in root.EnumerateArray())
+        {
+            RouteMessage(item);
+        }
+    }
+
+    private void RouteMessage(JsonElement root)
+    {
         var type = GetRequiredString(root, "type");
         if (!root.TryGetProperty("id", out var idProperty) || !idProperty.TryGetInt32(out var id))
         {

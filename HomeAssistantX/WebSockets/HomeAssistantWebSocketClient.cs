@@ -2,6 +2,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
@@ -57,20 +58,42 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             var reconnecting = _state == HomeAssistantConnectionState.Reconnecting;
             SetState(reconnecting ? HomeAssistantConnectionState.Reconnecting : HomeAssistantConnectionState.Connecting);
 
-            var socket = new ClientWebSocket();
-            socket.Options.KeepAliveInterval = _options.KeepAliveInterval;
             var connectionSource = CancellationTokenSource.CreateLinkedTokenSource(_disposeSource.Token);
             using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeSource.Token);
             connectTimeout.CancelAfter(_options.ConnectTimeout);
+            ClientWebSocket? socket = null;
             try
             {
-                await socket.ConnectAsync(HomeAssistantUri.BuildWebSocketUri(_options.BaseUri), connectTimeout.Token)
-                    .ConfigureAwait(false);
-                await AuthenticateAsync(socket, connectTimeout.Token).ConfigureAwait(false);
+                for (var attempt = 0; attempt < 2; attempt++)
+                {
+                    socket = new ClientWebSocket();
+                    socket.Options.KeepAliveInterval = _options.KeepAliveInterval;
+                    await socket.ConnectAsync(HomeAssistantUri.BuildWebSocketUri(_options.BaseUri), connectTimeout.Token)
+                        .ConfigureAwait(false);
+                    var authenticated = await AuthenticateAsync(
+                        socket,
+                        allowRecovery: attempt == 0,
+                        connectTimeout.Token).ConfigureAwait(false);
+                    if (authenticated)
+                    {
+                        Interlocked.Exchange(ref _nextCommandId, 0);
+                        await EnableSupportedFeaturesAsync(socket, connectTimeout.Token).ConfigureAwait(false);
+                        break;
+                    }
+
+                    socket.Dispose();
+                    socket = null;
+                }
+
+                if (socket is null)
+                {
+                    throw new HomeAssistantAuthenticationException(
+                        "Home Assistant rejected the recovered WebSocket access token.");
+                }
             }
             catch (Exception ex)
             {
-                socket.Dispose();
+                socket?.Dispose();
                 connectionSource.Dispose();
                 SetState(HomeAssistantConnectionState.Faulted, ex);
                 if (ex is OperationCanceledException
@@ -289,7 +312,10 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         return registration.WaitForCheckpointAsync(cancellationToken);
     }
 
-    private async Task AuthenticateAsync(ClientWebSocket socket, CancellationToken cancellationToken)
+    private async Task<bool> AuthenticateAsync(
+        ClientWebSocket socket,
+        bool allowRecovery,
+        CancellationToken cancellationToken)
     {
         var greeting = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
         using var greetingDocument = JsonDocument.Parse(greeting);
@@ -316,15 +342,69 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         var responseType = GetRequiredString(responseDocument.RootElement, "type");
         if (string.Equals(responseType, "auth_ok", StringComparison.Ordinal))
         {
-            return;
+            return true;
         }
 
         if (string.Equals(responseType, "auth_invalid", StringComparison.Ordinal))
         {
+            if (allowRecovery
+                && _options.AccessTokenProvider is IHomeAssistantAccessTokenRecovery recovery)
+            {
+                await recovery.RecoverAccessTokenAsync(token, cancellationToken).ConfigureAwait(false);
+                WriteDiagnostic(
+                    HomeAssistantDiagnosticLevel.Information,
+                    "websocket.authentication_recovered",
+                    "Recovered a Home Assistant WebSocket access token; opening a fresh session.");
+                return false;
+            }
+
             throw new HomeAssistantAuthenticationException("Home Assistant rejected the WebSocket access token.");
         }
 
         throw new HomeAssistantProtocolException("Unexpected Home Assistant authentication response: " + responseType + ".");
+    }
+
+    private async Task EnableSupportedFeaturesAsync(
+        ClientWebSocket socket,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.EnableWebSocketMessageCoalescing)
+        {
+            return;
+        }
+
+        const int commandId = 1;
+        await SendJsonAsync(socket, new Dictionary<string, object?>
+        {
+            ["id"] = commandId,
+            ["type"] = "supported_features",
+            ["features"] = new Dictionary<string, object?>
+            {
+                ["coalesce_messages"] = 1
+            }
+        }, cancellationToken).ConfigureAwait(false);
+
+        var response = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
+        using var responseDocument = JsonDocument.Parse(response);
+        var root = responseDocument.RootElement;
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("id", out var idProperty)
+            || !idProperty.TryGetInt32(out var responseId)
+            || responseId != commandId
+            || !string.Equals(GetRequiredString(root, "type"), "result", StringComparison.Ordinal))
+        {
+            throw new HomeAssistantProtocolException(
+                "Home Assistant returned an invalid supported-features response.");
+        }
+
+        var success = root.TryGetProperty("success", out var successProperty)
+            && successProperty.ValueKind == JsonValueKind.True;
+        if (!success)
+        {
+            throw ReadCommandException(root);
+        }
+
+        Interlocked.Exchange(ref _nextCommandId, commandId);
     }
 
     private async Task ActivateSubscriptionAsync(SubscriptionRegistration registration, CancellationToken cancellationToken)

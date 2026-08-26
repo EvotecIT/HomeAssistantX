@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
@@ -104,9 +105,11 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         return await ExecuteWithTimeoutAsync(
             async operationToken =>
             {
-                using var request = await CreateRequestAsync(HttpMethod.Get, pathOrAbsoluteUri, null, operationToken)
-                    .ConfigureAwait(false);
-                using var response = await SendCoreAsync(request, operationToken).ConfigureAwait(false);
+                using var response = await SendWithAuthenticationRecoveryAsync(
+                    HttpMethod.Get,
+                    pathOrAbsoluteUri,
+                    null,
+                    operationToken).ConfigureAwait(false);
                 return await ReadBoundedContentAsync(
                     response.Content,
                     _options.MaximumRestResponseBytes,
@@ -143,9 +146,11 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         return await ExecuteWithTimeoutAsync(
             async operationToken =>
             {
-                using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, body, operationToken)
-                    .ConfigureAwait(false);
-                using var response = await SendCoreAsync(request, operationToken).ConfigureAwait(false);
+                using var response = await SendWithAuthenticationRecoveryAsync(
+                    method,
+                    pathOrAbsoluteUri,
+                    body,
+                    operationToken).ConfigureAwait(false);
                 var bytes = await ReadBoundedContentAsync(
                     response.Content,
                     _options.MaximumRestResponseBytes,
@@ -165,9 +170,11 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         return await ExecuteWithTimeoutAsync(
             async operationToken =>
             {
-                using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, body, operationToken)
-                    .ConfigureAwait(false);
-                using var response = await SendCoreAsync(request, operationToken).ConfigureAwait(false);
+                using var response = await SendWithAuthenticationRecoveryAsync(
+                    method,
+                    pathOrAbsoluteUri,
+                    body,
+                    operationToken).ConfigureAwait(false);
                 var bytes = await ReadBoundedContentAsync(
                     response.Content,
                     _options.MaximumRestResponseBytes,
@@ -219,6 +226,36 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         }
 
         return request;
+    }
+
+    private async Task<HttpResponseMessage> SendWithAuthenticationRecoveryAsync(
+        HttpMethod method,
+        string pathOrAbsoluteUri,
+        object? body,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, body, cancellationToken)
+                .ConfigureAwait(false);
+            var rejectedAccessToken = request.Headers.Authorization?.Parameter;
+            try
+            {
+                return await SendCoreAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HomeAssistantAuthenticationException) when (
+                attempt == 0
+                && !string.IsNullOrWhiteSpace(rejectedAccessToken)
+                && _options.AccessTokenProvider is IHomeAssistantAccessTokenRecovery)
+            {
+                var recovery = (IHomeAssistantAccessTokenRecovery)_options.AccessTokenProvider;
+                await recovery.RecoverAccessTokenAsync(rejectedAccessToken!, cancellationToken).ConfigureAwait(false);
+                WriteDiagnostic(
+                    HomeAssistantDiagnosticLevel.Information,
+                    "rest.authentication_recovered",
+                    "Recovered a Home Assistant REST access token after an unauthorized response.");
+            }
+        }
     }
 
     private async Task<HttpResponseMessage> SendCoreAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -382,6 +419,21 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         }
 
         return Uri.EscapeDataString(value);
+    }
+
+    private void WriteDiagnostic(
+        HomeAssistantDiagnosticLevel level,
+        string name,
+        string message,
+        Exception? exception = null)
+    {
+        try
+        {
+            _options.Diagnostics.Write(new HomeAssistantDiagnosticEvent(level, name, message, exception));
+        }
+        catch
+        {
+        }
     }
 
     public void Dispose()

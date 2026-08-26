@@ -1,5 +1,6 @@
 ﻿using System.Net.Http;
 using System.Text.Json;
+using HomeAssistantX.Authentication;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
@@ -69,6 +70,63 @@ public sealed class RestClientContractTests
         var authError = await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
             () => unauthorizedClient.Rest.CheckApiAsync());
         Assert.DoesNotContain("private-bad-token", authError.ToString());
+        Assert.Equal(0, server.OAuthTokenRequestCount);
+    }
+
+    [Fact]
+    public async Task RejectedOAuthTokenIsRefreshedOnceAndConcurrentRequestsShareRecovery()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RequiredAccessToken = "refreshed-access-token"
+        };
+        using var oauth = new HomeAssistantOAuthClient(server.BaseUri);
+        using var provider = CreateUnexpiredRefreshingProvider(oauth);
+        using var client = TestClientFactory.Create(server, accessTokenProvider: provider);
+
+        var statuses = await Task.WhenAll(
+            Enumerable.Range(0, 12).Select(_ => client.Rest.CheckApiAsync()));
+
+        Assert.All(statuses, status => Assert.Equal("API running.", status.Message));
+        Assert.Equal(1, server.OAuthTokenRequestCount);
+        Assert.True(server.UnauthorizedRequestCount >= 1);
+        Assert.Equal(12, server.AuthenticatedRequestCount);
+    }
+
+    [Fact]
+    public async Task RecoveredOAuthTokenIsNotRetriedMoreThanOnce()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RequiredAccessToken = "a-token-the-provider-cannot-issue"
+        };
+        using var oauth = new HomeAssistantOAuthClient(server.BaseUri);
+        using var provider = CreateUnexpiredRefreshingProvider(oauth);
+        using var client = TestClientFactory.Create(server, accessTokenProvider: provider);
+
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            () => client.Rest.CheckApiAsync());
+
+        Assert.Equal(1, server.OAuthTokenRequestCount);
+        Assert.Equal(2, server.UnauthorizedRequestCount);
+    }
+
+    [Fact]
+    public async Task CallerCancellationStopsRejectedTokenRecoveryWithoutRetrying()
+    {
+        using var server = new TestHomeAssistantServer();
+        var provider = new BlockingRecoveryProvider();
+        using var client = TestClientFactory.Create(
+            server,
+            requestTimeout: TimeSpan.FromSeconds(5),
+            accessTokenProvider: provider);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.Rest.CheckApiAsync(cancellation.Token));
+
+        Assert.Equal(1, server.UnauthorizedRequestCount);
+        Assert.Equal(1, provider.RecoveryCount);
     }
 
     [Fact]
@@ -119,5 +177,43 @@ public sealed class RestClientContractTests
             () => client.Rest.SendAsync<JsonElement>(HttpMethod.Get, "api/test/invalid-json"));
 
         Assert.IsType<JsonException>(exception.InnerException);
+    }
+
+    private static RefreshingAccessTokenProvider CreateUnexpiredRefreshingProvider(
+        HomeAssistantOAuthClient oauth)
+    {
+        return new RefreshingAccessTokenProvider(
+            oauth,
+            new Uri("https://app.example.net/"),
+            new HomeAssistantOAuthTokens
+            {
+                AccessToken = "locally-unexpired-but-rejected",
+                RefreshToken = "oauth-refresh-token",
+                ExpiresInSeconds = 1800,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(20)
+            });
+    }
+
+    private sealed class BlockingRecoveryProvider :
+        IHomeAssistantAccessTokenProvider,
+        IHomeAssistantAccessTokenRecovery
+    {
+        private int _recoveryCount;
+
+        public int RecoveryCount => Volatile.Read(ref _recoveryCount);
+
+        public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult("rejected-static-token");
+        }
+
+        public async Task RecoverAccessTokenAsync(
+            string rejectedAccessToken,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _recoveryCount);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
     }
 }
