@@ -105,7 +105,7 @@ public sealed class HomeAssistantEntityRegistryEntry
     public string? Name { get; set; }
 
     [JsonPropertyName("aliases")]
-    public string[] Aliases { get; set; } = Array.Empty<string>();
+    public string?[] Aliases { get; set; } = Array.Empty<string?>();
 
     [JsonPropertyName("has_entity_name")]
     public bool HasEntityName { get; set; }

@@ -47,6 +47,10 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        ValidateFinite(Temperature, nameof(Temperature));
+        ValidateFinite(TargetTemperatureLow, nameof(TargetTemperatureLow));
+        ValidateFinite(TargetTemperatureHigh, nameof(TargetTemperatureHigh));
+
         if (!Temperature.HasValue
             && !TargetTemperatureLow.HasValue
             && !TargetTemperatureHigh.HasValue
@@ -87,6 +91,14 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
         if (ShouldProcess(target.Description, "Set climate values"))
         {
             WriteObject(await Client.Controls.Climate.SetAsync(target.Target, options, CancelToken).ConfigureAwait(false), true);
+        }
+    }
+
+    private static void ValidateFinite(double? value, string name)
+    {
+        if (value.HasValue && (double.IsNaN(value.Value) || double.IsInfinity(value.Value)))
+        {
+            throw new ArgumentOutOfRangeException(name, "The value must be a finite number.");
         }
     }
 }

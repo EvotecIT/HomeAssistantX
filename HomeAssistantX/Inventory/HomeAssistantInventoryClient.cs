@@ -167,12 +167,20 @@ public sealed class HomeAssistantInventoryClient
         floors.TryGetValue(area?.FloorId ?? string.Empty, out var floor);
         integrations.TryGetValue(entry?.ConfigEntryId ?? string.Empty, out var integration);
         var friendlyName = TryGetFriendlyName(state);
+        var registryName = GetRegistryFullName(entry, device);
+        var name = FirstNonEmpty(friendlyName, registryName, entityId);
+        var aliases = entry?.Aliases
+            .Select(alias => string.IsNullOrWhiteSpace(alias) ? registryName : alias!.Trim())
+            .Where(alias => !string.IsNullOrWhiteSpace(alias))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? Array.Empty<string>();
 
         return new HomeAssistantEntityInfo
         {
             EntityId = entityId,
-            Name = FirstNonEmpty(friendlyName, entry?.Name, entry?.OriginalName, entityId),
-            Aliases = entry?.Aliases ?? Array.Empty<string>(),
+            Name = name,
+            Aliases = aliases,
             Domain = GetDomain(entityId),
             State = state?.State,
             DeviceId = device?.Id,
@@ -320,6 +328,33 @@ public sealed class HomeAssistantInventoryClient
         return state is not null && state.TryGetAttribute<string>("friendly_name", out var value)
             ? value
             : null;
+    }
+
+    private static string? GetRegistryFullName(
+        HomeAssistantEntityRegistryEntry? entry,
+        HomeAssistantDeviceRegistryEntry? device)
+    {
+        if (entry is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.Name))
+        {
+            return entry.Name;
+        }
+
+        var deviceName = device is null
+            ? null
+            : FirstNonEmptyOrNull(device.NameByUser, device.Name, device.Model);
+        if (!string.IsNullOrWhiteSpace(deviceName))
+        {
+            return string.IsNullOrWhiteSpace(entry.OriginalName)
+                ? deviceName
+                : deviceName + " " + entry.OriginalName;
+        }
+
+        return FirstNonEmptyOrNull(entry.OriginalName, entry.EntityId);
     }
 
     private static string GetDomain(string entityId)

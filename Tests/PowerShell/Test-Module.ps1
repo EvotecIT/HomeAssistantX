@@ -220,6 +220,16 @@ try {
         throw 'The climate cmdlet accepted an incomplete target temperature range.'
     }
 
+    $nonFiniteClimateRejected = $false
+    try {
+        $null = Set-HomeAssistantClimate -Area Kitchen -Temperature ([double]::NaN) -WhatIf -ErrorAction Stop
+    } catch {
+        $nonFiniteClimateRejected = $true
+    }
+    if (-not $nonFiniteClimateRejected) {
+        throw 'The climate cmdlet accepted a non-finite temperature under WhatIf.'
+    }
+
     $invalidMediaRejected = $false
     try {
         $null = Set-HomeAssistantMediaPlayer -Area Kitchen -Power Off -Playback Play -Confirm:$false -ErrorAction Stop

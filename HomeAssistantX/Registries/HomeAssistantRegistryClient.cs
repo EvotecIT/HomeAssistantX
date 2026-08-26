@@ -20,18 +20,52 @@ public sealed class HomeAssistantRegistryClient
         var areasTask = _webSocket.RequestAsync("config/area_registry/list", null, cancellationToken);
         var floorsTask = _webSocket.RequestAsync("config/floor_registry/list", null, cancellationToken);
         var devicesTask = _webSocket.RequestAsync("config/device_registry/list", null, cancellationToken);
-        var entitiesTask = _webSocket.RequestAsync("config/entity_registry/list", null, cancellationToken);
+        var partialEntitiesTask = _webSocket.RequestAsync("config/entity_registry/list", null, cancellationToken);
         var configEntriesTask = _webSocket.RequestAsync("config_entries/get", null, cancellationToken);
-        await Task.WhenAll(areasTask, floorsTask, devicesTask, entitiesTask, configEntriesTask).ConfigureAwait(false);
+        await Task.WhenAll(areasTask, floorsTask, devicesTask, partialEntitiesTask, configEntriesTask).ConfigureAwait(false);
+
+        var partialEntities = DeserializeArray<HomeAssistantEntityRegistryEntry>(
+            await partialEntitiesTask.ConfigureAwait(false),
+            "entity registry");
+        var entities = partialEntities;
+        if (partialEntities.Count > 0)
+        {
+            var extendedEntities = await _webSocket.RequestAsync(
+                "config/entity_registry/get_entries",
+                new Dictionary<string, object?>
+                {
+                    ["entity_ids"] = partialEntities.Select(entry => entry.EntityId).ToArray()
+                },
+                cancellationToken).ConfigureAwait(false);
+            entities = DeserializeExtendedEntities(extendedEntities, partialEntities);
+        }
 
         return new HomeAssistantRegistrySnapshot
         {
             Areas = DeserializeArray<HomeAssistantArea>(await areasTask.ConfigureAwait(false), "area registry"),
             Floors = DeserializeArray<HomeAssistantFloor>(await floorsTask.ConfigureAwait(false), "floor registry"),
             Devices = DeserializeArray<HomeAssistantDeviceRegistryEntry>(await devicesTask.ConfigureAwait(false), "device registry"),
-            Entities = DeserializeArray<HomeAssistantEntityRegistryEntry>(await entitiesTask.ConfigureAwait(false), "entity registry"),
+            Entities = entities,
             ConfigEntries = DeserializeConfigEntries(await configEntriesTask.ConfigureAwait(false))
         };
+    }
+
+    private static IReadOnlyList<HomeAssistantEntityRegistryEntry> DeserializeExtendedEntities(
+        JsonElement value,
+        IReadOnlyList<HomeAssistantEntityRegistryEntry> partialEntries)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response had an unexpected shape.");
+        }
+
+        var extendedEntries = value.Deserialize<Dictionary<string, HomeAssistantEntityRegistryEntry?>>(HomeAssistantJson.SerializerOptions)
+            ?? throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response could not be decoded.");
+
+        return partialEntries.Select(partial =>
+            extendedEntries.TryGetValue(partial.EntityId, out var extended) && extended is not null
+                ? extended
+                : partial).ToArray();
     }
 
     private static IReadOnlyList<T> DeserializeArray<T>(JsonElement value, string name)

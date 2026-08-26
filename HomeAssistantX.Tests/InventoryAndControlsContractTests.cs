@@ -22,6 +22,8 @@ public sealed class InventoryAndControlsContractTests
         var area = Assert.Single(snapshot.Areas);
         var device = Assert.Single(snapshot.Devices);
         var light = Assert.Single(snapshot.Entities, x => x.EntityId == "light.kitchen");
+        var disabledTemperature = Assert.Single(snapshot.Entities, x => x.EntityId == "sensor.disabled_temperature");
+        var temperature = Assert.Single(snapshot.Entities, x => x.EntityId == "sensor.kitchen_temperature");
         var action = Assert.Single(snapshot.Actions, x => x.Domain == "light" && x.Action == "turn_on");
         var field = Assert.Single(action.Fields);
 
@@ -32,7 +34,11 @@ public sealed class InventoryAndControlsContractTests
         Assert.Equal("Ground", light.FloorName);
         Assert.Equal("Kitchen Sensor", light.DeviceName);
         Assert.Equal("Kitchen light", light.Name);
-        Assert.Equal("Island fixture", Assert.Single(light.Aliases));
+        Assert.Contains("Light", light.Aliases);
+        Assert.Contains("Island fixture", light.Aliases);
+        Assert.Equal("Kitchen Sensor Temperature", disabledTemperature.Name);
+        Assert.Contains(disabledTemperature.Name, disabledTemperature.Aliases);
+        Assert.Equal("temperature", temperature.RegistryEntry!.DeviceClass);
         Assert.Equal("test", light.IntegrationDomain);
         Assert.Equal("Test integration", light.IntegrationTitle);
         Assert.Equal("off", light.State);
