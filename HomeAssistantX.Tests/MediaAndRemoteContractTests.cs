@@ -57,6 +57,20 @@ public sealed class MediaAndRemoteContractTests
         Assert.Null(status.GetEstimatedPosition(DateTimeOffset.UtcNow));
     }
 
+    [Fact]
+    public void MediaStatusSkipsBlankArtworkBeforeSelectingFallback()
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.fallback\",\"state\":\"idle\",\"attributes\":{" +
+            "\"media_image_url\":\"   \",\"entity_picture_local\":\"/api/media/local-artwork\"}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Equal(
+            new Uri("https://ha.example.test/api/media/local-artwork"),
+            status.ResolveArtworkUri(new Uri("https://ha.example.test/")));
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"attributes\":null}")]

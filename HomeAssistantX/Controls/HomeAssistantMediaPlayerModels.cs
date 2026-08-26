@@ -255,8 +255,9 @@ public sealed class HomeAssistantMediaPlayerStatus
             throw new ArgumentNullException(nameof(homeAssistantBaseUri));
         }
 
-        var value = MediaImageUrl ?? EntityPictureLocal ?? EntityPicture;
-        if (string.IsNullOrWhiteSpace(value))
+        var value = new[] { MediaImageUrl, EntityPictureLocal, EntityPicture }
+            .FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate));
+        if (value is null)
         {
             return null;
         }
