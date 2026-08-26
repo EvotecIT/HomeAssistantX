@@ -122,6 +122,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public bool IgnoreUnsubscribeAcknowledgement { get; set; }
 
+    public bool RejectSupportedFeatures { get; set; }
+
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;
@@ -407,6 +409,12 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         switch (type)
         {
             case "supported_features":
+                if (RejectSupportedFeatures)
+                {
+                    await session.SendErrorAsync(id, "unknown_command", "Unknown command.", "unknown_command", _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
                 session.MessageCoalescingEnabled = command.TryGetProperty("features", out var features)
                     && features.ValueKind == JsonValueKind.Object
                     && features.TryGetProperty("coalesce_messages", out var coalesce)

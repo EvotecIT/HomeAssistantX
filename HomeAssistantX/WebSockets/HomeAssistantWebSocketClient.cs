@@ -76,7 +76,6 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                         connectTimeout.Token).ConfigureAwait(false);
                     if (authenticated)
                     {
-                        Interlocked.Exchange(ref _nextCommandId, 0);
                         await EnableSupportedFeaturesAsync(socket, connectTimeout.Token).ConfigureAwait(false);
                         break;
                     }
@@ -373,7 +372,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             return;
         }
 
-        const int commandId = 1;
+        var commandId = NextCommandId();
         await SendJsonAsync(socket, new Dictionary<string, object?>
         {
             ["id"] = commandId,
@@ -401,10 +400,19 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             && successProperty.ValueKind == JsonValueKind.True;
         if (!success)
         {
-            throw ReadCommandException(root);
-        }
+            var exception = ReadCommandException(root);
+            if (string.Equals(exception.Code, "unknown_command", StringComparison.Ordinal)
+                || string.Equals(exception.Code, "not_supported", StringComparison.Ordinal))
+            {
+                WriteDiagnostic(
+                    HomeAssistantDiagnosticLevel.Information,
+                    "websocket.coalescing_unavailable",
+                    "Home Assistant does not support WebSocket message coalescing; continuing without it.");
+                return;
+            }
 
-        Interlocked.Exchange(ref _nextCommandId, commandId);
+            throw exception;
+        }
     }
 
     private async Task ActivateSubscriptionAsync(SubscriptionRegistration registration, CancellationToken cancellationToken)

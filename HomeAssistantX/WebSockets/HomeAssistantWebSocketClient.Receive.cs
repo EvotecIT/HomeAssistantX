@@ -193,6 +193,16 @@ public sealed partial class HomeAssistantWebSocketClient
             {
                 return;
             }
+            catch (HomeAssistantAuthenticationException ex)
+            {
+                SetState(HomeAssistantConnectionState.Faulted, ex);
+                WriteDiagnostic(
+                    HomeAssistantDiagnosticLevel.Error,
+                    "websocket.reconnect_authentication_failed",
+                    "Home Assistant rejected the recovered WebSocket credentials; automatic reconnect stopped.",
+                    ex);
+                return;
+            }
             catch (Exception ex)
             {
                 WriteDiagnostic(HomeAssistantDiagnosticLevel.Warning, "websocket.reconnect_failed", "Home Assistant WebSocket reconnect failed; another attempt will follow.", ex);

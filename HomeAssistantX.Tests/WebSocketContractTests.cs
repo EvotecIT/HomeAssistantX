@@ -31,6 +31,34 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task UnsupportedFeatureNegotiationFallsBackToOrdinaryMessages()
+    {
+        using var server = new TestHomeAssistantServer { RejectSupportedFeatures = true };
+        using var client = TestClientFactory.Create(server);
+
+        var pong = await client.WebSocket.PingAsync();
+
+        Assert.Equal(JsonValueKind.Null, pong.ValueKind);
+        Assert.NotNull(server.GetLastWebSocketCommand("supported_features"));
+    }
+
+    [Fact]
+    public async Task CommandIdentifiersRemainMonotonicAcrossConnections()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.WebSocket.PingAsync();
+        using var first = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("ping")));
+        var firstId = first.RootElement.GetProperty("id").GetInt32();
+        await client.WebSocket.DisconnectAsync();
+        await client.WebSocket.PingAsync();
+        using var second = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("ping")));
+
+        Assert.True(second.RootElement.GetProperty("id").GetInt32() > firstId);
+    }
+
+    [Fact]
     public async Task CoalescedBatchCountIsBoundedIndependentlyFromFrameBytes()
     {
         using var server = new TestHomeAssistantServer();
@@ -83,6 +111,33 @@ public sealed class WebSocketContractTests
         Assert.Equal(JsonValueKind.Null, result.ValueKind);
         Assert.Equal(1, server.OAuthTokenRequestCount);
         Assert.Equal(2, server.WebSocketConnectionCount);
+    }
+
+    [Fact]
+    public async Task PermanentReconnectAuthenticationFailureStopsTheReconnectEpisode()
+    {
+        using var server = new TestHomeAssistantServer();
+        var provider = new NonRecoveringTokenProvider(TestHomeAssistantServer.AccessToken);
+        using var client = TestClientFactory.Create(server, accessTokenProvider: provider);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+        var faulted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WebSocket.ConnectionStateChanged += (_, args) =>
+        {
+            if (args.CurrentState == HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted)
+            {
+                faulted.TrySetResult(true);
+            }
+        };
+
+        server.RequiredAccessToken = "replacement-token";
+        await server.DropWebSocketsAsync();
+        await WithTimeoutAsync(faulted.Task);
+        var stoppedAt = server.WebSocketConnectionCount;
+        await Task.Delay(250);
+
+        Assert.Equal(1, provider.RecoveryCount);
+        Assert.Equal(stoppedAt, server.WebSocketConnectionCount);
+        Assert.Equal(HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted, client.WebSocket.State);
     }
 
     [Fact]
@@ -438,6 +493,27 @@ public sealed class WebSocketContractTests
         var winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(3)));
         Assert.Same(task, winner);
         await task;
+    }
+
+    private sealed class NonRecoveringTokenProvider : IHomeAssistantAccessTokenProvider, IHomeAssistantAccessTokenRecovery
+    {
+        private readonly string _token;
+
+        internal NonRecoveringTokenProvider(string token)
+        {
+            _token = token;
+        }
+
+        internal int RecoveryCount { get; private set; }
+
+        public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(_token);
+
+        public Task RecoverAccessTokenAsync(string rejectedAccessToken, CancellationToken cancellationToken = default)
+        {
+            RecoveryCount++;
+            return Task.CompletedTask;
+        }
     }
 }
 #endif
