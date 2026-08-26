@@ -21,7 +21,7 @@ public sealed class HomeAssistantArea
     public string[] Labels { get; set; } = Array.Empty<string>();
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantFloor
@@ -39,7 +39,7 @@ public sealed class HomeAssistantFloor
     public int? Level { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantDeviceRegistryEntry
@@ -72,7 +72,7 @@ public sealed class HomeAssistantDeviceRegistryEntry
     public JsonElement Identifiers { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantEntityRegistryEntry
@@ -126,7 +126,7 @@ public sealed class HomeAssistantEntityRegistryEntry
     public string[] Labels { get; set; } = Array.Empty<string>();
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantConfigEntry
@@ -177,7 +177,7 @@ public sealed class HomeAssistantConfigEntry
     public Dictionary<string, string>? ErrorReasonTranslationPlaceholders { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>A coherent snapshot of the registries used to map raw entities into rooms and devices.</summary>

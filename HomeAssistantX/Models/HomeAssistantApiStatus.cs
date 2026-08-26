@@ -8,5 +8,5 @@ public sealed class HomeAssistantApiStatus
     public string Message { get; set; } = string.Empty;
 
     [JsonExtensionData]
-    public Dictionary<string, System.Text.Json.JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, System.Text.Json.JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }

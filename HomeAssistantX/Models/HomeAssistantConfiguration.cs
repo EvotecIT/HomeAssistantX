@@ -22,5 +22,5 @@ public sealed class HomeAssistantConfiguration
     public string[] Components { get; set; } = Array.Empty<string>();
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }

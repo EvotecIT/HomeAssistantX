@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Models;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Tests.Infrastructure;
 
@@ -7,6 +8,18 @@ namespace HomeAssistantX.Tests;
 
 public sealed class CoreRestApiContractTests
 {
+    [Fact]
+    public void ExtensionDataPreservesCaseDistinctUnknownFields()
+    {
+        var configuration = JsonSerializer.Deserialize<HomeAssistantConfiguration>(
+            "{\"location_name\":\"Home\",\"future\":1,\"Future\":2}");
+
+        Assert.NotNull(configuration);
+        Assert.Equal(2, configuration.AdditionalData.Count);
+        Assert.Equal(1, configuration.AdditionalData["future"].GetInt32());
+        Assert.Equal(2, configuration.AdditionalData["Future"].GetInt32());
+    }
+
     [Fact]
     public async Task DocumentedReadOnlyRestFamiliesUseTheirRealWireContracts()
     {

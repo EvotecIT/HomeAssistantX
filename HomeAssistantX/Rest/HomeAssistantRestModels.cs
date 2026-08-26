@@ -14,7 +14,7 @@ public sealed class HomeAssistantEventType
     public int ListenerCount { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>The state and attributes used to create or update a state representation.</summary>
@@ -47,7 +47,7 @@ public sealed class HomeAssistantConfigurationCheck
     public string? Errors { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 
     [JsonIgnore]
     public bool IsValid => string.Equals(Result, "valid", StringComparison.OrdinalIgnoreCase);
@@ -63,7 +63,7 @@ public sealed class HomeAssistantCalendar
     public string Name { get; set; } = string.Empty;
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>A date or date-time boundary returned for a calendar event.</summary>
@@ -76,7 +76,7 @@ public sealed class HomeAssistantCalendarBoundary
     public DateTimeOffset? DateTime { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>An event returned by a Home Assistant calendar entity.</summary>
@@ -98,7 +98,7 @@ public sealed class HomeAssistantCalendarEvent
     public string? Location { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>An entry returned by the Home Assistant logbook API.</summary>
@@ -123,7 +123,7 @@ public sealed class HomeAssistantLogbookEntry
     public string? ContextUserId { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>Filters a history query while preserving Home Assistant's performance switches.</summary>

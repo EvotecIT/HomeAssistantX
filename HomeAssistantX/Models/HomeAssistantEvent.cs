@@ -24,5 +24,5 @@ public sealed class HomeAssistantEvent
     public HomeAssistantContext? Context { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }

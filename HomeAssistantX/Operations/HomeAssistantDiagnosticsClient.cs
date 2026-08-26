@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Protocol;
@@ -69,7 +69,7 @@ public sealed class HomeAssistantDiagnosticHandler
     public HomeAssistantDiagnosticHandlerSupport Handlers { get; set; } = new();
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantDiagnosticHandlerSupport
@@ -81,5 +81,5 @@ public sealed class HomeAssistantDiagnosticHandlerSupport
     public bool Device { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }

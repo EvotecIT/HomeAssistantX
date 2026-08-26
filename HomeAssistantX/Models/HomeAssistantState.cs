@@ -29,7 +29,7 @@ public sealed class HomeAssistantState
     public HomeAssistantContext? Context { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 
     [JsonIgnore]
     public string Domain

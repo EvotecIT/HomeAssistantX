@@ -15,5 +15,5 @@ public sealed class HomeAssistantContext
     public string? UserId { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, System.Text.Json.JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, System.Text.Json.JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
