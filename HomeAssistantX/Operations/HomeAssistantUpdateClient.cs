@@ -109,23 +109,16 @@ public sealed class HomeAssistantUpdateClient
 
     private static string? GetString(HomeAssistantState state, string name)
     {
-        return state.Attributes.TryGetValue(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
+        return HomeAssistantAttributeReader.GetString(state.Attributes, name);
     }
 
     private static bool GetBoolean(HomeAssistantState state, string name)
     {
-        return state.Attributes.TryGetValue(name, out var value)
-            && value.ValueKind == JsonValueKind.True;
+        return HomeAssistantAttributeReader.GetBoolean(state.Attributes, name) == true;
     }
 
     private static double? GetDouble(HomeAssistantState state, string name)
     {
-        return state.Attributes.TryGetValue(name, out var value)
-            && value.ValueKind == JsonValueKind.Number
-            && value.TryGetDouble(out var number)
-                ? number
-                : null;
+        return HomeAssistantAttributeReader.GetDouble(state.Attributes, name);
     }
 }
