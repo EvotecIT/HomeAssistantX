@@ -119,6 +119,7 @@ public static class HomeAssistantEntityId
         IEnumerable<HomeAssistantState> states,
         string domain)
     {
+        var entityIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var state in states)
         {
             if (state is null)
@@ -131,6 +132,11 @@ public static class HomeAssistantEntityId
             var separator = entityId.IndexOf('.');
             if (string.Equals(entityId.Substring(0, separator), domain, StringComparison.Ordinal))
             {
+                if (!entityIds.Add(entityId))
+                {
+                    throw new HomeAssistantProtocolException(
+                        "Home Assistant returned duplicate " + domain + " entity states.");
+                }
                 yield return state;
             }
         }

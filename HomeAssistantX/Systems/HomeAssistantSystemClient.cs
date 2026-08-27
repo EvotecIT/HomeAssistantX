@@ -186,7 +186,18 @@ public sealed class HomeAssistantSystemClient
             throw new HomeAssistantProtocolException("Home Assistant did not return a signed path.");
         }
 
-        return signedPath.GetString()!;
+        var signed = signedPath.GetString()!;
+        var expectedSeparator = path.IndexOf('?') >= 0 ? '&' : '?';
+        if (string.IsNullOrWhiteSpace(signed)
+            || !string.Equals(signed, signed.Trim(), StringComparison.Ordinal)
+            || !signed.StartsWith(path, StringComparison.Ordinal)
+            || signed.Length <= path.Length
+            || signed[path.Length] != expectedSeparator)
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned a signed path for a different route.");
+        }
+
+        return signed;
     }
 
     /// <summary>Creates a long-lived access token for the current user. Persist the returned secret immediately.</summary>

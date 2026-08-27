@@ -159,6 +159,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string? ExtendedEntityRegistryResponseJson { get; set; }
 
     public bool PublishNullStateEventData { get; set; }
+
+    public string? SignedPathResponseJson { get; set; }
+
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;
@@ -512,7 +515,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "auth/sign_path":
-                await session.SendResultAsync(id, ParseJson("{\"path\":\"/api/camera_proxy/camera.front?authSig=signed\"}"), false, _source.Token).ConfigureAwait(false);
+                var requestedPath = command.GetProperty("path").GetString()!;
+                var signedPathResponse = SignedPathResponseJson
+                    ?? JsonSerializer.Serialize(new { path = requestedPath + (requestedPath.IndexOf('?') >= 0 ? "&" : "?") + "authSig=signed" });
+                await session.SendResultAsync(id, ParseJson(signedPathResponse), false, _source.Token).ConfigureAwait(false);
                 return;
             case "auth/long_lived_access_token":
                 await session.SendResultAsync(id, "fake-long-lived-token", false, _source.Token).ConfigureAwait(false);

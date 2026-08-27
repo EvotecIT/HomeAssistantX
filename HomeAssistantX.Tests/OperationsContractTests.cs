@@ -10,6 +10,18 @@ namespace HomeAssistantX.Tests;
 public sealed class OperationsContractTests
 {
     [Fact]
+    public async Task TypedDomainListingsRejectDuplicateEntityIdentities()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("["
+            + "{\"entity_id\":\"update.home_assistant_core_update\",\"state\":\"on\",\"attributes\":{}},"
+            + "{\"entity_id\":\"update.home_assistant_core_update\",\"state\":\"off\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Operations.Updates.GetAllAsync());
+    }
+
+    [Fact]
     public async Task OptionalOperationalSelectorsRejectExplicitBlanksBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

@@ -697,6 +697,34 @@ public sealed class WebSocketContractTests
         Assert.Equal(int.MaxValue, command.RootElement.GetProperty("expires").GetInt32());
     }
 
+    [Theory]
+    [InlineData("/api/other?authSig=signed")]
+    [InlineData("/api/camera_proxy/camera.front-stale?authSig=signed")]
+    [InlineData("/api/camera_proxy/camera.front&other?authSig=signed")]
+    [InlineData("/api/camera_proxy/camera.front")]
+    public async Task SignPathRejectsResponsesForDifferentRoutes(string returnedPath)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SignedPathResponseJson = JsonSerializer.Serialize(new { path = returnedPath })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.System.SignPathAsync("/api/camera_proxy/camera.front"));
+    }
+
+    [Fact]
+    public async Task SignPathUsesAnAmpersandForARequestedRouteWithAQuery()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var signed = await client.System.SignPathAsync("/api/camera_proxy/camera.front?width=640");
+
+        Assert.Contains("?width=640&authSig=signed", signed);
+    }
+
     [Fact]
     public async Task WebSocketConversationRejectsExplicitBlankSelectorsBeforeDispatch()
     {
