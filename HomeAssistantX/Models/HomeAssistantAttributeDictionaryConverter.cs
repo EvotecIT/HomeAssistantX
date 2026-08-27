@@ -39,7 +39,7 @@ internal sealed class HomeAssistantAttributeDictionaryConverter
         JsonSerializerOptions options)
     {
         writer.WriteStartObject();
-        foreach (var attribute in value)
+        foreach (var attribute in value ?? Enumerable.Empty<KeyValuePair<string, JsonElement>>())
         {
             writer.WritePropertyName(attribute.Key);
             attribute.Value.WriteTo(writer);

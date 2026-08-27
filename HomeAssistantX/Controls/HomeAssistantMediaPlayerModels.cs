@@ -243,9 +243,12 @@ public sealed class HomeAssistantMediaPlayerStatus
             return MediaDuration.Value;
         }
 
-        return positionSeconds < 0
-            ? TimeSpan.Zero
-            : TimeSpan.FromSeconds(positionSeconds);
+        if (positionSeconds < 0)
+        {
+            return TimeSpan.Zero;
+        }
+
+        return ToTimeSpan(positionSeconds) ?? TimeSpan.MaxValue;
     }
 
     public Uri? ResolveArtworkUri(Uri homeAssistantBaseUri)
@@ -287,7 +290,7 @@ public sealed class HomeAssistantMediaPlayerStatus
             State = ParseState(state.State ?? string.Empty),
             FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name"),
             DeviceClass = HomeAssistantAttributeReader.GetString(attributes, "device_class"),
-            SupportedFeatures = (HomeAssistantMediaPlayerFeature)(HomeAssistantAttributeReader.GetInt64(attributes, "supported_features") ?? 0),
+            SupportedFeatures = (HomeAssistantMediaPlayerFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features") ?? 0),
             VolumeLevel = HomeAssistantAttributeReader.GetDouble(attributes, "volume_level"),
             VolumeStep = HomeAssistantAttributeReader.GetDouble(attributes, "volume_step"),
             IsVolumeMuted = HomeAssistantAttributeReader.GetBoolean(attributes, "is_volume_muted"),
@@ -342,11 +345,25 @@ public sealed class HomeAssistantMediaPlayerStatus
 
     private static TimeSpan? ToTimeSpan(double? seconds)
     {
-        return seconds.HasValue
-            && seconds.Value >= 0
-            && seconds.Value <= TimeSpan.MaxValue.TotalSeconds
-                ? TimeSpan.FromSeconds(seconds.Value)
+        if (!seconds.HasValue || seconds.Value < 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var ticks = decimal.Round(
+                (decimal)seconds.Value * TimeSpan.TicksPerSecond,
+                0,
+                MidpointRounding.AwayFromZero);
+            return ticks <= long.MaxValue
+                ? TimeSpan.FromTicks((long)ticks)
                 : null;
+        }
+        catch (OverflowException)
+        {
+            return null;
+        }
     }
 }
 

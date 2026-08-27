@@ -57,6 +57,35 @@ public sealed class MediaAndRemoteContractTests
         Assert.Null(status.GetEstimatedPosition(DateTimeOffset.UtcNow));
     }
 
+    [Fact]
+    public void MediaStatusRejectsNegativeCapabilitiesAndUnrepresentableTimes()
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.bad\",\"state\":\"playing\",\"attributes\":{" +
+            "\"supported_features\":-1,\"media_duration\":922337203685.4775," +
+            "\"media_position\":922337203685.4775}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Equal(HomeAssistantMediaPlayerFeature.None, status.SupportedFeatures);
+        Assert.Null(status.MediaDuration);
+        Assert.Null(status.MediaPosition);
+    }
+
+    [Fact]
+    public void MediaPositionEstimationSaturatesAtTheLargestRepresentableTimeSpan()
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.long\",\"state\":\"playing\",\"attributes\":{" +
+            "\"media_position\":922337203685.4774," +
+            "\"media_position_updated_at\":\"0001-01-01T00:00:00Z\"}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.NotNull(status.MediaPosition);
+        Assert.Equal(TimeSpan.MaxValue, status.GetEstimatedPosition(DateTimeOffset.MaxValue));
+    }
+
     [Theory]
     [InlineData("9223372036854775808")]
     [InlineData("\"9223372036854775808\"")]
@@ -117,6 +146,24 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public void StateAttributesNormalizeCallerAssignedNullBeforeSerialization()
+    {
+        var state = new HomeAssistantState
+        {
+            EntityId = "sensor.compatibility",
+            State = "unknown",
+            Attributes = null!
+        };
+
+        var json = JsonSerializer.Serialize(state);
+
+        Assert.NotNull(state.Attributes);
+        Assert.Empty(state.Attributes);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(JsonValueKind.Object, document.RootElement.GetProperty("attributes").ValueKind);
+    }
+
+    [Fact]
     public void RemoteStatusParsesActivityAndUnknownFieldsWithoutLosingRawState()
     {
         var raw = DeserializeState(
@@ -135,6 +182,18 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal("Watch TV", status.CurrentActivity);
         Assert.Equal(new[] { "Watch TV", "Music" }, status.Activities);
         Assert.Equal(1, status.RawState.Attributes["future_remote_field"].GetProperty("value").GetInt32());
+    }
+
+    [Fact]
+    public void RemoteStatusRejectsNegativeCapabilityMasks()
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"remote.bad\",\"state\":\"on\",\"attributes\":{" +
+            "\"supported_features\":-1}}");
+
+        var status = HomeAssistantRemoteStatus.FromState(raw);
+
+        Assert.Equal(HomeAssistantRemoteFeature.None, status.SupportedFeatures);
     }
 
     [Fact]
@@ -409,6 +468,26 @@ public sealed class MediaAndRemoteContractTests
             HomeAssistantTarget.ForEntity("remote.living_room"));
         using var fractionalCall = FindCall(server, "learn_command");
         Assert.Equal(9, fractionalCall.RootElement.GetProperty("service_data").GetProperty("timeout").GetInt32());
+    }
+
+    [Fact]
+    public async Task RemoteLearningUsesTheCurrentTransportDeadlineAtDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(30));
+        client.Options.RequestTimeout = TimeSpan.FromSeconds(5);
+
+        await client.Controls.Remotes.LearnCommandsAsync(
+            HomeAssistantTarget.ForEntity("remote.living_room"));
+
+        using var call = FindCall(server, "learn_command");
+        Assert.Equal(4, call.RootElement.GetProperty("service_data").GetProperty("timeout").GetInt32());
+
+        client.Options.RequestTimeout = TimeSpan.FromSeconds(4);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            client.Controls.Remotes.LearnCommandsAsync(
+                HomeAssistantTarget.ForEntity("remote.living_room"),
+                new HomeAssistantRemoteLearnOptions { Timeout = TimeSpan.FromSeconds(4) }));
     }
 
     [Fact]

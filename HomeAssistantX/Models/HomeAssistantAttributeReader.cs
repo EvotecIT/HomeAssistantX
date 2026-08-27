@@ -74,6 +74,14 @@ internal static class HomeAssistantAttributeReader
         return (long)number.Value;
     }
 
+    public static long? GetNonNegativeInt64(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name)
+    {
+        var value = GetInt64(attributes, name);
+        return value >= 0 ? value : null;
+    }
+
     public static bool? GetBoolean(IReadOnlyDictionary<string, JsonElement> attributes, string name)
     {
         if (!TryGetValue(attributes, name, out var value))

@@ -6,6 +6,8 @@ namespace HomeAssistantX.Models;
 /// <summary>A provider-neutral representation of a raw Home Assistant entity state.</summary>
 public sealed class HomeAssistantState
 {
+    private Dictionary<string, JsonElement> _attributes = new(StringComparer.Ordinal);
+
     [JsonPropertyName("entity_id")]
     public string EntityId { get; set; } = string.Empty;
 
@@ -14,7 +16,11 @@ public sealed class HomeAssistantState
 
     [JsonPropertyName("attributes")]
     [JsonConverter(typeof(HomeAssistantAttributeDictionaryConverter))]
-    public Dictionary<string, JsonElement> Attributes { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, JsonElement> Attributes
+    {
+        get => _attributes;
+        set => _attributes = value ?? new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+    }
 
     [JsonPropertyName("last_changed")]
     public DateTimeOffset? LastChanged { get; set; }

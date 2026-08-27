@@ -1,3 +1,4 @@
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 
@@ -9,14 +10,14 @@ public sealed class HomeAssistantControlsClient
     internal HomeAssistantControlsClient(
         HomeAssistantServiceClient services,
         HomeAssistantStateClient states,
-        TimeSpan requestTimeout)
+        HomeAssistantClientOptions options)
     {
         Lights = new HomeAssistantLightClient(services);
         Switches = new HomeAssistantSwitchClient(services);
         Climate = new HomeAssistantClimateClient(services);
         Covers = new HomeAssistantCoverClient(services);
         MediaPlayers = new HomeAssistantMediaPlayerClient(services, states);
-        Remotes = new HomeAssistantRemoteClient(services, states, requestTimeout);
+        Remotes = new HomeAssistantRemoteClient(services, states, options);
         Locks = new HomeAssistantLockClient(services);
     }
 

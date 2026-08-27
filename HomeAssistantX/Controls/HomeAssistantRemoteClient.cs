@@ -1,3 +1,4 @@
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Models;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
@@ -11,16 +12,16 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
     private const int DefaultLearningTimeoutSeconds = 30;
     private static readonly TimeSpan LearningResponseMargin = TimeSpan.FromSeconds(1);
     private readonly HomeAssistantStateClient _states;
-    private readonly TimeSpan _requestTimeout;
+    private readonly HomeAssistantClientOptions _options;
 
     internal HomeAssistantRemoteClient(
         HomeAssistantServiceClient services,
         HomeAssistantStateClient states,
-        TimeSpan requestTimeout)
+        HomeAssistantClientOptions options)
         : base(services, "remote")
     {
         _states = states;
-        _requestTimeout = requestTimeout;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     public async Task<HomeAssistantRemoteStatus> GetAsync(
@@ -126,7 +127,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
     {
         var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(
             options?.Timeout,
-            _requestTimeout,
+            _options.RequestTimeout,
             nameof(options));
 
         string? commandType = null;
