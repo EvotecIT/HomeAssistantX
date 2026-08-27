@@ -318,6 +318,11 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateDashboardAsync(
             new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House" }));
 
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { Title = "Updated" }));
+
         server.DashboardResourceListResponseJson = "[{\"url\":\"/local/storage-card.js\",\"type\":\"module\"}]";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
 

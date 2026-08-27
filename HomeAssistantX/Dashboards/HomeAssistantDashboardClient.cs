@@ -194,6 +194,13 @@ public sealed class HomeAssistantDashboardClient
             value,
             "The dashboard response could not be decoded.");
         ValidateStorageDashboard(dashboard);
+        if (!value.TryGetProperty("show_in_sidebar", out var showInSidebar)
+            || showInSidebar.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+            || !value.TryGetProperty("require_admin", out var requireAdmin)
+            || requireAdmin.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new HomeAssistantProtocolException("A dashboard mutation response did not contain its required visibility fields.");
+        }
         if (expectedDashboardId is not null && !string.Equals(dashboard.Id, expectedDashboardId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested identifier.");
         if (expectedUrlPath is not null && !string.Equals(dashboard.UrlPath, expectedUrlPath, StringComparison.Ordinal))
