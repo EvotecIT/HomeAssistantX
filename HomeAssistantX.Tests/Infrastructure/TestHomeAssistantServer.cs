@@ -262,6 +262,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string EnergyInfoResponseJson { get; set; } =
         "{\"cost_sensors\":{\"sensor.grid_energy\":\"sensor.grid_cost\"},\"solar_forecast_domains\":[\"forecast_solar\"]}";
 
+    public string? MobileRegistrationResponseJson { get; set; }
+
     public string MediaBrowseResponseJson { get; set; } =
         "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"media-source://media_source\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":true,\"children\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"future_media_field\":true}]}";
 

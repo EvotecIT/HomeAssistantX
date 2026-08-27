@@ -36,6 +36,9 @@ public sealed class HomeAssistantMobileAppClient
             throw new HomeAssistantProtocolException("Home Assistant did not return the requested mobile-app encryption secret.");
         }
 
+        RequireHttpUri(registration.CloudhookUri, "cloudhook URL");
+        RequireHttpUri(registration.RemoteUiUri, "remote UI URL");
+
         return registration;
     }
 
@@ -46,5 +49,16 @@ public sealed class HomeAssistantMobileAppClient
         if (string.IsNullOrWhiteSpace(registration.WebhookId)) throw new ArgumentException("A webhook identifier is required.", nameof(registration));
         var uri = registration.CloudhookUri ?? new Uri(_baseUri, "api/webhook/" + Uri.EscapeDataString(registration.WebhookId));
         return new HomeAssistantMobileAppWebhookClient(uri, registration.Secret, protector, _requestTimeout, _maximumResponseBytes);
+    }
+
+    private static void RequireHttpUri(Uri? value, string name)
+    {
+        if (value is null) return;
+        if (!value.IsAbsoluteUri
+            || (value.Scheme != Uri.UriSchemeHttp && value.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(value.UserInfo))
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned an invalid mobile-app " + name + ".");
+        }
     }
 }

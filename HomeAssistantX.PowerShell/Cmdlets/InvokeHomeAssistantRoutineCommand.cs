@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Management.Automation;
 using HomeAssistantX.Controls;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 
 namespace HomeAssistantX.PowerShell;
@@ -27,7 +28,7 @@ public sealed class InvokeHomeAssistantRoutineCommand : HomeAssistantTargetCmdle
         if (Transition.HasValue && Action != HomeAssistantRoutineAction.ActivateScene) throw new ArgumentException("Transition is valid only for scene activation.", nameof(Transition));
         if (Transition < TimeSpan.Zero || Transition > TimeSpan.FromSeconds(6553)) throw new ArgumentOutOfRangeException(nameof(Transition));
         if (Variables is not null && Action != HomeAssistantRoutineAction.RunScript) throw new ArgumentException("Variables are valid only when running a script.", nameof(Variables));
-        var variables = Convert(Variables);
+        var variables = HomeAssistantJson.FreezeObject(Convert(Variables), nameof(Variables), "Variables");
         var domain = Action switch { HomeAssistantRoutineAction.ActivateScene => "scene", HomeAssistantRoutineAction.PressButton => "button", HomeAssistantRoutineAction.PressInputButton => "input_button", _ => "script" };
         var target = await ResolveTargetAsync(domain).ConfigureAwait(false);
         if (!ShouldProcess(target.Description, Action.ToString())) return;

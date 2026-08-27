@@ -32,8 +32,15 @@ public sealed class HomeAssistantSirenOptions
         get => _tone;
         set
         {
-            if (value is not null && _toneId.HasValue) throw new ArgumentException("Tone and ToneId cannot be combined.", nameof(Tone));
-            _tone = string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+            if (value is null)
+            {
+                _tone = null;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Tone cannot be blank.", nameof(Tone));
+            if (_toneId.HasValue) throw new ArgumentException("Tone and ToneId cannot be combined.", nameof(Tone));
+            _tone = value.Trim();
         }
     }
 

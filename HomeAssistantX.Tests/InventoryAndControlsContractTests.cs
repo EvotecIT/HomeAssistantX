@@ -410,6 +410,55 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task CompoundClimateOperationSnapshotsTargetAndOptionsBeforeItsFirstDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var pause = server.PauseNextServiceCall();
+        var target = HomeAssistantTarget.ForEntity("climate.kitchen");
+        var options = new HomeAssistantClimateOptions
+        {
+            Temperature = 21,
+            HvacMode = "heat",
+            FanMode = "low",
+            PresetMode = "home",
+            Humidity = 45
+        };
+
+        var operation = client.Controls.Climate.SetAsync(target, options);
+        await pause.Received.WaitAsync(TimeSpan.FromSeconds(2));
+        target.EntityIds = new[] { "climate.mutated" };
+        options.FanMode = "high";
+        options.PresetMode = "away";
+        options.Humidity = 70;
+        pause.Release();
+        await operation;
+
+        Assert.Equal(4, server.ServiceCallBodies.Count);
+        foreach (var body in server.ServiceCallBodies)
+        {
+            using var call = JsonDocument.Parse(body);
+            Assert.Equal("climate.kitchen", call.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+        }
+
+        using var fan = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_fan_mode"));
+        Assert.Equal("low", fan.RootElement.GetProperty("service_data").GetProperty("fan_mode").GetString());
+        using var preset = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_preset_mode"));
+        Assert.Equal("home", preset.RootElement.GetProperty("service_data").GetProperty("preset_mode").GetString());
+        using var humidity = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_humidity"));
+        Assert.Equal(45, humidity.RootElement.GetProperty("service_data").GetProperty("humidity").GetDouble());
+    }
+
+    private static string FindServiceCall(IEnumerable<string> bodies, string service)
+    {
+        return bodies.Single(body =>
+        {
+        using var document = JsonDocument.Parse(body);
+            return document.RootElement.GetProperty("service").GetString() == service;
+        });
+    }
+
+    [Fact]
     public async Task ContradictoryMediaOperationsFailBeforeAnyServiceCall()
     {
         using var server = new TestHomeAssistantServer();

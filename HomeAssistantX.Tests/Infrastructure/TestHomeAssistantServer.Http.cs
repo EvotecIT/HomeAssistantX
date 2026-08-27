@@ -298,9 +298,10 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, "{\"conversation_id\":\"conversation-1\",\"continue_conversation\":false}").ConfigureAwait(false);
                 break;
             case "POST /api/mobile_app/registrations":
-                await WriteHttpResponseAsync(stream, 201, body.Contains("\"supports_encryption\":true", StringComparison.Ordinal)
-                    ? "{\"webhook_id\":\"test-webhook\",\"secret\":\"test-secret\",\"cloudhook_url\":null,\"remote_ui_url\":null,\"future_field\":\"preserved\"}"
-                    : "{\"webhook_id\":\"test-webhook\",\"secret\":null,\"cloudhook_url\":null,\"remote_ui_url\":null,\"future_field\":\"preserved\"}").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 201, MobileRegistrationResponseJson
+                    ?? (body.Contains("\"supports_encryption\":true", StringComparison.Ordinal)
+                        ? "{\"webhook_id\":\"test-webhook\",\"secret\":\"test-secret\",\"cloudhook_url\":null,\"remote_ui_url\":null,\"future_field\":\"preserved\"}"
+                        : "{\"webhook_id\":\"test-webhook\",\"secret\":null,\"cloudhook_url\":null,\"remote_ui_url\":null,\"future_field\":\"preserved\"}")).ConfigureAwait(false);
                 break;
             case "GET /api/test/oversize":
                 await WriteHeadersAndStallAsync(stream, 100_000_000).ConfigureAwait(false);

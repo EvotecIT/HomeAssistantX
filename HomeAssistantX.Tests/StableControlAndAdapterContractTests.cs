@@ -116,7 +116,13 @@ public sealed class StableControlAndAdapterContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Helpers.SetTextAsync(HomeAssistantHelperDomain.Select, HomeAssistantTarget.ForEntity("select.mode"), "eco"));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.Sirens.ActAsync(HomeAssistantTarget.ForEntity("siren.house"), (HomeAssistantSirenAction)99));
         Assert.Throws<ArgumentException>(() => new HomeAssistantSirenOptions { Tone = "alarm", ToneId = 2 });
+        Assert.Throws<ArgumentException>(() => new HomeAssistantSirenOptions { Tone = " " });
         Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantSirenOptions { Duration = TimeSpan.FromMilliseconds(500) });
+        var cyclicVariables = new Dictionary<string, object?>();
+        cyclicVariables["self"] = cyclicVariables;
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Routines.RunScriptAsync(
+            HomeAssistantTarget.ForEntity("script.evening"),
+            cyclicVariables));
         Assert.Null(server.LastServiceCallBody);
     }
 
@@ -388,7 +394,7 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
-    public async Task DnsSdDiscoveryQueriesEveryEligibleInterfaceAndAggregatesResponses()
+    public async Task DnsSdDiscoveryKeepsIdenticalResponsesSeparatedAcrossInterfaces()
     {
         var addresses = new[] { IPAddress.Parse("192.0.2.10"), IPAddress.Parse("198.51.100.20") };
         var factory = new TestDiscoveryTransportFactory(addresses, CreateDiscoveryPacket());
@@ -396,7 +402,7 @@ public sealed class StableControlAndAdapterContractTests
 
         var instances = await client.DiscoverAsync(TimeSpan.FromMilliseconds(100));
 
-        Assert.Single(instances);
+        Assert.Equal(2, instances.Count);
         Assert.Equal(addresses.OrderBy(value => value.ToString()), factory.CreatedAddresses.OrderBy(value => value.ToString()));
         Assert.Equal(addresses.OrderBy(value => value.ToString()), factory.SentAddresses.OrderBy(value => value.ToString()));
     }
@@ -409,6 +415,18 @@ public sealed class StableControlAndAdapterContractTests
             new TestDiscoveryTransportFactory(new[] { address }, CreateDiscoveryPacket(), failAfterPacket: true));
 
         Assert.Single(await client.DiscoverAsync(TimeSpan.FromMilliseconds(100)));
+    }
+
+    [Fact]
+    public void Ipv4DnsSdDiscoveryDoesNotExposeUnscopedAaaaRecords()
+    {
+        var aggregate = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(
+            AppendAaaaRecord(CreateDiscoveryPacket(), "ha.local", IPAddress.Parse("fe80::1234")),
+            aggregate);
+
+        var instance = Assert.Single(aggregate.Build());
+        Assert.All(instance.Addresses, address => Assert.Equal(AddressFamily.InterNetwork, address.AddressFamily));
     }
 
     [Fact]
@@ -626,6 +644,23 @@ public sealed class StableControlAndAdapterContractTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => client.MobileApp.RegisterAsync(request));
 
         Assert.Null(server.LastRequestBody);
+    }
+
+    [Theory]
+    [InlineData("cloudhook_url", "ftp://example.invalid/webhook")]
+    [InlineData("remote_ui_url", "file:///private/home-assistant")]
+    [InlineData("cloudhook_url", "https://user:password@example.invalid/webhook")]
+    [InlineData("remote_ui_url", "https://user@example.invalid/")]
+    public async Task MobileAppRegistrationClassifiesInvalidReturnedUris(string field, string value)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MobileRegistrationResponseJson = "{\"webhook_id\":\"test-webhook\",\"secret\":null,\"cloudhook_url\":null,\"remote_ui_url\":null,\"" + field + "\":\"" + value + "\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(() =>
+            client.MobileApp.RegisterAsync(RegistrationRequest(false)));
     }
 
     [Fact]
@@ -903,6 +938,16 @@ public sealed class StableControlAndAdapterContractTests
         using var data = new MemoryStream();
         foreach (var item in textItems) { var bytes = Encoding.UTF8.GetBytes(item); data.WriteByte((byte)bytes.Length); data.Write(bytes); }
         WriteData(stream, data.ToArray());
+        return stream.ToArray();
+    }
+
+    private static byte[] AppendAaaaRecord(byte[] packet, string host, IPAddress address)
+    {
+        var updated = (byte[])packet.Clone();
+        updated[7]++;
+        using var stream = new MemoryStream();
+        stream.Write(updated);
+        Name(stream, host); U16(stream, 28); U16(stream, 1); U32(stream, 120); U16(stream, 16); stream.Write(address.GetAddressBytes());
         return stream.ToArray();
     }
 

@@ -55,7 +55,10 @@ public sealed class HomeAssistantDiscoveryClient
                     new AggregateException(errors));
             }
 
-            return MergeInstances(results.SelectMany(result => result.Instances))
+            // Service-instance names and .local host names are only unique on their
+            // receiving link. Each per-interface aggregate already deduplicates alias
+            // responses, so never merge identities across isolated interfaces here.
+            return results.SelectMany(result => result.Instances)
                 .OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(value => value.ServiceInstanceName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(value => value.ServiceInstanceName, StringComparer.Ordinal)
@@ -641,10 +644,9 @@ internal static class DnsDiscoveryPacket
                     case 28:
                     {
                         if (length != 16) throw new InvalidDataException("Invalid AAAA record length.");
-                        var bytes = new byte[16];
-                        Buffer.BlockCopy(packet, offset, bytes, 0, 16);
-                        var address = new IPAddress(bytes);
-                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Aaaa, Name = name, Address = address, DataKey = address.ToString(), Ttl = ttl, CacheFlush = cacheFlush });
+                        // Discovery transports and their interface identity are explicitly
+                        // IPv4. An AAAA record cannot be associated with the IPv6 scope that
+                        // makes link-local addresses usable, so validate but do not expose it.
                         break;
                     }
                 }

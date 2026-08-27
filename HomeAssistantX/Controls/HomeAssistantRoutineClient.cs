@@ -1,4 +1,5 @@
 using HomeAssistantX.Services;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Controls;
 
@@ -22,13 +23,16 @@ public sealed class HomeAssistantRoutineClient
         => CallAsync("scene", "turn_on", target, call => AddTransition(call, transition), cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> RunScriptAsync(HomeAssistantTarget target, IReadOnlyDictionary<string, object?>? variables = null, CancellationToken cancellationToken = default)
-        => CallAsync("script", "turn_on", target, call =>
+    {
+        var frozenVariables = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables");
+        return CallAsync("script", "turn_on", target, call =>
         {
-            if (variables is not null)
+            if (frozenVariables is not null)
             {
-                call.WithData("variables", variables);
+                call.WithData("variables", frozenVariables);
             }
         }, cancellationToken);
+    }
 
     public Task<HomeAssistantServiceCallResult> StopScriptAsync(HomeAssistantTarget target, CancellationToken cancellationToken = default)
         => CallAsync("script", "turn_off", target, null, cancellationToken);

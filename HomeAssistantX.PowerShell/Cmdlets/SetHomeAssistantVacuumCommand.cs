@@ -17,13 +17,19 @@ public sealed class SetHomeAssistantVacuumCommand : HomeAssistantTargetCmdlet
     [Parameter][ValidateNotNullOrEmpty] public string[]? CleaningAreaId { get; set; }
     protected override async Task ProcessTargetRecordAsync()
     {
-        var count = (Action.HasValue ? 1 : 0) + (!string.IsNullOrWhiteSpace(FanSpeed) ? 1 : 0) + (CleaningAreaId is { Length: > 0 } ? 1 : 0);
+        var fanSpeed = FanSpeed is null
+            ? null
+            : string.IsNullOrWhiteSpace(FanSpeed)
+                ? throw new ArgumentException("FanSpeed must not be blank.", nameof(FanSpeed))
+                : FanSpeed.Trim();
+        var cleaningAreaIds = CleaningAreaId is null ? null : ControlValidation.RequiredValues(CleaningAreaId, nameof(CleaningAreaId));
+        var count = (Action.HasValue ? 1 : 0) + (fanSpeed is not null ? 1 : 0) + (cleaningAreaIds is { Count: > 0 } ? 1 : 0);
         if (count != 1) throw new ArgumentException("Specify exactly one vacuum operation.");
         if (Action.HasValue && !Enum.IsDefined(typeof(HomeAssistantVacuumAction), Action.Value)) throw new ArgumentOutOfRangeException(nameof(Action));
         var target = await ResolveTargetAsync("vacuum").ConfigureAwait(false);
         if (!ShouldProcess(target.Description, "Set vacuum")) return;
         WriteObject(Action.HasValue ? await Client.Controls.Vacuums.ActAsync(target.Target, Action.Value, CancelToken).ConfigureAwait(false)
-            : FanSpeed is not null ? await Client.Controls.Vacuums.SetFanSpeedAsync(target.Target, FanSpeed, CancelToken).ConfigureAwait(false)
-            : await Client.Controls.Vacuums.CleanAreaAsync(target.Target, CleaningAreaId!, CancelToken).ConfigureAwait(false));
+            : fanSpeed is not null ? await Client.Controls.Vacuums.SetFanSpeedAsync(target.Target, fanSpeed, CancelToken).ConfigureAwait(false)
+            : await Client.Controls.Vacuums.CleanAreaAsync(target.Target, cleaningAreaIds!, CancelToken).ConfigureAwait(false));
     }
 }

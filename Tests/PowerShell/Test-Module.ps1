@@ -704,6 +704,20 @@ try {
             throw "WhatIf output exposed private Home Assistant data: $privateValue"
         }
     }
+    $confirmationTargetMethod = [HomeAssistantX.PowerShell.HomeAssistantCmdlet].GetMethod(
+        'ConfirmationTarget',
+        [Reflection.BindingFlags]'NonPublic, Static')
+    $confirmationConnection = $connection.PSObject.BaseObject
+    $targetFingerprints = @(
+        $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'light.kitchen'))
+        $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'lock.front_door'))
+        $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'app private_app'))
+        $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'C:\private\diagnostic.zip'))
+    )
+    if (($targetFingerprints | Sort-Object -Unique).Count -ne 4 -or
+        ($targetFingerprints | Where-Object { $_ -notmatch '^Home Assistant target \[[0-9A-F]{8}\] on ' }).Count -ne 0) {
+        throw 'WhatIf output did not preserve distinct privacy-safe operation targets.'
+    }
 
     $null = Set-HomeAssistantStatistic -StatisticId ' sensor.grid_energy ' -UnitOfMeasurement MWh -Confirm:$false
     $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_UPDATE')
@@ -727,8 +741,8 @@ try {
     $importMetadata.HasMean = $false
     $importMetadata.HasSum = $true
     $importMetadata.MeanType = [HomeAssistantX.Recorder.HomeAssistantStatisticMeanType]::None
-    $importMetadata.UnitClass = 'energy'
-    $importMetadata.UnitOfMeasurement = 'kWh'
+    $importMetadata.UnitClass = ' energy '
+    $importMetadata.UnitOfMeasurement = ' kWh '
     $importRows = 1, 2 | ForEach-Object {
         $row = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
         $row.Start = [DateTimeOffset]::Parse("2026-08-26T0$($_):00:00Z")
@@ -739,7 +753,7 @@ try {
     $server.StandardInput.WriteLine('GET_LAST_RECORDER_IMPORT')
     $server.StandardInput.Flush()
     $importCommand = $server.StandardOutput.ReadLine() | ConvertFrom-Json
-    if ($importCommand.stats.Count -ne 2 -or $importCommand.metadata.has_mean -ne $false -or $importCommand.metadata.statistic_id -ne 'external:daily_energy' -or $importCommand.metadata.source -ne 'external') {
+    if ($importCommand.stats.Count -ne 2 -or $importCommand.metadata.has_mean -ne $false -or $importCommand.metadata.statistic_id -ne 'external:daily_energy' -or $importCommand.metadata.source -ne 'external' -or $importCommand.metadata.unit_class -ne 'energy' -or $importCommand.metadata.unit_of_measurement -ne 'kWh') {
         throw 'Piped statistics rows were not imported as one complete batch.'
     }
 
@@ -829,6 +843,8 @@ try {
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.kitchen -KeepDays -1 -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantCamera camera.front -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantCamera camera.Front -PreloadStream $true -WhatIf -ErrorAction Stop }
+        { Export-HomeAssistantCameraSnapshot ' ' (Join-Path ([IO.Path]::GetTempPath()) 'invalid-camera.jpg') -WhatIf -ErrorAction Stop }
+        { Export-HomeAssistantCameraSnapshot camera.Front (Join-Path ([IO.Path]::GetTempPath()) 'invalid-camera.jpg') -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ConfigurationJson '[]' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ConfigurationJson '{"views":[],"views":[{}]}' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -New -UrlPath house -Title House -WhatIf -ErrorAction Stop }
