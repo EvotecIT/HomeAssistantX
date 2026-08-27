@@ -34,6 +34,31 @@ public sealed class OperationsContractTests
         Assert.Null(server.GetLastWebSocketCommand("config_entries/get"));
         Assert.Null(server.GetLastWebSocketCommand("trace/contexts"));
     }
+
+#if !NET472
+    [Fact]
+    public async Task TraceDomainsAreCanonicalizedBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Operations.Traces.GetAllAsync(" AUTOMATION ", "night");
+        using (var list = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("trace/list"))))
+        {
+            Assert.Equal("automation", list.RootElement.GetProperty("domain").GetString());
+        }
+
+        await client.Operations.Traces.GetAsync("SCRIPT", "night", "run-1");
+        using (var get = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("trace/get"))))
+        {
+            Assert.Equal("script", get.RootElement.GetProperty("domain").GetString());
+        }
+
+        await client.Operations.Traces.GetContextsAsync("AUTOMATION", "night");
+        using var contexts = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("trace/contexts")));
+        Assert.Equal("automation", contexts.RootElement.GetProperty("domain").GetString());
+    }
+#endif
 #if !NET472
     [Fact]
     public async Task OperationalReadsUseTheActualWebSocketAndRestContracts()

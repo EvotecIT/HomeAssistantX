@@ -36,6 +36,19 @@ public sealed class RestClientContractTests
     }
 
     [Fact]
+    public async Task TypedStateMutationRejectsAValidButDifferentResponseEntity()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            StateMutationResponseJson = "{\"entity_id\":\"sensor.other\",\"state\":\"ready\",\"attributes\":{}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Rest.SetStateAsync("sensor.virtual", new HomeAssistantX.Rest.HomeAssistantStateUpdate("ready")));
+    }
+
+    [Fact]
     public async Task RestApiPreservesHomeAssistantStateAndExtensionData()
     {
         using var server = new TestHomeAssistantServer();

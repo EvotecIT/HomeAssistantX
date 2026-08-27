@@ -135,8 +135,7 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, KitchenTemperatureStateJson).ConfigureAwait(false);
                 break;
             case "POST /api/states/sensor.virtual":
-                await WriteHttpResponseAsync(stream, 200,
-                    "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, StateMutationResponseJson).ConfigureAwait(false);
                 break;
             case "DELETE /api/states/sensor.virtual":
                 await WriteHttpResponseAsync(stream, 200, "{\"message\":\"Entity removed.\"}").ConfigureAwait(false);

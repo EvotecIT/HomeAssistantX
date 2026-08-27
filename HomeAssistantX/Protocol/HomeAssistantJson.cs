@@ -68,16 +68,24 @@ internal static class HomeAssistantJson
     }
 
     /// <summary>Snapshots an arbitrary provider-specific JSON value before asynchronous dispatch.</summary>
-    internal static JsonElement FreezeValue(object? value, string parameterName, string displayName)
+    internal static JsonElement FreezeValue(
+        object? value,
+        string parameterName,
+        string displayName,
+        CancellationToken cancellationToken = default)
     {
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var json = JsonSerializer.Serialize(value, SerializerOptions);
+            cancellationToken.ThrowIfCancellationRequested();
             using var document = JsonDocument.Parse(json);
+            cancellationToken.ThrowIfCancellationRequested();
             return document.RootElement.Clone();
         }
         catch (Exception ex) when (ex is JsonException || ex is NotSupportedException || ex is InvalidOperationException)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             throw new ArgumentException(displayName + " must be a serializable JSON value.", parameterName, ex);
         }
     }

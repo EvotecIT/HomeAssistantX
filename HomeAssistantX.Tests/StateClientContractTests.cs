@@ -30,6 +30,18 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public async Task InitialSnapshotRejectsDuplicateEntityIdentifiersWithoutPublishingPartialState()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"light.kitchen\",\"state\":\"off\",\"attributes\":{}},{\"entity_id\":\"light.kitchen\",\"state\":\"on\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.States.InitializeAsync());
+
+        Assert.Empty(client.States.Snapshot);
+    }
+
+    [Fact]
     public async Task MaintainsSnapshotAndAppliesEntityRemovalFromPushEvents()
     {
         using var server = new TestHomeAssistantServer();

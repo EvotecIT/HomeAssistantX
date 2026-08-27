@@ -212,20 +212,21 @@ public sealed class HomeAssistantStateClient : IDisposable
         }
 
         var currentStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(snapshot, "The get_states response could not be decoded.");
+        var validatedStates = ValidateSnapshotStates(currentStates);
         var changes = new List<HomeAssistantStateChange>();
 
         lock (_stateGate)
         {
             var previousStates = new Dictionary<string, HomeAssistantState>(_states, StringComparer.OrdinalIgnoreCase);
             _states.Clear();
-            foreach (var state in currentStates)
+            foreach (var state in validatedStates)
             {
                 _states[state.EntityId] = state;
             }
 
             if (isReconnect)
             {
-                foreach (var state in currentStates)
+                foreach (var state in validatedStates)
                 {
                     previousStates.TryGetValue(state.EntityId, out var previous);
                     if (previous is null || !StatesEquivalent(previous, state))
@@ -402,6 +403,29 @@ public sealed class HomeAssistantStateClient : IDisposable
         }
 
         return state;
+    }
+
+    private static IReadOnlyList<HomeAssistantState> ValidateSnapshotStates(IEnumerable<HomeAssistantState> states)
+    {
+        var result = new List<HomeAssistantState>();
+        var entityIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var state in states)
+        {
+            if (state is null)
+            {
+                throw new HomeAssistantProtocolException("The get_states response contained a null entity state.");
+            }
+
+            var entityId = HomeAssistantEntityId.RequireResponseEntityId(state.EntityId);
+            if (!entityIds.Add(entityId))
+            {
+                throw new HomeAssistantProtocolException("The get_states response contained a duplicate entity identifier.");
+            }
+
+            result.Add(state);
+        }
+
+        return result;
     }
 
     private static bool StatesEquivalent(HomeAssistantState left, HomeAssistantState right)

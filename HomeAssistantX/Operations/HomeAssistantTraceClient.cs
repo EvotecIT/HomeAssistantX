@@ -20,12 +20,12 @@ public sealed class HomeAssistantTraceClient
         string itemId,
         CancellationToken cancellationToken = default)
     {
-        ValidateDomain(domain);
+        var normalizedDomain = NormalizeDomain(domain);
         var result = await _webSocket.RequestAsync(
             "trace/list",
             new Dictionary<string, object?>
             {
-                ["domain"] = domain,
+                ["domain"] = normalizedDomain,
                 ["item_id"] = Required(itemId, nameof(itemId))
             },
             cancellationToken).ConfigureAwait(false);
@@ -38,12 +38,12 @@ public sealed class HomeAssistantTraceClient
         string runId,
         CancellationToken cancellationToken = default)
     {
-        ValidateDomain(domain);
+        var normalizedDomain = NormalizeDomain(domain);
         return _webSocket.RequestAsync(
             "trace/get",
             new Dictionary<string, object?>
             {
-                ["domain"] = domain,
+                ["domain"] = normalizedDomain,
                 ["item_id"] = Required(itemId, nameof(itemId)),
                 ["run_id"] = Required(runId, nameof(runId))
             },
@@ -58,8 +58,7 @@ public sealed class HomeAssistantTraceClient
         var payload = new Dictionary<string, object?>();
         if (domain is not null)
         {
-            ValidateDomain(domain);
-            payload["domain"] = domain.Trim();
+            payload["domain"] = NormalizeDomain(domain);
         }
 
         if (itemId is not null)
@@ -70,13 +69,15 @@ public sealed class HomeAssistantTraceClient
         return _webSocket.RequestAsync("trace/contexts", payload, cancellationToken);
     }
 
-    private static void ValidateDomain(string domain)
+    private static string NormalizeDomain(string domain)
     {
-        if (!string.Equals(domain, "automation", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(domain, "script", StringComparison.OrdinalIgnoreCase))
+        var normalized = domain?.Trim().ToLowerInvariant();
+        if (normalized is not ("automation" or "script"))
         {
             throw new ArgumentOutOfRangeException(nameof(domain), "Trace domain must be 'automation' or 'script'.");
         }
+
+        return normalized;
     }
 
     private static string Required(string value, string parameterName)

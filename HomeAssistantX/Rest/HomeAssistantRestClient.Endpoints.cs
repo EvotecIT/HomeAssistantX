@@ -123,7 +123,7 @@ public sealed partial class HomeAssistantRestClient
     }
 
     /// <summary>Creates or updates a state representation without controlling the underlying device.</summary>
-    public Task<HomeAssistantState> SetStateAsync(
+    public async Task<HomeAssistantState> SetStateAsync(
         string entityId,
         HomeAssistantStateUpdate update,
         CancellationToken cancellationToken = default)
@@ -133,11 +133,13 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentNullException(nameof(update));
         }
 
-        return SendHomeAssistantAsync<HomeAssistantState>(
+        var normalizedEntityId = NormalizeEntityId(entityId);
+        var state = await SendHomeAssistantAsync<HomeAssistantState>(
             HttpMethod.Post,
-            "api/states/" + EscapePath(NormalizeEntityId(entityId)),
+            "api/states/" + EscapePath(normalizedEntityId),
             update,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
     }
 
     /// <summary>Deletes a state representation from Home Assistant.</summary>

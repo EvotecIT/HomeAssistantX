@@ -750,6 +750,35 @@ public sealed class WebSocketContractTests
         Assert.Contains("?width=640&authSig=signed", signed);
     }
 
+    [Theory]
+    [InlineData("/api/camera_proxy/camera.front?authSig=old")]
+    [InlineData("/api/camera_proxy/camera.front?%61uthSig=old")]
+    public async Task SignPathRejectsRequestedRoutesThatAlreadyContainASignature(string path)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.SignPathAsync(path));
+
+        Assert.Null(server.GetLastWebSocketCommand("auth/sign_path"));
+    }
+
+    [Theory]
+    [InlineData("/api/camera_proxy/camera.front?other=value")]
+    [InlineData("/api/camera_proxy/camera.front?authSig=")]
+    [InlineData("/api/camera_proxy/camera.front?authSig=signed&other=value")]
+    public async Task SignPathRequiresExactlyOneNonemptySignatureParameter(string returnedPath)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SignedPathResponseJson = JsonSerializer.Serialize(new { path = returnedPath })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.System.SignPathAsync("/api/camera_proxy/camera.front"));
+    }
+
     [Fact]
     public async Task WebSocketConversationRejectsExplicitBlankSelectorsBeforeDispatch()
     {

@@ -161,7 +161,7 @@ public sealed class HomeAssistantSystemClient
         TimeSpan? expiration = null,
         CancellationToken cancellationToken = default)
     {
-        if (!HomeAssistantRootRelativePath.IsValid(path))
+        if (!HomeAssistantRootRelativePath.IsValid(path) || ContainsSignatureQueryParameter(path))
         {
             throw new ArgumentException("A root-relative Home Assistant path is required.", nameof(path));
         }
@@ -188,15 +188,60 @@ public sealed class HomeAssistantSystemClient
 
         var signed = signedPath.GetString()!;
         var expectedSeparator = path.IndexOf('?') >= 0 ? '&' : '?';
+        var suffix = signed.Length > path.Length + 1
+            ? signed.Substring(path.Length + 1)
+            : string.Empty;
         if (!HomeAssistantRootRelativePath.IsValid(signed)
             || !signed.StartsWith(path, StringComparison.Ordinal)
             || signed.Length <= path.Length
-            || signed[path.Length] != expectedSeparator)
+            || signed[path.Length] != expectedSeparator
+            || !HasValidSignatureSuffix(suffix))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned a signed path for a different route.");
         }
 
         return signed;
+    }
+
+    private static bool HasValidSignatureSuffix(string suffix)
+    {
+        if (suffix.IndexOf('&') >= 0 || !suffix.StartsWith("authSig=", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            return !string.IsNullOrWhiteSpace(Uri.UnescapeDataString(suffix.Substring("authSig=".Length)));
+        }
+        catch (UriFormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ContainsSignatureQueryParameter(string path)
+    {
+        var queryStart = path.IndexOf('?');
+        if (queryStart < 0) return false;
+        foreach (var pair in path.Substring(queryStart + 1).Split('&'))
+        {
+            var separator = pair.IndexOf('=');
+            var encodedName = separator < 0 ? pair : pair.Substring(0, separator);
+            try
+            {
+                if (string.Equals(Uri.UnescapeDataString(encodedName), "authSig", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            catch (UriFormatException)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Creates a long-lived access token for the current user. Persist the returned secret immediately.</summary>
