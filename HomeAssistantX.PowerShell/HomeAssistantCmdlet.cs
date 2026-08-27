@@ -16,6 +16,9 @@ public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
 
     protected HomeAssistantConnection ActiveConnection => Connection ?? HomeAssistantSession.GetRequired(CurrentRunspaceId);
 
+    /// <summary>Returns the operator-assigned connection name without disclosing its endpoint.</summary>
+    protected string ConnectionDisplayName => ActiveConnection.Name;
+
     protected HomeAssistantClient Client
     {
         get

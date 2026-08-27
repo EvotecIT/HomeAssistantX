@@ -122,7 +122,7 @@ public sealed class InvokeHomeAssistantActionCommand : HomeAssistantCmdlet
             AreaParameterSet => "areas " + string.Join(", ", AreaId),
             FloorParameterSet => "floors " + string.Join(", ", FloorId),
             LabelParameterSet => "labels " + string.Join(", ", LabelId),
-            _ => ActiveConnection.ToString()
+            _ => ConnectionDisplayName
         };
     }
 }
