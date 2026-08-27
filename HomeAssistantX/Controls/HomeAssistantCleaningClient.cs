@@ -1,4 +1,5 @@
 using HomeAssistantX.Services;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Controls;
 
@@ -44,14 +45,18 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
 
     /// <summary>Sends a provider-specific vacuum command while keeping the common target contract typed.</summary>
     public Task<HomeAssistantServiceCallResult> SendCommandAsync(HomeAssistantTarget target, string command, object? parameters = null, CancellationToken cancellationToken = default)
-        => CallAsync("send_command", target, call =>
+    {
+        var normalizedCommand = ControlValidation.Required(command, nameof(command));
+        var frozenParameters = parameters is null ? (System.Text.Json.JsonElement?)null : HomeAssistantJson.FreezeValue(parameters, nameof(parameters), "Parameters");
+        return CallAsync("send_command", target, call =>
         {
-            call.WithData("command", ControlValidation.Required(command, nameof(command)));
-            if (parameters is not null)
+            call.WithData("command", normalizedCommand);
+            if (frozenParameters.HasValue)
             {
-                call.WithData("params", parameters);
+                call.WithData("params", frozenParameters.Value);
             }
         }, cancellationToken);
+    }
 }
 
 /// <summary>Controls the standard Home Assistant lawn mower lifecycle.</summary>

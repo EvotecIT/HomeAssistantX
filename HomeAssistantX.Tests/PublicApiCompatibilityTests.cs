@@ -65,6 +65,34 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("System.String?", FormatAnnotatedType(property.PropertyType, property));
     }
 
+    [Fact]
+    public void MemberFormatterPreservesIndexerAndProtectedConstructorContracts()
+    {
+        var indexer = typeof(IndexerFixture).GetProperty("Item")!;
+        var protectedConstructor = typeof(ProtectedConstructorFixture).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single();
+
+        Assert.Equal("[System.String key]", FormatIndexerParameters(indexer));
+        Assert.Equal("protected ", ConstructorAccess(protectedConstructor));
+    }
+
+    [Fact]
+    public void MemberFormatterPreservesProtectedInheritanceContracts()
+    {
+        var type = typeof(ProtectedSurfaceFixture);
+        var field = type.GetField("Value", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var property = type.GetProperty("Name", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+        var method = type.GetMethod("Transform", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var eventInfo = type.GetEvent("Changed", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        Assert.True(IsExternallyAccessibleField(field));
+        Assert.True(IsExternallyAccessibleProperty(property));
+        Assert.True(IsExternallyAccessibleMethod(method));
+        Assert.True(IsExternallyAccessibleEvent(eventInfo));
+        Assert.StartsWith("F protected ", FormatField(field), StringComparison.Ordinal);
+        Assert.Equal("protected ", MemberAccess(method));
+        Assert.Equal("get;protected set;", FormatPropertyAccessors(property));
+    }
+
 #if NET10_0
     [Fact]
     public void PropertyFormatterPreservesInitOnlyAccessors()
@@ -156,17 +184,31 @@ public sealed class PublicApiCompatibilityTests
                 continue;
             }
 
-            foreach (var constructor in type.GetConstructors(BindingFlags.Instance | BindingFlags.Public).OrderBy(FormatMethod, StringComparer.Ordinal))
-                lines.Add("  C " + FormatType(type) + "(" + FormatParameters(constructor.GetParameters()) + ")");
-            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).OrderBy(value => value.Name, StringComparer.Ordinal))
+            foreach (var constructor in type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                         .Where(IsExternallyAccessibleConstructor)
+                         .OrderBy(FormatMethod, StringComparer.Ordinal))
+                lines.Add("  C " + ConstructorAccess(constructor) + FormatType(type) + "(" + FormatParameters(constructor.GetParameters()) + ")");
+            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         .Where(IsExternallyAccessibleField)
+                         .OrderBy(value => value.Name, StringComparer.Ordinal))
                 lines.Add("  " + FormatField(field));
-            foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).OrderBy(value => value.Name, StringComparer.Ordinal))
-                lines.Add("  P " + MemberScope(property.GetMethod ?? property.SetMethod!) + " " + FormatAnnotatedType(property.PropertyType, property) + " " + property.Name + " {" + FormatPropertyAccessors(property) + "}");
-            foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).OrderBy(value => value.Name, StringComparer.Ordinal))
-                lines.Add("  E " + MemberScope(eventInfo.AddMethod ?? eventInfo.RemoveMethod!) + " " + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
-            foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly)
-                         .Where(value => !value.IsSpecialName).OrderBy(FormatMethod, StringComparer.Ordinal))
-                lines.Add("  M " + MemberScope(method) + " " + FormatAnnotatedType(method.ReturnType, method.ReturnParameter) + " " + FormatMethod(method));
+            foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         .Where(IsExternallyAccessibleProperty)
+                         .OrderBy(value => value.Name, StringComparer.Ordinal))
+            {
+                var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
+                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + FormatAnnotatedType(property.PropertyType, property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
+            }
+            foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         .Where(IsExternallyAccessibleEvent)
+                         .OrderBy(value => value.Name, StringComparer.Ordinal))
+            {
+                var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
+            }
+            foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         .Where(value => !value.IsSpecialName && IsExternallyAccessibleMethod(value)).OrderBy(FormatMethod, StringComparer.Ordinal))
+                lines.Add("  M " + MemberAccess(method) + MemberScope(method) + " " + FormatAnnotatedType(method.ReturnType, method.ReturnParameter) + " " + FormatMethod(method));
         }
         return string.Join("\n", lines);
     }
@@ -237,6 +279,31 @@ public sealed class PublicApiCompatibilityTests
         public string[,,]? Mutable = new string[1, 1, 1];
     }
 
+    private sealed class IndexerFixture
+    {
+        public string this[string key] => key;
+    }
+
+    private class ProtectedConstructorFixture
+    {
+        protected ProtectedConstructorFixture(int value)
+        {
+        }
+    }
+
+    private class ProtectedSurfaceFixture
+    {
+        protected int Value = 1;
+
+        public string Name { get; protected set; } = string.Empty;
+
+#pragma warning disable CS0067
+        protected event EventHandler? Changed;
+#pragma warning restore CS0067
+
+        protected virtual string Transform(string value) => value;
+    }
+
     private interface VariantFixture<out TResult>
     {
     }
@@ -267,24 +334,69 @@ public sealed class PublicApiCompatibilityTests
             ? "const"
             : (field.IsStatic ? "static" : "instance") + (field.IsInitOnly ? " readonly" : string.Empty);
         var value = field.IsLiteral ? " = " + FormatDefault(field.GetRawConstantValue()) : string.Empty;
-        return "F " + scope + " " + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
     private static string FormatPropertyAccessors(PropertyInfo property)
     {
-        var getter = property.GetMethod?.IsPublic == true ? "get;" : string.Empty;
-        if (property.SetMethod?.IsPublic != true)
-        {
-            return getter;
-        }
+        var propertyAccess = MemberAccess(MostAccessible(property.GetMethod, property.SetMethod)!);
+        var getter = FormatAccessor(property.GetMethod, propertyAccess, "get;");
+        if (!IsExternallyAccessibleMethod(property.SetMethod)) return getter;
 
-        var isInitOnly = property.SetMethod.ReturnParameter
+        var isInitOnly = property.SetMethod!.ReturnParameter
             .GetRequiredCustomModifiers()
             .Any(modifier => string.Equals(
                 modifier.FullName,
                 "System.Runtime.CompilerServices.IsExternalInit",
                 StringComparison.Ordinal));
-        return getter + (isInitOnly ? "init;" : "set;");
+        return getter + FormatAccessor(property.SetMethod, propertyAccess, isInitOnly ? "init;" : "set;");
+    }
+
+    private static string FormatIndexerParameters(PropertyInfo property)
+    {
+        var parameters = property.GetIndexParameters();
+        return parameters.Length == 0 ? string.Empty : "[" + FormatParameters(parameters) + "]";
+    }
+
+    private static bool IsExternallyAccessibleConstructor(ConstructorInfo constructor)
+        => constructor.IsPublic || constructor.IsFamily || constructor.IsFamilyOrAssembly;
+
+    private static string ConstructorAccess(ConstructorInfo constructor)
+        => constructor.IsPublic ? string.Empty : constructor.IsFamilyOrAssembly ? "protected internal " : "protected ";
+
+    private static bool IsExternallyAccessibleMethod(MethodBase? method)
+        => method is not null && (method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly);
+
+    private static bool IsExternallyAccessibleField(FieldInfo field)
+        => field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly;
+
+    private static bool IsExternallyAccessibleProperty(PropertyInfo property)
+        => IsExternallyAccessibleMethod(property.GetMethod) || IsExternallyAccessibleMethod(property.SetMethod);
+
+    private static bool IsExternallyAccessibleEvent(EventInfo eventInfo)
+        => IsExternallyAccessibleMethod(eventInfo.AddMethod) || IsExternallyAccessibleMethod(eventInfo.RemoveMethod);
+
+    private static MethodInfo? MostAccessible(MethodInfo? first, MethodInfo? second)
+    {
+        if (first is null) return second;
+        if (second is null) return first;
+        return AccessRank(first) >= AccessRank(second) ? first : second;
+    }
+
+    private static int AccessRank(MethodBase method)
+        => method.IsPublic ? 3 : method.IsFamilyOrAssembly ? 2 : method.IsFamily ? 1 : 0;
+
+    private static string MemberAccess(MethodBase method)
+        => method.IsPublic ? string.Empty : method.IsFamilyOrAssembly ? "protected internal " : "protected ";
+
+    private static string FieldAccess(FieldInfo field)
+        => field.IsPublic ? string.Empty : field.IsFamilyOrAssembly ? "protected internal " : "protected ";
+
+    private static string FormatAccessor(MethodInfo? accessor, string propertyAccess, string text)
+    {
+        if (!IsExternallyAccessibleMethod(accessor)) return string.Empty;
+        var accessorAccess = MemberAccess(accessor!);
+        return (string.Equals(accessorAccess, propertyAccess, StringComparison.Ordinal) ? string.Empty : accessorAccess) + text;
     }
 
     private static string FormatParameters(IEnumerable<ParameterInfo> parameters) => string.Join(", ", parameters.Select(parameter =>

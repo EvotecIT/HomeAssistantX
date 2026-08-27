@@ -760,6 +760,54 @@ public sealed class StableControlAndAdapterContractTests
         await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(() => encryptedRegistration);
     }
 
+    [Fact]
+    public async Task MobileAppRegistrationClassifiesUndefinedJsonAppDataBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var request = RegistrationRequest(false);
+        request.AppData = new Dictionary<string, object?> { ["undefined"] = default(JsonElement) };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.MobileApp.RegisterAsync(request));
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task VacuumCommandFreezesAndRejectsProviderParametersBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var cyclic = new Dictionary<string, object?>();
+        cyclic["self"] = cyclic;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Vacuums.SendCommandAsync(
+            HomeAssistantTarget.ForEntity("vacuum.downstairs"), "provider_command", cyclic));
+        Assert.Null(server.LastServiceCallBody);
+
+        var tokenProvider = new BlockingTokenProvider();
+        using var delayedClient = TestClientFactory.Create(server, accessTokenProvider: tokenProvider);
+        var parameters = new Dictionary<string, object?> { ["zone"] = "original" };
+        var operation = delayedClient.Controls.Vacuums.SendCommandAsync(
+            HomeAssistantTarget.ForEntity("vacuum.downstairs"), "provider_command", parameters);
+        await tokenProvider.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        parameters["zone"] = "changed";
+        tokenProvider.Release.TrySetResult(TestHomeAssistantServer.AccessToken);
+        await operation;
+
+        using var call = LastCall(server);
+        Assert.Equal("original", call.RootElement.GetProperty("service_data").GetProperty("params").GetProperty("zone").GetString());
+    }
+
+    [Fact]
+    public async Task RawWebhookPayloadsFailBeforeTransport()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration { WebhookId = "undefined" });
+        await Assert.ThrowsAsync<ArgumentException>(() => webhook.SendAsync("custom", default(JsonElement)));
+        Assert.Null(server.LastRequestBody);
+    }
+
     [Theory]
     [InlineData("cloudhook_url", "ftp://example.invalid/webhook")]
     [InlineData("remote_ui_url", "file:///private/home-assistant")]

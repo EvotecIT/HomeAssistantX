@@ -91,6 +91,9 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     {
         if (string.IsNullOrWhiteSpace(commandType)) throw new ArgumentException("A webhook command type is required.", nameof(commandType));
         var command = commandType.Trim();
+        var frozenData = data is null
+            ? HomeAssistantJson.FreezeValue(new Dictionary<string, object?>(), nameof(data), "Data")
+            : HomeAssistantJson.FreezeValue(data, nameof(data), "Data");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_requestTimeout);
         var operationToken = timeout.Token;
@@ -99,12 +102,12 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             object envelope;
             if (_secret is null)
             {
-                envelope = new Dictionary<string, object?> { ["type"] = command, ["data"] = data ?? new Dictionary<string, object?>() };
+                envelope = new Dictionary<string, object?> { ["type"] = command, ["data"] = frozenData };
             }
             else
             {
                 var requestPlaintext = JsonSerializer.SerializeToUtf8Bytes(
-                    data ?? new Dictionary<string, object?>(),
+                    frozenData,
                     HomeAssistantJson.SerializerOptions);
                 var encrypted = await _protector!.ProtectAsync(requestPlaintext, _secret!, operationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(encrypted)) throw new HomeAssistantProtocolException("The mobile-app payload protector returned an empty request payload.");
