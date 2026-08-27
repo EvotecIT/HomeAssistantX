@@ -156,6 +156,75 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Equal(new[] { "change", "sum" }, command.RootElement.GetProperty("types").EnumerateArray().Select(value => value.GetString()).ToArray());
     }
 
+    [Theory]
+    [InlineData(HomeAssistantStatisticKind.Mean, false, true)]
+    [InlineData(HomeAssistantStatisticKind.Sum, true, false)]
+    public async Task RecorderCatalogCorrelatesRowsToTheRequestedStatisticKind(
+        HomeAssistantStatisticKind kind,
+        bool hasMean,
+        bool hasSum)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":"
+                + hasMean.ToString().ToLowerInvariant() + ",\"has_sum\":" + hasSum.ToString().ToLowerInvariant() + "}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.ListStatisticsAsync(kind));
+    }
+
+    [Theory]
+    [InlineData("Energy")]
+    [InlineData(" energy")]
+    [InlineData("energy ")]
+    [InlineData("not-a-unit")]
+    public async Task RecorderStatisticsRequireCanonicalUnitClassKeysBeforeDispatch(string unitClass)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(
+            DateTimeOffset.UtcNow.AddHours(-1),
+            HomeAssistantStatisticPeriod.Hour,
+            "sensor.grid_energy")
+        {
+            Units = new Dictionary<string, string> { [unitClass] = "kWh" }
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.GetStatisticsAsync(query));
+
+        Assert.Null(server.GetLastWebSocketCommand("recorder/statistics_during_period"));
+    }
+
+    [Fact]
+    public async Task RecorderStatisticsRejectNullUnitClassKeysAsArguments()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(
+            DateTimeOffset.UtcNow.AddHours(-1),
+            HomeAssistantStatisticPeriod.Hour,
+            "sensor.grid_energy")
+        {
+            Units = new NullKeyUnits()
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.GetStatisticsAsync(query));
+        Assert.Null(server.GetLastWebSocketCommand("recorder/statistics_during_period"));
+    }
+
+    [Theory]
+    [InlineData("{\"sensor.grid_energy\":[{\"start\":1,\"end\":2,\"min\":10,\"max\":1}]}")]
+    [InlineData("{\"sensor.grid_energy\":[{\"start\":1,\"end\":2,\"min\":\"bad\",\"max\":1}]}")]
+    public async Task RecorderStatisticsRejectInvalidDecodedRanges(string response)
+    {
+        using var server = new TestHomeAssistantServer { RecorderStatisticsResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, "sensor.grid_energy")));
+    }
+
     [Fact]
     public async Task RecorderAdministrativeOperationsValidateAndSerializeBeforeDispatch()
     {
@@ -823,7 +892,7 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
-    public async Task RecorderStatisticsNormalizeUnitOverridesAndRequireStrictRowOrdering()
+    public async Task RecorderStatisticsNormalizeUnitValuesAndRequireStrictRowOrdering()
     {
         using var server = new TestHomeAssistantServer
         {
@@ -832,7 +901,7 @@ public sealed class EnergyRecorderWeatherContractTests
         using var client = TestClientFactory.Create(server);
         var query = new HomeAssistantStatisticsQuery(DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, "sensor.energy")
         {
-            Units = new Dictionary<string, string> { [" energy "] = " kWh " }
+            Units = new Dictionary<string, string> { ["energy"] = " kWh " }
         };
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(query));
@@ -1006,6 +1075,25 @@ public sealed class EnergyRecorderWeatherContractTests
         using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("energy/fossil_energy_consumption")));
         Assert.Equal(new[] { "sensor.energy", "source:grid_energy" }, command.RootElement.GetProperty("energy_statistic_ids").EnumerateArray().Select(item => item.GetString()));
         Assert.Equal("sensor.co2", command.RootElement.GetProperty("co2_statistic_id").GetString());
+    }
+
+    private sealed class NullKeyUnits : IReadOnlyDictionary<string, string>
+    {
+        public int Count => 1;
+        public IEnumerable<string> Keys => new string[] { null! };
+        public IEnumerable<string> Values => new[] { "kWh" };
+        public string this[string key] => throw new KeyNotFoundException();
+        public bool ContainsKey(string key) => false;
+        public bool TryGetValue(string key, out string value)
+        {
+            value = string.Empty;
+            return false;
+        }
+
+        public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            => new[] { new KeyValuePair<string, string>(null!, "kWh") }.AsEnumerable().GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private sealed class BlockingTokenProvider : IHomeAssistantAccessTokenProvider

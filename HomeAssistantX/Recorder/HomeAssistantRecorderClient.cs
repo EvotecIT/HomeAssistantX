@@ -37,6 +37,7 @@ public sealed class HomeAssistantRecorderClient
             if (metadata.Any(item => !requestedIds.Contains(item.StatisticId)))
                 throw new HomeAssistantProtocolException("Recorder statistics metadata contained an unexpected statistic identifier.");
         }
+
         return metadata;
     }
 
@@ -54,6 +55,12 @@ public sealed class HomeAssistantRecorderClient
         if (metadata.Any(item => !responseIds.Add(item.StatisticId)))
         {
             throw new HomeAssistantProtocolException("Recorder statistic identifiers contained a duplicate identifier.");
+        }
+
+        if (kind == HomeAssistantStatisticKind.Mean && metadata.Any(item => !item.HasMean)
+            || kind == HomeAssistantStatisticKind.Sum && metadata.Any(item => !item.HasSum))
+        {
+            throw new HomeAssistantProtocolException("Recorder statistic identifiers did not match the requested statistic type.");
         }
 
         return metadata;
@@ -81,12 +88,14 @@ public sealed class HomeAssistantRecorderClient
         }
         if (query.Units is not null)
         {
-            if (query.Units.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value)))
-                throw new ArgumentException("Statistics unit names and values must be non-empty.", nameof(query));
+            if (query.Units.Any(pair => string.IsNullOrEmpty(pair.Key)
+                || !HomeAssistantStatisticIdentifier.IsSlug(pair.Key)
+                || string.IsNullOrWhiteSpace(pair.Value)))
+                throw new ArgumentException("Statistics unit-class keys must be canonical lowercase identifiers and unit values must be non-empty.", nameof(query));
             var units = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in query.Units)
             {
-                var normalizedName = pair.Key.Trim();
+                var normalizedName = pair.Key;
                 if (units.ContainsKey(normalizedName))
                     throw new ArgumentException("Statistics unit names must be unique after normalization.", nameof(query));
                 units.Add(normalizedName, pair.Value.Trim());
@@ -262,7 +271,9 @@ public sealed class HomeAssistantRecorderClient
             if (row.ValueKind != JsonValueKind.Object
                 || !TryGetUnixMilliseconds(row, "start", required: true, out var start)
                 || !TryGetUnixMilliseconds(row, "end", required: true, out var end)
-                || !TryGetUnixMilliseconds(row, "last_reset", required: false, out _))
+                || !TryGetUnixMilliseconds(row, "last_reset", required: false, out _)
+                || !TryGetFiniteDouble(row, "min", out var minimum)
+                || !TryGetFiniteDouble(row, "max", out var maximum))
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained an invalid timestamp.");
             }
@@ -270,6 +281,11 @@ public sealed class HomeAssistantRecorderClient
             if (end <= start)
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a non-positive interval.");
+            }
+
+            if (minimum.HasValue && maximum.HasValue && minimum.Value > maximum.Value)
+            {
+                throw new HomeAssistantProtocolException("A Recorder statistics series contained a minimum greater than its maximum.");
             }
 
             if (previousStart.HasValue && start <= previousStart.Value)
@@ -300,6 +316,16 @@ public sealed class HomeAssistantRecorderClient
         {
             return false;
         }
+    }
+
+    private static bool TryGetFiniteDouble(JsonElement value, string propertyName, out double? result)
+    {
+        result = null;
+        if (!value.TryGetProperty(propertyName, out var property) || property.ValueKind == JsonValueKind.Null) return true;
+        if (property.ValueKind != JsonValueKind.Number || !property.TryGetDouble(out var number)
+            || double.IsNaN(number) || double.IsInfinity(number)) return false;
+        result = number;
+        return true;
     }
 
     private static string? NormalizeOptionalUnit(string? value, string parameterName)
