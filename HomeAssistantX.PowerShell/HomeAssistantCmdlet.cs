@@ -17,19 +17,56 @@ public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
     protected HomeAssistantConnection ActiveConnection => Connection ?? HomeAssistantSession.GetRequired(CurrentRunspaceId);
 
     /// <summary>Returns the operator-assigned connection name without disclosing its endpoint.</summary>
-    protected string ConnectionDisplayName => ActiveConnection.Name;
+    protected string ConnectionDisplayName => RequireUsableConnection().ConfirmationName;
 
     protected HomeAssistantClient Client
     {
         get
         {
-            var connection = ActiveConnection;
-            if (connection.IsDisposed)
-            {
-                throw new ObjectDisposedException(nameof(HomeAssistantConnection));
-            }
-
-            return connection.Client;
+            return RequireUsableConnection().Client;
         }
+    }
+
+    /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
+    public new bool ShouldProcess(string? target)
+    {
+        _ = RequireUsableConnection();
+        return base.ShouldProcess(target);
+    }
+
+    /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
+    public new bool ShouldProcess(string? target, string action)
+    {
+        _ = RequireUsableConnection();
+        return base.ShouldProcess(target, action);
+    }
+
+    /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
+    public new bool ShouldProcess(string verboseDescription, string verboseWarning, string caption)
+    {
+        _ = RequireUsableConnection();
+        return base.ShouldProcess(verboseDescription, verboseWarning, caption);
+    }
+
+    /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
+    public new bool ShouldProcess(
+        string verboseDescription,
+        string verboseWarning,
+        string caption,
+        out ShouldProcessReason shouldProcessReason)
+    {
+        _ = RequireUsableConnection();
+        return base.ShouldProcess(verboseDescription, verboseWarning, caption, out shouldProcessReason);
+    }
+
+    private HomeAssistantConnection RequireUsableConnection()
+    {
+        var connection = ActiveConnection;
+        if (connection.IsDisposed)
+        {
+            throw new ObjectDisposedException(nameof(HomeAssistantConnection));
+        }
+
+        return connection;
     }
 }

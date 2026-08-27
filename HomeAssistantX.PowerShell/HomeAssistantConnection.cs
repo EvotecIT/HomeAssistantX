@@ -9,9 +9,13 @@ public sealed class HomeAssistantConnection : IDisposable
 
     internal HomeAssistantConnection(string? name, HomeAssistantClient client)
     {
-        Name = string.IsNullOrWhiteSpace(name) ? client.Options.BaseUri.Host : name!;
+        var hasExplicitName = !string.IsNullOrWhiteSpace(name);
+        Name = hasExplicitName ? name!.Trim() : client.Options.BaseUri.Host;
+        ConfirmationName = hasExplicitName ? Name : "Home Assistant";
         Client = client;
     }
+
+    internal string ConfirmationName { get; }
 
     public string Name { get; }
 
