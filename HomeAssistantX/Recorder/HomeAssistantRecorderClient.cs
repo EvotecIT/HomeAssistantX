@@ -116,7 +116,7 @@ public sealed class HomeAssistantRecorderClient
         unitOfMeasurement = NormalizeOptionalUnit(unitOfMeasurement, nameof(unitOfMeasurement));
         _ = await _webSocket.RequestAsync("recorder/update_statistics_metadata", new Dictionary<string, object?>
         {
-            ["statistic_id"] = Require(statisticId, nameof(statisticId)),
+            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId)),
             ["unit_class"] = unitClass,
             ["unit_of_measurement"] = unitOfMeasurement
         }, cancellationToken).ConfigureAwait(false);
@@ -130,7 +130,7 @@ public sealed class HomeAssistantRecorderClient
             throw new ArgumentException("The old and new statistics units must be different.", nameof(newUnit));
         _ = await _webSocket.RequestAsync("recorder/change_statistics_unit", new Dictionary<string, object?>
         {
-            ["statistic_id"] = Require(statisticId, nameof(statisticId)),
+            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId)),
             ["old_unit_of_measurement"] = oldUnit,
             ["new_unit_of_measurement"] = newUnit
         }, cancellationToken).ConfigureAwait(false);
@@ -142,7 +142,7 @@ public sealed class HomeAssistantRecorderClient
         unit = NormalizeOptionalUnit(unit, nameof(unit));
         _ = await _webSocket.RequestAsync("recorder/adjust_sum_statistics", new Dictionary<string, object?>
         {
-            ["statistic_id"] = Require(statisticId, nameof(statisticId)),
+            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId)),
             ["start_time"] = start.ToString("O", CultureInfo.InvariantCulture),
             ["adjustment"] = adjustment,
             ["adjustment_unit_of_measurement"] = unit
@@ -157,7 +157,7 @@ public sealed class HomeAssistantRecorderClient
         var unitOfMeasurement = NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement));
         var metadataPayload = new Dictionary<string, object?>
         {
-            ["statistic_id"] = Require(metadata.StatisticId, nameof(metadata.StatisticId)),
+            ["statistic_id"] = RequireStatisticId(metadata.StatisticId, nameof(metadata.StatisticId)),
             ["source"] = Require(metadata.Source, nameof(metadata.Source)),
             ["name"] = metadata.Name,
             ["has_mean"] = metadata.HasMean,
@@ -338,6 +338,13 @@ public sealed class HomeAssistantRecorderClient
             if (!normalized.Contains(statisticId, StringComparer.Ordinal)) normalized.Add(statisticId);
         }
         return normalized.ToArray();
+    }
+
+    private static string RequireStatisticId(string value, string name)
+    {
+        if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var statisticId))
+            throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", name);
+        return statisticId;
     }
 
     private static string[] RequireDomains(IReadOnlyCollection<string> values, string name)

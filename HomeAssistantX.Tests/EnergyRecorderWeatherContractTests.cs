@@ -554,6 +554,25 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Equal("sensor.grid_energy", command.RootElement.GetProperty("statistic_ids")[0].GetString());
     }
 
+    [Theory]
+    [InlineData("sensor.Bad")]
+    [InlineData("sensor.energy.extra")]
+    [InlineData("source:Bad")]
+    [InlineData("source:")]
+    public async Task RecorderMutationsRejectMalformedStatisticIdentifiersBeforeDispatch(string statisticId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.UpdateStatisticsMetadataAsync(statisticId, null, "kWh"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ChangeStatisticsUnitAsync(statisticId, "Wh", "kWh"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.AdjustSumStatisticsAsync(statisticId, DateTimeOffset.UtcNow, 1, "kWh"));
+
+        Assert.Null(server.GetLastWebSocketCommand("recorder/update_statistics_metadata"));
+        Assert.Null(server.GetLastWebSocketCommand("recorder/change_statistics_unit"));
+        Assert.Null(server.GetLastWebSocketCommand("recorder/adjust_sum_statistics"));
+    }
+
     [Fact]
     public async Task RecorderStatisticsNormalizeUnitOverridesAndRequireStrictRowOrdering()
     {

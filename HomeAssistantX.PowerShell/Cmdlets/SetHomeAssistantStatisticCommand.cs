@@ -51,11 +51,8 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             return;
         }
 
-        var statisticId = StatisticId?.Trim() ?? string.Empty;
-        if (statisticId.Length == 0)
-        {
-            throw new ArgumentException("A statistic identifier is required.", nameof(StatisticId));
-        }
+        if (!HomeAssistantStatisticIdentifier.TryNormalize(StatisticId, out var statisticId))
+            throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", nameof(StatisticId));
 
         switch (ParameterSetName)
         {
@@ -113,10 +110,13 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
     private static HomeAssistantStatisticImportMetadata ValidateImport(HomeAssistantStatisticImportMetadata? metadata, IReadOnlyCollection<HomeAssistantStatisticImportRow> rows)
     {
         if (metadata is null) throw new ArgumentException("Import metadata is required.", nameof(ImportMetadata));
+        if (!HomeAssistantStatisticIdentifier.TryNormalizeExternal(metadata.StatisticId, out var statisticId, out var source)
+            || !string.Equals(source, metadata.Source?.Trim(), StringComparison.Ordinal))
+            throw new ArgumentException("Import metadata requires a canonical external StatisticId whose source prefix exactly matches Source.", nameof(ImportMetadata));
         var normalized = new HomeAssistantStatisticImportMetadata
         {
-            StatisticId = metadata.StatisticId?.Trim() ?? string.Empty,
-            Source = metadata.Source?.Trim() ?? string.Empty,
+            StatisticId = statisticId,
+            Source = source,
             Name = metadata.Name,
             HasMean = metadata.HasMean,
             HasSum = metadata.HasSum,
