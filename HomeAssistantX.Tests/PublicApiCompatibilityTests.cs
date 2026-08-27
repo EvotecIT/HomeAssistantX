@@ -41,7 +41,12 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("ref struct", FormatTypeKind(typeof(RefStructFixture)));
         Assert.Equal("readonly struct", FormatTypeKind(typeof(ReadOnlyStructFixture)));
         Assert.Contains("<out TResult>", FormatTypeDeclarationName(typeof(VariantFixture<>)), StringComparison.Ordinal);
-        Assert.Contains("+Nested", FormatTypeDeclarationName(typeof(GenericOwner<>.Nested<>)), StringComparison.Ordinal);
+        Assert.EndsWith("+GenericOwner<TOuter>+Nested<TInner>", FormatTypeDeclarationName(typeof(GenericOwner<>.Nested<>)), StringComparison.Ordinal);
+        Assert.EndsWith("+CollisionOwner<TOuter>+Nested<TInner>", FormatTypeDeclarationName(typeof(CollisionOwner<>.Nested<>)), StringComparison.Ordinal);
+        Assert.EndsWith("+CollisionOwner<TFirst,TSecond>+Nested", FormatTypeDeclarationName(typeof(CollisionOwner<,>.Nested)), StringComparison.Ordinal);
+        Assert.NotEqual(
+            FormatTypeDeclarationName(typeof(CollisionOwner<>.Nested<>)),
+            FormatTypeDeclarationName(typeof(CollisionOwner<,>.Nested)));
     }
 
     [Fact]
@@ -179,6 +184,46 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("required ", RequiredMember(requiredField));
         Assert.Equal(string.Empty, RequiredMember(mutable));
     }
+
+    [Fact]
+    public void MemberFormatterPreservesScopedParametersAndReadonlyRefReturns()
+    {
+        var scoped = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(ScopedParameterFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var readOnlyReturn = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(RefReadonlyReturnFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var refReadonlyParameter = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(RefReadonlyParameterFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var writableProperty = typeof(PublicApiCompatibilityTests).GetProperty(
+            nameof(WritableRefProperty),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var readOnlyProperty = typeof(PublicApiCompatibilityTests).GetProperty(
+            nameof(ReadOnlyRefProperty),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal("scoped ref System.Int32 value", FormatParameters(scoped.GetParameters()));
+        Assert.Equal("ref readonly System.Int32 value", FormatParameters(refReadonlyParameter.GetParameters()));
+        Assert.Equal("ref readonly System.Int32", FormatReturnType(readOnlyReturn));
+        Assert.Equal("ref System.Int32", FormatPropertyType(writableProperty));
+        Assert.Equal("ref readonly System.Int32", FormatPropertyType(readOnlyProperty));
+        Assert.Equal(
+            " where T : allows ref struct",
+            FormatGenericConstraints(typeof(AllowsRefStructFixture<>).GetGenericArguments()));
+    }
+
+    [Fact]
+    public void ConstructorFormatterPreservesRequiredMemberSatisfaction()
+    {
+        var constructors = typeof(RequiredConstructorFixture).GetConstructors();
+        var satisfying = constructors.Single(constructor => constructor.GetParameters().Length == 0);
+        var ordinary = constructors.Single(constructor => constructor.GetParameters().Length == 1);
+
+        Assert.Equal("sets required ", RequiredMemberSatisfaction(satisfying));
+        Assert.Equal(string.Empty, RequiredMemberSatisfaction(ordinary));
+    }
 #endif
 
     [Fact]
@@ -259,7 +304,7 @@ public sealed class PublicApiCompatibilityTests
             foreach (var constructor in type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                          .Where(IsExternallyAccessibleConstructor)
                          .OrderBy(FormatMethod, StringComparer.Ordinal))
-                lines.Add("  C " + ConstructorAccess(constructor) + FormatType(type) + "(" + FormatParameters(constructor.GetParameters()) + ")");
+                lines.Add("  C " + ConstructorAccess(constructor) + RequiredMemberSatisfaction(constructor) + FormatType(type) + "(" + FormatParameters(constructor.GetParameters()) + ")");
             foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleField)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
@@ -269,7 +314,7 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
-                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + RequiredMember(property) + FormatAnnotatedType(property.PropertyType, property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
+                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + RequiredMember(property) + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
             }
             foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleEvent)
@@ -280,7 +325,7 @@ public sealed class PublicApiCompatibilityTests
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
-                lines.Add("  M " + MemberAccess(method) + MemberScope(method) + " " + FormatAnnotatedType(method.ReturnType, method.ReturnParameter) + " " + FormatMethod(method));
+                lines.Add("  M " + MemberAccess(method) + MemberScope(method) + " " + FormatReturnType(method) + " " + FormatMethod(method));
         }
         return string.Join("\n", lines);
     }
@@ -421,6 +466,20 @@ public sealed class PublicApiCompatibilityTests
         }
     }
 
+    private sealed class CollisionOwner<TOuter>
+    {
+        public sealed class Nested<TInner>
+        {
+        }
+    }
+
+    private sealed class CollisionOwner<TFirst, TSecond>
+    {
+        public sealed class Nested
+        {
+        }
+    }
+
     private class ProtectedConstructorFixture
     {
         protected ProtectedConstructorFixture(int value)
@@ -455,6 +514,44 @@ public sealed class PublicApiCompatibilityTests
         public required string Required { get; set; }
 
         public required string RequiredField = string.Empty;
+    }
+
+    private sealed class RequiredConstructorFixture
+    {
+        [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+        public RequiredConstructorFixture()
+        {
+            Value = string.Empty;
+        }
+
+        public RequiredConstructorFixture(string value)
+        {
+            Value = value;
+        }
+
+        public required string Value { get; set; }
+    }
+
+    private static int RefReadonlyStorage;
+
+    private static void ScopedParameterFixture(scoped ref int value)
+    {
+        value++;
+    }
+
+    private static ref readonly int RefReadonlyReturnFixture() => ref RefReadonlyStorage;
+
+    private static void RefReadonlyParameterFixture(ref readonly int value)
+    {
+        _ = value;
+    }
+
+    private static ref int WritableRefProperty => ref RefReadonlyStorage;
+
+    private static ref readonly int ReadOnlyRefProperty => ref RefReadonlyStorage;
+
+    private sealed class AllowsRefStructFixture<T> where T : allows ref struct
+    {
     }
 #endif
 
@@ -534,6 +631,14 @@ public sealed class PublicApiCompatibilityTests
             ? "required "
             : string.Empty;
 
+    private static string RequiredMemberSatisfaction(ConstructorInfo constructor)
+        => constructor.CustomAttributes.Any(attribute => string.Equals(
+            attribute.AttributeType.FullName,
+            "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute",
+            StringComparison.Ordinal))
+            ? "sets required "
+            : string.Empty;
+
     private static string FormatIndexerParameters(PropertyInfo property)
     {
         var parameters = property.GetIndexParameters();
@@ -594,18 +699,60 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatParameterType(ParameterInfo parameter)
     {
         var paramsPrefix = parameter.GetCustomAttribute<ParamArrayAttribute>() is null ? string.Empty : "params ";
+        var safetyPrefix = RefSafetyPrefix(parameter);
         if (!parameter.ParameterType.IsByRef)
         {
-            return paramsPrefix + FormatAnnotatedType(parameter.ParameterType, parameter);
+            return paramsPrefix + safetyPrefix + FormatAnnotatedType(parameter.ParameterType, parameter);
         }
 
-        var direction = parameter.IsOut
+        var direction = HasAttribute(parameter, "System.Runtime.CompilerServices.RequiresLocationAttribute")
+            ? "ref readonly "
+            : parameter.IsOut
             ? "out "
             : parameter.IsIn
                 ? "in "
                 : "ref ";
-        return direction + FormatAnnotatedType(parameter.ParameterType.GetElementType()!, parameter);
+        return safetyPrefix + direction + FormatAnnotatedType(parameter.ParameterType.GetElementType()!, parameter);
     }
+
+    private static string FormatReturnType(MethodInfo method)
+        => FormatReturnType(method, method);
+
+    private static string FormatReturnType(MethodInfo method, ICustomAttributeProvider owner)
+    {
+        var parameter = method.ReturnParameter;
+        var safetyPrefix = RefSafetyPrefix(parameter)
+            + (HasAttribute(owner, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")
+                || HasAttribute(method, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
+        if (!method.ReturnType.IsByRef)
+            return safetyPrefix + FormatAnnotatedType(method.ReturnType, parameter);
+
+        var readOnly = HasAttribute(parameter, "System.Runtime.CompilerServices.IsReadOnlyAttribute")
+            || parameter.GetRequiredCustomModifiers().Any(modifier => string.Equals(
+                modifier.FullName,
+                "System.Runtime.InteropServices.InAttribute",
+                StringComparison.Ordinal));
+        return safetyPrefix + (readOnly ? "ref readonly " : "ref ")
+            + FormatAnnotatedType(method.ReturnType.GetElementType()!, parameter);
+    }
+
+    private static string FormatPropertyType(PropertyInfo property)
+    {
+        if (property.PropertyType.IsByRef && property.GetMethod is not null)
+            return FormatReturnType(property.GetMethod, property);
+        var safetyPrefix = HasAttribute(property, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty;
+        return safetyPrefix + FormatAnnotatedType(property.PropertyType, property);
+    }
+
+    private static string RefSafetyPrefix(ParameterInfo parameter)
+    {
+        if (HasAttribute(parameter, "System.Runtime.CompilerServices.ScopedRefAttribute")) return "scoped ";
+        if (HasAttribute(parameter, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")) return "unscoped ";
+        return string.Empty;
+    }
+
+    private static bool HasAttribute(ICustomAttributeProvider provider, string attributeName)
+        => GetCustomAttributes(provider).Any(attribute => string.Equals(attribute.AttributeType.FullName, attributeName, StringComparison.Ordinal));
 
     private static string FormatTypeKind(Type type)
     {
@@ -630,7 +777,6 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatTypeDeclarationName(Type type)
     {
         if (!type.IsGenericTypeDefinition) return FormatType(type);
-        var name = StripGenericArities(type.FullName ?? type.Name);
         var arguments = type.GetGenericArguments().Select(argument =>
         {
             var variance = argument.GenericParameterAttributes & GenericParameterAttributes.VarianceMask;
@@ -640,8 +786,8 @@ public sealed class PublicApiCompatibilityTests
                     ? "in "
                     : string.Empty;
             return prefix + argument.Name;
-        });
-        return name + "<" + string.Join(",", arguments) + ">";
+        }).ToArray();
+        return FormatGenericTypeName(type, arguments);
     }
 
     private static string FormatGenericConstraints(IEnumerable<Type> genericArguments)
@@ -650,7 +796,8 @@ public sealed class PublicApiCompatibilityTests
         foreach (var argument in genericArguments.Where(argument => argument.IsGenericParameter))
         {
             var constraints = new List<string>();
-            var attributes = argument.GenericParameterAttributes & GenericParameterAttributes.SpecialConstraintMask;
+            var genericAttributes = argument.GenericParameterAttributes;
+            var attributes = genericAttributes & GenericParameterAttributes.SpecialConstraintMask;
             var unmanaged = argument.CustomAttributes.Any(attribute =>
                 string.Equals(attribute.AttributeType.FullName, "System.Runtime.CompilerServices.IsUnmanagedAttribute", StringComparison.Ordinal));
             if (unmanaged)
@@ -675,6 +822,12 @@ public sealed class PublicApiCompatibilityTests
                 && (attributes & GenericParameterAttributes.DefaultConstructorConstraint) != 0)
             {
                 constraints.Add("new()");
+            }
+
+            const GenericParameterAttributes allowByRefLike = (GenericParameterAttributes)32;
+            if ((genericAttributes & allowByRefLike) != 0)
+            {
+                constraints.Add("allows ref struct");
             }
 
             if (constraints.Count > 0)
@@ -710,9 +863,7 @@ public sealed class PublicApiCompatibilityTests
         if (type.IsByRef) return "ref " + FormatType(type.GetElementType()!);
         if (type.IsArray) return FormatType(type.GetElementType()!) + ArraySuffix(type);
         if (!type.IsGenericType) return type.FullName ?? type.Name;
-        var definition = type.GetGenericTypeDefinition();
-        var name = StripGenericArities(definition.FullName ?? definition.Name);
-        return name + "<" + string.Join(",", type.GetGenericArguments().Select(FormatType)) + ">";
+        return FormatGenericTypeName(type, type.GetGenericArguments().Select(FormatType).ToArray());
     }
 
     private static string FormatAnnotatedType(Type type, ICustomAttributeProvider provider)
@@ -739,8 +890,10 @@ public sealed class PublicApiCompatibilityTests
             {
                 return FormatTuple(type, cursor, tupleNames);
             }
-            var name = StripGenericArities(definition.FullName ?? definition.Name);
-            var formatted = name + "<" + string.Join(",", type.GetGenericArguments().Select(argument => FormatAnnotatedType(argument, cursor, tupleNames))) + ">";
+            var arguments = type.GetGenericArguments()
+                .Select(argument => FormatAnnotatedType(argument, cursor, tupleNames))
+                .ToArray();
+            var formatted = FormatGenericTypeName(type, arguments);
             return !type.IsValueType && flag == 2 ? formatted + "?" : formatted;
         }
 
@@ -784,12 +937,33 @@ public sealed class PublicApiCompatibilityTests
 
     private static string ArraySuffix(Type type) => "[" + new string(',', type.GetArrayRank() - 1) + "]";
 
-    private static string StripGenericArities(string name)
-        => string.Join("+", name.Split('+').Select(segment =>
+    private static string FormatGenericTypeName(Type type, IReadOnlyList<string> formattedArguments)
+    {
+        var definition = type.IsGenericTypeDefinition ? type : type.GetGenericTypeDefinition();
+        var segments = (definition.FullName ?? definition.Name).Split('+');
+        var formattedSegments = new List<string>(segments.Length);
+        var argumentIndex = 0;
+        foreach (var segment in segments)
         {
-            var marker = segment.IndexOf('`');
-            return marker < 0 ? segment : segment.Substring(0, marker);
-        }));
+            var marker = segment.LastIndexOf('`');
+            if (marker < 0)
+            {
+                formattedSegments.Add(segment);
+                continue;
+            }
+
+            if (!int.TryParse(segment.Substring(marker + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var arity)
+                || arity < 1
+                || argumentIndex + arity > formattedArguments.Count)
+                throw new InvalidOperationException("The generic type name contained an invalid arity.");
+            formattedSegments.Add(segment.Substring(0, marker) + "<" + string.Join(",", formattedArguments.Skip(argumentIndex).Take(arity)) + ">");
+            argumentIndex += arity;
+        }
+
+        if (argumentIndex != formattedArguments.Count)
+            throw new InvalidOperationException("The generic type name did not own all generic arguments.");
+        return string.Join("+", formattedSegments);
+    }
 
     private static byte[] ReadNullableFlags(ICustomAttributeProvider provider)
     {
