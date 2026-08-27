@@ -119,6 +119,16 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             throw new ArgumentException("A supplied MediaContentType cannot be empty.", nameof(MediaContentType));
         }
 
+        if (Source is not null && string.IsNullOrWhiteSpace(Source))
+        {
+            throw new ArgumentException("A supplied Source cannot be empty.", nameof(Source));
+        }
+
+        if (SoundMode is not null && string.IsNullOrWhiteSpace(SoundMode))
+        {
+            throw new ArgumentException("A supplied SoundMode cannot be empty.", nameof(SoundMode));
+        }
+
         var hasContent = !string.IsNullOrWhiteSpace(MediaContentId)
             || !string.IsNullOrWhiteSpace(MediaContentType);
         if (!HasAnyOperation(hasContent))
