@@ -278,7 +278,8 @@ Get-HomeAssistantCalendarEvent -EntityId calendar.home `
     -EndTime (Get-Date).AddDays(7)
 
 Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner `
-    -StartTime '2026-08-27 18:00' -EndTime '2026-08-27 20:00' -WhatIf
+    -StartTime '2026-08-27T18:00:00+02:00' `
+    -EndTime '2026-08-27T20:00:00+02:00' -WhatIf
 Receive-HomeAssistantCalendarEvent -EntityId calendar.home -Count 1
 
 Get-HomeAssistantLabel

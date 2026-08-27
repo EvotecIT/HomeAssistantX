@@ -23,7 +23,7 @@ public sealed class HomeAssistantCalendarClient
     public Task<IReadOnlyList<HomeAssistantCalendar>> GetAsync(CancellationToken cancellationToken = default)
         => _rest.GetCalendarsAsync(cancellationToken);
 
-    public Task<IReadOnlyList<HomeAssistantCalendarEvent>> GetEventsAsync(
+    public async Task<IReadOnlyList<HomeAssistantCalendarEvent>> GetEventsAsync(
         string entityId,
         DateTimeOffset start,
         DateTimeOffset end,
@@ -31,7 +31,9 @@ public sealed class HomeAssistantCalendarClient
     {
         var normalizedEntityId = NormalizeEntityId(entityId);
         ValidateRange(start, end);
-        return _rest.GetCalendarEventsAsync(normalizedEntityId, start, end, cancellationToken);
+        var events = await _rest.GetCalendarEventsAsync(normalizedEntityId, start, end, cancellationToken).ConfigureAwait(false);
+        ValidateEvents(events);
+        return events;
     }
 
     public async Task CreateEventAsync(
@@ -131,6 +133,7 @@ public sealed class HomeAssistantCalendarClient
                 update.Events = HomeAssistantJson.DeserializeResponse<HomeAssistantCalendarEvent[]>(
                     value,
                     "The Home Assistant calendar subscription could not be decoded.");
+                ValidateEvents(update.Events);
             }
 
             await handler(update, token).ConfigureAwait(false);
@@ -142,6 +145,26 @@ public sealed class HomeAssistantCalendarClient
         if (end <= start)
         {
             throw new ArgumentOutOfRangeException(nameof(end), "The calendar range end must be after its start.");
+        }
+    }
+
+    private static void ValidateEvents(IReadOnlyList<HomeAssistantCalendarEvent> events)
+    {
+        foreach (var item in events)
+        {
+            if (string.IsNullOrWhiteSpace(item.Summary) || item.Start is null || item.End is null)
+            {
+                throw new HomeAssistantProtocolException("Home Assistant returned an incomplete calendar event.");
+            }
+
+            var allDay = item.Start.Date is not null && item.End.Date is not null;
+            var timed = item.Start.DateTime.HasValue && item.End.DateTime.HasValue;
+            if ((!allDay && !timed)
+                || (allDay && string.CompareOrdinal(item.End.Date, item.Start.Date) <= 0)
+                || (timed && item.End.DateTime <= item.Start.DateTime))
+            {
+                throw new HomeAssistantProtocolException("Home Assistant returned a calendar event with an invalid range.");
+            }
         }
     }
 

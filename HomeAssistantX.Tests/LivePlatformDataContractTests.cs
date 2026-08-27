@@ -156,6 +156,25 @@ public sealed class LivePlatformDataContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
     }
 
+    [Theory]
+    [InlineData("[{}]")]
+    [InlineData("[{\"summary\":\"Dinner\",\"start\":\"2026-08-26T18:00:00+02:00\"}]")]
+    [InlineData("[{\"summary\":\" \",\"start\":\"2026-08-26T18:00:00+02:00\",\"end\":\"2026-08-26T20:00:00+02:00\"}]")]
+    [InlineData("[{\"summary\":\"Dinner\",\"start\":\"2026-08-26\",\"end\":\"2026-08-26T20:00:00+02:00\"}]")]
+    public async Task CalendarSubscriptionRejectsIncompleteEventEntries(string payload)
+    {
+        using var server = new TestHomeAssistantServer { CalendarSubscriptionEventJson = payload };
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero);
+        using var subscription = await client.Calendars.SubscribeAsync(
+            "calendar.home",
+            start,
+            start.AddDays(1),
+            (_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
     [Fact]
     public void CalendarInputAcceptsOffsetTransitionsAndRejectsInvalidRangesBeforeNetworkUse()
     {
