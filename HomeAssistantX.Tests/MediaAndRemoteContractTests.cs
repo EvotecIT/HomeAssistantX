@@ -133,6 +133,33 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal(HomeAssistantRemoteFeature.None, status.SupportedFeatures);
     }
 
+    [Theory]
+    [InlineData("1.00000000000000000000000000001")]
+    [InlineData("\"1.00000000000000000000000000001\"")]
+    [InlineData("\"١\"")]
+    public void TypedStatusDoesNotRoundOverprecisionCapabilitiesToAnInteger(string value)
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"remote.bad\",\"state\":\"on\",\"attributes\":{" +
+            "\"supported_features\":" + value + "}}");
+
+        Assert.Equal(HomeAssistantRemoteFeature.None, HomeAssistantRemoteStatus.FromState(raw).SupportedFeatures);
+    }
+
+    [Theory]
+    [InlineData("[\"light.kitchen\"]")]
+    [InlineData("[\"media_player.Kitchen\"]")]
+    [InlineData("[\"media_player.kitchen\",\"media_player.kitchen\"]")]
+    [InlineData("[null]")]
+    public void MediaStatusRejectsInvalidGroupMemberIdentities(string groupMembers)
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.group\",\"state\":\"idle\",\"attributes\":{" +
+            "\"group_members\":" + groupMembers + "}}");
+
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantMediaPlayerStatus.FromState(raw));
+    }
+
     [Fact]
     public void MediaStatusSkipsBlankArtworkBeforeSelectingFallback()
     {
@@ -161,6 +188,20 @@ public sealed class MediaAndRemoteContractTests
             status.ResolveArtworkUri(new Uri("https://ha.example.test/")));
         Assert.Equal(
             new Uri("https://ha.example.test/home-assistant/api/media/local-artwork"),
+            status.ResolveArtworkUri(new Uri("https://ha.example.test/home-assistant/")));
+    }
+
+    [Fact]
+    public void MediaStatusResolvesProtocolRelativeArtworkAgainstTheHomeAssistantScheme()
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.cdn\",\"state\":\"idle\",\"attributes\":{" +
+            "\"media_image_url\":\"//cdn.example.test/artwork.png\"}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Equal(
+            new Uri("https://cdn.example.test/artwork.png"),
             status.ResolveArtworkUri(new Uri("https://ha.example.test/home-assistant/")));
     }
 

@@ -1,5 +1,6 @@
 using HomeAssistantX.Models;
 using HomeAssistantX.Exceptions;
+using System.Text.Json;
 
 namespace HomeAssistantX.Controls;
 
@@ -275,7 +276,10 @@ public sealed class HomeAssistantMediaPlayerStatus
                 continue;
             }
 
-            if (Uri.TryCreate(homeAssistantBaseUri, trimmed.TrimStart('/'), out var resolved)
+            var relativeArtwork = trimmed.StartsWith("//", StringComparison.Ordinal)
+                ? homeAssistantBaseUri.Scheme + ":" + trimmed
+                : trimmed.TrimStart('/');
+            if (Uri.TryCreate(homeAssistantBaseUri, relativeArtwork, out var resolved)
                 && IsSupportedArtworkUri(resolved))
             {
                 return resolved;
@@ -342,7 +346,7 @@ public sealed class HomeAssistantMediaPlayerStatus
             AppName = HomeAssistantAttributeReader.GetString(attributes, "app_name"),
             Shuffle = HomeAssistantAttributeReader.GetBoolean(attributes, "shuffle"),
             Repeat = HomeAssistantAttributeReader.GetString(attributes, "repeat"),
-            GroupMembers = HomeAssistantAttributeReader.GetStringList(attributes, "group_members"),
+            GroupMembers = GetGroupMembers(attributes),
             MediaImageUrl = HomeAssistantAttributeReader.GetString(attributes, "media_image_url"),
             EntityPicture = HomeAssistantAttributeReader.GetString(attributes, "entity_picture"),
             EntityPictureLocal = HomeAssistantAttributeReader.GetString(attributes, "entity_picture_local"),
@@ -366,6 +370,36 @@ public sealed class HomeAssistantMediaPlayerStatus
             "standby" => HomeAssistantMediaPlayerState.Standby,
             _ => HomeAssistantMediaPlayerState.Other
         };
+    }
+
+    private static IReadOnlyList<string> GetGroupMembers(IReadOnlyDictionary<string, JsonElement> attributes)
+    {
+        if (!HomeAssistantAttributeReader.TryGetValue(attributes, "group_members", out var value))
+        {
+            return Array.Empty<string>();
+        }
+
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant media-player group members were malformed.");
+        }
+
+        var members = new List<string>();
+        var unique = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String
+                || !HomeAssistantEntityId.TryNormalizeForDomain(item.GetString(), "media_player", out var member)
+                || !string.Equals(item.GetString(), member, StringComparison.Ordinal)
+                || !unique.Add(member))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant media-player group members contained an invalid or duplicate entity identifier.");
+            }
+
+            members.Add(member);
+        }
+
+        return members;
     }
 
     private static double? GetNormalizedVolume(

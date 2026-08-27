@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using HomeAssistantX.Protocol;
 
@@ -143,18 +144,83 @@ internal static class HomeAssistantAttributeReader
             return true;
         }
 
-        if (decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact)
-            && exact >= long.MinValue
-            && exact <= long.MaxValue
-            && decimal.Truncate(exact) == exact)
+        return TryParseExactIntegralInt64(value, out result);
+    }
+
+    private static bool TryParseExactIntegralInt64(string? value, out long result)
+    {
+        result = default;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var text = value!.Trim();
+        var index = 0;
+        var negative = false;
+        if (text[index] is '+' or '-')
         {
-            result = decimal.ToInt64(exact);
-            return true;
+            negative = text[index] == '-';
+            if (++index == text.Length) return false;
         }
 
-        result = default;
-        return false;
+        var digits = new System.Text.StringBuilder(text.Length);
+        var fractionalDigits = 0;
+        var sawDigit = false;
+        while (index < text.Length && IsAsciiDigit(text[index]))
+        {
+            digits.Append(text[index++]);
+            sawDigit = true;
+        }
+
+        if (index < text.Length && text[index] == '.')
+        {
+            index++;
+            var fractionStart = digits.Length;
+            while (index < text.Length && IsAsciiDigit(text[index]))
+            {
+                digits.Append(text[index++]);
+                sawDigit = true;
+            }
+            fractionalDigits = digits.Length - fractionStart;
+        }
+
+        if (!sawDigit) return false;
+        var exponent = 0;
+        if (index < text.Length && text[index] is 'e' or 'E')
+        {
+            index++;
+            var exponentStart = index;
+            if (index < text.Length && text[index] is '+' or '-') index++;
+            while (index < text.Length && IsAsciiDigit(text[index])) index++;
+            if (index == exponentStart || (index == exponentStart + 1 && text[exponentStart] is '+' or '-')) return false;
+            if (!int.TryParse(text.Substring(exponentStart, index - exponentStart), NumberStyles.Integer, CultureInfo.InvariantCulture, out exponent)) return false;
+        }
+
+        if (index != text.Length) return false;
+        var scale = (long)fractionalDigits - exponent;
+        var digitText = digits.ToString();
+        if (scale > 0)
+        {
+            if (scale > digitText.Length) return digitText.All(character => character == '0');
+            var scaleCount = (int)scale;
+            if (digitText.Substring(digitText.Length - scaleCount).Any(character => character != '0')) return false;
+            digitText = digitText.Substring(0, digitText.Length - scaleCount);
+        }
+        else if (scale < 0)
+        {
+            var appendedZeroCount = -scale;
+            if (appendedZeroCount > 20 || digitText.Length + appendedZeroCount > 20) return false;
+            digitText += new string('0', (int)appendedZeroCount);
+        }
+
+        digitText = digitText.TrimStart('0');
+        if (digitText.Length == 0) return true;
+        if (digitText.Length > 19) return false;
+        var exact = BigInteger.Parse(digitText, CultureInfo.InvariantCulture);
+        if (negative) exact = -exact;
+        if (exact < long.MinValue || exact > long.MaxValue) return false;
+        result = (long)exact;
+        return true;
     }
+
+    private static bool IsAsciiDigit(char value) => value >= '0' && value <= '9';
 
     internal static bool TryGetValue(IReadOnlyDictionary<string, JsonElement> attributes, string name, out JsonElement value)
     {
