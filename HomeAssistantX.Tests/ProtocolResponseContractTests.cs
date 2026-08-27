@@ -268,7 +268,11 @@ public sealed class ProtocolResponseContractTests
     [InlineData("{\"dateTime\":\"2026-08-27\"}")]
     [InlineData("{\"dateTime\":\"08/27/2026\"}")]
     [InlineData("{\"date\":42}")]
+    [InlineData("\"\"")]
     [InlineData("\"2026-08-27T18:00:00\"")]
+    [InlineData("{\"date\":\"not-a-date\"}")]
+    [InlineData("{}")]
+    [InlineData("{\"date\":\"2026-08-27\",\"dateTime\":\"2026-08-27T18:00:00Z\"}")]
     public void CalendarBoundaryConverterRejectsInvalidTypedShapesWithJsonException(string json)
     {
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<HomeAssistantCalendarBoundary>(json));

@@ -120,7 +120,7 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             var value = reader.GetString();
             if (string.IsNullOrWhiteSpace(value))
             {
-                return new HomeAssistantCalendarBoundary();
+                throw new JsonException("A Home Assistant calendar boundary string cannot be blank.");
             }
 
             if (DateTime.TryParseExact(
@@ -149,8 +149,16 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             throw new JsonException("A Home Assistant calendar boundary must be a string or object.");
         }
 
+        var hasDate = root.TryGetProperty("date", out var date);
+        var hasDateTime = root.TryGetProperty("dateTime", out var dateTimeValue);
+        if (hasDate == hasDateTime)
+        {
+            throw new JsonException(
+                "A Home Assistant calendar boundary must contain exactly one of date or dateTime.");
+        }
+
         string? dateValue = null;
-        if (root.TryGetProperty("date", out var date))
+        if (hasDate)
         {
             if (date.ValueKind != JsonValueKind.String)
             {
@@ -158,10 +166,19 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             }
 
             dateValue = date.GetString();
+            if (!DateTime.TryParseExact(
+                    dateValue,
+                    "yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None,
+                    out _))
+            {
+                throw new JsonException("A Home Assistant calendar date must use yyyy-MM-dd.");
+            }
         }
 
         DateTimeOffset? parsedDateTime = null;
-        if (root.TryGetProperty("dateTime", out var dateTimeValue))
+        if (hasDateTime)
         {
             if (!TryReadWireDateTime(dateTimeValue, out var dateTime))
             {
