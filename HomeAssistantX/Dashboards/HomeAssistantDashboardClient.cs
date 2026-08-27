@@ -1,0 +1,210 @@
+using System.Text.Json;
+using HomeAssistantX.Exceptions;
+using HomeAssistantX.Protocol;
+using HomeAssistantX.WebSockets;
+
+namespace HomeAssistantX.Dashboards;
+
+/// <summary>Reads frontend panels and manages Lovelace dashboards, configurations, and resources.</summary>
+public sealed class HomeAssistantDashboardClient
+{
+    private readonly HomeAssistantWebSocketClient _webSocket;
+
+    internal HomeAssistantDashboardClient(HomeAssistantWebSocketClient webSocket) => _webSocket = webSocket;
+
+    public async Task<IReadOnlyList<HomeAssistantPanel>> GetPanelsAsync(CancellationToken cancellationToken = default)
+    {
+        var value = await _webSocket.RequestAsync("get_panels", null, cancellationToken).ConfigureAwait(false);
+        if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("The frontend panel response was not an object.");
+        var result = new List<HomeAssistantPanel>();
+        foreach (var property in value.EnumerateObject())
+        {
+            var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(property.Value, "A frontend panel could not be decoded.");
+            if (string.IsNullOrWhiteSpace(panel.UrlPath)) panel.UrlPath = property.Name;
+            if (string.IsNullOrWhiteSpace(panel.UrlPath) || string.IsNullOrWhiteSpace(panel.ComponentName))
+                throw new HomeAssistantProtocolException("A frontend panel did not contain its required fields.");
+            result.Add(panel);
+        }
+        return result.OrderBy(item => item.UrlPath, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public async Task<HomeAssistantLovelaceInfo> GetInfoAsync(CancellationToken cancellationToken = default)
+    {
+        var info = HomeAssistantJson.DeserializeResponse<HomeAssistantLovelaceInfo>(
+            await _webSocket.RequestAsync("lovelace/info", null, cancellationToken).ConfigureAwait(false),
+            "The Lovelace information could not be decoded.");
+        if (string.IsNullOrWhiteSpace(info.ResourceMode))
+            throw new HomeAssistantProtocolException("The Lovelace information did not contain its resource mode.");
+        return info;
+    }
+
+    public async Task<IReadOnlyList<HomeAssistantDashboard>> GetDashboardsAsync(CancellationToken cancellationToken = default)
+    {
+        var dashboards = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard[]>(
+            await _webSocket.RequestAsync("lovelace/dashboards/list", null, cancellationToken).ConfigureAwait(false),
+            "The dashboard list could not be decoded.");
+        foreach (var dashboard in dashboards) ValidateListedDashboard(dashboard);
+        return dashboards;
+    }
+
+    public async Task<HomeAssistantDashboard> CreateDashboardAsync(HomeAssistantDashboardCreate create, CancellationToken cancellationToken = default)
+    {
+        if (create is null) throw new ArgumentNullException(nameof(create));
+        var urlPath = Require(create.UrlPath, nameof(create.UrlPath));
+        var title = Require(create.Title, nameof(create.Title));
+        if (!create.AllowSingleWord && urlPath.IndexOf('-') < 0) throw new ArgumentException("Dashboard URL paths must contain a hyphen unless AllowSingleWord is explicitly enabled.", nameof(create));
+        var payload = new Dictionary<string, object?>
+        {
+            ["url_path"] = urlPath,
+            ["title"] = title,
+            ["show_in_sidebar"] = create.ShowInSidebar,
+            ["require_admin"] = create.RequireAdmin
+        };
+        if (create.Icon is not null) payload["icon"] = RequireIcon(create.Icon, nameof(create.Icon));
+        if (create.AllowSingleWord) payload["allow_single_word"] = true;
+        return await RequestDashboardAsync("lovelace/dashboards/create", payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<HomeAssistantDashboard> UpdateDashboardAsync(string dashboardId, HomeAssistantDashboardUpdate update, CancellationToken cancellationToken = default)
+    {
+        if (update is null) throw new ArgumentNullException(nameof(update));
+        if (update.RemoveIcon && update.Icon is not null) throw new ArgumentException("Icon and RemoveIcon cannot be combined.", nameof(update));
+        var payload = new Dictionary<string, object?> { ["dashboard_id"] = Require(dashboardId, nameof(dashboardId)) };
+        if (update.Title is not null) payload["title"] = Require(update.Title, nameof(update.Title));
+        if (update.Icon is not null) payload["icon"] = RequireIcon(update.Icon, nameof(update.Icon));
+        if (update.RemoveIcon) payload["icon"] = null;
+        if (update.ShowInSidebar.HasValue) payload["show_in_sidebar"] = update.ShowInSidebar.Value;
+        if (update.RequireAdmin.HasValue) payload["require_admin"] = update.RequireAdmin.Value;
+        if (payload.Count == 1) throw new ArgumentException("At least one dashboard update is required.", nameof(update));
+        return RequestDashboardAsync("lovelace/dashboards/update", payload, cancellationToken);
+    }
+
+    public Task<JsonElement> DeleteDashboardAsync(string dashboardId, CancellationToken cancellationToken = default)
+        => _webSocket.RequestAsync("lovelace/dashboards/delete", new Dictionary<string, object?> { ["dashboard_id"] = Require(dashboardId, nameof(dashboardId)) }, cancellationToken);
+
+    public Task<JsonElement> GetConfigurationAsync(string? urlPath = null, bool force = false, CancellationToken cancellationToken = default)
+    {
+        var payload = new Dictionary<string, object?>();
+        if (force) payload["force"] = true;
+        if (urlPath is not null) payload["url_path"] = Require(urlPath, nameof(urlPath));
+        return _webSocket.RequestAsync("lovelace/config", payload, cancellationToken);
+    }
+
+    public Task<JsonElement> SaveConfigurationAsync(JsonElement configuration, string? urlPath = null, CancellationToken cancellationToken = default)
+    {
+        if (configuration.ValueKind != JsonValueKind.Object) throw new ArgumentException("A Lovelace configuration JSON object is required.", nameof(configuration));
+        var payload = new Dictionary<string, object?> { ["config"] = configuration.Clone() };
+        if (urlPath is not null) payload["url_path"] = Require(urlPath, nameof(urlPath));
+        return _webSocket.RequestAsync("lovelace/config/save", payload, cancellationToken);
+    }
+
+    public Task<JsonElement> DeleteConfigurationAsync(string? urlPath = null, CancellationToken cancellationToken = default)
+    {
+        var payload = new Dictionary<string, object?>();
+        if (urlPath is not null) payload["url_path"] = Require(urlPath, nameof(urlPath));
+        return _webSocket.RequestAsync("lovelace/config/delete", payload, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<HomeAssistantDashboardResource>> GetResourcesAsync(CancellationToken cancellationToken = default)
+    {
+        var resourceMode = (await GetInfoAsync(cancellationToken).ConfigureAwait(false)).ResourceMode;
+        var resources = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource[]>(
+            await _webSocket.RequestAsync("lovelace/resources/list", null, cancellationToken).ConfigureAwait(false),
+            "The Lovelace resource list could not be decoded.");
+        foreach (var resource in resources) ValidateListedResource(resource, resourceMode);
+        return resources;
+    }
+
+    public Task<HomeAssistantDashboardResource> CreateResourceAsync(string url, HomeAssistantDashboardResourceType type, CancellationToken cancellationToken = default)
+        => RequestResourceAsync("lovelace/resources/create", new Dictionary<string, object?> { ["url"] = Require(url, nameof(url)), ["res_type"] = ResourceTypeName(type) }, cancellationToken);
+
+    public Task<HomeAssistantDashboardResource> UpdateResourceAsync(string resourceId, string? url = null, HomeAssistantDashboardResourceType? type = null, CancellationToken cancellationToken = default)
+    {
+        var payload = new Dictionary<string, object?> { ["resource_id"] = Require(resourceId, nameof(resourceId)) };
+        if (url is not null) payload["url"] = Require(url, nameof(url));
+        if (type.HasValue) payload["res_type"] = ResourceTypeName(type.Value);
+        if (payload.Count == 1) throw new ArgumentException("At least one resource update is required.");
+        return RequestResourceAsync("lovelace/resources/update", payload, cancellationToken);
+    }
+
+    public Task<JsonElement> DeleteResourceAsync(string resourceId, CancellationToken cancellationToken = default)
+        => _webSocket.RequestAsync("lovelace/resources/delete", new Dictionary<string, object?> { ["resource_id"] = Require(resourceId, nameof(resourceId)) }, cancellationToken);
+
+    private async Task<HomeAssistantDashboard> RequestDashboardAsync(string command, IReadOnlyDictionary<string, object?> payload, CancellationToken cancellationToken)
+    {
+        var dashboard = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard>(
+            await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false),
+            "The dashboard response could not be decoded.");
+        ValidateStorageDashboard(dashboard);
+        return dashboard;
+    }
+
+    private async Task<HomeAssistantDashboardResource> RequestResourceAsync(string command, IReadOnlyDictionary<string, object?> payload, CancellationToken cancellationToken)
+    {
+        var resource = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource>(
+            await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false),
+            "The Lovelace resource response could not be decoded.");
+        ValidateStorageResource(resource);
+        return resource;
+    }
+
+    private static void ValidateListedDashboard(HomeAssistantDashboard dashboard)
+    {
+        if (string.IsNullOrWhiteSpace(dashboard.UrlPath)
+            || string.IsNullOrWhiteSpace(dashboard.Title)
+            || string.IsNullOrWhiteSpace(dashboard.Mode))
+            throw new HomeAssistantProtocolException("A dashboard did not contain its required fields.");
+        if (string.Equals(dashboard.Mode, "storage", StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(dashboard.Id))
+            throw new HomeAssistantProtocolException("A storage dashboard did not contain its identifier.");
+        if (string.Equals(dashboard.Mode, "yaml", StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(dashboard.FileName))
+            throw new HomeAssistantProtocolException("A YAML dashboard did not contain its filename.");
+    }
+
+    private static void ValidateStorageDashboard(HomeAssistantDashboard dashboard)
+    {
+        ValidateListedDashboard(dashboard);
+        if (string.IsNullOrWhiteSpace(dashboard.Id))
+            throw new HomeAssistantProtocolException("A dashboard mutation response did not contain its identifier.");
+    }
+
+    private static void ValidateListedResource(HomeAssistantDashboardResource resource, string? resourceMode = null)
+    {
+        if (string.IsNullOrWhiteSpace(resource.Url)
+            || string.IsNullOrWhiteSpace(resource.Type))
+            throw new HomeAssistantProtocolException("A Lovelace resource did not contain its required fields.");
+        if (string.Equals(resourceMode, "storage", StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(resource.Id))
+            throw new HomeAssistantProtocolException("A storage Lovelace resource did not contain its identifier.");
+    }
+
+    private static void ValidateStorageResource(HomeAssistantDashboardResource resource)
+    {
+        ValidateListedResource(resource);
+        if (string.IsNullOrWhiteSpace(resource.Id))
+            throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not contain its identifier.");
+    }
+
+    private static string ResourceTypeName(HomeAssistantDashboardResourceType value) => value switch
+    {
+        HomeAssistantDashboardResourceType.JavaScript => "js",
+        HomeAssistantDashboardResourceType.Css => "css",
+        HomeAssistantDashboardResourceType.Module => "module",
+        HomeAssistantDashboardResourceType.Html => "html",
+        _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+
+    private static string Require(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", parameterName);
+        return value.Trim();
+    }
+
+    private static string RequireIcon(string value, string parameterName)
+    {
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(value, out var normalized))
+            throw new ArgumentException("A dashboard icon must use the 'prefix:name' form.", parameterName);
+        return normalized;
+    }
+}

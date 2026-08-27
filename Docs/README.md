@@ -16,6 +16,9 @@ Creates, verifies, and optionally stores the runspace's default Home Assistant c
 ### [Disconnect-HomeAssistant](Disconnect-HomeAssistant.md)
 Closes the supplied connection or the current runspace default.
 
+### [Export-HomeAssistantCameraSnapshot](Export-HomeAssistantCameraSnapshot.md)
+Exports one bounded camera snapshot through an atomic local-file replacement.
+
 ### [Export-HomeAssistantDiagnostic](Export-HomeAssistantDiagnostic.md)
 Downloads Home Assistant-redacted diagnostics for a configuration entry or one device.
 
@@ -28,6 +31,9 @@ Gets installed Supervisor-managed Home Assistant apps.
 ### [Get-HomeAssistantArea](Get-HomeAssistantArea.md)
 Lists Home Assistant areas (rooms), optionally within a floor.
 
+### [Get-HomeAssistantAutomation](Get-HomeAssistantAutomation.md)
+Reads automation runtime state or an administrator-only editable configuration.
+
 ### [Get-HomeAssistantBackup](Get-HomeAssistantBackup.md)
 Gets backups from a Supervisor-managed Home Assistant installation.
 
@@ -37,11 +43,17 @@ Lists Home Assistant calendar entities.
 ### [Get-HomeAssistantCalendarEvent](Get-HomeAssistantCalendarEvent.md)
 Gets events from one Home Assistant calendar over an explicit time range.
 
+### [Get-HomeAssistantCamera](Get-HomeAssistantCamera.md)
+Reads camera state, capabilities, stream details, preferences, or temporary signed paths.
+
 ### [Get-HomeAssistantCategory](Get-HomeAssistantCategory.md)
 Lists Home Assistant categories within an explicit registry scope.
 
 ### [Get-HomeAssistantConnection](Get-HomeAssistantConnection.md)
 Gets the default Home Assistant connection for the current PowerShell runspace.
+
+### [Get-HomeAssistantDashboard](Get-HomeAssistantDashboard.md)
+Reads Home Assistant frontend panels, Lovelace dashboards, configurations, resources, or mode information.
 
 ### [Get-HomeAssistantDevice](Get-HomeAssistantDevice.md)
 Lists Home Assistant devices, optionally filtered by area or floor.
@@ -79,6 +91,9 @@ Gets structured system-log entries or bounded Core, Supervisor, host, and app lo
 ### [Get-HomeAssistantLogbook](Get-HomeAssistantLogbook.md)
 Reads human-oriented Recorder logbook activity for a bounded time range.
 
+### [Get-HomeAssistantMedia](Get-HomeAssistantMedia.md)
+Browses, searches, or resolves Home Assistant media sources and media-player libraries.
+
 ### [Get-HomeAssistantNotification](Get-HomeAssistantNotification.md)
 Gets persistent notifications currently stored by Home Assistant.
 
@@ -103,6 +118,9 @@ Invokes any Home Assistant action with one target-oriented set of parameters.
 ### [Invoke-HomeAssistantApp](Invoke-HomeAssistantApp.md)
 Runs one explicit lifecycle operation for a Supervisor-managed Home Assistant app.
 
+### [Invoke-HomeAssistantAutomation](Invoke-HomeAssistantAutomation.md)
+Runs selected automation entities without changing their definitions.
+
 ### [Invoke-HomeAssistantRecorderMaintenance](Invoke-HomeAssistantRecorderMaintenance.md)
 Runs a bounded Recorder maintenance task.
 
@@ -124,11 +142,17 @@ Streams persistent-notification changes without polling.
 ### [Receive-HomeAssistantWeatherForecast](Receive-HomeAssistantWeatherForecast.md)
 Streams weather forecast updates without polling.
 
+### [Remove-HomeAssistantAutomation](Remove-HomeAssistantAutomation.md)
+Deletes one administrator-managed automation definition.
+
 ### [Remove-HomeAssistantCalendarEvent](Remove-HomeAssistantCalendarEvent.md)
 Deletes a Home Assistant calendar event or recurring occurrence.
 
 ### [Remove-HomeAssistantCategory](Remove-HomeAssistantCategory.md)
 Deletes a Home Assistant category from an explicit scope.
+
+### [Remove-HomeAssistantDashboard](Remove-HomeAssistantDashboard.md)
+Removes a Lovelace dashboard, its configuration, or a storage-mode resource.
 
 ### [Remove-HomeAssistantLabel](Remove-HomeAssistantLabel.md)
 Deletes a Home Assistant label.
@@ -145,8 +169,14 @@ Restarts Core, Supervisor, host, an app, or reloads one integration.
 ### [Send-HomeAssistantNotification](Send-HomeAssistantNotification.md)
 Sends a persistent notification or a message to selected notify entities.
 
+### [Set-HomeAssistantAutomation](Set-HomeAssistantAutomation.md)
+Creates or replaces one administrator-managed automation definition.
+
 ### [Set-HomeAssistantCalendarEvent](Set-HomeAssistantCalendarEvent.md)
 Creates or updates a timed or all-day Home Assistant calendar event.
+
+### [Set-HomeAssistantCamera](Set-HomeAssistantCamera.md)
+Updates administrator-only camera streaming preferences.
 
 ### [Set-HomeAssistantCategory](Set-HomeAssistantCategory.md)
 Creates or updates a Home Assistant category within an explicit scope.
@@ -156,6 +186,9 @@ Sets common climate values with typed parameters instead of raw action data.
 
 ### [Set-HomeAssistantCover](Set-HomeAssistantCover.md)
 Moves covers with a typed action, position, or tilt position.
+
+### [Set-HomeAssistantDashboard](Set-HomeAssistantDashboard.md)
+Creates or updates Lovelace dashboards, configurations, and storage-mode resources.
 
 ### [Set-HomeAssistantEnergy](Set-HomeAssistantEnergy.md)
 Updates one or more Energy dashboard preference collections.

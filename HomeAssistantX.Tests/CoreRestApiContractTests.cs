@@ -70,7 +70,7 @@ public sealed class CoreRestApiContractTests
         });
         var logbookPath = server.LastRequestPath;
         var errorLog = await client.Rest.GetErrorLogAsync();
-        var camera = await client.Rest.GetCameraImageAsync("camera.front");
+        var camera = await client.Rest.GetCameraImageAsync("camera.front", CancellationToken.None);
         var calendars = await client.Rest.GetCalendarsAsync();
         var calendarEvents = await client.Rest.GetCalendarEventsAsync("calendar.home", start, end);
 

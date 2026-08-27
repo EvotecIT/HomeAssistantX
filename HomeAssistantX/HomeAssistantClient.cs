@@ -1,12 +1,16 @@
 ﻿using System.Net.Http;
 using HomeAssistantX.Authentication;
+using HomeAssistantX.Automations;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Calendars;
+using HomeAssistantX.Cameras;
+using HomeAssistantX.Dashboards;
 using HomeAssistantX.Events;
 using HomeAssistantX.Energy;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Inventory;
+using HomeAssistantX.Media;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Notifications;
 using HomeAssistantX.Recorder;
@@ -42,6 +46,10 @@ public sealed class HomeAssistantClient : IDisposable
         Inventory = new HomeAssistantInventoryClient(Registries, States, Services);
         Controls = new HomeAssistantControlsClient(Services, States, options);
         System = new HomeAssistantSystemClient(WebSocket);
+        Cameras = new HomeAssistantCameraClient(Rest, States, WebSocket, System);
+        Media = new HomeAssistantMediaBrowserClient(WebSocket);
+        Dashboards = new HomeAssistantDashboardClient(WebSocket);
+        Automations = new HomeAssistantAutomationClient(States, Rest, Services);
         Operations = new HomeAssistantOperationsClient(Rest, WebSocket, States, Services);
         Supervisor = HomeAssistantSupervisorClient.CreateViaCore(Rest, WebSocket);
     }
@@ -74,6 +82,18 @@ public sealed class HomeAssistantClient : IDisposable
 
     /// <summary>Provides typed current weather observations and push-based forecasts.</summary>
     public HomeAssistantWeatherClient Weather { get; }
+
+    /// <summary>Provides camera state, bounded snapshots, streams, signed paths, preferences, and push updates.</summary>
+    public HomeAssistantCameraClient Cameras { get; }
+
+    /// <summary>Provides provider-neutral media-source and media-player browsing, search, and resolution.</summary>
+    public HomeAssistantMediaBrowserClient Media { get; }
+
+    /// <summary>Provides typed frontend panel and Lovelace dashboard, configuration, and resource access.</summary>
+    public HomeAssistantDashboardClient Dashboards { get; }
+
+    /// <summary>Provides automation runtime state/execution and administrator-only editable definitions.</summary>
+    public HomeAssistantAutomationClient Automations { get; }
 
     /// <summary>Provides a joined, queryable view of the house and its available actions.</summary>
     public HomeAssistantInventoryClient Inventory { get; }

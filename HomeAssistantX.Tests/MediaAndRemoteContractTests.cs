@@ -1111,6 +1111,26 @@ public sealed class MediaAndRemoteContractTests
         server.ExactStateResponseJson = "{\"entity_id\":\"remote.bedroom\",\"state\":\"on\",\"attributes\":{}}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(
             () => client.Controls.Remotes.GetAsync("remote.living_room"));
+
+    }
+
+    [Fact]
+    public async Task PlayerBrowseSelectorsAreIndependentlyOptionalAndNormalized()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Media.BrowsePlayerAsync("media_player.kitchen", mediaContentType: " music ");
+        using (var typeOnly = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("media_player/browse_media"))))
+        {
+            Assert.Equal("music", typeOnly.RootElement.GetProperty("media_content_type").GetString());
+            Assert.False(typeOnly.RootElement.TryGetProperty("media_content_id", out _));
+        }
+
+        await client.Media.BrowsePlayerAsync("media_player.kitchen", mediaContentId: " source-only ");
+        using var idOnly = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("media_player/browse_media")));
+        Assert.Equal("source-only", idOnly.RootElement.GetProperty("media_content_id").GetString());
+        Assert.False(idOnly.RootElement.TryGetProperty("media_content_type", out _));
     }
 
     [Fact]

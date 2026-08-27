@@ -24,15 +24,19 @@ Import-Module -Name $resolvedModulePath -Force -ErrorAction Stop
 $expectedCommands = @(
     'Connect-HomeAssistant',
     'Disconnect-HomeAssistant',
+    'Export-HomeAssistantCameraSnapshot',
     'Export-HomeAssistantDiagnostic',
     'Get-HomeAssistantAction',
     'Get-HomeAssistantApp',
     'Get-HomeAssistantArea',
+    'Get-HomeAssistantAutomation',
     'Get-HomeAssistantBackup',
     'Get-HomeAssistantCalendar',
     'Get-HomeAssistantCalendarEvent',
+    'Get-HomeAssistantCamera',
     'Get-HomeAssistantCategory',
     'Get-HomeAssistantConnection',
+    'Get-HomeAssistantDashboard',
     'Get-HomeAssistantDevice',
     'Get-HomeAssistantEnergy',
     'Get-HomeAssistantEntity',
@@ -45,6 +49,7 @@ $expectedCommands = @(
     'Get-HomeAssistantLabel',
     'Get-HomeAssistantLog',
     'Get-HomeAssistantLogbook',
+    'Get-HomeAssistantMedia',
     'Get-HomeAssistantNotification',
     'Get-HomeAssistantStatistic',
     'Get-HomeAssistantTrace',
@@ -53,6 +58,7 @@ $expectedCommands = @(
     'Install-HomeAssistantUpdate',
     'Invoke-HomeAssistantAction',
     'Invoke-HomeAssistantApp',
+    'Invoke-HomeAssistantAutomation',
     'Invoke-HomeAssistantRecorderMaintenance',
     'Invoke-HomeAssistantRemote',
     'New-HomeAssistantBackup',
@@ -60,17 +66,22 @@ $expectedCommands = @(
     'Receive-HomeAssistantEvent',
     'Receive-HomeAssistantNotification',
     'Receive-HomeAssistantWeatherForecast',
+    'Remove-HomeAssistantAutomation',
     'Remove-HomeAssistantCalendarEvent',
     'Remove-HomeAssistantCategory',
+    'Remove-HomeAssistantDashboard',
     'Remove-HomeAssistantLabel',
     'Remove-HomeAssistantNotification',
     'Remove-HomeAssistantStatistic',
     'Restart-HomeAssistant',
     'Send-HomeAssistantNotification',
+    'Set-HomeAssistantAutomation',
     'Set-HomeAssistantCalendarEvent',
+    'Set-HomeAssistantCamera',
     'Set-HomeAssistantCategory',
     'Set-HomeAssistantClimate',
     'Set-HomeAssistantCover',
+    'Set-HomeAssistantDashboard',
     'Set-HomeAssistantEnergy',
     'Set-HomeAssistantLabel',
     'Set-HomeAssistantLight',
@@ -93,6 +104,10 @@ $parameterSetContracts = @{
     'Get-HomeAssistantEnergy'     = @('FossilConsumption', 'Info', 'Preferences', 'SolarForecast', 'Validation')
     'Get-HomeAssistantStatistic'  = @('Catalog', 'Metadata', 'Values')
     'Get-HomeAssistantWeather'    = @('Current', 'Forecast', 'Units')
+    'Get-HomeAssistantCamera'     = @('Capabilities', 'Preferences', 'SignedImage', 'SignedMjpeg', 'Status', 'Stream')
+    'Get-HomeAssistantDashboard'  = @('Configuration', 'Dashboards', 'Info', 'Panels', 'Resources')
+    'Get-HomeAssistantMedia'      = @('Player', 'PlayerSearch', 'Resolve', 'Sources', 'SourceSearch')
+    'Get-HomeAssistantAutomation' = @('Configuration', 'Status')
     'Install-HomeAssistantUpdate' = @('App', 'Core', 'Entity', 'OperatingSystem', 'Supervisor')
     'Invoke-HomeAssistantAction'  = @('Area', 'Data', 'Device', 'Entity', 'Floor', 'Label')
     'Invoke-HomeAssistantRemote'  = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
@@ -103,6 +118,8 @@ $parameterSetContracts = @{
     'Set-HomeAssistantCategory'   = @('Create', 'Update')
     'Set-HomeAssistantLabel'      = @('Create', 'Update')
     'Set-HomeAssistantStatistic'  = @('AdjustSum', 'Import', 'Metadata', 'Unit')
+    'Set-HomeAssistantDashboard'  = @('Configuration', 'Create', 'ResourceCreate', 'ResourceUpdate', 'Update')
+    'Remove-HomeAssistantDashboard' = @('Configuration', 'Dashboard', 'Resource')
     'Restart-HomeAssistant'       = @('App', 'Core', 'Host', 'Integration', 'Supervisor')
     'Set-HomeAssistantClimate'    = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
     'Set-HomeAssistantCover'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
@@ -128,16 +145,18 @@ foreach ($command in Get-Command -Module $importedModuleName) {
     }
 }
 
-$operationalOutputTypeContracts = @{
+$outputTypeContracts = @{
     'Get-HomeAssistantEnergy' = @('HomeAssistantEnergyInfo', 'HomeAssistantEnergyPreferences', 'HomeAssistantFossilEnergyPeriod', 'IReadOnlyDictionary`2', 'JsonElement')
     'Get-HomeAssistantStatistic' = @('HomeAssistantStatisticMetadata', 'HomeAssistantStatisticSeries')
     'Get-HomeAssistantWeather' = @('HomeAssistantWeatherForecastUpdate', 'HomeAssistantWeatherObservation', 'IReadOnlyDictionary`2')
     'Install-HomeAssistantUpdate' = @('HomeAssistantServiceCallResult', 'JsonElement')
     'Invoke-HomeAssistantApp' = @('JsonElement')
     'Restart-HomeAssistant' = @('HomeAssistantIntegrationOperationResult', 'JsonElement')
+    'Set-HomeAssistantAutomation' = @('JsonElement')
+    'Set-HomeAssistantDashboard' = @('HomeAssistantDashboard', 'HomeAssistantDashboardResource', 'JsonElement')
     'Test-HomeAssistantStatistic' = @('JsonElement')
 }
-foreach ($entry in $operationalOutputTypeContracts.GetEnumerator()) {
+foreach ($entry in $outputTypeContracts.GetEnumerator()) {
     $actualTypes = @((Get-Command -Name $entry.Key).OutputType.Type.Name | Sort-Object)
     $expectedTypes = @($entry.Value | Sort-Object)
     if (($actualTypes -join '|') -ne ($expectedTypes -join '|')) {
@@ -165,7 +184,7 @@ foreach ($name in 'Action', 'Activity', 'Command', 'RemoteDevice', 'RepeatCount'
     }
 }
 
-foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch') {
+foreach ($name in 'Export-HomeAssistantCameraSnapshot', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantAutomation', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Remove-HomeAssistantAutomation', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantDashboard', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantAutomation', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCamera', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantDashboard', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch') {
     if (-not (Get-Command -Name $name).Parameters.ContainsKey('WhatIf')) {
         throw "$name must support ShouldProcess/WhatIf."
     }
@@ -312,6 +331,15 @@ try {
     if (-not $disposedProvenanceRejected) {
         throw 'A typed-control WhatIf preview accepted a disposed source connection.'
     }
+    $disposedConfirmationRejected = $false
+    try {
+        $null = Invoke-HomeAssistantAction -Connection $secondaryConnection light turn_on -EntityId light.kitchen -WhatIf -ErrorAction Stop
+    } catch {
+        $disposedConfirmationRejected = $true
+    }
+    if (-not $disposedConfirmationRejected) {
+        throw 'A ShouldProcess preview accepted a disposed explicit Home Assistant connection.'
+    }
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
@@ -361,6 +389,21 @@ try {
         throw 'The history cmdlet did not preserve Home Assistant default-start behavior for an end-only query.'
     }
 
+    foreach ($automationCommand in @(
+        { Set-HomeAssistantAutomation -AutomationId ' ' -ConfigurationJson '{"alias":"Morning","triggers":[],"actions":[]}' -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantAutomation -AutomationId ' ' -WhatIf -ErrorAction Stop }
+    )) {
+        $blankAutomationIdRejected = $false
+        try {
+            & $automationCommand
+        } catch {
+            $blankAutomationIdRejected = $true
+        }
+        if (-not $blankAutomationIdRejected) {
+            throw 'An automation configuration cmdlet accepted a blank identifier before WhatIf confirmation.'
+        }
+    }
+
     $floors = @(Get-HomeAssistantFloor)
     $areas = @(Get-HomeAssistantArea -Floor Ground)
     $devices = @(Get-HomeAssistantDevice -Area Kitchen)
@@ -395,6 +438,17 @@ try {
     $weatherUnits = Get-HomeAssistantWeather -ConvertibleUnits
     $weatherUpdates = @(Receive-HomeAssistantWeatherForecast weather.home -ForecastType Hourly -Count 1 -TimeoutSeconds 5)
     $logbook = @(Get-HomeAssistantLogbook -StartTime '2026-08-24T00:00:00Z' -EndTime '2026-08-26T00:00:00Z' -EntityId light.kitchen)
+    $cameraCapabilities = Get-HomeAssistantCamera camera.front -Capabilities
+    $cameraStream = Get-HomeAssistantCamera camera.front -Stream
+    $cameraPreferences = Get-HomeAssistantCamera camera.front -Preferences
+    $mediaRoot = Get-HomeAssistantMedia
+    $mediaSearch = @(Get-HomeAssistantMedia -PlayerEntityId media_player.kitchen -Search dinner -MediaClass music)
+    $resolvedMedia = Get-HomeAssistantMedia -Resolve -MediaContentId 'media-source://media_source/local/dinner.mp3' -ExpiresInSeconds 300
+    $dashboardPanels = @(Get-HomeAssistantDashboard -Panels)
+    $dashboards = @(Get-HomeAssistantDashboard)
+    $dashboardConfiguration = Get-HomeAssistantDashboard -Configuration
+    $dashboardResources = @(Get-HomeAssistantDashboard -Resources)
+    $automationConfiguration = Get-HomeAssistantAutomation morning-routine -Configuration
 
     if ($info.Version -ne '2026.8.3') { throw 'Core information was not returned.' }
     if (-not [object]::ReferenceEquals($connection, $defaultConnection)) { throw 'Connect-HomeAssistant did not establish the runspace default.' }
@@ -470,6 +524,17 @@ try {
     if (-not $weatherUnits.ContainsKey('temperature_unit')) { throw 'Weather convertible units were not returned.' }
     if ($weatherUpdates.Count -ne 1 -or $weatherUpdates[0].Forecast[0].Condition -ne 'rainy') { throw 'Weather forecast streaming was not returned.' }
     if ($logbook.Count -ne 1 -or $logbook[0].Message -ne 'turned on') { throw 'Recorder logbook activity was not returned.' }
+    if (-not @($cameraCapabilities.FrontendStreamTypes).Contains('web_rtc')) { throw 'Camera capabilities were not returned.' }
+    if (-not $cameraStream.Path.EndsWith('master_playlist.m3u8')) { throw 'Camera HLS stream was not returned.' }
+    if (-not $cameraPreferences.PreloadStream) { throw 'Camera preferences were not returned.' }
+    if ($mediaRoot.Title -ne 'Music' -or $mediaRoot.Children[0].Title -ne 'Dinner') { throw 'Media-source browsing was not returned.' }
+    if ($mediaSearch.Count -ne 1 -or $mediaSearch[0].Title -ne 'Dinner') { throw 'Media-player search was not returned.' }
+    if ($resolvedMedia.MimeType -ne 'audio/mpeg') { throw 'Media resolution was not returned.' }
+    if ($dashboardPanels.Count -ne 1 -or $dashboardPanels[0].UrlPath -ne 'lovelace') { throw 'Frontend panels were not returned.' }
+    if ($dashboards.Count -ne 1 -or $dashboards[0].Id -ne 'house-main') { throw 'Lovelace dashboards were not returned.' }
+    if ($dashboardConfiguration.GetProperty('views').GetArrayLength() -ne 1) { throw 'Lovelace configuration was not returned.' }
+    if ($dashboardResources.Count -ne 1 -or $dashboardResources[0].Id -ne 'resource-1') { throw 'Lovelace resources were not returned.' }
+    if ($automationConfiguration.AutomationId -ne 'morning-routine' -or $automationConfiguration.Definition.GetProperty('alias').GetString() -ne 'Morning') { throw 'Editable automation configuration was not returned.' }
 
     $server.StandardInput.WriteLine('SET_CASE_DISTINCT_LABELS')
     $server.StandardInput.Flush()
@@ -525,6 +590,17 @@ try {
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') { throw 'A whitespace-only notification value dispatched an action.' }
 
+    $cameraPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Camera-' + [Guid]::NewGuid().ToString('N') + '.jpg')
+    try {
+        [IO.File]::WriteAllText($cameraPath, 'old image')
+        $cameraFile = Export-HomeAssistantCameraSnapshot camera.front $cameraPath -Width 640 -Height 360 -Force -Confirm:$false
+        if (-not $cameraFile.Exists -or [IO.File]::ReadAllText($cameraPath) -ne 'test-image-bytes') { throw 'Camera snapshot export did not atomically replace the destination.' }
+        $temporaryPattern = '.' + [IO.Path]::GetFileName($cameraPath) + '.*.tmp'
+        if (@(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($cameraPath)) -Filter $temporaryPattern).Count -ne 0) { throw 'Camera snapshot export left a temporary file behind.' }
+    } finally {
+        if (Test-Path -LiteralPath $cameraPath) { Remove-Item -LiteralPath $cameraPath -Force }
+    }
+
     $null = Send-HomeAssistantNotification -Persistent -Message 'Garage is open' -Title Security -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
@@ -556,6 +632,11 @@ try {
     $null = Remove-HomeAssistantStatistic sensor.grid_energy -WhatIf
     $null = Invoke-HomeAssistantRecorderMaintenance -Purge -KeepDays 30 -WhatIf
     $null = Invoke-HomeAssistantRecorderMaintenance -RefreshStatisticsIssues -Confirm:$false
+    $null = Set-HomeAssistantCamera camera.front -PreloadStream $false -WhatIf
+    $null = Set-HomeAssistantDashboard -ConfigurationJson '{"views":[]}' -WhatIf
+    $null = Set-HomeAssistantAutomation morning-routine '{"alias":"Morning","triggers":[],"actions":[]}' -WhatIf
+    $null = Remove-HomeAssistantAutomation morning-routine -WhatIf
+    $null = Remove-HomeAssistantDashboard -Configuration -UrlPath house-main -WhatIf
 
     $null = Set-HomeAssistantStatistic -StatisticId ' sensor.grid_energy ' -UnitOfMeasurement MWh -Confirm:$false
     $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_UPDATE')
@@ -676,7 +757,23 @@ try {
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain SENSOR -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain ' ' -WhatIf -ErrorAction Stop }
-        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.kitchen -KeepDays -1 -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantCamera camera.front -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantCamera camera.Front -PreloadStream $true -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -ConfigurationJson '[]' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -New -UrlPath house -Title House -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -New -UrlPath house-main -Title ' ' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -New -UrlPath ' ' -Title House -AllowSingleWord -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -New -UrlPath house-main -Title House -Icon home -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -DashboardId ' ' -Title House -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -DashboardId house-main -Title ' ' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -DashboardId house-main -Icon home -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -NewResource -ResourceUrl ' ' -ResourceType Module -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -ResourceId ' ' -ResourceUrl /local/card.js -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -ConfigurationJson '{}' -UrlPath ' ' -WhatIf -ErrorAction Stop }
+        { Remove-HomeAssistantDashboard ' ' -WhatIf -ErrorAction Stop }
+        { Remove-HomeAssistantDashboard -ResourceId ' ' -WhatIf -ErrorAction Stop }
+        { Remove-HomeAssistantDashboard -Configuration -UrlPath ' ' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantAutomation morning-routine '[]' -WhatIf -ErrorAction Stop }
     )) {
         $rejected = $false
         try { $null = & $invalidPlatformData } catch { $rejected = $true }
