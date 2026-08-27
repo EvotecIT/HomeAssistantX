@@ -23,6 +23,10 @@ public sealed class HomeAssistantDashboardClient
             var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.");
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
+            if (property.Value.ValueKind != JsonValueKind.Object
+                || !property.Value.TryGetProperty("require_admin", out var requireAdmin)
+                || requireAdmin.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                throw new HomeAssistantProtocolException("A frontend panel did not contain its required administrator requirement.");
             var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(property.Value, "A frontend panel could not be decoded.");
             if (string.IsNullOrWhiteSpace(panel.UrlPath))
             {

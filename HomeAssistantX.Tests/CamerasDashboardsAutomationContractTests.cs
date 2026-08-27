@@ -395,6 +395,12 @@ public sealed class CamerasDashboardsAutomationContractTests
         server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\" \"}}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
 
+        server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\"lovelace\",\"show_in_sidebar\":true}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\"lovelace\",\"show_in_sidebar\":true,\"require_admin\":0}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
         server.LovelaceInfoResponseJson = "{}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetInfoAsync());
     }
@@ -454,7 +460,7 @@ public sealed class CamerasDashboardsAutomationContractTests
     {
         using var server = new TestHomeAssistantServer
         {
-            FrontendPanelsResponseJson = "{\"config/integrations\":{\"component_name\":\"config\"}}"
+            FrontendPanelsResponseJson = "{\"config/integrations\":{\"component_name\":\"config\",\"require_admin\":true}}"
         };
         using var client = TestClientFactory.Create(server);
 
