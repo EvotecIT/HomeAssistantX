@@ -56,9 +56,14 @@ public sealed class HomeAssistantAutomationClient
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
         var value = await _rest.SendAsync<JsonElement>(HttpMethod.Get, ConfigurationPath(id), null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Home Assistant returned a non-object automation definition.");
-        if (!value.TryGetProperty("id", out var responseId)
-            || responseId.ValueKind != JsonValueKind.String
-            || !string.Equals(responseId.GetString(), id, StringComparison.Ordinal))
+        if (HasDuplicateProperties(value)) throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with duplicate JSON properties.");
+        var responseIds = value.EnumerateObject()
+            .Where(property => property.NameEquals("id"))
+            .Select(property => property.Value)
+            .ToArray();
+        if (responseIds.Length != 1
+            || responseIds[0].ValueKind != JsonValueKind.String
+            || !string.Equals(responseIds[0].GetString(), id, StringComparison.Ordinal))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with a mismatched identifier.");
         }
@@ -71,6 +76,7 @@ public sealed class HomeAssistantAutomationClient
         cancellationToken.ThrowIfCancellationRequested();
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
         if (definition.ValueKind != JsonValueKind.Object) throw new ArgumentException("An automation definition JSON object is required.", nameof(definition));
+        if (HasDuplicateProperties(definition)) throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", nameof(definition));
         var definitionIds = definition.EnumerateObject()
             .Where(property => property.NameEquals("id"))
             .Select(property => property.Value)
@@ -110,6 +116,22 @@ public sealed class HomeAssistantAutomationClient
             CurrentRuns = HomeAssistantAttributeReader.GetNonNegativeInt64(state.Attributes, "current"),
             RawState = state
         };
+    }
+
+    private static bool HasDuplicateProperties(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            return value.EnumerateArray().Any(HasDuplicateProperties);
+        }
+        if (value.ValueKind != JsonValueKind.Object) return false;
+
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in value.EnumerateObject())
+        {
+            if (!names.Add(property.Name) || HasDuplicateProperties(property.Value)) return true;
+        }
+        return false;
     }
 
     private static string ValidateEntityId(string entityId)

@@ -671,6 +671,9 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("{\"alias\":\"Morning\"}")]
     [InlineData("{\"id\":\"other-routine\",\"alias\":\"Morning\"}")]
     [InlineData("{\"id\":42,\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"other-routine\",\"id\":\"morning-routine\",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"alias\":\"First\",\"alias\":\"Second\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"actions\":[{\"service\":\"light.turn_on\",\"service\":\"light.turn_off\"}]}")]
     public async Task AutomationConfigurationCorrelatesReturnedIdentifier(string response)
     {
         using var server = new TestHomeAssistantServer { AutomationConfigurationResponseJson = response };
@@ -734,7 +737,9 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("{\"id\":42,\"alias\":\"Morning\"}")]
     [InlineData("{\"id\":\" morning-routine \",\"alias\":\"Morning\"}")]
     [InlineData("{\"id\":\"morning-routine\",\"id\":\"morning-routine\",\"alias\":\"Morning\"}")]
-    public async Task AutomationConfigurationSaveRejectsConflictingIdentifiersBeforeDispatch(string json)
+    [InlineData("{\"id\":\"morning-routine\",\"alias\":\"First\",\"alias\":\"Second\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"actions\":[{\"service\":\"light.turn_on\",\"service\":\"light.turn_off\"}]}")]
+    public async Task AutomationConfigurationSaveRejectsAmbiguousDefinitionsBeforeDispatch(string json)
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
