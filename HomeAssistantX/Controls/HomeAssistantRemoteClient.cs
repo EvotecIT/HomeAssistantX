@@ -69,6 +69,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         string? activity = null,
         CancellationToken cancellationToken = default)
     {
+        var normalizedActivity = activity is null ? null : ControlValidation.Required(activity, nameof(activity));
         var service = action switch
         {
             HomeAssistantPowerAction.On => "turn_on",
@@ -79,9 +80,9 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         return CallAsync(
             service,
             target,
-            string.IsNullOrWhiteSpace(activity)
+            normalizedActivity is null
                 ? null
-                : call => call.WithData("activity", activity),
+                : call => call.WithData("activity", normalizedActivity),
             cancellationToken);
     }
 
@@ -92,15 +93,16 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         var values = ValidateCommands(commands, nameof(commands));
+        var device = options?.Device is null ? null : ControlValidation.Required(options.Device, nameof(options.Device));
         return CallAsync(
             "send_command",
             target,
             call =>
             {
                 call.WithData("command", values);
-                if (!string.IsNullOrWhiteSpace(options?.Device))
+                if (device is not null)
                 {
-                    call.WithData("device", options!.Device);
+                    call.WithData("device", device);
                 }
 
                 if (options?.RepeatCount.HasValue == true)
@@ -126,6 +128,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         HomeAssistantRemoteLearnOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        var device = options?.Device is null ? null : ControlValidation.Required(options.Device, nameof(options.Device));
         var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(
             options?.Timeout,
             _options.RequestTimeout,
@@ -156,9 +159,9 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
             target,
             call =>
             {
-                if (!string.IsNullOrWhiteSpace(options?.Device))
+                if (device is not null)
                 {
-                    call.WithData("device", options!.Device);
+                    call.WithData("device", device);
                 }
 
                 if (commands is not null)
@@ -209,15 +212,16 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         var values = ValidateCommands(commands, nameof(commands));
+        var normalizedDevice = device is null ? null : ControlValidation.Required(device, nameof(device));
         return CallAsync(
             "delete_command",
             target,
             call =>
             {
                 call.WithData("command", values);
-                if (!string.IsNullOrWhiteSpace(device))
+                if (normalizedDevice is not null)
                 {
-                    call.WithData("device", device);
+                    call.WithData("device", normalizedDevice);
                 }
             },
             cancellationToken);

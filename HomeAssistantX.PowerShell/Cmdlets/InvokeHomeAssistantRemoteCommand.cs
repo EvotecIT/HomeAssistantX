@@ -88,6 +88,8 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
         ValidateFiniteDuration(DelaySeconds, nameof(DelaySeconds), allowZero: true);
         ValidateFiniteDuration(HoldSeconds, nameof(HoldSeconds), allowZero: true);
         ValidateFiniteDuration(TimeoutSeconds, nameof(TimeoutSeconds), allowZero: false);
+        var activity = Activity is null ? null : RequireSelector(Activity, nameof(Activity));
+        var remoteDevice = RemoteDevice is null ? null : RequireSelector(RemoteDevice, nameof(RemoteDevice));
         ValidateShape();
         var target = await ResolveTargetAsync("remote").ConfigureAwait(false);
         var learningTimeout = ToDuration(TimeoutSeconds);
@@ -121,17 +123,17 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
         var result = Action switch
         {
             HomeAssistantRemoteAction.TurnOn => await Client.Controls.Remotes.SetPowerAsync(
-                target.Target, HomeAssistantPowerAction.On, Activity, CancelToken).ConfigureAwait(false),
+                target.Target, HomeAssistantPowerAction.On, activity, CancelToken).ConfigureAwait(false),
             HomeAssistantRemoteAction.TurnOff => await Client.Controls.Remotes.SetPowerAsync(
-                target.Target, HomeAssistantPowerAction.Off, Activity, CancelToken).ConfigureAwait(false),
+                target.Target, HomeAssistantPowerAction.Off, activity, CancelToken).ConfigureAwait(false),
             HomeAssistantRemoteAction.Toggle => await Client.Controls.Remotes.SetPowerAsync(
-                target.Target, HomeAssistantPowerAction.Toggle, Activity, CancelToken).ConfigureAwait(false),
+                target.Target, HomeAssistantPowerAction.Toggle, activity, CancelToken).ConfigureAwait(false),
             HomeAssistantRemoteAction.SendCommand => await Client.Controls.Remotes.SendCommandsAsync(
                 target.Target,
                 Command!,
                 new HomeAssistantRemoteSendOptions
                 {
-                    Device = RemoteDevice,
+                    Device = remoteDevice,
                     RepeatCount = RepeatCount,
                     Delay = ToDuration(DelaySeconds),
                     Hold = ToDuration(HoldSeconds)
@@ -141,7 +143,7 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
                 target.Target,
                 new HomeAssistantRemoteLearnOptions
                 {
-                    Device = RemoteDevice,
+                    Device = remoteDevice,
                     Commands = Command,
                     CommandType = CommandType,
                     Alternative = Alternative,
@@ -149,10 +151,17 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
                 },
                 CancelToken).ConfigureAwait(false),
             HomeAssistantRemoteAction.DeleteCommand => await Client.Controls.Remotes.DeleteCommandsAsync(
-                target.Target, Command!, RemoteDevice, CancelToken).ConfigureAwait(false),
+                target.Target, Command!, remoteDevice, CancelToken).ConfigureAwait(false),
             _ => throw new ArgumentOutOfRangeException(nameof(Action), Action, "Unsupported remote action.")
         };
         WriteObject(result);
+    }
+
+    private static string RequireSelector(string value, string parameterName)
+    {
+        var normalized = value.Trim();
+        if (normalized.Length == 0) throw new ArgumentException("A non-empty selector is required.", parameterName);
+        return normalized;
     }
 
     private void ValidateShape()

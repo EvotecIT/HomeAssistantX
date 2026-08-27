@@ -336,7 +336,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             cancellationToken);
     }
 
-    private static IReadOnlyDictionary<string, object?>? FreezeMediaExtra(
+    internal static IReadOnlyDictionary<string, object?>? FreezeMediaExtra(
         IReadOnlyDictionary<string, object?>? extra,
         string parameterName)
     {

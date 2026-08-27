@@ -580,6 +580,23 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task RemoteSelectorsRejectBlankValuesBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("remote.living_room");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.SetPowerAsync(target, HomeAssistantPowerAction.On, " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.SendCommandsAsync(
+            target, new[] { "power" }, new HomeAssistantRemoteSendOptions { Device = " " }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.LearnCommandsAsync(
+            target, new HomeAssistantRemoteLearnOptions { Device = " " }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.DeleteCommandsAsync(target, new[] { "power" }, " "));
+
+        Assert.Empty(server.ServiceCallBodies);
+    }
+
+    [Fact]
     public async Task RemoteLearningSendsAnEffectiveDefaultInsideTheTransportDeadline()
     {
         using var server = new TestHomeAssistantServer();

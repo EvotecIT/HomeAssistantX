@@ -292,7 +292,7 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             result.Add(key, entry.Value);
         }
 
-        return result;
+        return HomeAssistantMediaPlayerClient.FreezeMediaExtra(result, nameof(MediaExtra));
     }
 
     private static TimeSpan? ToTimeSpan(double? value, string name)
