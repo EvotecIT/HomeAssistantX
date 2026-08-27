@@ -148,6 +148,21 @@ public sealed class CamerasDashboardsAutomationContractTests
             "camera.front", new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
     }
 
+    [Fact]
+    public async Task CameraSignedPathsRejectMismatchedRoutes()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SignedPathResponseJson = "{\"path\":\"/api/camera_proxy/camera.other?authSig=signed\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Cameras.GetSignedImagePathAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Cameras.GetSignedMjpegStreamPathAsync("camera.front"));
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"preload_stream\":true}")]
@@ -235,6 +250,24 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         Assert.Null(Assert.Single(await client.Automations.GetAsync()).CurrentRuns);
+    }
+
+    [Fact]
+    public async Task CameraAndAutomationListingsRejectDuplicateEntityIdentities()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        server.SetStates("["
+            + "{\"entity_id\":\"camera.front\",\"state\":\"idle\",\"attributes\":{}},"
+            + "{\"entity_id\":\"camera.front\",\"state\":\"streaming\",\"attributes\":{}}]");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetAsync());
+
+        server.SetStates("["
+            + "{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{}},"
+            + "{\"entity_id\":\"automation.morning\",\"state\":\"off\",\"attributes\":{}}]");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Automations.GetAsync());
     }
 
     [Fact]
@@ -682,6 +715,23 @@ public sealed class CamerasDashboardsAutomationContractTests
             client.Automations.SaveConfigurationAsync(automationId, definition.RootElement));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             client.Automations.DeleteConfigurationAsync(automationId));
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Theory]
+    [InlineData("{\"id\":\"other-routine\",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":42,\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\" morning-routine \",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"id\":\"morning-routine\",\"alias\":\"Morning\"}")]
+    public async Task AutomationConfigurationSaveRejectsConflictingIdentifiersBeforeDispatch(string json)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var definition = JsonDocument.Parse(json);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Automations.SaveConfigurationAsync("morning-routine", definition.RootElement));
+
         Assert.Null(server.LastRequestBody);
     }
 }

@@ -68,8 +68,20 @@ public sealed class HomeAssistantAutomationClient
     /// <summary>Creates or replaces an editable automation definition and requests a targeted automation reload.</summary>
     public async Task<JsonElement> SaveConfigurationAsync(string automationId, JsonElement definition, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
         if (definition.ValueKind != JsonValueKind.Object) throw new ArgumentException("An automation definition JSON object is required.", nameof(definition));
+        var definitionIds = definition.EnumerateObject()
+            .Where(property => property.NameEquals("id"))
+            .Select(property => property.Value)
+            .ToArray();
+        if (definitionIds.Length > 1
+            || (definitionIds.Length == 1
+                && (definitionIds[0].ValueKind != JsonValueKind.String
+                    || !string.Equals(definitionIds[0].GetString(), id, StringComparison.Ordinal))))
+        {
+            throw new ArgumentException("An automation definition identifier must match the requested automation identifier.", nameof(definition));
+        }
         return await _rest.SendAsync<JsonElement>(HttpMethod.Post, ConfigurationPath(id), definition.Clone(), cancellationToken).ConfigureAwait(false);
     }
 
