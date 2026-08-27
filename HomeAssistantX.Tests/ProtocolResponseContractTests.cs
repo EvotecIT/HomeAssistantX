@@ -81,6 +81,17 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
+    public void RawStateAttributesRetainSystemTextJsonTimestampCompatibility()
+    {
+        using var document = JsonDocument.Parse("\"2026-08-27T18:00:00\"");
+        var state = new HomeAssistantState();
+        state.Attributes["provider_timestamp"] = document.RootElement.Clone();
+
+        Assert.True(state.TryGetAttribute<DateTimeOffset>("provider_timestamp", out var timestamp));
+        Assert.Equal(2026, timestamp.Year);
+    }
+
+    [Fact]
     public void JsonSnapshotHelpersClassifyInvalidValuesBeforeTransport()
     {
         var undefined = new Dictionary<string, object?> { ["value"] = default(JsonElement) };

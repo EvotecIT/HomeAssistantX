@@ -18,9 +18,12 @@ internal static class HomeAssistantJson
         Converters = { new HomeAssistantDateTimeOffsetConverter() }
     };
 
-    public static JsonSerializerOptions RawSerializerOptions { get; } = new(SerializerOptions)
+    public static JsonSerializerOptions RawSerializerOptions { get; } = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     public static JsonElement Clone(JsonElement value)
