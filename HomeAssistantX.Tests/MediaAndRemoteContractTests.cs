@@ -184,12 +184,15 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal(1, status.RawState.Attributes["future_remote_field"].GetProperty("value").GetInt32());
     }
 
-    [Fact]
-    public void RemoteStatusRejectsNegativeCapabilityMasks()
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("2147483648")]
+    [InlineData("4294967297")]
+    public void RemoteStatusRejectsCapabilityMasksOutsideTheEnumRange(string value)
     {
         var raw = DeserializeState(
             "{\"entity_id\":\"remote.bad\",\"state\":\"on\",\"attributes\":{" +
-            "\"supported_features\":-1}}");
+            "\"supported_features\":" + value + "}}");
 
         var status = HomeAssistantRemoteStatus.FromState(raw);
 
