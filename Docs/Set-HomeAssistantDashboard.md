@@ -268,7 +268,7 @@ Accept wildcard characters: False
 ```
 
 ### -ResourceType
-Specifies a value for resource type.
+Dashboard resource type. Required when creating a resource; optional when updating one.
 
 ```yaml
 Type: HomeAssistantDashboardResourceType
@@ -284,7 +284,7 @@ Accept wildcard characters: False
 ```
 
 ### -ResourceUrl
-Specifies a value for resource url.
+Dashboard resource URL. Required when creating a resource; optional when updating one.
 
 ```yaml
 Type: String
@@ -316,7 +316,7 @@ Accept wildcard characters: False
 ```
 
 ### -Title
-Specifies a value for title.
+Dashboard title. Required when creating a dashboard; optional when updating one.
 
 ```yaml
 Type: String
@@ -332,7 +332,7 @@ Accept wildcard characters: False
 ```
 
 ### -UrlPath
-Specifies a value for url path.
+Dashboard URL path. Required when creating a dashboard; optional when targeting a stored configuration.
 
 ```yaml
 Type: String

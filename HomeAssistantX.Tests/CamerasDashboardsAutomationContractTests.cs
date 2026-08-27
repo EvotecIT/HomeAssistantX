@@ -265,6 +265,27 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.SearchSourcesAsync("dinner"));
     }
 
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"can_expand\":true}")]
+    [InlineData("{\"title\":\"Music\",\"can_play\":false}")]
+    [InlineData("{\"title\":\"Music\",\"can_play\":0,\"can_expand\":true}")]
+    public async Task MediaBrowseRejectsMissingOrInvalidActionabilityFlags(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task MediaSearchRejectsMissingActionabilityFlags()
+    {
+        using var server = new TestHomeAssistantServer { MediaSearchResponseJson = "{\"result\":[{\"title\":\"Music\"}]}" };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.SearchSourcesAsync("music"));
+    }
+
     [Fact]
     public async Task DashboardsExposeReadModelsAndGuardStorageMutations()
     {
@@ -311,7 +332,13 @@ public sealed class CamerasDashboardsAutomationContractTests
         server.DashboardListResponseJson = "[{\"id\":\"\",\"url_path\":\"house-main\",\"title\":\"House\",\"mode\":\"storage\"}]";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
 
-        server.DashboardListResponseJson = "[{\"url_path\":\"yaml-home\",\"title\":\"YAML Home\",\"mode\":\"yaml\",\"filename\":\"ui-lovelace.yaml\"}]";
+        server.DashboardListResponseJson = "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"mode\":\"storage\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.DashboardListResponseJson = "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":false,\"require_admin\":0,\"mode\":\"storage\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.DashboardListResponseJson = "[{\"url_path\":\"yaml-home\",\"title\":\"YAML Home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"yaml\",\"filename\":\"ui-lovelace.yaml\"}]";
         Assert.Empty(Assert.Single(await client.Dashboards.GetDashboardsAsync()).Id);
 
         server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\" \",\"title\":\"House\",\"mode\":\"storage\"}";

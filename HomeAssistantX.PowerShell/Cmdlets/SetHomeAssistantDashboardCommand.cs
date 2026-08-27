@@ -21,10 +21,12 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
     private const string ResourceUpdateSet = "ResourceUpdate";
 
     [Parameter(Mandatory = true, ParameterSetName = ConfigurationSet)][ValidateNotNullOrEmpty] public string? ConfigurationJson { get; set; }
+    /// <summary>Dashboard URL path. Required when creating a dashboard; optional when targeting a stored configuration.</summary>
     [Parameter(ParameterSetName = ConfigurationSet)]
     [Parameter(Mandatory = true, ParameterSetName = CreateSet)]
     [ValidateNotNullOrEmpty] public string? UrlPath { get; set; }
     [Parameter(Mandatory = true, ParameterSetName = CreateSet)][ValidateSwitchPresent] public SwitchParameter New { get; set; }
+    /// <summary>Dashboard title. Required when creating a dashboard; optional when updating one.</summary>
     [Parameter(Mandatory = true, ParameterSetName = CreateSet)]
     [Parameter(ParameterSetName = UpdateSet)]
     [ValidateNotNullOrEmpty] public string? Title { get; set; }
@@ -39,9 +41,11 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
     [Parameter(ParameterSetName = UpdateSet)] public bool? DashboardRequireAdmin { get; set; }
     [Parameter(Mandatory = true, ParameterSetName = ResourceCreateSet)][ValidateSwitchPresent] public SwitchParameter NewResource { get; set; }
     [Parameter(Mandatory = true, ParameterSetName = ResourceUpdateSet)][ValidateNotNullOrEmpty] public string? ResourceId { get; set; }
+    /// <summary>Dashboard resource URL. Required when creating a resource; optional when updating one.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ResourceCreateSet)]
     [Parameter(ParameterSetName = ResourceUpdateSet)]
     [ValidateNotNullOrEmpty] public string? ResourceUrl { get; set; }
+    /// <summary>Dashboard resource type. Required when creating a resource; optional when updating one.</summary>
     [Parameter(Mandatory = true, ParameterSetName = ResourceCreateSet)]
     [Parameter(ParameterSetName = ResourceUpdateSet)] public HomeAssistantDashboardResourceType? ResourceType { get; set; }
     [Parameter] public SwitchParameter PassThru { get; set; }

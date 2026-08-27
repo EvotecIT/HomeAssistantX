@@ -74,6 +74,7 @@ public sealed class HomeAssistantMediaBrowserClient
         var response = HomeAssistantJson.DeserializeResponse<HomeAssistantMediaSearchResponse>(value, "The media search response could not be decoded.");
         if (response.Items is null)
             throw new HomeAssistantProtocolException("The media search response contained a null result.");
+        foreach (var item in result.EnumerateArray()) ValidateItemShape(item);
         HomeAssistantJson.RequireNoNullCollectionEntries(response.Items, "The media search response contained a null result.");
         foreach (var item in response.Items) ValidateItemCollections(item);
         return response;
@@ -81,9 +82,27 @@ public sealed class HomeAssistantMediaBrowserClient
 
     private static HomeAssistantMediaItem DecodeItem(JsonElement value)
     {
+        ValidateItemShape(value);
         var result = HomeAssistantJson.DeserializeResponse<HomeAssistantMediaItem>(value, "The media browse response could not be decoded.");
         ValidateItemCollections(result);
         return result;
+    }
+
+    private static void ValidateItemShape(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object
+            || !value.TryGetProperty("can_play", out var canPlay)
+            || canPlay.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+            || !value.TryGetProperty("can_expand", out var canExpand)
+            || canExpand.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new HomeAssistantProtocolException("The media response omitted its required actionability flags.");
+        }
+
+        if (!value.TryGetProperty("children", out var children)) return;
+        if (children.ValueKind != JsonValueKind.Array)
+            throw new HomeAssistantProtocolException("The media response contained an invalid children collection.");
+        foreach (var child in children.EnumerateArray()) ValidateItemShape(child);
     }
 
     private static void ValidateItemCollections(HomeAssistantMediaItem item)

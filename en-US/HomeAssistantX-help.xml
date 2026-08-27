@@ -15441,7 +15441,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>UrlPath</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for url path.</maml:para>
+            <maml:para>Dashboard URL path. Required when creating a dashboard; optional when targeting a stored configuration.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -15540,7 +15540,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Title</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for title.</maml:para>
+            <maml:para>Dashboard title. Required when creating a dashboard; optional when updating one.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -15552,7 +15552,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>UrlPath</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for url path.</maml:para>
+            <maml:para>Dashboard URL path. Required when creating a dashboard; optional when targeting a stored configuration.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -15651,7 +15651,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Title</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for title.</maml:para>
+            <maml:para>Dashboard title. Required when creating a dashboard; optional when updating one.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -15702,7 +15702,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ResourceType</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for resource type.</maml:para>
+            <maml:para>Dashboard resource type. Required when creating a resource; optional when updating one.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">HomeAssistantDashboardResourceType</command:parameterValue>
           <command:parameterValueGroup>
@@ -15720,7 +15720,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ResourceUrl</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for resource url.</maml:para>
+            <maml:para>Dashboard resource URL. Required when creating a resource; optional when updating one.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -15771,7 +15771,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ResourceType</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for resource type.</maml:para>
+            <maml:para>Dashboard resource type. Required when creating a resource; optional when updating one.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">HomeAssistantDashboardResourceType</command:parameterValue>
           <command:parameterValueGroup>
@@ -15789,7 +15789,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ResourceUrl</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for resource url.</maml:para>
+            <maml:para>Dashboard resource URL. Required when creating a resource; optional when updating one.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -15960,7 +15960,7 @@
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>ResourceType</maml:name>
         <maml:description>
-          <maml:para>Specifies a value for resource type.</maml:para>
+          <maml:para>Dashboard resource type. Required when creating a resource; optional when updating one.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">HomeAssistantDashboardResourceType</command:parameterValue>
         <command:parameterValueGroup>
@@ -15978,7 +15978,7 @@
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>ResourceUrl</maml:name>
         <maml:description>
-          <maml:para>Specifies a value for resource url.</maml:para>
+          <maml:para>Dashboard resource URL. Required when creating a resource; optional when updating one.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -16002,7 +16002,7 @@
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Title</maml:name>
         <maml:description>
-          <maml:para>Specifies a value for title.</maml:para>
+          <maml:para>Dashboard title. Required when creating a dashboard; optional when updating one.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -16014,7 +16014,7 @@
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>UrlPath</maml:name>
         <maml:description>
-          <maml:para>Specifies a value for url path.</maml:para>
+          <maml:para>Dashboard URL path. Required when creating a dashboard; optional when targeting a stored configuration.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>

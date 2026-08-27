@@ -47,8 +47,12 @@ public sealed class HomeAssistantDashboardClient
 
     public async Task<IReadOnlyList<HomeAssistantDashboard>> GetDashboardsAsync(CancellationToken cancellationToken = default)
     {
+        var value = await _webSocket.RequestAsync("lovelace/dashboards/list", null, cancellationToken).ConfigureAwait(false);
+        if (value.ValueKind != JsonValueKind.Array)
+            throw new HomeAssistantProtocolException("The dashboard list had an unexpected shape.");
+        foreach (var item in value.EnumerateArray()) RequireDashboardVisibility(item, "A dashboard did not contain its required visibility fields.");
         var dashboards = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard[]>(
-            await _webSocket.RequestAsync("lovelace/dashboards/list", null, cancellationToken).ConfigureAwait(false),
+            value,
             "The dashboard list could not be decoded.");
         foreach (var dashboard in dashboards) ValidateListedDashboard(dashboard);
         return dashboards;
@@ -194,13 +198,7 @@ public sealed class HomeAssistantDashboardClient
             value,
             "The dashboard response could not be decoded.");
         ValidateStorageDashboard(dashboard);
-        if (!value.TryGetProperty("show_in_sidebar", out var showInSidebar)
-            || showInSidebar.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
-            || !value.TryGetProperty("require_admin", out var requireAdmin)
-            || requireAdmin.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-        {
-            throw new HomeAssistantProtocolException("A dashboard mutation response did not contain its required visibility fields.");
-        }
+        RequireDashboardVisibility(value, "A dashboard mutation response did not contain its required visibility fields.");
         if (expectedDashboardId is not null && !string.Equals(dashboard.Id, expectedDashboardId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested identifier.");
         if (expectedUrlPath is not null && !string.Equals(dashboard.UrlPath, expectedUrlPath, StringComparison.Ordinal))
@@ -253,6 +251,18 @@ public sealed class HomeAssistantDashboardClient
         if (string.Equals(dashboard.Mode, "yaml", StringComparison.Ordinal)
             && string.IsNullOrWhiteSpace(dashboard.FileName))
             throw new HomeAssistantProtocolException("A YAML dashboard did not contain its filename.");
+    }
+
+    private static void RequireDashboardVisibility(JsonElement value, string failureMessage)
+    {
+        if (value.ValueKind != JsonValueKind.Object
+            || !value.TryGetProperty("show_in_sidebar", out var showInSidebar)
+            || showInSidebar.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+            || !value.TryGetProperty("require_admin", out var requireAdmin)
+            || requireAdmin.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new HomeAssistantProtocolException(failureMessage);
+        }
     }
 
     private static void ValidateStorageDashboard(HomeAssistantDashboard dashboard)
