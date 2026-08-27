@@ -31,7 +31,7 @@ public sealed class HomeAssistantUpdateClient
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
         var updates = states
             .Where(state => string.Equals(state.Domain, "update", StringComparison.OrdinalIgnoreCase))
-            .Select(ToUpdate)
+            .Select(state => ToUpdate(HomeAssistantEntityId.RequireResponseDomain(state, "update")))
             .Where(update => !availableOnly || update.IsAvailable)
             .ToArray();
         return updates;

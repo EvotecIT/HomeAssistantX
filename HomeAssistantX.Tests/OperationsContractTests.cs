@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Supervisor;
 using HomeAssistantX.Tests.Infrastructure;
@@ -128,6 +129,17 @@ public sealed class OperationsContractTests
 
         Assert.Null(server.GetLastWebSocketCommand("update/release_notes"));
         Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task UpdateBulkReadRejectsMalformedServerEntityIds()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"update.core.extra\",\"state\":\"on\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Operations.Updates.GetAllAsync());
     }
 
     [Fact]

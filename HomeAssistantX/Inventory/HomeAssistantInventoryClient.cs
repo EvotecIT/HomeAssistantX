@@ -73,8 +73,8 @@ public sealed class HomeAssistantInventoryClient
         var areasById = registries.Areas.ToDictionary(x => x.AreaId, StringComparer.OrdinalIgnoreCase);
         var floorsById = registries.Floors.ToDictionary(x => x.FloorId, StringComparer.OrdinalIgnoreCase);
         var devicesById = registries.Devices.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-        var entriesById = registries.Entities.ToDictionary(x => x.EntityId, StringComparer.OrdinalIgnoreCase);
-        var statesById = states.ToDictionary(x => x.EntityId, StringComparer.OrdinalIgnoreCase);
+        var entriesById = BuildEntityMap(registries.Entities, entry => entry.EntityId);
+        var statesById = BuildEntityMap(states, state => state.EntityId);
         var integrationsById = registries.ConfigEntries.ToDictionary(x => x.EntryId, StringComparer.OrdinalIgnoreCase);
 
         var entities = entriesById.Keys
@@ -147,6 +147,26 @@ public sealed class HomeAssistantInventoryClient
             Actions = actions,
             Registries = registries
         };
+    }
+
+    private static Dictionary<string, T> BuildEntityMap<T>(
+        IEnumerable<T> values,
+        Func<T, string?> getEntityId)
+    {
+        var result = new Dictionary<string, T>(StringComparer.Ordinal);
+        foreach (var value in values)
+        {
+            var entityId = HomeAssistantEntityId.RequireResponseEntityId(getEntityId(value));
+            if (result.ContainsKey(entityId))
+            {
+                throw new HomeAssistantProtocolException(
+                    "Home Assistant returned a duplicate entity identifier while building inventory.");
+            }
+
+            result.Add(entityId, value);
+        }
+
+        return result;
     }
 
     private static HomeAssistantEntityInfo CreateEntity(

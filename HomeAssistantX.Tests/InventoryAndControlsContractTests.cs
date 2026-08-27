@@ -106,6 +106,20 @@ public sealed class InventoryAndControlsContractTests
         }));
     }
 
+    [Theory]
+    [InlineData("camera.FRONT")]
+    [InlineData("CAMERA.front")]
+    [InlineData("camera.front.extra")]
+    public async Task InventoryRejectsNoncanonicalStateEntityIds(string entityId)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"" + entityId + "\",\"state\":\"idle\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Inventory.GetSnapshotAsync());
+    }
+
     [Fact]
     public async Task TypedLightControlProducesTheNativeValidatedPayload()
     {
