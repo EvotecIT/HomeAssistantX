@@ -91,13 +91,24 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("{\"frontend_stream_types\":[\" hls \"]}")]
     [InlineData("{\"frontend_stream_types\":[\"HLS\"]}")]
     [InlineData("{\"frontend_stream_types\":[\"hls\",\"hls\"]}")]
-    [InlineData("{\"frontend_stream_types\":[\"future\"]}")]
     public async Task CameraCapabilitiesRequireTheFrontendStreamTypeArray(string response)
     {
         using var server = new TestHomeAssistantServer { CameraCapabilitiesResponseJson = response };
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetCapabilitiesAsync("camera.front"));
+    }
+
+    [Fact]
+    public async Task CameraCapabilitiesPreserveCanonicalFutureStreamTypes()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            CameraCapabilitiesResponseJson = "{\"frontend_stream_types\":[\"future_stream\"]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal("future_stream", Assert.Single((await client.Cameras.GetCapabilitiesAsync("camera.front")).FrontendStreamTypes));
     }
 
     [Fact]
@@ -214,6 +225,16 @@ public sealed class CamerasDashboardsAutomationContractTests
 
         server.SetStates("[{\"entity_id\":\" automation.morning\",\"state\":\"on\",\"attributes\":{}}]");
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Automations.GetAsync());
+    }
+
+    [Fact]
+    public async Task AutomationStatusTreatsNegativeCurrentRunsAsUnavailable()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{\"current\":-1}}]");
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Null(Assert.Single(await client.Automations.GetAsync()).CurrentRuns);
     }
 
     [Fact]

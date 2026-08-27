@@ -95,7 +95,7 @@ public sealed class HomeAssistantAutomationClient
                     : null,
             LastTriggered = HomeAssistantAttributeReader.GetDateTimeOffset(state.Attributes, "last_triggered"),
             Mode = HomeAssistantAttributeReader.GetString(state.Attributes, "mode"),
-            CurrentRuns = HomeAssistantAttributeReader.GetInt64(state.Attributes, "current"),
+            CurrentRuns = HomeAssistantAttributeReader.GetNonNegativeInt64(state.Attributes, "current"),
             RawState = state
         };
     }

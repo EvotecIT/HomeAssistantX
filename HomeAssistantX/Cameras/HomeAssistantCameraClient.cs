@@ -71,7 +71,7 @@ public sealed class HomeAssistantCameraClient
         var streamTypes = new HashSet<string>(StringComparer.Ordinal);
         if (result.FrontendStreamTypes.Any(value => string.IsNullOrWhiteSpace(value)
             || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
-            || (value != "hls" && value != "web_rtc")
+            || !string.Equals(value, value.ToLowerInvariant(), StringComparison.Ordinal)
             || !streamTypes.Add(value)))
         {
             throw new HomeAssistantProtocolException("The camera capabilities contained an invalid stream type.");
