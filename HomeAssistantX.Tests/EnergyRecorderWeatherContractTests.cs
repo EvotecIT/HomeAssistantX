@@ -677,6 +677,18 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task UnfilteredRecorderMetadataRejectsDuplicateStatisticIdentifiers()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.grid_energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true},{\"statistic_id\":\"sensor.grid_energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
+    }
+
+    [Fact]
     public async Task FilteredRecorderMetadataAllowsMissingRequestedRows()
     {
         using var server = new TestHomeAssistantServer { RecorderMetadataResponseJson = "[]" };

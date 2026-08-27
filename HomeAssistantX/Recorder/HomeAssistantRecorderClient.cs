@@ -28,12 +28,14 @@ public sealed class HomeAssistantRecorderClient
         var payload = requestedIdSnapshot is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = requestedIdSnapshot };
         var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
         var metadata = DecodeMetadata(value, "Recorder statistics metadata could not be decoded.");
+        var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (metadata.Any(item => !responseIds.Add(item.StatisticId)))
+            throw new HomeAssistantProtocolException("Recorder statistics metadata contained a duplicate statistic identifier.");
         if (requestedIdSnapshot is not null)
         {
             var requestedIds = new HashSet<string>(requestedIdSnapshot, StringComparer.OrdinalIgnoreCase);
-            var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (metadata.Any(item => !requestedIds.Contains(item.StatisticId) || !responseIds.Add(item.StatisticId)))
-                throw new HomeAssistantProtocolException("Recorder statistics metadata contained an unexpected or duplicate statistic identifier.");
+            if (metadata.Any(item => !requestedIds.Contains(item.StatisticId)))
+                throw new HomeAssistantProtocolException("Recorder statistics metadata contained an unexpected statistic identifier.");
         }
         return metadata;
     }
