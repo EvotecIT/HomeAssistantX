@@ -1,5 +1,6 @@
 ﻿#if NET10_0
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Models;
 using HomeAssistantX.States;
 using HomeAssistantX.Tests.Infrastructure;
@@ -126,6 +127,44 @@ public sealed class StateClientContractTests
             async () => await WithTimeoutAsync(subscription.Completion));
     }
 
+    [Fact]
+    public async Task SharedServerFailureKeepsItsDiagnosticClassification()
+    {
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var server = new TestHomeAssistantServer { PublishNullStateEventData = true };
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            TestHomeAssistantServer.KitchenLightOnStateJson);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(diagnostics.Events, item => item.Name == "state.server_subscription_failed");
+        Assert.DoesNotContain(diagnostics.Events, item => item.Name == "state.subscription_overflow");
+        Assert.DoesNotContain(diagnostics.Events, item => item.Name == "state.subscription_handler_failed");
+    }
+
+    [Fact]
+    public async Task TerminalReconnectAuthenticationFaultsLocalStateSubscriptions()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+
+        server.RequiredAccessToken = "replacement-token";
+        await server.DropWebSocketsAsync();
+
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+    }
+
     private static async Task WaitUntilAsync(Func<bool> predicate)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
@@ -148,6 +187,18 @@ public sealed class StateClientContractTests
         var winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
         Assert.Same(task, winner);
         await task;
+    }
+
+    private sealed class RecordingDiagnosticsSink : IHomeAssistantDiagnosticsSink
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<HomeAssistantDiagnosticEvent> _events = new();
+
+        public IReadOnlyCollection<HomeAssistantDiagnosticEvent> Events => _events.ToArray();
+
+        public void Write(HomeAssistantDiagnosticEvent diagnosticEvent)
+        {
+            _events.Enqueue(diagnosticEvent);
+        }
     }
 }
 #endif

@@ -213,7 +213,16 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         HomeAssistantAppOperation operation,
         CancellationToken cancellationToken = default)
     {
-        var operationName = operation.ToString().ToLowerInvariant();
+        var operationName = operation switch
+        {
+            HomeAssistantAppOperation.Install => "install",
+            HomeAssistantAppOperation.Update => "update",
+            HomeAssistantAppOperation.Start => "start",
+            HomeAssistantAppOperation.Stop => "stop",
+            HomeAssistantAppOperation.Restart => "restart",
+            HomeAssistantAppOperation.Uninstall => "uninstall",
+            _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "A supported app operation is required.")
+        };
         return SendAsync(
             HttpMethod.Post,
             "/addons/" + EscapeApp(app, nameof(app)) + "/" + operationName,

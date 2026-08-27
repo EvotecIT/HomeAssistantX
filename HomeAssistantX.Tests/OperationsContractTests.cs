@@ -195,7 +195,11 @@ public sealed class OperationsContractTests
             client.Supervisor.InstallUpdateAsync(HomeAssistantSupervisorUpdateTarget.App, ".."));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             client.Supervisor.InvokeAppAsync("test/app", HomeAssistantAppOperation.Restart));
-        await client.Supervisor.InvokeAppAsync(" test_app ", HomeAssistantAppOperation.Restart);
+        server.ClearLastWebSocketCommand("supervisor/api");
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            client.Supervisor.InvokeAppAsync("test_app", (HomeAssistantAppOperation)99));
+        Assert.Null(server.GetLastWebSocketCommand("supervisor/api"));
+        await client.Supervisor.InvokeAppAsync(" TEST_APP ", HomeAssistantAppOperation.Restart);
 
         Assert.Equal("2026.08.0", info.Version);
         Assert.True(info.Healthy);
@@ -210,7 +214,7 @@ public sealed class OperationsContractTests
         Assert.Contains("test log line", log);
         Assert.Equal("job-new", backup.GetProperty("job_id").GetString());
         using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("supervisor/api")));
-        Assert.Equal("/addons/test_app/restart", command.RootElement.GetProperty("endpoint").GetString());
+        Assert.Equal("/addons/TEST_APP/restart", command.RootElement.GetProperty("endpoint").GetString());
         Assert.Equal("post", command.RootElement.GetProperty("method").GetString());
     }
 #endif
@@ -230,6 +234,7 @@ public sealed class OperationsContractTests
         var apps = await supervisor.GetAppsAsync();
         var backups = await supervisor.GetBackupsAsync();
         var log = await supervisor.GetLogAsync(HomeAssistantSupervisorLogTarget.Core, 10);
+        await supervisor.InvokeAppAsync(" TEST_APP ", HomeAssistantAppOperation.Restart);
 
         Assert.Equal("2026.08.0", info.Version);
         Assert.Equal("2026.8.3", overview.CoreVersion);
@@ -237,6 +242,7 @@ public sealed class OperationsContractTests
         Assert.Single(apps);
         Assert.Single(backups);
         Assert.Contains("direct supervisor log line", log);
+        Assert.Equal("/addons/TEST_APP/restart", server.LastRequestPath);
         Assert.Equal("Bearer " + TestHomeAssistantServer.AccessToken, server.LastAuthorization);
     }
 

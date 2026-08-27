@@ -321,7 +321,7 @@ public sealed class HomeAssistantStateClient : IDisposable
         {
             if (!subscriber.TryPublish(change))
             {
-                subscriber.Fail(new HomeAssistantProtocolException(
+                subscriber.FailOverflow(new HomeAssistantProtocolException(
                     "The state subscription consumer could not keep up with Home Assistant updates."));
             }
         }
@@ -490,6 +490,22 @@ public sealed class HomeAssistantStateClient : IDisposable
 
         public void Fail(Exception exception)
         {
+            Fail(
+                exception,
+                "state.server_subscription_failed",
+                "The shared Home Assistant state subscription failed.");
+        }
+
+        public void FailOverflow(Exception exception)
+        {
+            Fail(
+                exception,
+                "state.subscription_overflow",
+                "A state subscription consumer could not keep up with Home Assistant updates.");
+        }
+
+        private void Fail(Exception exception, string diagnosticName, string diagnosticMessage)
+        {
             if (Interlocked.Exchange(ref _stopped, 1) != 0)
             {
                 return;
@@ -498,8 +514,8 @@ public sealed class HomeAssistantStateClient : IDisposable
             _remove(this);
             _diagnostic(
                 HomeAssistantDiagnosticLevel.Error,
-                "state.subscription_overflow",
-                "A state subscription consumer could not keep up with Home Assistant updates.",
+                diagnosticName,
+                diagnosticMessage,
                 exception);
             _channel.Writer.TryComplete(exception);
         }
@@ -519,26 +535,33 @@ public sealed class HomeAssistantStateClient : IDisposable
                 {
                     while (_channel.Reader.TryRead(out var change))
                     {
-                        await _handler(change, _source.Token).ConfigureAwait(false);
+                        try
+                        {
+                            await _handler(change, _source.Token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException) when (_source.IsCancellationRequested)
+                        {
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            if (Interlocked.Exchange(ref _stopped, 1) == 0)
+                            {
+                                _remove(this);
+                            }
+
+                            _diagnostic(
+                                HomeAssistantDiagnosticLevel.Error,
+                                "state.subscription_handler_failed",
+                                "A state subscription handler failed.",
+                                ex);
+                            throw;
+                        }
                     }
                 }
             }
             catch (OperationCanceledException) when (_source.IsCancellationRequested)
             {
-            }
-            catch (Exception ex)
-            {
-                if (Interlocked.Exchange(ref _stopped, 1) == 0)
-                {
-                    _remove(this);
-                }
-
-                _diagnostic(
-                    HomeAssistantDiagnosticLevel.Error,
-                    "state.subscription_handler_failed",
-                    "A state subscription handler failed.",
-                    ex);
-                throw;
             }
             finally
             {

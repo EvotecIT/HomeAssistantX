@@ -1,5 +1,6 @@
 ﻿using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
+using HomeAssistantX.Diagnostics;
 
 namespace HomeAssistantX.Tests.Infrastructure;
 
@@ -12,7 +13,8 @@ internal static class TestClientFactory
         TimeSpan? requestTimeout = null,
         int maximumRestResponseBytes = 64 * 1024 * 1024,
         IHomeAssistantAccessTokenProvider? accessTokenProvider = null,
-        int maximumCoalescedWebSocketMessages = 4096)
+        int maximumCoalescedWebSocketMessages = 4096,
+        IHomeAssistantDiagnosticsSink? diagnostics = null)
     {
         var options = new HomeAssistantClientOptions(
             server.BaseUri,
@@ -27,6 +29,11 @@ internal static class TestClientFactory
             MaximumRestResponseBytes = maximumRestResponseBytes,
             MaximumCoalescedWebSocketMessages = maximumCoalescedWebSocketMessages
         };
+        if (diagnostics is not null)
+        {
+            options.Diagnostics = diagnostics;
+        }
+
         return new HomeAssistantClient(options);
     }
 }

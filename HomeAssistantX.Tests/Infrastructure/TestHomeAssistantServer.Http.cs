@@ -89,6 +89,9 @@ internal sealed partial class TestHomeAssistantServer
             case "GET /core/logs":
                 await WriteHttpResponseAsync(stream, 200, "2026-08-25 direct supervisor log line").ConfigureAwait(false);
                 break;
+            case "POST /addons/TEST_APP/restart":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\",\"data\":{}}").ConfigureAwait(false);
+                break;
             case "GET /api/":
                 await WriteHttpResponseAsync(stream, 200, "{\"message\":\"API running.\",\"custom_api_field\":true}").ConfigureAwait(false);
                 break;
