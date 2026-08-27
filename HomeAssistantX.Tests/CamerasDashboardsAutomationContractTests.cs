@@ -121,6 +121,23 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"preload_stream\":true}")]
+    [InlineData("{\"orientation\":3}")]
+    [InlineData("{\"preload_stream\":null,\"orientation\":3}")]
+    [InlineData("{\"preload_stream\":true,\"orientation\":\"3\"}")]
+    public async Task CameraPreferencesRequireCompleteTypedResponses(string response)
+    {
+        using var server = new TestHomeAssistantServer { CameraPreferencesResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetPreferencesAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
+    }
+
+    [Theory]
     [InlineData("House_Main")]
     [InlineData("House-main")]
     [InlineData("house--main")]

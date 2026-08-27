@@ -106,6 +106,16 @@ public sealed class HomeAssistantCameraClient
 
     private static HomeAssistantCameraPreferences DecodePreferences(JsonElement value, string failureMessage)
     {
+        if (value.ValueKind != JsonValueKind.Object
+            || !value.TryGetProperty("preload_stream", out var preloadStream)
+            || preloadStream.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+            || !value.TryGetProperty("orientation", out var orientation)
+            || orientation.ValueKind != JsonValueKind.Number
+            || !orientation.TryGetInt32(out _))
+        {
+            throw new HomeAssistantProtocolException(failureMessage);
+        }
+
         var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraPreferences>(value, failureMessage);
         if (!Enum.IsDefined(typeof(HomeAssistantCameraOrientation), preferences.Orientation))
             throw new HomeAssistantProtocolException(failureMessage);

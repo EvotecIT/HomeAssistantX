@@ -170,7 +170,7 @@ public sealed partial class HomeAssistantRestClient
         CancellationToken cancellationToken = default)
         => GetCameraImageCoreAsync(entityId, width, height, cancellationToken);
 
-    private Task<byte[]> GetCameraImageCoreAsync(
+    private async Task<byte[]> GetCameraImageCoreAsync(
         string entityId,
         int? width,
         int? height,
@@ -201,7 +201,13 @@ public sealed partial class HomeAssistantRestClient
             }, cancellationToken);
         }
 
-        return GetBytesAsync(path, cancellationToken);
+        var image = await GetBytesAsync(path, cancellationToken).ConfigureAwait(false);
+        if (image.Length == 0)
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned an empty camera image.");
+        }
+
+        return image;
     }
 
     /// <summary>Gets all calendar entities.</summary>

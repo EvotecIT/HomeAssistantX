@@ -135,6 +135,18 @@ public sealed class CoreRestApiContractTests
     }
 
     [Fact]
+    public async Task CameraRestOverloadsRejectEmptySuccessfulResponses()
+    {
+        using var server = new TestHomeAssistantServer { CameraImageResponse = string.Empty };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Rest.GetCameraImageAsync("camera.front", CancellationToken.None));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Rest.GetCameraImageAsync("camera.front", 640, 360, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task DocumentedRestCommandsSerializeAndDecodeTheirContracts()
     {
         using var server = new TestHomeAssistantServer();
