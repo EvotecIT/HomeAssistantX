@@ -260,6 +260,14 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                 await SendCommandAsync(socket, commandId, commandType, payload, deadline.Token).ConfigureAwait(false);
                 return await AwaitWithDeadlineAsync(completion.Task, deadline.Token, cancellationToken).ConfigureAwait(false);
             }
+            catch (ObjectDisposedException ex) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException("The Home Assistant WebSocket request was canceled.", ex, cancellationToken);
+            }
+            catch (ObjectDisposedException) when (deadline.IsCancellationRequested)
+            {
+                throw CreateRequestTimeoutException();
+            }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
             {
                 throw CreateRequestTimeoutException();
@@ -479,6 +487,14 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                     await SendCommandAsync(socket, serverId, registration.CommandType, registration.Payload, deadline.Token)
                         .ConfigureAwait(false);
                     await AwaitWithDeadlineAsync(completion.Task, deadline.Token, cancellationToken).ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException ex) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException("The Home Assistant WebSocket subscription activation was canceled.", ex, cancellationToken);
+                }
+                catch (ObjectDisposedException) when (deadline.IsCancellationRequested)
+                {
+                    throw CreateRequestTimeoutException();
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
                 {
