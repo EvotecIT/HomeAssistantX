@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Tests.Infrastructure;
@@ -60,6 +61,20 @@ public sealed class CoreRestApiContractTests
         Assert.Equal("test-image-bytes", Encoding.UTF8.GetString(camera));
         Assert.Equal("calendar.home", Assert.Single(calendars).EntityId);
         Assert.Equal("Dinner", Assert.Single(calendarEvents).Summary);
+    }
+
+    [Theory]
+    [InlineData("[null]")]
+    [InlineData("[{\"entity_id\":\"light.kitchen\",\"name\":\"Wrong domain\"}]")]
+    [InlineData("[{\"entity_id\":\" calendar.home \",\"name\":\"Padded\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.Home\",\"name\":\"Noncanonical\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"First\"},{\"entity_id\":\"calendar.home\",\"name\":\"Duplicate\"}]")]
+    public async Task DirectCalendarRestDiscoveryRejectsMalformedResponseIdentities(string response)
+    {
+        using var server = new TestHomeAssistantServer { CalendarListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetCalendarsAsync());
     }
 
     [Fact]

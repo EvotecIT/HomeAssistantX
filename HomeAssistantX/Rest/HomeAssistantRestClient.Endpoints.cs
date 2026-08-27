@@ -2,6 +2,7 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
 
@@ -98,8 +99,19 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets all calendar entities.</summary>
     public async Task<IReadOnlyList<HomeAssistantCalendar>> GetCalendarsAsync(CancellationToken cancellationToken = default)
     {
-        return await SendHomeAssistantAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
+        var calendars = await SendHomeAssistantAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
             .ConfigureAwait(false);
+        HomeAssistantJson.RequireNoNullCollectionEntries(calendars, "The Home Assistant calendar list contained a null item.");
+        var entityIds = new HashSet<string>(StringComparer.Ordinal);
+        if (calendars.Any(calendar =>
+                !HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out var normalized)
+                || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
+                || !entityIds.Add(normalized)))
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
+        }
+
+        return calendars;
     }
 
     /// <summary>Gets calendar events in an exclusive time range.</summary>
