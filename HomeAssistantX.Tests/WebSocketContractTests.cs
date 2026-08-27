@@ -482,6 +482,7 @@ public sealed class WebSocketContractTests
         var targetServices = await client.System.GetServicesForTargetAsync(target);
         var displayRegistry = await client.System.GetEntityRegistryForDisplayAsync();
         var exposures = await client.System.GetExposedEntitiesAsync();
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.SetEntityExposureAsync("light.Kitchen", "cloud", true));
         var changedExposure = await client.System.SetEntityExposureAsync(" light.kitchen ", " cloud ", true);
         var signedPath = await client.System.SignPathAsync("/api/camera_proxy/camera.front", TimeSpan.FromMinutes(1));
         var longLivedToken = await client.System.CreateLongLivedAccessTokenAsync("Contract test", 30);

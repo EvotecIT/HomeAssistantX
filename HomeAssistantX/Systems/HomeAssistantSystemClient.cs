@@ -142,7 +142,7 @@ public sealed class HomeAssistantSystemClient
         bool shouldExpose,
         CancellationToken cancellationToken = default)
     {
-        var validatedEntityIds = ValidateIdentifiers(entityIds, nameof(entityIds));
+        var validatedEntityIds = ValidateEntityIds(entityIds, nameof(entityIds));
         var validatedAssistants = ValidateIdentifiers(assistants, nameof(assistants));
         return _webSocket.RequestAsync(
             "homeassistant/expose_entity",
@@ -282,5 +282,24 @@ public sealed class HomeAssistantSystemClient
         }
 
         return values.Select(value => value.Trim()).ToArray();
+    }
+
+    private static string[] ValidateEntityIds(IReadOnlyList<string> values, string parameterName)
+    {
+        if (values is null || values.Count == 0)
+        {
+            throw new ArgumentException("At least one entity identifier is required.", parameterName);
+        }
+
+        var normalized = new string[values.Count];
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (!HomeAssistantEntityId.TryNormalize(values[index], out normalized[index]))
+            {
+                throw new ArgumentException("Entity identifiers must use the native Home Assistant format.", parameterName);
+            }
+        }
+
+        return normalized;
     }
 }

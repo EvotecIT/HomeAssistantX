@@ -70,7 +70,7 @@ public sealed partial class HomeAssistantRestClient
         AddTimestamp(parameters, "end_time", query.EndTime);
         if (!string.IsNullOrWhiteSpace(query.EntityId))
         {
-            parameters.Add(new KeyValuePair<string, string?>("entity", query.EntityId!.Trim()));
+            parameters.Add(new KeyValuePair<string, string?>("entity", NormalizeEntityId(query.EntityId!)));
         }
 
         return await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
@@ -135,7 +135,7 @@ public sealed partial class HomeAssistantRestClient
 
         return SendHomeAssistantAsync<HomeAssistantState>(
             HttpMethod.Post,
-            "api/states/" + EscapePath(entityId),
+            "api/states/" + EscapePath(NormalizeEntityId(entityId)),
             update,
             cancellationToken);
     }
@@ -145,7 +145,7 @@ public sealed partial class HomeAssistantRestClient
     {
         return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Delete,
-            "api/states/" + EscapePath(entityId),
+            "api/states/" + EscapePath(NormalizeEntityId(entityId)),
             null,
             cancellationToken);
     }

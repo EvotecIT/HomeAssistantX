@@ -10,6 +10,19 @@ namespace HomeAssistantX.Tests;
 public sealed class RestClientContractTests
 {
     [Fact]
+    public async Task TypedEntityRestPathsRejectNoncanonicalIdentifiersBeforeIo()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.GetStateAsync("sensor.Kitchen"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.SetStateAsync("sensor.Kitchen", new HomeAssistantX.Rest.HomeAssistantStateUpdate("on")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.DeleteStateAsync("sensor.Kitchen"));
+        Assert.Throws<ArgumentException>(() => new HomeAssistantX.Rest.HomeAssistantHistoryQuery("sensor.Kitchen"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.GetLogbookAsync(new HomeAssistantX.Rest.HomeAssistantLogbookQuery { EntityId = "sensor.Kitchen" }));
+    }
+
+    [Fact]
     public async Task RestApiPreservesHomeAssistantStateAndExtensionData()
     {
         using var server = new TestHomeAssistantServer();

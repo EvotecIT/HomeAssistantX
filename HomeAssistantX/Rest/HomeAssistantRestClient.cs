@@ -50,7 +50,11 @@ public sealed partial class HomeAssistantRestClient : IDisposable
 
     public Task<HomeAssistantState> GetStateAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        return SendHomeAssistantAsync<HomeAssistantState>(HttpMethod.Get, "api/states/" + EscapePath(entityId), null, cancellationToken);
+        return SendHomeAssistantAsync<HomeAssistantState>(
+            HttpMethod.Get,
+            "api/states/" + EscapePath(NormalizeEntityId(entityId)),
+            null,
+            cancellationToken);
     }
 
     public Task<JsonElement> GetServicesAsync(CancellationToken cancellationToken = default)
@@ -427,6 +431,16 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         }
 
         return Uri.EscapeDataString(value.Trim());
+    }
+
+    private static string NormalizeEntityId(string entityId)
+    {
+        if (!HomeAssistantEntityId.TryNormalize(entityId, out var normalized))
+        {
+            throw new ArgumentException("A Home Assistant entity identifier is required.", nameof(entityId));
+        }
+
+        return normalized;
     }
 
     private void WriteDiagnostic(

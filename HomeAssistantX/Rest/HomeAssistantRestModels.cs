@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using HomeAssistantX.Models;
 
 namespace HomeAssistantX.Rest;
 
@@ -135,7 +136,16 @@ public sealed class HomeAssistantHistoryQuery
             throw new ArgumentException("At least one entity identifier is required.", nameof(entityIds));
         }
 
-        EntityIds = entityIds.Select(entityId => entityId.Trim()).ToArray();
+        var normalized = new string[entityIds.Length];
+        for (var index = 0; index < entityIds.Length; index++)
+        {
+            if (!HomeAssistantEntityId.TryNormalize(entityIds[index], out normalized[index]))
+            {
+                throw new ArgumentException("History filters require valid Home Assistant entity identifiers.", nameof(entityIds));
+            }
+        }
+
+        EntityIds = normalized;
     }
 
     public IReadOnlyList<string> EntityIds { get; }

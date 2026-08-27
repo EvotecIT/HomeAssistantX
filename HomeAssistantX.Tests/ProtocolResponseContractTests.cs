@@ -8,6 +8,14 @@ namespace HomeAssistantX.Tests;
 public sealed class ProtocolResponseContractTests
 {
     [Fact]
+    public void NativeEntityIdentifierNormalizerTrimsCanonicalIdsAndRejectsUppercase()
+    {
+        Assert.True(HomeAssistantEntityId.TryNormalize(" light.kitchen ", out var normalized));
+        Assert.Equal("light.kitchen", normalized);
+        Assert.False(HomeAssistantEntityId.TryNormalize("light.Kitchen", out _));
+    }
+
+    [Fact]
     public void BuiltInResponseDecoderClassifiesTypedJsonMismatches()
     {
         using var document = JsonDocument.Parse("{\"components\":\"api\"}");

@@ -2,7 +2,8 @@ using HomeAssistantX.Exceptions;
 
 namespace HomeAssistantX.Models;
 
-internal static class HomeAssistantEntityId
+/// <summary>Validates and normalizes native Home Assistant entity identifiers.</summary>
+public static class HomeAssistantEntityId
 {
     internal static bool TryNormalizeForDomain(
         string? value,
@@ -30,7 +31,8 @@ internal static class HomeAssistantEntityId
         return normalized;
     }
 
-    private static bool TryNormalize(string? value, out string normalized)
+    /// <summary>Trims and validates a lowercase Home Assistant entity identifier.</summary>
+    public static bool TryNormalize(string? value, out string normalized)
     {
         normalized = value?.Trim() ?? string.Empty;
         var separator = normalized.IndexOf('.');
