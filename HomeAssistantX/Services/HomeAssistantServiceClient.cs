@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
@@ -11,16 +12,16 @@ public sealed class HomeAssistantServiceClient
 {
     private readonly HomeAssistantRestClient _rest;
     private readonly HomeAssistantWebSocketClient _webSocket;
-    private readonly HomeAssistantServiceCallTransport _controlTransport;
+    private readonly HomeAssistantClientOptions _options;
 
     internal HomeAssistantServiceClient(
         HomeAssistantRestClient rest,
         HomeAssistantWebSocketClient webSocket,
-        HomeAssistantServiceCallTransport controlTransport)
+        HomeAssistantClientOptions options)
     {
         _rest = rest;
         _webSocket = webSocket;
-        _controlTransport = controlTransport;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     public Task<JsonElement> GetCatalogAsync(CancellationToken cancellationToken = default)
@@ -119,7 +120,7 @@ public sealed class HomeAssistantServiceClient
         HomeAssistantServiceCall call,
         CancellationToken cancellationToken)
     {
-        return _controlTransport switch
+        return _options.ControlServiceCallTransport switch
         {
             HomeAssistantServiceCallTransport.WebSocket => CallAsync(call, cancellationToken),
             HomeAssistantServiceCallTransport.Rest => CallRestAsync(call, cancellationToken),

@@ -291,8 +291,8 @@ public sealed class HomeAssistantMediaPlayerStatus
             FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name"),
             DeviceClass = HomeAssistantAttributeReader.GetString(attributes, "device_class"),
             SupportedFeatures = (HomeAssistantMediaPlayerFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features") ?? 0),
-            VolumeLevel = HomeAssistantAttributeReader.GetDouble(attributes, "volume_level"),
-            VolumeStep = HomeAssistantAttributeReader.GetDouble(attributes, "volume_step"),
+            VolumeLevel = GetNormalizedVolume(attributes, "volume_level"),
+            VolumeStep = GetNormalizedVolume(attributes, "volume_step"),
             IsVolumeMuted = HomeAssistantAttributeReader.GetBoolean(attributes, "is_volume_muted"),
             Source = HomeAssistantAttributeReader.GetString(attributes, "source"),
             Sources = HomeAssistantAttributeReader.GetStringList(attributes, "source_list"),
@@ -341,6 +341,14 @@ public sealed class HomeAssistantMediaPlayerStatus
             "standby" => HomeAssistantMediaPlayerState.Standby,
             _ => HomeAssistantMediaPlayerState.Other
         };
+    }
+
+    private static double? GetNormalizedVolume(
+        IReadOnlyDictionary<string, System.Text.Json.JsonElement> attributes,
+        string name)
+    {
+        var value = HomeAssistantAttributeReader.GetDouble(attributes, name);
+        return value.HasValue && value.Value >= 0d && value.Value <= 1d ? value : null;
     }
 
     private static TimeSpan? ToTimeSpan(double? seconds)

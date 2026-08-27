@@ -57,6 +57,24 @@ public sealed class MediaAndRemoteContractTests
         Assert.Null(status.GetEstimatedPosition(DateTimeOffset.UtcNow));
     }
 
+    [Theory]
+    [InlineData(-0.01)]
+    [InlineData(1.01)]
+    [InlineData(1e100)]
+    public void MediaStatusTreatsOutOfRangeVolumeMetadataAsAbsent(double value)
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.bad\",\"state\":\"idle\",\"attributes\":{" +
+            "\"volume_level\":" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," +
+            "\"volume_step\":" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Null(status.VolumeLevel);
+        Assert.Null(status.VolumePercent);
+        Assert.Null(status.VolumeStep);
+    }
+
     [Fact]
     public void MediaStatusRejectsNegativeCapabilitiesAndUnrepresentableTimes()
     {
@@ -277,6 +295,20 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task TypedControlsObserveTransportChangesAfterClientConstruction()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        client.Options.ControlServiceCallTransport = HomeAssistantServiceCallTransport.Rest;
+
+        await client.Controls.MediaPlayers.SetVolumeAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            35);
+
+        Assert.Equal("/api/services/media_player/volume_set", server.LastRequestPath);
+    }
+
+    [Fact]
     public async Task MediaSeekGroupingPlaylistAndPlayMediaUseExactHomeAssistantFields()
     {
         using var server = new TestHomeAssistantServer();
@@ -374,6 +406,15 @@ public sealed class MediaAndRemoteContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.JoinAsync(
             target,
             new[] { "light.kitchen" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.JoinAsync(
+            target,
+            new[] { "media_player." }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.JoinAsync(
+            target,
+            new[] { "media_player.kitchen.extra" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.JoinAsync(
+            target,
+            new[] { "media_player.kitchen-speaker" }));
         Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantRemoteLearnOptions
         {
             Timeout = TimeSpan.FromSeconds((double)int.MaxValue + 1d)

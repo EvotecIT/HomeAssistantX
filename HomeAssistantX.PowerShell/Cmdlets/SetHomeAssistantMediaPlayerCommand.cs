@@ -104,7 +104,7 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         ValidateOptionalEnum(Repeat, nameof(Repeat));
         ValidateOptionalEnum(Enqueue, nameof(Enqueue));
         ValidateFinitePercent(VolumePercent, nameof(VolumePercent));
-        ValidateFiniteNonNegative(SeekSeconds, nameof(SeekSeconds));
+        var seekPosition = ToTimeSpan(SeekSeconds, nameof(SeekSeconds));
         ValidateJoinMembers(JoinMember);
         var mediaExtra = ConvertExtra(MediaExtra);
 
@@ -222,11 +222,11 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
                 CancelToken).ConfigureAwait(false));
         }
 
-        if (SeekSeconds.HasValue)
+        if (seekPosition.HasValue)
         {
             results.Add(await Client.Controls.MediaPlayers.SeekAsync(
                 target.Target,
-                TimeSpan.FromSeconds(SeekSeconds.Value),
+                seekPosition.Value,
                 CancelToken).ConfigureAwait(false));
         }
 
@@ -294,10 +294,32 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         return result;
     }
 
-    private static void ValidateFiniteNonNegative(double? value, string name)
+    private static TimeSpan? ToTimeSpan(double? value, string name)
     {
-        if (value.HasValue
-            && (double.IsNaN(value.Value) || double.IsInfinity(value.Value) || value.Value < 0d || value.Value > TimeSpan.MaxValue.TotalSeconds))
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (double.IsNaN(value.Value) || double.IsInfinity(value.Value) || value.Value < 0d)
+            {
+                throw new OverflowException();
+            }
+
+            var ticks = decimal.Round(
+                (decimal)value.Value * TimeSpan.TicksPerSecond,
+                0,
+                MidpointRounding.AwayFromZero);
+            if (ticks > long.MaxValue)
+            {
+                throw new OverflowException();
+            }
+
+            return TimeSpan.FromTicks((long)ticks);
+        }
+        catch (OverflowException)
         {
             throw new ArgumentOutOfRangeException(name, "The value must be a finite non-negative number of seconds within the TimeSpan range.");
         }
@@ -316,13 +338,32 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
     {
         if (members is not null
             && (members.Count == 0
-                || members.Any(value => string.IsNullOrWhiteSpace(value)
-                    || !value.StartsWith("media_player.", StringComparison.OrdinalIgnoreCase))))
+                || members.Any(value => !IsMediaPlayerEntityId(value))))
         {
             throw new ArgumentException(
                 "JoinMember must contain at least one media_player entity identifier.",
                 nameof(JoinMember));
         }
+    }
+
+    private static bool IsMediaPlayerEntityId(string? value)
+    {
+        var normalized = value?.Trim();
+        if (normalized is null || normalized.Length == 0) return false;
+        var separator = normalized.IndexOf('.');
+        if (separator <= 0
+            || separator != normalized.LastIndexOf('.')
+            || separator == normalized.Length - 1
+            || !string.Equals(normalized.Substring(0, separator), "media_player", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return normalized.Substring(separator + 1).All(character =>
+            (character >= 'a' && character <= 'z')
+            || (character >= 'A' && character <= 'Z')
+            || (character >= '0' && character <= '9')
+            || character == '_');
     }
 
     private static void ValidateOptionalEnum<T>(T? value, string name)
