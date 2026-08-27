@@ -363,6 +363,26 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task RegistryIdentifiersAreNormalizedBeforeDispatchAndCorrelation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Registries.UpdateLabelAsync(" security ", new HomeAssistantLabelUpdate().WithName(" Security "));
+        using (var labelCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("config/label_registry/update"))))
+        {
+            Assert.Equal("security", labelCommand.RootElement.GetProperty("label_id").GetString());
+            Assert.Equal("Security", labelCommand.RootElement.GetProperty("name").GetString());
+        }
+
+        await client.Registries.UpdateCategoryAsync(" automation ", " comfort ", new HomeAssistantCategoryUpdate().WithName(" Comfort "));
+        using var categoryCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("config/category_registry/update")));
+        Assert.Equal("automation", categoryCommand.RootElement.GetProperty("scope").GetString());
+        Assert.Equal("comfort", categoryCommand.RootElement.GetProperty("category_id").GetString());
+        Assert.Equal("Comfort", categoryCommand.RootElement.GetProperty("name").GetString());
+    }
+
+    [Fact]
     public async Task EmptyNotificationTargetFailsBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

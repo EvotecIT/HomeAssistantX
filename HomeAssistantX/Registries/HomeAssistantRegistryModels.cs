@@ -324,7 +324,7 @@ internal static class HomeAssistantRegistryValidation
             throw new ArgumentException("A non-empty value is required.", parameterName);
         }
 
-        return value;
+        return value.Trim();
     }
 }
 

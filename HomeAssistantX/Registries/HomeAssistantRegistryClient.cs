@@ -109,7 +109,7 @@ public sealed class HomeAssistantRegistryClient
 
     public Task DeleteLabelAsync(string labelId, CancellationToken cancellationToken = default)
     {
-        HomeAssistantRegistryValidation.Require(labelId, nameof(labelId));
+        labelId = HomeAssistantRegistryValidation.Require(labelId, nameof(labelId));
         return IgnoreResultAsync("config/label_registry/delete", new Dictionary<string, object?> { ["label_id"] = labelId }, cancellationToken);
     }
 
@@ -117,7 +117,7 @@ public sealed class HomeAssistantRegistryClient
         string scope,
         CancellationToken cancellationToken = default)
     {
-        HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope));
         var value = await _webSocket.RequestAsync("config/category_registry/list", new Dictionary<string, object?>
         {
             ["scope"] = scope
@@ -132,7 +132,7 @@ public sealed class HomeAssistantRegistryClient
         HomeAssistantCategoryCreate category,
         CancellationToken cancellationToken = default)
     {
-        HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope));
         if (category is null)
         {
             throw new ArgumentNullException(nameof(category));
@@ -154,7 +154,7 @@ public sealed class HomeAssistantRegistryClient
         HomeAssistantCategoryUpdate update,
         CancellationToken cancellationToken = default)
     {
-        HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope));
         categoryId = HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
         if (update is null)
         {
@@ -175,8 +175,8 @@ public sealed class HomeAssistantRegistryClient
 
     public Task DeleteCategoryAsync(string scope, string categoryId, CancellationToken cancellationToken = default)
     {
-        HomeAssistantRegistryValidation.Require(scope, nameof(scope));
-        HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
+        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        categoryId = HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
         return IgnoreResultAsync("config/category_registry/delete", new Dictionary<string, object?>
         {
             ["scope"] = scope,
