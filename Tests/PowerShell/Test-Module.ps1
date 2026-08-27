@@ -252,16 +252,18 @@ try {
         throw "Could not establish the action-call baseline. Received: $serviceBaseline"
     }
 
-    $actionPreview = @(
-        $connection | Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId light.kitchen -WhatIf 6>&1
-        $connection | Invoke-HomeAssistantAction -Domain private_domain -Action private_action -EntityId light.kitchen -WhatIf 6>&1
-    ) | Out-String
-    if (-not $actionPreview.Contains('light.turn_on')) {
+    $actionCmdlet = [HomeAssistantX.PowerShell.InvokeHomeAssistantActionCommand]::new()
+    $actionCmdlet.Connection = $connection.PSObject.BaseObject
+    $describeAction = $actionCmdlet.GetType().GetMethod('DescribeAction', [Reflection.BindingFlags]'NonPublic, Instance')
+    $standardAction = $describeAction.Invoke($actionCmdlet, @([HomeAssistantX.Services.HomeAssistantServiceCall]::Create('light', 'turn_on')))
+    $customAction = $describeAction.Invoke($actionCmdlet, @([HomeAssistantX.Services.HomeAssistantServiceCall]::Create('private_domain', 'private_action')))
+    if (-not $standardAction.Contains('light.turn_on')) {
         throw 'WhatIf output did not identify a validated standard Home Assistant action.'
     }
-    if ($actionPreview.Contains('private_domain') -or $actionPreview.Contains('private_action')) {
+    if ($customAction.Contains('private_domain') -or $customAction.Contains('private_action')) {
         throw 'WhatIf output exposed a custom Home Assistant service name.'
     }
+    $null = $connection | Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId light.kitchen -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
