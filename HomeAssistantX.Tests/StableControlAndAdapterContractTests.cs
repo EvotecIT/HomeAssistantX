@@ -884,6 +884,42 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Null(server.LastRequestBody);
     }
 
+    [Fact]
+    public async Task CancelledWebhookCommandsDoNotInspectCallerOwnedPayloads()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration { WebhookId = "undefined" });
+        var cyclic = new Dictionary<string, object?>();
+        cyclic["self"] = cyclic;
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            webhook.SendAsync("custom", cyclic, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate
+            {
+                AppVersion = "1.0",
+                DeviceName = "Test",
+                Manufacturer = "Evotec",
+                Model = "Test",
+                AppData = cyclic
+            }, cancellation.Token));
+        var registration = RegistrationRequest(false);
+        registration.AppData = cyclic;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.MobileApp.RegisterAsync(registration, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Vacuums.SendCommandAsync(
+                HomeAssistantTarget.ForEntity("vacuum.downstairs"),
+                "custom",
+                cyclic,
+                cancellation.Token));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
     [Theory]
     [InlineData("cloudhook_url", "ftp://example.invalid/webhook")]
     [InlineData("remote_ui_url", "file:///private/home-assistant")]

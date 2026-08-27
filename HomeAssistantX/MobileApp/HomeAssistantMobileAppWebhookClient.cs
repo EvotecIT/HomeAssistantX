@@ -84,6 +84,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     public Task<JsonElement> UpdateRegistrationAsync(HomeAssistantMobileAppRegistrationUpdate update, CancellationToken cancellationToken = default)
     {
         if (update is null) throw new ArgumentNullException(nameof(update));
+        cancellationToken.ThrowIfCancellationRequested();
         update.Validate();
         var snapshot = new HomeAssistantMobileAppRegistrationUpdate
         {
@@ -92,7 +93,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             Manufacturer = update.Manufacturer,
             Model = update.Model,
             OperatingSystemVersion = update.OperatingSystemVersion,
-            AppData = HomeAssistantJson.FreezeObject(update.AppData, nameof(update.AppData), "AppData")
+            AppData = HomeAssistantJson.FreezeObject(update.AppData, nameof(update.AppData), "AppData", cancellationToken)
         };
         return SendAsync("update_registration", snapshot, cancellationToken);
     }
@@ -101,10 +102,11 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     public async Task<JsonElement> SendAsync(string commandType, object? data, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(commandType)) throw new ArgumentException("A webhook command type is required.", nameof(commandType));
+        cancellationToken.ThrowIfCancellationRequested();
         var command = commandType.Trim();
         var frozenData = data is null
-            ? HomeAssistantJson.FreezeValue(new Dictionary<string, object?>(), nameof(data), "Data")
-            : HomeAssistantJson.FreezeValue(data, nameof(data), "Data");
+            ? HomeAssistantJson.FreezeValue(new Dictionary<string, object?>(), nameof(data), "Data", cancellationToken)
+            : HomeAssistantJson.FreezeValue(data, nameof(data), "Data", cancellationToken);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_requestTimeout);
         var operationToken = timeout.Token;

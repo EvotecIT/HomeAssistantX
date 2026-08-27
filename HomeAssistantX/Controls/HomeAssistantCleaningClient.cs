@@ -46,8 +46,9 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
     /// <summary>Sends a provider-specific vacuum command while keeping the common target contract typed.</summary>
     public Task<HomeAssistantServiceCallResult> SendCommandAsync(HomeAssistantTarget target, string command, object? parameters = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var normalizedCommand = ControlValidation.Required(command, nameof(command));
-        var frozenParameters = parameters is null ? (System.Text.Json.JsonElement?)null : HomeAssistantJson.FreezeValue(parameters, nameof(parameters), "Parameters");
+        var frozenParameters = parameters is null ? (System.Text.Json.JsonElement?)null : HomeAssistantJson.FreezeValue(parameters, nameof(parameters), "Parameters", cancellationToken);
         return CallAsync("send_command", target, call =>
         {
             call.WithData("command", normalizedCommand);
