@@ -14,7 +14,7 @@ public static class HomeAssistantDashboardIdentifier
             || character == '-');
     }
 
-    /// <summary>Trims and validates Home Assistant's prefix:name icon form.</summary>
+    /// <summary>Trims and validates Home Assistant's colon-delimited icon selector form.</summary>
     public static bool TryNormalizeIcon(string? value, out string normalized)
     {
         normalized = value?.Trim() ?? string.Empty;

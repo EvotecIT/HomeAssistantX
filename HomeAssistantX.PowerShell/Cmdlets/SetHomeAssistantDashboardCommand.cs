@@ -126,7 +126,7 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
     private static string RequireIcon(string value, string parameterName)
     {
         if (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(value, out var normalized))
-            throw new ArgumentException("A dashboard icon must use the 'prefix:name' form.", parameterName);
+            throw new ArgumentException("A dashboard icon must contain a ':' separator.", parameterName);
         return normalized;
     }
 }

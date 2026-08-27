@@ -15,6 +15,17 @@ namespace HomeAssistantX.Tests;
 public sealed class CamerasDashboardsAutomationContractTests
 {
     [Theory]
+    [InlineData(":")]
+    [InlineData("mdi:")]
+    [InlineData(":home")]
+    [InlineData("custom:room_kitchen")]
+    public void DashboardIconsFollowHomeAssistantColonContract(string icon)
+    {
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeIcon(icon, out var normalized));
+        Assert.Equal(icon, normalized);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData(" ")]
     public async Task GlobalMediaSelectorsRejectBlankValuesBeforeDispatch(string selector)
