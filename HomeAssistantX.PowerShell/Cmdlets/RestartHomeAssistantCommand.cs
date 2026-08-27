@@ -63,14 +63,19 @@ public sealed class RestartHomeAssistantCommand : HomeAssistantCmdlet
                 result = await Client.Operations.Integrations.ReloadAsync(IntegrationId, CancelToken).ConfigureAwait(false);
                 break;
             case AppParameterSet:
-                target = "app " + App;
+                if (!HomeAssistantSupervisorIdentifier.TryNormalizeAppSlug(App, out var app))
+                {
+                    throw new ArgumentException("A valid Supervisor app/add-on slug is required.", nameof(App));
+                }
+
+                target = "app " + app;
                 action = "Restart";
                 if (!ShouldProcess(target, action))
                 {
                     return;
                 }
 
-                result = await Client.Supervisor.InvokeAppAsync(App, HomeAssistantAppOperation.Restart, CancelToken).ConfigureAwait(false);
+                result = await Client.Supervisor.InvokeAppAsync(app, HomeAssistantAppOperation.Restart, CancelToken).ConfigureAwait(false);
                 break;
             default:
                 var supervisorTarget = ParameterSetName switch
