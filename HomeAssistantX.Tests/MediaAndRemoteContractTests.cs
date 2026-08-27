@@ -1806,6 +1806,30 @@ public sealed class MediaAndRemoteContractTests
     }
 
 #if NET10_0
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":0}")]
+    public async Task MediaBrowseRejectsMissingOrInvalidSearchCapability(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":0,\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"music\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    public async Task MediaBrowseRejectsMissingOrInvalidIdentityFields(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
     private static string[] ReadServices(TestHomeAssistantServer server)
     {
         return server.ServiceCallBodies.Select(body =>

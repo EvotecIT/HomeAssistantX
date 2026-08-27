@@ -91,12 +91,20 @@ public sealed class HomeAssistantMediaBrowserClient
     private static void ValidateItemShape(JsonElement value)
     {
         if (value.ValueKind != JsonValueKind.Object
+            || !value.TryGetProperty("media_class", out var mediaClass)
+            || mediaClass.ValueKind != JsonValueKind.String
+            || !value.TryGetProperty("media_content_id", out var mediaContentId)
+            || mediaContentId.ValueKind != JsonValueKind.String
+            || !value.TryGetProperty("media_content_type", out var mediaContentType)
+            || mediaContentType.ValueKind != JsonValueKind.String
             || !value.TryGetProperty("can_play", out var canPlay)
             || canPlay.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
             || !value.TryGetProperty("can_expand", out var canExpand)
-            || canExpand.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            || canExpand.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+            || !value.TryGetProperty("can_search", out var canSearch)
+            || canSearch.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
         {
-            throw new HomeAssistantProtocolException("The media response omitted its required actionability flags.");
+            throw new HomeAssistantProtocolException("The media response omitted its required identity or actionability fields.");
         }
 
         if (!value.TryGetProperty("children", out var children)) return;

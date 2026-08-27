@@ -259,10 +259,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         "{\"cost_sensors\":{\"sensor.grid_energy\":\"sensor.grid_cost\"},\"solar_forecast_domains\":[\"forecast_solar\"]}";
 
     public string MediaBrowseResponseJson { get; set; } =
-        "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"media-source://media_source\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":true,\"children\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"future_media_field\":true}]}";
+        "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"media-source://media_source\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":true,\"children\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"future_media_field\":true}]}";
 
     public string MediaSearchResponseJson { get; set; } =
-        "{\"result\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false}],\"future_search_metadata\":{\"provider\":\"kept\"}}";
+        "{\"result\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false}],\"future_search_metadata\":{\"provider\":\"kept\"}}";
 
     public string DashboardListResponseJson { get; set; } =
         "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"icon\":\"mdi:home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\",\"future_dashboard\":true}]";
