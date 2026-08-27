@@ -17,14 +17,18 @@ public sealed class HomeAssistantDashboardClient
         var value = await _webSocket.RequestAsync("get_panels", null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("The frontend panel response was not an object.");
         var result = new List<HomeAssistantPanel>();
+        var routes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
         {
+            var route = RequireResponseUrlPath(property.Name, "A frontend panel contained an invalid route.");
+            if (!routes.Add(route))
+                throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
             var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(property.Value, "A frontend panel could not be decoded.");
             if (string.IsNullOrWhiteSpace(panel.UrlPath))
             {
-                panel.UrlPath = property.Name;
+                panel.UrlPath = route;
             }
-            else if (!string.Equals(panel.UrlPath, property.Name, StringComparison.Ordinal))
+            else if (!string.Equals(RequireResponseUrlPath(panel.UrlPath, "A frontend panel contained an invalid route."), route, StringComparison.Ordinal))
             {
                 throw new HomeAssistantProtocolException("A frontend panel route did not match its registered key.");
             }
@@ -40,7 +44,7 @@ public sealed class HomeAssistantDashboardClient
         var info = HomeAssistantJson.DeserializeResponse<HomeAssistantLovelaceInfo>(
             await _webSocket.RequestAsync("lovelace/info", null, cancellationToken).ConfigureAwait(false),
             "The Lovelace information could not be decoded.");
-        if (string.IsNullOrWhiteSpace(info.ResourceMode))
+        if (info.ResourceMode != "storage" && info.ResourceMode != "yaml")
             throw new HomeAssistantProtocolException("The Lovelace information did not contain its resource mode.");
         return info;
     }
@@ -154,7 +158,13 @@ public sealed class HomeAssistantDashboardClient
         var resources = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource[]>(
             await _webSocket.RequestAsync("lovelace/resources/list", null, cancellationToken).ConfigureAwait(false),
             "The Lovelace resource list could not be decoded.");
-        foreach (var resource in resources) ValidateListedResource(resource, resourceMode);
+        var storageIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var resource in resources)
+        {
+            ValidateListedResource(resource, resourceMode);
+            if (resourceMode == "storage" && !storageIds.Add(resource.Id))
+                throw new HomeAssistantProtocolException("The Lovelace resource list contained a duplicate storage identifier.");
+        }
         return resources;
     }
 
@@ -256,12 +266,20 @@ public sealed class HomeAssistantDashboardClient
             || string.IsNullOrWhiteSpace(dashboard.Title)
             || string.IsNullOrWhiteSpace(dashboard.Mode))
             throw new HomeAssistantProtocolException("A dashboard did not contain its required fields.");
-        if (string.Equals(dashboard.Mode, "storage", StringComparison.Ordinal)
-            && string.IsNullOrWhiteSpace(dashboard.Id))
-            throw new HomeAssistantProtocolException("A storage dashboard did not contain its identifier.");
-        if (string.Equals(dashboard.Mode, "yaml", StringComparison.Ordinal)
-            && string.IsNullOrWhiteSpace(dashboard.FileName))
-            throw new HomeAssistantProtocolException("A YAML dashboard did not contain its filename.");
+        if (dashboard.Mode == "storage")
+        {
+            dashboard.Id = RequireResponseSelector(dashboard.Id, "A storage dashboard did not contain a canonical identifier.");
+        }
+        else if (dashboard.Mode == "yaml")
+        {
+            if (string.IsNullOrWhiteSpace(dashboard.FileName)
+                || !string.Equals(dashboard.FileName, dashboard.FileName.Trim(), StringComparison.Ordinal))
+                throw new HomeAssistantProtocolException("A YAML dashboard did not contain a canonical filename.");
+        }
+        else
+        {
+            throw new HomeAssistantProtocolException("A dashboard contained an unsupported mode.");
+        }
     }
 
     private static void RequireDashboardVisibility(JsonElement value, string failureMessage)
@@ -288,9 +306,8 @@ public sealed class HomeAssistantDashboardClient
         if (string.IsNullOrWhiteSpace(resource.Url)
             || string.IsNullOrWhiteSpace(resource.Type))
             throw new HomeAssistantProtocolException("A Lovelace resource did not contain its required fields.");
-        if (string.Equals(resourceMode, "storage", StringComparison.Ordinal)
-            && string.IsNullOrWhiteSpace(resource.Id))
-            throw new HomeAssistantProtocolException("A storage Lovelace resource did not contain its identifier.");
+        if (resourceMode == "storage")
+            resource.Id = RequireResponseSelector(resource.Id, "A storage Lovelace resource did not contain a canonical identifier.");
     }
 
     private static void ValidateStorageResource(HomeAssistantDashboardResource resource)
@@ -320,6 +337,22 @@ public sealed class HomeAssistantDashboardClient
         if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(value, allowSingleWord: true, out var normalized))
             throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", parameterName);
         return normalized;
+    }
+
+    private static string RequireResponseUrlPath(string? value, string failureMessage)
+    {
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(value, allowSingleWord: true, out var normalized)
+            || !string.Equals(value, normalized, StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException(failureMessage);
+        return normalized;
+    }
+
+    private static string RequireResponseSelector(string? value, string failureMessage)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException(failureMessage);
+        return value;
     }
 
     private static string RequireIcon(string value, string parameterName)

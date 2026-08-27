@@ -89,6 +89,9 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("{\"frontend_stream_types\":{}}")]
     [InlineData("{\"frontend_stream_types\":[\"\"]}")]
     [InlineData("{\"frontend_stream_types\":[\" hls \"]}")]
+    [InlineData("{\"frontend_stream_types\":[\"HLS\"]}")]
+    [InlineData("{\"frontend_stream_types\":[\"hls\",\"hls\"]}")]
+    [InlineData("{\"frontend_stream_types\":[\"future\"]}")]
     public async Task CameraCapabilitiesRequireTheFrontendStreamTypeArray(string response)
     {
         using var server = new TestHomeAssistantServer { CameraCapabilitiesResponseJson = response };
@@ -415,6 +418,41 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+    }
+
+    [Theory]
+    [InlineData("[{\"id\":\" same \",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]")]
+    [InlineData("[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"Storage\"}]")]
+    [InlineData("[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"future\"}]")]
+    [InlineData("[{\"url_path\":\"yaml-home\",\"title\":\"YAML\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"yaml\",\"filename\":\" ui-lovelace.yaml \"}]")]
+    public async Task DashboardResponsesRejectNonCanonicalSelectorsAndModes(string response)
+    {
+        using var server = new TestHomeAssistantServer { DashboardListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+    }
+
+    [Theory]
+    [InlineData("{\" House \":{\"component_name\":\"lovelace\"}}")]
+    [InlineData("{\"house\":{\"component_name\":\"lovelace\"},\"house\":{\"component_name\":\"lovelace\"}}")]
+    public async Task PanelResponsesRejectNonCanonicalAndDuplicateRoutes(string response)
+    {
+        using var server = new TestHomeAssistantServer { FrontendPanelsResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Theory]
+    [InlineData("[{\"id\":\" resource-1 \",\"url\":\"/local/card.js\",\"type\":\"module\"}]")]
+    [InlineData("[{\"id\":\"resource-1\",\"url\":\"/local/a.js\",\"type\":\"module\"},{\"id\":\"resource-1\",\"url\":\"/local/b.js\",\"type\":\"module\"}]")]
+    public async Task StorageResourceResponsesRejectNonCanonicalAndDuplicateIdentifiers(string response)
+    {
+        using var server = new TestHomeAssistantServer { DashboardResourceListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
     }
 
     [Fact]

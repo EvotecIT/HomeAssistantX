@@ -68,8 +68,11 @@ public sealed class HomeAssistantCameraClient
         if (result.FrontendStreamTypes is null)
             throw new HomeAssistantProtocolException("The camera capabilities contained a null stream-type collection.");
         HomeAssistantJson.RequireNoNullCollectionEntries(result.FrontendStreamTypes, "The camera capabilities contained a null stream type.");
+        var streamTypes = new HashSet<string>(StringComparer.Ordinal);
         if (result.FrontendStreamTypes.Any(value => string.IsNullOrWhiteSpace(value)
-            || !string.Equals(value, value.Trim(), StringComparison.Ordinal)))
+            || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
+            || (value != "hls" && value != "web_rtc")
+            || !streamTypes.Add(value)))
         {
             throw new HomeAssistantProtocolException("The camera capabilities contained an invalid stream type.");
         }
