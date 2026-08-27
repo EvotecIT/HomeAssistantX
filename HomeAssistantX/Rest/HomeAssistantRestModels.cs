@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Rest;
 
@@ -211,24 +212,7 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
 
     private static bool TryReadWireDateTime(string? text, out DateTimeOffset result)
     {
-        result = default;
-        if (text is null) return false;
-
-        if (text.Length < 20 || text[10] != 'T')
-        {
-            return false;
-        }
-
-        var hasUtcSuffix = text.EndsWith("Z", StringComparison.Ordinal);
-        var hasOffsetSuffix = text.Length >= 25
-            && (text[text.Length - 6] == '+' || text[text.Length - 6] == '-')
-            && text[text.Length - 3] == ':';
-        return (hasUtcSuffix || hasOffsetSuffix)
-            && DateTimeOffset.TryParse(
-                text,
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.RoundtripKind,
-                out result);
+        return HomeAssistantTimestamp.TryParse(text, out result);
     }
 
     public override void Write(Utf8JsonWriter writer, HomeAssistantCalendarBoundary value, JsonSerializerOptions options)
