@@ -44,6 +44,42 @@ public sealed class ProtocolResponseContractTests
         Assert.IsType<JsonException>(exception.InnerException);
     }
 
+    [Theory]
+    [InlineData("2026-08-27T18:00:00")]
+    [InlineData("2026-08-27")]
+    [InlineData("08/27/2026 18:00:00")]
+    public void BuiltInResponseDecoderRejectsTimestampsWithoutAnExplicitOffset(string timestamp)
+    {
+        using var document = JsonDocument.Parse(
+            "{\"entity_id\":\"sensor.clock\",\"state\":\"on\",\"attributes\":{},\"last_changed\":\""
+            + timestamp
+            + "\"}");
+
+        var exception = Assert.Throws<HomeAssistantProtocolException>(() =>
+            HomeAssistantJson.DeserializeResponse<HomeAssistantState>(
+                document.RootElement,
+                "State response failed."));
+
+        Assert.IsType<JsonException>(exception.InnerException);
+    }
+
+    [Theory]
+    [InlineData("2026-08-27T18:00:00Z")]
+    [InlineData("2026-08-27T18:00:00.1234567+02:00")]
+    public void BuiltInResponseDecoderAcceptsExactWireTimestamps(string timestamp)
+    {
+        using var document = JsonDocument.Parse(
+            "{\"entity_id\":\"sensor.clock\",\"state\":\"on\",\"attributes\":{},\"last_changed\":\""
+            + timestamp
+            + "\"}");
+
+        var state = HomeAssistantJson.DeserializeResponse<HomeAssistantState>(
+            document.RootElement,
+            "State response failed.");
+
+        Assert.NotNull(state.LastChanged);
+    }
+
     [Fact]
     public void JsonSnapshotHelpersClassifyInvalidValuesBeforeTransport()
     {

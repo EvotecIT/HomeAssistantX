@@ -199,6 +199,16 @@ internal static class ControlValidation
         return value!.Trim();
     }
 
+    public static string RequiredUnchanged(string? value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("A non-empty value is required.", name);
+        }
+
+        return value!;
+    }
+
     public static double? Percent(double? value, string name)
     {
         if (value.HasValue && (!IsFinite(value.Value) || value.Value < 0 || value.Value > 100))

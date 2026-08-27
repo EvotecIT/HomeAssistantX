@@ -2,6 +2,7 @@
 using System.Text.Json.Serialization;
 using System.Collections;
 using System.Reflection;
+using System.Globalization;
 using HomeAssistantX.Exceptions;
 
 namespace HomeAssistantX.Protocol;
@@ -13,7 +14,8 @@ internal static class HomeAssistantJson
         PropertyNameCaseInsensitive = false,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new HomeAssistantDateTimeOffsetConverter() }
     };
 
     public static JsonSerializerOptions RawSerializerOptions { get; } = new(SerializerOptions)
@@ -246,5 +248,21 @@ internal static class HomeAssistantJson
                 && (value.GetGenericTypeDefinition() == typeof(IDictionary<,>)
                     || value.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
         return dictionary?.GetGenericArguments()[1];
+    }
+    private sealed class HomeAssistantDateTimeOffsetConverter : JsonConverter<DateTimeOffset>
+    {
+        public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType != JsonTokenType.String
+                || !HomeAssistantTimestamp.TryParse(reader.GetString(), out var value))
+            {
+                throw new JsonException("A Home Assistant timestamp must use Z or an explicit UTC offset.");
+            }
+
+            return value;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
+            => writer.WriteStringValue(value.ToString("O", CultureInfo.InvariantCulture));
     }
 }

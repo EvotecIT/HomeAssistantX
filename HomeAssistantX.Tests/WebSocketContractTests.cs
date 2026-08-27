@@ -200,6 +200,7 @@ public sealed class WebSocketContractTests
             }
         };
 
+        await Task.Delay(100);
         server.RequiredAccessToken = "replacement-token";
         await server.DropWebSocketsAsync();
         await WithTimeoutAsync(faulted.Task);

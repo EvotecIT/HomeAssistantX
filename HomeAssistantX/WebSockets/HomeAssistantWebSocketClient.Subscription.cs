@@ -21,6 +21,7 @@ public sealed partial class HomeAssistantWebSocketClient
         private readonly Task _pump;
         private TaskCompletionSource<bool> _progress = CreateProgressSource();
         private Task? _stopTask;
+        private Exception? _terminalFailure;
         private long _publishedSequence;
         private long _processedSequence;
         private int _stopped;
@@ -127,6 +128,7 @@ public sealed partial class HomeAssistantWebSocketClient
                             }
 
                             await _channel.Reader.Completion.ConfigureAwait(false);
+                            RethrowTerminalFailure();
                             return;
                         }
                         catch (Exception ex)
@@ -145,6 +147,7 @@ public sealed partial class HomeAssistantWebSocketClient
             }
             catch (OperationCanceledException) when (_source.IsCancellationRequested)
             {
+                RethrowTerminalFailure();
             }
             finally
             {
@@ -222,6 +225,7 @@ public sealed partial class HomeAssistantWebSocketClient
                 }
                 else
                 {
+                    Volatile.Write(ref _terminalFailure, exception);
                     _channel.Writer.TryComplete(exception);
                     CancelSource();
                 }
@@ -256,6 +260,15 @@ public sealed partial class HomeAssistantWebSocketClient
             catch (ObjectDisposedException)
             {
                 // The pump can finish and dispose its token source while an unsubscribe is in flight.
+            }
+        }
+
+        private void RethrowTerminalFailure()
+        {
+            var terminalFailure = Volatile.Read(ref _terminalFailure);
+            if (terminalFailure is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(terminalFailure).Throw();
             }
         }
     }

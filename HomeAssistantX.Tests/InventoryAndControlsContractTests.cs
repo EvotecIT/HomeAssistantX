@@ -239,10 +239,10 @@ public sealed class InventoryAndControlsContractTests
             Assert.False(media.RootElement.GetProperty("service_data").GetProperty("is_volume_muted").GetBoolean());
         }
 
-        await client.Controls.Locks.ActAsync(HomeAssistantTarget.ForEntity("lock.front_door"), HomeAssistantLockAction.Unlock, "1234");
+        await client.Controls.Locks.ActAsync(HomeAssistantTarget.ForEntity("lock.front_door"), HomeAssistantLockAction.Unlock, " 1234 ");
         using var lockCall = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
         Assert.Equal("unlock", lockCall.RootElement.GetProperty("service").GetString());
-        Assert.Equal("1234", lockCall.RootElement.GetProperty("service_data").GetProperty("code").GetString());
+        Assert.Equal(" 1234 ", lockCall.RootElement.GetProperty("service_data").GetProperty("code").GetString());
     }
 
     [Fact]
