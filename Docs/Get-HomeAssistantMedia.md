@@ -102,7 +102,7 @@ Accept wildcard characters: False
 ```
 
 ### -MediaContentId
-Specifies a value for media content id.
+Optional media selector for browsing and searching; required and positional only with -Resolve.
 
 ```yaml
 Type: String

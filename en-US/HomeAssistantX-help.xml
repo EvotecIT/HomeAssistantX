@@ -5056,7 +5056,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>MediaContentId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for media content id.</maml:para>
+            <maml:para>Optional media selector for browsing and searching; required and positional only with -Resolve.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -5095,7 +5095,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>MediaContentId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for media content id.</maml:para>
+            <maml:para>Optional media selector for browsing and searching; required and positional only with -Resolve.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -5146,7 +5146,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>MediaContentId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for media content id.</maml:para>
+            <maml:para>Optional media selector for browsing and searching; required and positional only with -Resolve.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -5185,7 +5185,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>MediaContentId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for media content id.</maml:para>
+            <maml:para>Optional media selector for browsing and searching; required and positional only with -Resolve.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -5248,7 +5248,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>MediaContentId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for media content id.</maml:para>
+            <maml:para>Optional media selector for browsing and searching; required and positional only with -Resolve.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -5335,7 +5335,7 @@
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
         <maml:name>MediaContentId</maml:name>
         <maml:description>
-          <maml:para>Specifies a value for media content id.</maml:para>
+          <maml:para>Optional media selector for browsing and searching; required and positional only with -Resolve.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
