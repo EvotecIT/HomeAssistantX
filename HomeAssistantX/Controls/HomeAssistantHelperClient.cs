@@ -84,7 +84,7 @@ public sealed class HomeAssistantHelperClient
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
         var serviceDomain = ToDomain(domain);
-        var call = HomeAssistantServiceCall.Create(serviceDomain, service).ForTarget(target.NormalizeForDomain(serviceDomain));
+        var call = HomeAssistantServiceCall.Create(serviceDomain, service).ForTarget(target.NormalizeRequiredForDomain(serviceDomain));
         configure?.Invoke(call);
         return await _services.CallControlAsync(call, cancellationToken).ConfigureAwait(false);
     }

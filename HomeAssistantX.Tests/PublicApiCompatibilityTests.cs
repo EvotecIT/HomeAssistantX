@@ -66,6 +66,17 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void MethodSelectionPreservesUserDefinedOperatorsAndExcludesAccessors()
+    {
+        var operatorMethod = typeof(OperatorFixture).GetMethod("op_Addition", BindingFlags.Public | BindingFlags.Static)!;
+        var propertyGetter = typeof(OperatorFixture).GetProperty(nameof(OperatorFixture.Value))!.GetMethod!;
+
+        Assert.True(ShouldIncludeMethod(operatorMethod));
+        Assert.False(ShouldIncludeMethod(propertyGetter));
+        Assert.StartsWith("op_Addition(", FormatMethod(operatorMethod), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MemberFormatterPreservesIndexerAndProtectedConstructorContracts()
     {
         var indexer = typeof(IndexerFixture).GetProperty("Item")!;
@@ -216,7 +227,7 @@ public sealed class PublicApiCompatibilityTests
                 lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                         .Where(value => !value.IsSpecialName && IsExternallyAccessibleMethod(value)).OrderBy(FormatMethod, StringComparer.Ordinal))
+                         .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
                 lines.Add("  M " + MemberAccess(method) + MemberScope(method) + " " + FormatAnnotatedType(method.ReturnType, method.ReturnParameter) + " " + FormatMethod(method));
         }
         return string.Join("\n", lines);
@@ -306,6 +317,16 @@ public sealed class PublicApiCompatibilityTests
     private sealed class IndexerFixture
     {
         public string this[string key] => key;
+    }
+
+    private readonly struct OperatorFixture
+    {
+        public OperatorFixture(int value) => Value = value;
+
+        public int Value { get; }
+
+        public static OperatorFixture operator +(OperatorFixture left, OperatorFixture right)
+            => new(left.Value + right.Value);
     }
 
     private class ProtectedConstructorFixture
@@ -400,6 +421,10 @@ public sealed class PublicApiCompatibilityTests
 
     private static bool IsExternallyAccessibleMethod(MethodBase? method)
         => method is not null && (method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly);
+
+    private static bool ShouldIncludeMethod(MethodInfo method)
+        => IsExternallyAccessibleMethod(method)
+            && (!method.IsSpecialName || method.Name.StartsWith("op_", StringComparison.Ordinal));
 
     private static bool IsExternallyAccessibleField(FieldInfo field)
         => field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly;

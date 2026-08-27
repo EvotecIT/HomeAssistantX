@@ -363,6 +363,22 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task TypedControlFamiliesRejectEmptyTargetsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var empty = HomeAssistantTarget.Create();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Alarms.ActAsync(empty, HomeAssistantAlarmAction.ArmHome));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(empty, new HomeAssistantClimateOptions { Temperature = 21 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.SetAsync(empty, new HomeAssistantMediaPlayerOptions { VolumePercent = 25 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Helpers.SetBooleanAsync(empty, true));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Routines.ActivateSceneAsync(empty));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task ClimateShapeValidationFailsBeforeAnyServiceCall()
     {
         using var server = new TestHomeAssistantServer();

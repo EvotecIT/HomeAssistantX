@@ -90,7 +90,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
         cancellationToken.ThrowIfCancellationRequested();
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
-            .NormalizeForDomain(Domain, cancellationToken);
+            .NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
         var frozenOptions = options.Snapshot(cancellationToken);
         var power = frozenOptions.Power;
         var playback = frozenOptions.Playback;
