@@ -268,9 +268,19 @@ public sealed class ProtocolResponseContractTests
     [InlineData("{\"dateTime\":\"2026-08-27\"}")]
     [InlineData("{\"dateTime\":\"08/27/2026\"}")]
     [InlineData("{\"date\":42}")]
+    [InlineData("\"2026-08-27T18:00:00\"")]
     public void CalendarBoundaryConverterRejectsInvalidTypedShapesWithJsonException(string json)
     {
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<HomeAssistantCalendarBoundary>(json));
+    }
+
+    [Theory]
+    [InlineData("\"2026-08-27\"")]
+    [InlineData("\"2026-08-27T18:00:00Z\"")]
+    [InlineData("\"2026-08-27T18:00:00+02:00\"")]
+    public void CalendarBoundaryConverterAcceptsUnambiguousStringForms(string json)
+    {
+        Assert.NotNull(JsonSerializer.Deserialize<HomeAssistantCalendarBoundary>(json));
     }
 
     private sealed class CancellationProbeEnumerable : IEnumerable<string>

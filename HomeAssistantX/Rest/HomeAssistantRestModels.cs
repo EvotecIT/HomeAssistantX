@@ -133,12 +133,13 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
                 return new HomeAssistantCalendarBoundary { Date = value };
             }
 
-            if (DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dateTime))
+            if (TryReadWireDateTime(value, out var dateTime))
             {
                 return new HomeAssistantCalendarBoundary { DateTime = dateTime };
             }
 
-            return new HomeAssistantCalendarBoundary { Date = value };
+            throw new JsonException(
+                "A Home Assistant calendar boundary string must be an ISO date or an offset timestamp.");
         }
 
         using var document = JsonDocument.ParseValue(ref reader);
@@ -188,11 +189,13 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             return false;
         }
 
-        var text = value.GetString();
-        if (text is null)
-        {
-            return false;
-        }
+        return TryReadWireDateTime(value.GetString(), out result);
+    }
+
+    private static bool TryReadWireDateTime(string? text, out DateTimeOffset result)
+    {
+        result = default;
+        if (text is null) return false;
 
         if (text.Length < 20 || text[10] != 'T')
         {
@@ -203,7 +206,12 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
         var hasOffsetSuffix = text.Length >= 25
             && (text[text.Length - 6] == '+' || text[text.Length - 6] == '-')
             && text[text.Length - 3] == ':';
-        return (hasUtcSuffix || hasOffsetSuffix) && value.TryGetDateTimeOffset(out result);
+        return (hasUtcSuffix || hasOffsetSuffix)
+            && DateTimeOffset.TryParse(
+                text,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind,
+                out result);
     }
 
     public override void Write(Utf8JsonWriter writer, HomeAssistantCalendarBoundary value, JsonSerializerOptions options)
