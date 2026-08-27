@@ -10,21 +10,30 @@ internal static class HomeAssistantReceiveWaiter
         int? timeoutSeconds,
         CancellationToken cancellationToken)
     {
-        var canceled = Task.Delay(Timeout.Infinite, cancellationToken);
+        using var waitSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var timeout = timeoutSeconds.HasValue
-            ? Task.Delay(TimeSpan.FromSeconds(timeoutSeconds.Value))
-            : Task.Delay(Timeout.Infinite);
-        var completed = await Task.WhenAny(
-            subscription.Completion,
-            canceled,
-            countReached,
-            timeout).ConfigureAwait(false);
-
-        if (completed == countReached || completed == timeout)
+            ? Task.Delay(TimeSpan.FromSeconds(timeoutSeconds.Value), waitSource.Token)
+            : Task.Delay(Timeout.Infinite, waitSource.Token);
+        try
         {
-            return;
-        }
+            var completed = await Task.WhenAny(subscription.Completion, countReached, timeout).ConfigureAwait(false);
 
-        await completed.ConfigureAwait(false);
+            if (completed == countReached)
+            {
+                return;
+            }
+
+            if (completed == timeout)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return;
+            }
+
+            await completed.ConfigureAwait(false);
+        }
+        finally
+        {
+            waitSource.Cancel();
+        }
     }
 }

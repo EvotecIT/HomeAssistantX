@@ -668,6 +668,15 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     },
                     _source.Token).ConfigureAwait(false);
                 return;
+            case "test/coalesced_invalid_id":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["type"] = "event", ["event"] = new Dictionary<string, object?>() },
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
             case "config/area_registry/list":
                 await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\"}]"), false, _source.Token).ConfigureAwait(false);
                 return;

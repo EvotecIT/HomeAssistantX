@@ -124,6 +124,19 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task CoalescedBatchRejectsRoutedMessagesWithoutAnIntegerIdentifierBeforeRoutingAnyItem()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/coalesced_invalid_id"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("command identifier", protocolFailure.Message);
+    }
+
+    [Fact]
     public async Task RejectedOAuthTokenRefreshesBeforeOpeningAFreshWebSocketSession()
     {
         using var server = new TestHomeAssistantServer

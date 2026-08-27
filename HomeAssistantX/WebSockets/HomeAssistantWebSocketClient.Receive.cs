@@ -100,7 +100,13 @@ public sealed partial class HomeAssistantWebSocketClient
                     "A Home Assistant coalesced WebSocket batch contained a non-message value.");
             }
 
-            _ = GetRequiredString(item, "type");
+            var type = GetRequiredString(item, "type");
+            if (RequiresCommandIdentifier(type)
+                && (!item.TryGetProperty("id", out var idProperty) || !idProperty.TryGetInt32(out _)))
+            {
+                throw new HomeAssistantProtocolException(
+                    "A Home Assistant coalesced WebSocket batch contained a routed message without a valid command identifier.");
+            }
         }
 
         foreach (var item in root.EnumerateArray())
@@ -108,6 +114,11 @@ public sealed partial class HomeAssistantWebSocketClient
             RouteMessage(item);
         }
     }
+
+    private static bool RequiresCommandIdentifier(string type)
+        => string.Equals(type, "result", StringComparison.Ordinal)
+            || string.Equals(type, "event", StringComparison.Ordinal)
+            || string.Equals(type, "pong", StringComparison.Ordinal);
 
     private void RouteMessage(JsonElement root)
     {
