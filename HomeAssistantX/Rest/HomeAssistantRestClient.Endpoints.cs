@@ -70,7 +70,7 @@ public sealed partial class HomeAssistantRestClient
         AddTimestamp(parameters, "end_time", query.EndTime);
         if (!string.IsNullOrWhiteSpace(query.EntityId))
         {
-            parameters.Add(new KeyValuePair<string, string?>("entity", query.EntityId));
+            parameters.Add(new KeyValuePair<string, string?>("entity", query.EntityId!.Trim()));
         }
 
         return await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(

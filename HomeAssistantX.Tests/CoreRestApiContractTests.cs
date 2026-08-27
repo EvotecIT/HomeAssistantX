@@ -29,8 +29,9 @@ public sealed class CoreRestApiContractTests
         {
             StartTime = start,
             EndTime = end,
-            EntityId = "light.kitchen"
+            EntityId = " light.kitchen "
         });
+        var logbookPath = server.LastRequestPath;
         var errorLog = await client.Rest.GetErrorLogAsync();
         var camera = await client.Rest.GetCameraImageAsync("camera.front");
         var calendars = await client.Rest.GetCalendarsAsync();
@@ -40,6 +41,8 @@ public sealed class CoreRestApiContractTests
         Assert.Equal(5, Assert.Single(events).ListenerCount);
         Assert.Equal("sensor.kitchen_temperature", Assert.Single(Assert.Single(history)).EntityId);
         Assert.Equal("turned on", Assert.Single(logbook).Message);
+        Assert.Contains("entity=light.kitchen", logbookPath);
+        Assert.DoesNotContain("%20", logbookPath);
         Assert.Equal("test integration warning", errorLog);
         Assert.Equal("test-image-bytes", Encoding.UTF8.GetString(camera));
         Assert.Equal("calendar.home", Assert.Single(calendars).EntityId);

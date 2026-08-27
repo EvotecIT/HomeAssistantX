@@ -470,7 +470,7 @@ public sealed class WebSocketContractTests
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
-        var target = HomeAssistantTarget.ForEntity("light.kitchen");
+        var target = new HomeAssistantTarget { EntityIds = new[] { " light.kitchen " } };
 
         var configuration = await client.System.GetConfigurationAsync();
         var services = await client.Services.GetCatalogWebSocketAsync();
@@ -482,7 +482,7 @@ public sealed class WebSocketContractTests
         var targetServices = await client.System.GetServicesForTargetAsync(target);
         var displayRegistry = await client.System.GetEntityRegistryForDisplayAsync();
         var exposures = await client.System.GetExposedEntitiesAsync();
-        var changedExposure = await client.System.SetEntityExposureAsync("light.kitchen", "cloud", true);
+        var changedExposure = await client.System.SetEntityExposureAsync(" light.kitchen ", " cloud ", true);
         var signedPath = await client.System.SignPathAsync("/api/camera_proxy/camera.front", TimeSpan.FromMinutes(1));
         var longLivedToken = await client.System.CreateLongLivedAccessTokenAsync("Contract test", 30);
         var conversation = await client.System.ProcessConversationAsync("Turn on the kitchen light");
@@ -518,6 +518,9 @@ public sealed class WebSocketContractTests
         using var validationCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("validate_config")));
         Assert.True(validationCommand.RootElement.TryGetProperty("action", out _));
         Assert.False(validationCommand.RootElement.TryGetProperty("trigger", out _));
+        target.EntityIds = new[] { " " };
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.ExtractFromTargetAsync(target));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.GetTriggersForTargetAsync(target));
     }
 
     [Fact]

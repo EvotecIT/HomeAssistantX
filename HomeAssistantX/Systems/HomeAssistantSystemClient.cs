@@ -77,7 +77,7 @@ public sealed class HomeAssistantSystemClient
             "extract_from_target",
             new Dictionary<string, object?>
             {
-                ["target"] = target,
+                ["target"] = target.Normalize(),
                 ["expand_group"] = expandGroup
             },
             cancellationToken);
@@ -269,7 +269,7 @@ public sealed class HomeAssistantSystemClient
             command,
             new Dictionary<string, object?>
             {
-                ["target"] = target,
+                ["target"] = target.Normalize(),
                 ["expand_group"] = expandGroup
             },
             cancellationToken);
@@ -282,6 +282,6 @@ public sealed class HomeAssistantSystemClient
             throw new ArgumentException("At least one non-empty identifier is required.", parameterName);
         }
 
-        return values.ToArray();
+        return values.Select(value => value.Trim()).ToArray();
     }
 }
