@@ -11,7 +11,7 @@ Creates or updates a Home Assistant label while allowing nullable fields to be e
 ## SYNTAX
 ### Create (Default)
 ```powershell
-Set-HomeAssistantLabel [-Name] <string> [-Color <string>] [-Description <string>] [-Icon <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-HomeAssistantLabel [-Name] <string> [-Color <string>] [-Description <string>] [-Icon <string>] [-ClearColor] [-ClearDescription] [-ClearIcon] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Update
@@ -43,7 +43,7 @@ Clears the current color. Mutually exclusive with Color.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Update
+Parameter Sets: Create, Update
 Aliases: None
 Possible values:
 
@@ -59,7 +59,7 @@ Clears the current description. Mutually exclusive with Description.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Update
+Parameter Sets: Create, Update
 Aliases: None
 Possible values:
 
@@ -75,7 +75,7 @@ Clears the current icon. Mutually exclusive with Icon.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Update
+Parameter Sets: Create, Update
 Aliases: None
 Possible values:
 

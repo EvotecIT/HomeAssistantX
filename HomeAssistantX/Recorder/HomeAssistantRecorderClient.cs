@@ -1,0 +1,256 @@
+using System.Globalization;
+using System.Text.Json;
+using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
+using HomeAssistantX.Services;
+using HomeAssistantX.WebSockets;
+
+namespace HomeAssistantX.Recorder;
+
+/// <summary>Provides Recorder history, logbook, statistics, and maintenance operations.</summary>
+public sealed class HomeAssistantRecorderClient
+{
+    private readonly HomeAssistantWebSocketClient _webSocket;
+    private readonly HomeAssistantServiceClient _services;
+
+    internal HomeAssistantRecorderClient(HomeAssistantWebSocketClient webSocket, HomeAssistantServiceClient services)
+    {
+        _webSocket = webSocket;
+        _services = services;
+    }
+
+    public async Task<IReadOnlyList<HomeAssistantStatisticMetadata>> GetStatisticsMetadataAsync(
+        IReadOnlyCollection<string>? statisticIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var payload = statisticIds is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = RequireIds(statisticIds, nameof(statisticIds)) };
+        var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(value, "Recorder statistics metadata could not be decoded.");
+    }
+
+    public async Task<IReadOnlyList<HomeAssistantStatisticMetadata>> ListStatisticsAsync(
+        HomeAssistantStatisticKind kind = HomeAssistantStatisticKind.Any,
+        CancellationToken cancellationToken = default)
+    {
+        var payload = kind == HomeAssistantStatisticKind.Any ? null : new Dictionary<string, object?>
+        {
+            ["statistic_type"] = kind == HomeAssistantStatisticKind.Mean ? "mean" : kind == HomeAssistantStatisticKind.Sum ? "sum" : throw new ArgumentOutOfRangeException(nameof(kind))
+        };
+        var value = await _webSocket.RequestAsync("recorder/list_statistic_ids", payload, cancellationToken).ConfigureAwait(false);
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(value, "Recorder statistic identifiers could not be decoded.");
+    }
+
+    public async Task<IReadOnlyList<HomeAssistantStatisticSeries>> GetStatisticsAsync(
+        HomeAssistantStatisticsQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        if (query is null) throw new ArgumentNullException(nameof(query));
+        if (query.EndTime.HasValue && query.EndTime <= query.StartTime)
+            throw new ArgumentOutOfRangeException(nameof(query), "The statistics end must be after the start.");
+        var payload = new Dictionary<string, object?>
+        {
+            ["start_time"] = query.StartTime.ToString("O", CultureInfo.InvariantCulture),
+            ["statistic_ids"] = query.StatisticIds,
+            ["period"] = PeriodName(query.Period)
+        };
+        if (query.EndTime.HasValue) payload["end_time"] = query.EndTime.Value.ToString("O", CultureInfo.InvariantCulture);
+        if (query.Types is not null)
+        {
+            if (query.Types.Count == 0) throw new ArgumentException("Statistics types cannot be empty.", nameof(query));
+            payload["types"] = query.Types.Select(TypeName).Distinct(StringComparer.Ordinal).ToArray();
+        }
+        if (query.Units is not null)
+        {
+            if (query.Units.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value)))
+                throw new ArgumentException("Statistics unit names and values must be non-empty.", nameof(query));
+            payload["units"] = query.Units;
+        }
+
+        var value = await _webSocket.RequestAsync("recorder/statistics_during_period", payload, cancellationToken).ConfigureAwait(false);
+        if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Recorder statistics were not an object.");
+        var series = new List<HomeAssistantStatisticSeries>();
+        foreach (var property in value.EnumerateObject())
+        {
+            var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(property.Value, "A Recorder statistics series could not be decoded.");
+            series.Add(new HomeAssistantStatisticSeries { StatisticId = property.Name, Rows = rows });
+        }
+        return series.OrderBy(item => item.StatisticId, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public Task<JsonElement> ValidateStatisticsAsync(CancellationToken cancellationToken = default)
+        => _webSocket.RequestAsync("recorder/validate_statistics", null, cancellationToken);
+
+    public async Task UpdateStatisticsIssuesAsync(CancellationToken cancellationToken = default)
+        => _ = await _webSocket.RequestAsync("recorder/update_statistics_issues", null, cancellationToken).ConfigureAwait(false);
+
+    public async Task ClearStatisticsAsync(IReadOnlyCollection<string> statisticIds, CancellationToken cancellationToken = default)
+        => _ = await _webSocket.RequestAsync("recorder/clear_statistics", new Dictionary<string, object?> { ["statistic_ids"] = RequireIds(statisticIds, nameof(statisticIds)) }, cancellationToken).ConfigureAwait(false);
+
+    public async Task UpdateStatisticsMetadataAsync(string statisticId, string? unitClass, string? unitOfMeasurement, CancellationToken cancellationToken = default)
+        => _ = await _webSocket.RequestAsync("recorder/update_statistics_metadata", new Dictionary<string, object?>
+        {
+            ["statistic_id"] = Require(statisticId, nameof(statisticId)),
+            ["unit_class"] = unitClass,
+            ["unit_of_measurement"] = unitOfMeasurement
+        }, cancellationToken).ConfigureAwait(false);
+
+    public async Task ChangeStatisticsUnitAsync(string statisticId, string? oldUnit, string? newUnit, CancellationToken cancellationToken = default)
+        => _ = await _webSocket.RequestAsync("recorder/change_statistics_unit", new Dictionary<string, object?>
+        {
+            ["statistic_id"] = Require(statisticId, nameof(statisticId)),
+            ["old_unit_of_measurement"] = oldUnit,
+            ["new_unit_of_measurement"] = newUnit
+        }, cancellationToken).ConfigureAwait(false);
+
+    public async Task AdjustSumStatisticsAsync(string statisticId, DateTimeOffset start, double adjustment, string? unit, CancellationToken cancellationToken = default)
+    {
+        if (double.IsNaN(adjustment) || double.IsInfinity(adjustment)) throw new ArgumentOutOfRangeException(nameof(adjustment));
+        _ = await _webSocket.RequestAsync("recorder/adjust_sum_statistics", new Dictionary<string, object?>
+        {
+            ["statistic_id"] = Require(statisticId, nameof(statisticId)),
+            ["start_time"] = start.ToString("O", CultureInfo.InvariantCulture),
+            ["adjustment"] = adjustment,
+            ["adjustment_unit_of_measurement"] = unit
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ImportStatisticsAsync(HomeAssistantStatisticImportMetadata metadata, IReadOnlyCollection<HomeAssistantStatisticImportRow> rows, CancellationToken cancellationToken = default)
+    {
+        if (metadata is null) throw new ArgumentNullException(nameof(metadata));
+        metadata.ValidateRows(rows);
+        var metadataPayload = new Dictionary<string, object?>
+        {
+            ["statistic_id"] = Require(metadata.StatisticId, nameof(metadata.StatisticId)),
+            ["source"] = Require(metadata.Source, nameof(metadata.Source)),
+            ["name"] = metadata.Name,
+            ["has_mean"] = metadata.HasMean,
+            ["has_sum"] = metadata.HasSum,
+            ["unit_class"] = metadata.UnitClass,
+            ["unit_of_measurement"] = metadata.UnitOfMeasurement
+        };
+        metadataPayload["mean_type"] = (int)metadata.MeanType;
+        var rowPayload = rows.Select(ToImportPayload).ToArray();
+        _ = await _webSocket.RequestAsync("recorder/import_statistics", new Dictionary<string, object?>
+        {
+            ["metadata"] = metadataPayload,
+            ["stats"] = rowPayload
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<HomeAssistantServiceCallResult> PurgeAsync(int? keepDays = null, bool repack = false, bool applyFilter = false, CancellationToken cancellationToken = default)
+    {
+        if (keepDays.HasValue && keepDays.Value < 0) throw new ArgumentOutOfRangeException(nameof(keepDays));
+        var call = new HomeAssistantServiceCall("recorder", "purge");
+        if (keepDays.HasValue) call.WithData("keep_days", keepDays.Value);
+        if (repack) call.WithData("repack", true);
+        if (applyFilter) call.WithData("apply_filter", true);
+        return _services.CallControlAsync(call, cancellationToken);
+    }
+
+    public Task<HomeAssistantServiceCallResult> PurgeEntitiesAsync(IReadOnlyCollection<string>? entityIds = null, IReadOnlyCollection<string>? domains = null, IReadOnlyCollection<string>? entityGlobs = null, int? keepDays = null, CancellationToken cancellationToken = default)
+    {
+        if ((entityIds is null || entityIds.Count == 0) && (domains is null || domains.Count == 0) && (entityGlobs is null || entityGlobs.Count == 0))
+            throw new ArgumentException("At least one entity, domain, or entity glob is required.");
+        if (keepDays.HasValue && keepDays.Value < 0) throw new ArgumentOutOfRangeException(nameof(keepDays));
+        var call = new HomeAssistantServiceCall("recorder", "purge_entities");
+        if (entityIds is { Count: > 0 }) call.WithData("entity_id", RequireEntityIds(entityIds, nameof(entityIds)));
+        if (domains is { Count: > 0 }) call.WithData("domains", RequireDomains(domains, nameof(domains)));
+        if (entityGlobs is { Count: > 0 }) call.WithData("entity_globs", RequireIds(entityGlobs, nameof(entityGlobs)));
+        if (keepDays.HasValue) call.WithData("keep_days", keepDays.Value);
+        return _services.CallControlAsync(call, cancellationToken);
+    }
+
+    public Task<HomeAssistantServiceCallResult> SetEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
+        => _services.CallControlAsync(new HomeAssistantServiceCall("recorder", enabled ? "enable" : "disable"), cancellationToken);
+
+    private static Dictionary<string, object?> ToImportPayload(HomeAssistantStatisticImportRow row)
+    {
+        if (row is null) throw new ArgumentException("Statistics rows cannot contain null values.");
+        var result = new Dictionary<string, object?> { ["start"] = row.Start.ToString("O", CultureInfo.InvariantCulture) };
+        AddFinite(result, "mean", row.Mean); AddFinite(result, "min", row.Minimum); AddFinite(result, "max", row.Maximum);
+        AddFinite(result, "state", row.State); AddFinite(result, "sum", row.Sum);
+        if (row.LastReset.HasValue) result["last_reset"] = row.LastReset.Value.ToString("O", CultureInfo.InvariantCulture);
+        return result;
+    }
+
+    private static void AddFinite(IDictionary<string, object?> payload, string name, double? value)
+    {
+        if (!value.HasValue) return;
+        if (double.IsNaN(value.Value) || double.IsInfinity(value.Value)) throw new ArgumentOutOfRangeException(name);
+        payload[name] = value.Value;
+    }
+
+    private static string Require(string value, string name)
+        => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("A non-empty value is required.", name) : value.Trim();
+
+    private static string[] RequireIds(IReadOnlyCollection<string> values, string name)
+    {
+        if (values is null || values.Count == 0 || values.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("At least one non-empty identifier is required.", name);
+        return values.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string[] RequireEntityIds(IReadOnlyCollection<string> values, string name)
+    {
+        if (values is null || values.Count == 0)
+        {
+            throw new ArgumentException("At least one entity identifier is required.", name);
+        }
+
+        var normalized = new List<string>(values.Count);
+        foreach (var value in values)
+        {
+            if (!HomeAssistantEntityId.TryNormalize(value, out var entityId))
+            {
+                throw new ArgumentException("Entity identifiers must use the native Home Assistant format.", name);
+            }
+
+            if (!normalized.Contains(entityId, StringComparer.Ordinal))
+            {
+                normalized.Add(entityId);
+            }
+        }
+
+        return normalized.ToArray();
+    }
+
+    private static string[] RequireDomains(IReadOnlyCollection<string> values, string name)
+    {
+        if (values is null || values.Count == 0)
+        {
+            throw new ArgumentException("At least one domain is required.", name);
+        }
+
+        var normalized = new List<string>(values.Count);
+        foreach (var value in values)
+        {
+            if (!HomeAssistantEntityId.TryNormalizeDomain(value, out var domain))
+            {
+                throw new ArgumentException("Domains must use the native Home Assistant format.", name);
+            }
+
+            if (!normalized.Contains(domain, StringComparer.Ordinal))
+            {
+                normalized.Add(domain);
+            }
+        }
+
+        return normalized.ToArray();
+    }
+
+    private static string PeriodName(HomeAssistantStatisticPeriod value) => value switch
+    {
+        HomeAssistantStatisticPeriod.FiveMinute => "5minute", HomeAssistantStatisticPeriod.Hour => "hour",
+        HomeAssistantStatisticPeriod.Day => "day", HomeAssistantStatisticPeriod.Week => "week",
+        HomeAssistantStatisticPeriod.Month => "month",
+        _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+
+    private static string TypeName(HomeAssistantStatisticType value) => value switch
+    {
+        HomeAssistantStatisticType.Change => "change", HomeAssistantStatisticType.LastReset => "last_reset",
+        HomeAssistantStatisticType.Maximum => "max", HomeAssistantStatisticType.Mean => "mean",
+        HomeAssistantStatisticType.Minimum => "min", HomeAssistantStatisticType.State => "state",
+        HomeAssistantStatisticType.Sum => "sum", _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+}

@@ -66,6 +66,9 @@ All endpoints currently listed in the official REST API reference have named met
 | Persistent notifications | First class | List, create/update by stable ID, dismiss one/all, and reconnect-safe current/added/updated/removed subscriptions |
 | Notify entities | First class | Standard `notify.send_message` with typed entity, device, area, floor, or label targets; integration-specific legacy notify services remain generic actions |
 | Calendar event management | First class | Create, update, delete, recurring-event references, and live range subscriptions |
+| Energy dashboard | First class / extensible | Named preference read/update, capabilities, validation, provider forecasts, and fossil-energy calculations; integration-owned source/forecast fields are preserved as JSON |
+| Recorder statistics | First class | Catalog and metadata, aggregated periods, validation, issue refresh, metadata/unit/sum maintenance, import, and explicit clearing |
+| Weather | First class | Current observations, convertible units, service-response forecasts, and reconnect-safe daily/hourly/twice-daily subscriptions |
 | Other/custom commands | Raw | `RequestAsync` and `SubscribeAsync` |
 | Coalesced message batches | First class | Object and array frames are decoded; byte and message-count limits reject oversized batches |
 
@@ -84,6 +87,7 @@ open-ended Home Assistant payloads remain `JsonElement`.
 | Automation and script traces | First class / extensible | List summaries, retrieve one run, inspect related contexts |
 | Update entities | First class | Discover update states, release notes, and invoke `update.install` |
 | Diagnostics | First class / binary | List diagnostic handlers and download redacted config-entry or device diagnostics |
+| Recorder history and maintenance | First class | REST history/logbook plus typed long-term statistics; purge, entity purge, enable/disable, import, correction, and clear operations are explicit mutations |
 
 ## Supervisor and Home Assistant OS
 
@@ -149,7 +153,7 @@ The following boundaries are intentional:
 | Instance discovery over mDNS | Not supported yet | Cross-platform discovery deserves an optional adapter or a dependency-free implementation; manual URL entry works today |
 | Native companion-app registration and webhook lifecycle | Raw / future adapter | Different lifecycle from the Core client; should not distort the base transport |
 | HACS/custom repository package installation | Not modeled | Not a stable Core package-management contract; Supervisor apps are supported separately |
-| Energy preferences and media browsers | Raw | Schemas evolve independently; consumers can use protected raw commands until a reusable model earns ownership here |
+| Media browsers | Raw | Provider media trees evolve independently; consumers can use the protected raw command until Tactra establishes a reusable model |
 | Product device-domain normalization | Consumer-owned | CasaRay/Tactra map joined HA inventory into their own product models and safety/UI policy |
 | HomeKit protocol/bridge | Out of scope | Separate protocol and credential model; not part of HomeAssistantX |
 
@@ -157,4 +161,4 @@ The following boundaries are intentional:
 
 The normal contract suite runs against a real loopback HTTP/WebSocket peer, including rejected-token recovery, exactly-once retry, fragmented and coalesced frames, malformed and oversized batch rejection, out-of-order responses, bounded bodies, OAuth refresh concurrency, cancellation, subscription failure, reconnect, and missed-state reconciliation. It runs on .NET Framework 4.7.2 and .NET 10.
 
-The optional live suite is read-only. It validates the configured real instance's API status, configuration, components, event and service catalogs, state REST/WebSocket parity, panels, registries, signed paths, subscription setup, recent history when the recorder is loaded, operational capability discovery, system logs, Repairs, diagnostics handlers, configuration entries, update discovery, and accessible Supervisor inventory. It does not call services, fire events, create tokens, install updates, restart components, create backups, expose entities, or otherwise mutate the home.
+The optional live suite is read-only. It validates the configured real instance's API status, configuration, components, event and service catalogs, state REST/WebSocket parity, panels, registries, signed paths, subscription setup, recent history and Recorder statistics when available, Energy preferences/validation/forecasts when configured, current weather and forecast subscriptions when available, operational capability discovery, system logs, Repairs, diagnostics handlers, configuration entries, update discovery, and accessible Supervisor inventory. It does not call services, fire events, create tokens, alter Energy or Recorder data, install updates, restart components, create backups, expose entities, or otherwise mutate the home.

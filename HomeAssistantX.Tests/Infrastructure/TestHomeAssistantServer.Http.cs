@@ -137,6 +137,11 @@ internal sealed partial class TestHomeAssistantServer
             case "GET /api/states/sensor.kitchen_temperature":
                 await WriteHttpResponseAsync(stream, 200, KitchenTemperatureStateJson).ConfigureAwait(false);
                 break;
+            case "GET /api/states/weather.home":
+                await WriteHttpResponseAsync(stream, 200,
+                    "{\"entity_id\":\"weather.home\",\"state\":\"partlycloudy\",\"attributes\":{\"friendly_name\":\"Home\",\"temperature\":21.5,\"temperature_unit\":\"°C\",\"humidity\":55,\"wind_bearing\":180,\"supported_features\":3}}")
+                    .ConfigureAwait(false);
+                break;
             case "POST /api/states/sensor.virtual":
                 await WriteHttpResponseAsync(stream, 200, StateMutationResponseJson).ConfigureAwait(false);
                 break;

@@ -71,7 +71,7 @@ public sealed partial class HomeAssistantRestClient
 
         var parameters = new List<KeyValuePair<string, string?>>();
         AddTimestamp(parameters, "end_time", query.EndTime);
-        if (!string.IsNullOrWhiteSpace(query.EntityId))
+        if (query.EntityId is not null)
         {
             parameters.Add(new KeyValuePair<string, string?>("entity", NormalizeEntityId(query.EntityId!, cancellationToken)));
         }

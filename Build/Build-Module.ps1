@@ -62,6 +62,15 @@ Build-Module -ModuleName 'HomeAssistantX' -RunMode $RunMode {
             'HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider'
             'HomeAssistantX.Authentication.StaticAccessTokenProvider'
             'HomeAssistantX.Operations.HomeAssistantCapabilityAvailability'
+            'HomeAssistantX.Energy.HomeAssistantEnergyPeriod'
+            'HomeAssistantX.Recorder.HomeAssistantStatisticKind'
+            'HomeAssistantX.Recorder.HomeAssistantStatisticPeriod'
+            'HomeAssistantX.Recorder.HomeAssistantStatisticType'
+            'HomeAssistantX.Recorder.HomeAssistantStatisticMeanType'
+            'HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata'
+            'HomeAssistantX.Recorder.HomeAssistantStatisticImportRow'
+            'HomeAssistantX.Weather.HomeAssistantWeatherForecastType'
+            'HomeAssistantX.Weather.HomeAssistantWeatherFeature'
         )
         DeleteTargetModuleBeforeBuild           = $true
         NETBinaryModuleDocumentation            = $true

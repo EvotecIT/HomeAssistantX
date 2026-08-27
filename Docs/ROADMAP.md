@@ -13,7 +13,7 @@ HomeAssistantX should remain one dependency-light package. New packages are just
 - [ ] Add a native-app registration/webhook adapter when CasaRay or another real host needs companion-app lifecycle behavior.
 - [ ] Promote integration-specific raw commands into typed APIs only when two consumers need the same stable contract.
 - [ ] Add an MCP/agent adapter over the same explicit connection and typed operations after the library and PowerShell contracts have field experience. Keep mutations policy-gated and expose read-only troubleshooting first.
-- [ ] Add optional recorder/statistics, energy-preference, and media-browser models when real consumers need more than the bounded raw APIs.
+- [ ] Add typed media-browser models when Tactra needs more than the bounded raw API.
 - [ ] Add narrowly scoped restore/recovery helpers only after defining interactive confirmation, backup verification, and failure-recovery contracts.
 
 ## Explicit non-goals

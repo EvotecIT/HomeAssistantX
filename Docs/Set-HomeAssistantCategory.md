@@ -11,7 +11,7 @@ Creates or updates a Home Assistant category within an explicit scope.
 ## SYNTAX
 ### Create (Default)
 ```powershell
-Set-HomeAssistantCategory [-Scope] <string> [-Name] <string> [-Icon <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-HomeAssistantCategory [-Scope] <string> [-Name] <string> [-Icon <string>] [-ClearIcon] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Update
@@ -59,7 +59,7 @@ Clears the current icon. Mutually exclusive with Icon.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Update
+Parameter Sets: Create, Update
 Aliases: None
 Possible values:
 

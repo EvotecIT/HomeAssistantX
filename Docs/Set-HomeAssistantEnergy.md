@@ -4,61 +4,28 @@ Module Name: HomeAssistantX
 online version: https://github.com/EvotecIT/HomeAssistantX
 schema: 2.0.0
 ---
-# Invoke-HomeAssistantApp
+# Set-HomeAssistantEnergy
 ## SYNOPSIS
-Runs one explicit lifecycle operation for a Supervisor-managed Home Assistant app.
+Updates one or more Energy dashboard preference collections.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-HomeAssistantApp [-App] <string> [-Action] <HomeAssistantAppAction> [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-HomeAssistantEnergy [-EnergySourcesJson <string>] [-DeviceConsumptionJson <string>] [-WaterConsumptionJson <string>] [-PassThru] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Runs one explicit lifecycle operation for a Supervisor-managed Home Assistant app.
+Updates one or more Energy dashboard preference collections.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-$ha | Invoke-HomeAssistantApp -App 'example_app' -Action Restart -WhatIf
+Set-HomeAssistantEnergy -DeviceConsumptionJson '[{"stat_consumption":"sensor.ev_energy"}]' -WhatIf
 ```
 
-Uses one lifecycle action enum instead of a cmdlet per app operation.
 
 ## PARAMETERS
-
-### -Action
-Lifecycle action: Install, Update, Start, Stop, Restart, or Uninstall.
-
-```yaml
-Type: HomeAssistantAppAction
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values: Install, Update, Start, Stop, Restart, Uninstall
-
-Required: True
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -App
-Supervisor app/add-on slug.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: True
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
 
 ### -Connection
 Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.
@@ -76,11 +43,59 @@ Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
+### -DeviceConsumptionJson
+Specifies a value for device consumption json.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -EnergySourcesJson
+Specifies a value for energy sources json.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -PassThru
-Writes the Supervisor result to the pipeline.
+Specifies the pass thru switch.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -WaterConsumptionJson
+Specifies a value for water consumption json.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -101,7 +116,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Text.Json.JsonElement`
+- `HomeAssistantX.Energy.HomeAssistantEnergyPreferences`
 
 ## RELATED LINKS
 

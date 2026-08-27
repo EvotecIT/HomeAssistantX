@@ -84,6 +84,12 @@ while (await Console.In.ReadLineAsync() is { } command)
             server.ClearLastWebSocketCommand("config/category_registry/list");
             Console.WriteLine("CATEGORY_LIST_CLEARED");
             break;
+        case "GET_LAST_RECORDER_IMPORT":
+            Console.WriteLine(server.GetLastWebSocketCommand("recorder/import_statistics") ?? "RECORDER_IMPORT_NONE");
+            break;
+        case "GET_LAST_RECORDER_METADATA_UPDATE":
+            Console.WriteLine(server.GetLastWebSocketCommand("recorder/update_statistics_metadata") ?? "RECORDER_METADATA_NONE");
+            break;
         case "GET_UNSUBSCRIBE_COUNT":
             Console.WriteLine(server.UnsubscribeCommandCount);
             break;

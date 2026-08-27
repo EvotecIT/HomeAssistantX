@@ -1501,6 +1501,421 @@
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Get-HomeAssistantEnergy</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>HomeAssistantEnergy</command:noun>
+      <maml:description>
+        <maml:para>Reads Energy preferences, capabilities, validation, provider forecasts, or fossil-energy periods.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Reads Energy preferences, capabilities, validation, provider forecasts, or fossil-energy periods.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="Preferences">
+        <maml:name>Get-HomeAssistantEnergy</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Preferences</maml:name>
+          <maml:description>
+            <maml:para>Specifies the preferences switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Info">
+        <maml:name>Get-HomeAssistantEnergy</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Info</maml:name>
+          <maml:description>
+            <maml:para>Specifies the info switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Validation">
+        <maml:name>Get-HomeAssistantEnergy</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Validation</maml:name>
+          <maml:description>
+            <maml:para>Specifies the validation switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="SolarForecast">
+        <maml:name>Get-HomeAssistantEnergy</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SolarForecast</maml:name>
+          <maml:description>
+            <maml:para>Specifies the solar forecast switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="FossilConsumption">
+        <maml:name>Get-HomeAssistantEnergy</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Co2StatisticId</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for co2 statistic id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EndTime</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for end time.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">DateTimeOffset</command:parameterValue>
+          <dev:type>
+            <maml:name>DateTimeOffset</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EnergyStatisticId</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for energy statistic id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FossilConsumption</maml:name>
+          <maml:description>
+            <maml:para>Specifies the fossil consumption switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Period</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for period.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantEnergyPeriod</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">FiveMinute</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Hour</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Day</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Month</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantEnergyPeriod</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>StartTime</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for start time.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">DateTimeOffset</command:parameterValue>
+          <dev:type>
+            <maml:name>DateTimeOffset</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Co2StatisticId</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for co2 statistic id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EndTime</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for end time.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">DateTimeOffset</command:parameterValue>
+        <dev:type>
+          <maml:name>DateTimeOffset</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EnergyStatisticId</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for energy statistic id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FossilConsumption</maml:name>
+        <maml:description>
+          <maml:para>Specifies the fossil consumption switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Info</maml:name>
+        <maml:description>
+          <maml:para>Specifies the info switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Period</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for period.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">HomeAssistantEnergyPeriod</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">FiveMinute</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Hour</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Day</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Month</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantEnergyPeriod</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Preferences</maml:name>
+        <maml:description>
+          <maml:para>Specifies the preferences switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SolarForecast</maml:name>
+        <maml:description>
+          <maml:para>Specifies the solar forecast switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>StartTime</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for start time.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">DateTimeOffset</command:parameterValue>
+        <dev:type>
+          <maml:name>DateTimeOffset</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Validation</maml:name>
+        <maml:description>
+          <maml:para>Specifies the validation switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Energy.HomeAssistantEnergyPreferences</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Energy.HomeAssistantEnergyInfo</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Text.Json.JsonElement</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Collections.Generic.IReadOnlyDictionary[System.String,System.Text.Json.JsonElement]</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Energy.HomeAssistantFossilEnergyPeriod</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Inspect Energy dashboard preferences</maml:title>
+        <dev:code>Get-HomeAssistantEnergy</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Calculate hourly fossil energy</maml:title>
+        <dev:code>Get-HomeAssistantEnergy -FossilConsumption -StartTime (Get-Date).AddDays(-1) -EndTime (Get-Date) -EnergyStatisticId sensor.grid_energy -Co2StatisticId sensor.co2_intensity -Period Hour</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Get-HomeAssistantEntity</command:name>
       <command:verb>Get</command:verb>
       <command:noun>HomeAssistantEntity</command:noun>
@@ -3297,6 +3712,154 @@
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Get-HomeAssistantLogbook</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>HomeAssistantLogbook</command:noun>
+      <maml:description>
+        <maml:para>Reads human-oriented Recorder logbook activity for a bounded time range.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Reads human-oriented Recorder logbook activity for a bounded time range.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Get-HomeAssistantLogbook</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EndTime</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for end time.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DateTimeOffset</command:parameterValue>
+          <dev:type>
+            <maml:name>DateTimeOffset</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>EntityId</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for entity id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>StartTime</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for start time.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DateTimeOffset</command:parameterValue>
+          <dev:type>
+            <maml:name>DateTimeOffset</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EndTime</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for end time.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DateTimeOffset</command:parameterValue>
+        <dev:type>
+          <maml:name>DateTimeOffset</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+        <maml:name>EntityId</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for entity id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>StartTime</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for start time.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DateTimeOffset</command:parameterValue>
+        <dev:type>
+          <maml:name>DateTimeOffset</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Rest.HomeAssistantLogbookEntry</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Read today's kitchen light activity</maml:title>
+        <dev:code>Get-HomeAssistantLogbook -StartTime (Get-Date).Date -EntityId light.kitchen</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Get-HomeAssistantNotification</command:name>
       <command:verb>Get</command:verb>
       <command:noun>HomeAssistantNotification</command:noun>
@@ -3364,6 +3927,370 @@
       <command:example>
         <maml:title>List current notifications</maml:title>
         <dev:code>Get-HomeAssistantNotification</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-HomeAssistantStatistic</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>HomeAssistantStatistic</command:noun>
+      <maml:description>
+        <maml:para>Lists Recorder statistics or returns typed aggregated values.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Lists Recorder statistics or returns typed aggregated values.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="Catalog">
+        <maml:name>Get-HomeAssistantStatistic</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Kind</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for kind.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantStatisticKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Any</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Mean</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Sum</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantStatisticKind</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Metadata">
+        <maml:name>Get-HomeAssistantStatistic</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Metadata</maml:name>
+          <maml:description>
+            <maml:para>Specifies the metadata switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>StatisticId</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for statistic id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Values">
+        <maml:name>Get-HomeAssistantStatistic</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EndTime</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for end time.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DateTimeOffset</command:parameterValue>
+          <dev:type>
+            <maml:name>DateTimeOffset</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Period</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for period.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantStatisticPeriod</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">FiveMinute</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Hour</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Day</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Week</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Month</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantStatisticPeriod</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>StartTime</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for start time.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">DateTimeOffset</command:parameterValue>
+          <dev:type>
+            <maml:name>DateTimeOffset</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>StatisticId</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for statistic id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Type</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for type.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantStatisticType[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Change</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LastReset</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Maximum</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Mean</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Minimum</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">State</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Sum</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantStatisticType[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Unit</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for unit.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Dictionary`2</command:parameterValue>
+          <dev:type>
+            <maml:name>Dictionary`2</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EndTime</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for end time.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DateTimeOffset</command:parameterValue>
+        <dev:type>
+          <maml:name>DateTimeOffset</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Kind</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for kind.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantStatisticKind</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Any</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Mean</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Sum</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantStatisticKind</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Metadata</maml:name>
+        <maml:description>
+          <maml:para>Specifies the metadata switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Period</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for period.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">HomeAssistantStatisticPeriod</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">FiveMinute</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Hour</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Day</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Week</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Month</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantStatisticPeriod</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>StartTime</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for start time.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">DateTimeOffset</command:parameterValue>
+        <dev:type>
+          <maml:name>DateTimeOffset</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="None">
+        <maml:name>StatisticId</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for statistic id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Type</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for type.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantStatisticType[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Change</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">LastReset</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Maximum</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Mean</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Minimum</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">State</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Sum</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantStatisticType[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Unit</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for unit.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Dictionary`2</command:parameterValue>
+        <dev:type>
+          <maml:name>Dictionary`2</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Recorder.HomeAssistantStatisticMetadata</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Recorder.HomeAssistantStatisticSeries</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>List sum statistics</maml:title>
+        <dev:code>Get-HomeAssistantStatistic -Kind Sum</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Read hourly energy</maml:title>
+        <dev:code>Get-HomeAssistantStatistic -StatisticId sensor.grid_energy -StartTime (Get-Date).AddDays(-1) -Period Hour -Type Change,Sum</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -3738,6 +4665,247 @@
         <dev:code>$ha | Get-HomeAssistantUpdate -AvailableOnly</dev:code>
         <dev:remarks>
           <maml:para>Returns update entities that currently advertise a newer version.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-HomeAssistantWeather</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>HomeAssistantWeather</command:noun>
+      <maml:description>
+        <maml:para>Reads current observations, forecasts, or supported weather units.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Reads current observations, forecasts, or supported weather units.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="Current">
+        <maml:name>Get-HomeAssistantWeather</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>EntityId</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for entity id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Forecast">
+        <maml:name>Get-HomeAssistantWeather</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>EntityId</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for entity id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Forecast</maml:name>
+          <maml:description>
+            <maml:para>Specifies the forecast switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ForecastType</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for forecast type.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantWeatherForecastType</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Daily</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Hourly</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TwiceDaily</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantWeatherForecastType</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Units">
+        <maml:name>Get-HomeAssistantWeather</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ConvertibleUnits</maml:name>
+          <maml:description>
+            <maml:para>Specifies the convertible units switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ConvertibleUnits</maml:name>
+        <maml:description>
+          <maml:para>Specifies the convertible units switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+        <maml:name>EntityId</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for entity id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Forecast</maml:name>
+        <maml:description>
+          <maml:para>Specifies the forecast switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ForecastType</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for forecast type.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">HomeAssistantWeatherForecastType</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Daily</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Hourly</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">TwiceDaily</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantWeatherForecastType</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Weather.HomeAssistantWeatherObservation</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Weather.HomeAssistantWeatherForecastUpdate</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Collections.Generic.IReadOnlyDictionary[System.String,System.Collections.Generic.IReadOnlyList[System.String]]</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>List weather entities</maml:title>
+        <dev:code>Get-HomeAssistantWeather</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Read the daily forecast</maml:title>
+        <dev:code>Get-HomeAssistantWeather -EntityId weather.home -Forecast -ForecastType Daily</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -4192,7 +5360,18 @@
         </maml:description>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Services.HomeAssistantServiceCallResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Text.Json.JsonElement</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -4957,7 +6136,13 @@
         </maml:description>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Text.Json.JsonElement</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -4969,6 +6154,478 @@
         <dev:code>$ha | Invoke-HomeAssistantApp -App 'example_app' -Action Restart -WhatIf</dev:code>
         <dev:remarks>
           <maml:para>Uses one lifecycle action enum instead of a cmdlet per app operation.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Invoke-HomeAssistantRecorderMaintenance</command:name>
+      <command:verb>Invoke</command:verb>
+      <command:noun>HomeAssistantRecorderMaintenance</command:noun>
+      <maml:description>
+        <maml:para>Runs a bounded Recorder maintenance task.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Runs a bounded Recorder maintenance task.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="Purge">
+        <maml:name>Invoke-HomeAssistantRecorderMaintenance</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ApplyFilter</maml:name>
+          <maml:description>
+            <maml:para>Specifies the apply filter switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>KeepDays</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for keep days.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Specifies the pass thru switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Purge</maml:name>
+          <maml:description>
+            <maml:para>Specifies the purge switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Repack</maml:name>
+          <maml:description>
+            <maml:para>Specifies the repack switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="PurgeEntities">
+        <maml:name>Invoke-HomeAssistantRecorderMaintenance</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Domain</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for domain.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EntityGlob</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for entity glob.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EntityId</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for entity id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>KeepDays</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for keep days.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Specifies the pass thru switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PurgeEntities</maml:name>
+          <maml:description>
+            <maml:para>Specifies the purge entities switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Enable">
+        <maml:name>Invoke-HomeAssistantRecorderMaintenance</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enable</maml:name>
+          <maml:description>
+            <maml:para>Specifies the enable switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Specifies the pass thru switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Disable">
+        <maml:name>Invoke-HomeAssistantRecorderMaintenance</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Disable</maml:name>
+          <maml:description>
+            <maml:para>Specifies the disable switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Specifies the pass thru switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="RefreshStatisticsIssues">
+        <maml:name>Invoke-HomeAssistantRecorderMaintenance</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RefreshStatisticsIssues</maml:name>
+          <maml:description>
+            <maml:para>Specifies the refresh statistics issues switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ApplyFilter</maml:name>
+        <maml:description>
+          <maml:para>Specifies the apply filter switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Disable</maml:name>
+        <maml:description>
+          <maml:para>Specifies the disable switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Domain</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for domain.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Enable</maml:name>
+        <maml:description>
+          <maml:para>Specifies the enable switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EntityGlob</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for entity glob.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EntityId</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for entity id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>KeepDays</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for keep days.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Specifies the pass thru switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Purge</maml:name>
+        <maml:description>
+          <maml:para>Specifies the purge switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PurgeEntities</maml:name>
+        <maml:description>
+          <maml:para>Specifies the purge entities switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RefreshStatisticsIssues</maml:name>
+        <maml:description>
+          <maml:para>Specifies the refresh statistics issues switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Repack</maml:name>
+        <maml:description>
+          <maml:para>Specifies the repack switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Services.HomeAssistantServiceCallResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Preview purging old data</maml:title>
+        <dev:code>Invoke-HomeAssistantRecorderMaintenance -Purge -KeepDays 30 -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -7021,6 +8678,188 @@
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Receive-HomeAssistantWeatherForecast</command:name>
+      <command:verb>Receive</command:verb>
+      <command:noun>HomeAssistantWeatherForecast</command:noun>
+      <maml:description>
+        <maml:para>Streams weather forecast updates without polling.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Streams weather forecast updates without polling.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Receive-HomeAssistantWeatherForecast</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Count</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for count.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>EntityId</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for entity id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ForecastType</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for forecast type.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantWeatherForecastType</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Daily</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Hourly</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TwiceDaily</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantWeatherForecastType</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for timeout seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Count</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for count.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+        <maml:name>EntityId</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for entity id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ForecastType</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for forecast type.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">HomeAssistantWeatherForecastType</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Daily</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Hourly</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">TwiceDaily</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantWeatherForecastType</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for timeout seconds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Weather.HomeAssistantWeatherForecastUpdate</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Wait for the next hourly forecast</maml:title>
+        <dev:code>Receive-HomeAssistantWeatherForecast weather.home -ForecastType Hourly -Count 1 -TimeoutSeconds 30</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Remove-HomeAssistantCalendarEvent</command:name>
       <command:verb>Remove</command:verb>
       <command:noun>HomeAssistantCalendarEvent</command:noun>
@@ -7545,6 +9384,100 @@
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Remove-HomeAssistantStatistic</command:name>
+      <command:verb>Remove</command:verb>
+      <command:noun>HomeAssistantStatistic</command:noun>
+      <maml:description>
+        <maml:para>Permanently removes long-term statistics for one or more identifiers.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Permanently removes long-term statistics for one or more identifiers.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Remove-HomeAssistantStatistic</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>StatisticId</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for statistic id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="None">
+        <maml:name>StatisticId</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for statistic id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues />
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Preview removing obsolete statistics</maml:title>
+        <dev:code>Remove-HomeAssistantStatistic sensor.old_energy -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Restart-HomeAssistant</command:name>
       <command:verb>Restart</command:verb>
       <command:noun>HomeAssistant</command:noun>
@@ -7848,7 +9781,18 @@
         </maml:description>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Operations.HomeAssistantIntegrationOperationResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Text.Json.JsonElement</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -9116,6 +11060,18 @@
     <command:syntax>
       <command:syntaxItem parameterSetName="Create">
         <maml:name>Set-HomeAssistantCategory</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearIcon</maml:name>
+          <maml:description>
+            <maml:para>Clears the current icon. Mutually exclusive with Icon.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
           <maml:name>Connection</maml:name>
           <maml:description>
@@ -10839,6 +12795,178 @@
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Set-HomeAssistantEnergy</command:name>
+      <command:verb>Set</command:verb>
+      <command:noun>HomeAssistantEnergy</command:noun>
+      <maml:description>
+        <maml:para>Updates one or more Energy dashboard preference collections.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Updates one or more Energy dashboard preference collections.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Set-HomeAssistantEnergy</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DeviceConsumptionJson</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for device consumption json.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EnergySourcesJson</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for energy sources json.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Specifies the pass thru switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WaterConsumptionJson</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for water consumption json.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DeviceConsumptionJson</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for device consumption json.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EnergySourcesJson</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for energy sources json.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Specifies the pass thru switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WaterConsumptionJson</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for water consumption json.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Energy.HomeAssistantEnergyPreferences</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Preview replacing device consumption</maml:title>
+        <dev:code>Set-HomeAssistantEnergy -DeviceConsumptionJson '[{"stat_consumption":"sensor.ev_energy"}]' -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Set-HomeAssistantLabel</command:name>
       <command:verb>Set</command:verb>
       <command:noun>HomeAssistantLabel</command:noun>
@@ -10852,6 +12980,42 @@
     <command:syntax>
       <command:syntaxItem parameterSetName="Create">
         <maml:name>Set-HomeAssistantLabel</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearColor</maml:name>
+          <maml:description>
+            <maml:para>Clears the current color. Mutually exclusive with Color.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearDescription</maml:name>
+          <maml:description>
+            <maml:para>Clears the current description. Mutually exclusive with Description.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearIcon</maml:name>
+          <maml:description>
+            <maml:para>Clears the current icon. Mutually exclusive with Icon.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Color</maml:name>
           <maml:description>
@@ -14534,6 +16698,510 @@
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Set-HomeAssistantStatistic</command:name>
+      <command:verb>Set</command:verb>
+      <command:noun>HomeAssistantStatistic</command:noun>
+      <maml:description>
+        <maml:para>Updates metadata, converts units, adjusts sums, or imports Recorder statistics.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Updates metadata, converts units, adjusts sums, or imports Recorder statistics.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="Metadata">
+        <maml:name>Set-HomeAssistantStatistic</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearUnitClass</maml:name>
+          <maml:description>
+            <maml:para>Specifies the clear unit class switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearUnitOfMeasurement</maml:name>
+          <maml:description>
+            <maml:para>Specifies the clear unit of measurement switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>StatisticId</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for statistic id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UnitClass</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for unit class.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UnitOfMeasurement</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for unit of measurement.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Unit">
+        <maml:name>Set-HomeAssistantStatistic</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ChangeUnit</maml:name>
+          <maml:description>
+            <maml:para>Specifies the change unit switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearNewUnit</maml:name>
+          <maml:description>
+            <maml:para>Specifies the clear new unit switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearOldUnit</maml:name>
+          <maml:description>
+            <maml:para>Specifies the clear old unit switch.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NewUnit</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for new unit.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OldUnit</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for old unit.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>StatisticId</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for statistic id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="AdjustSum">
+        <maml:name>Set-HomeAssistantStatistic</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AdjustSum</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for adjust sum.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>StartTime</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for start time.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">DateTimeOffset</command:parameterValue>
+          <dev:type>
+            <maml:name>DateTimeOffset</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+          <maml:name>StatisticId</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for statistic id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Unit</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for unit.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Import">
+        <maml:name>Set-HomeAssistantStatistic</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ImportMetadata</maml:name>
+          <maml:description>
+            <maml:para>Specifies a value for import metadata.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantStatisticImportMetadata</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantStatisticImportMetadata</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>ImportRow</maml:name>
+          <maml:description>
+            <maml:para>Specifies one or more values for import row.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantStatisticImportRow[]</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantStatisticImportRow[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AdjustSum</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for adjust sum.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">Double</command:parameterValue>
+        <dev:type>
+          <maml:name>Double</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ChangeUnit</maml:name>
+        <maml:description>
+          <maml:para>Specifies the change unit switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ClearNewUnit</maml:name>
+        <maml:description>
+          <maml:para>Specifies the clear new unit switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ClearOldUnit</maml:name>
+        <maml:description>
+          <maml:para>Specifies the clear old unit switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ClearUnitClass</maml:name>
+        <maml:description>
+          <maml:para>Specifies the clear unit class switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ClearUnitOfMeasurement</maml:name>
+        <maml:description>
+          <maml:para>Specifies the clear unit of measurement switch.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ImportMetadata</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for import metadata.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">HomeAssistantStatisticImportMetadata</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantStatisticImportMetadata</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>ImportRow</maml:name>
+        <maml:description>
+          <maml:para>Specifies one or more values for import row.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">HomeAssistantStatisticImportRow[]</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantStatisticImportRow[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NewUnit</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for new unit.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OldUnit</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for old unit.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>StartTime</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for start time.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">DateTimeOffset</command:parameterValue>
+        <dev:type>
+          <maml:name>DateTimeOffset</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+        <maml:name>StatisticId</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for statistic id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Unit</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for unit.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UnitClass</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for unit class.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UnitOfMeasurement</maml:name>
+        <maml:description>
+          <maml:para>Specifies a value for unit of measurement.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.Recorder.HomeAssistantStatisticImportRow[]</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues />
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Preview a sum correction</maml:title>
+        <dev:code>Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1.25 -StartTime (Get-Date) -Unit kWh -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Set-HomeAssistantSwitch</command:name>
       <command:verb>Set</command:verb>
       <command:noun>HomeAssistantSwitch</command:noun>
@@ -15022,6 +17690,82 @@
         <dev:code>$ha | Test-HomeAssistantConfiguration</dev:code>
         <dev:remarks>
           <maml:para>Returns Home Assistant's validation result without restarting Core.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Test-HomeAssistantStatistic</command:name>
+      <command:verb>Test</command:verb>
+      <command:noun>HomeAssistantStatistic</command:noun>
+      <maml:description>
+        <maml:para>Validates Recorder long-term statistics and returns every issue reported by Home Assistant.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Validates Recorder long-term statistics and returns every issue reported by Home Assistant.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Test-HomeAssistantStatistic</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Text.Json.JsonElement</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Find statistics issues</maml:title>
+        <dev:code>Test-HomeAssistantStatistic</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

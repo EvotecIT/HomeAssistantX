@@ -201,7 +201,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `None`
+- `HomeAssistantX.Services.HomeAssistantServiceCallResult`
+- `System.Text.Json.JsonElement`
 
 ## RELATED LINKS
 
