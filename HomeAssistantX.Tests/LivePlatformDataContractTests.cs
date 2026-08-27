@@ -347,6 +347,22 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task RegistryUpdatesCorrelateReturnedImmutableIdentifiers()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            LabelMutationResponseJson = "{\"label_id\":\"other\",\"name\":\"Security\"}",
+            CategoryMutationResponseJson = "{\"category_id\":\"other\",\"name\":\"Comfort\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.UpdateLabelAsync("security", new HomeAssistantLabelUpdate().WithName("Security")));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.UpdateCategoryAsync("automation", "comfort", new HomeAssistantCategoryUpdate().WithName("Comfort")));
+    }
+
+    [Fact]
     public async Task EmptyNotificationTargetFailsBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

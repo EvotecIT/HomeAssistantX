@@ -90,7 +90,7 @@ public sealed class HomeAssistantRegistryClient
         HomeAssistantLabelUpdate update,
         CancellationToken cancellationToken = default)
     {
-        HomeAssistantRegistryValidation.Require(labelId, nameof(labelId));
+        labelId = HomeAssistantRegistryValidation.Require(labelId, nameof(labelId));
         if (update is null)
         {
             throw new ArgumentNullException(nameof(update));
@@ -102,6 +102,8 @@ public sealed class HomeAssistantRegistryClient
             "updated label",
             cancellationToken);
         ValidateLabel(updated);
+        if (!string.Equals(updated.LabelId, labelId, StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException("The updated Home Assistant label did not match the requested identifier.");
         return updated;
     }
 
@@ -153,7 +155,7 @@ public sealed class HomeAssistantRegistryClient
         CancellationToken cancellationToken = default)
     {
         HomeAssistantRegistryValidation.Require(scope, nameof(scope));
-        HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
+        categoryId = HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
         if (update is null)
         {
             throw new ArgumentNullException(nameof(update));
@@ -166,6 +168,8 @@ public sealed class HomeAssistantRegistryClient
             "updated category",
             cancellationToken);
         ValidateCategory(updated);
+        if (!string.Equals(updated.CategoryId, categoryId, StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException("The updated Home Assistant category did not match the requested identifier.");
         return updated;
     }
 
