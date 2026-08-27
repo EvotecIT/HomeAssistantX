@@ -258,17 +258,35 @@ public sealed class HomeAssistantMediaPlayerStatus
             throw new ArgumentNullException(nameof(homeAssistantBaseUri));
         }
 
-        var value = new[] { MediaImageUrl, EntityPictureLocal, EntityPicture }
-            .FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate));
-        if (value is null)
+        foreach (var value in new[] { MediaImageUrl, EntityPictureLocal, EntityPicture })
         {
-            return null;
+            if (value is null || string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var trimmed = value.Trim();
+            if (!Uri.TryCreate(trimmed, UriKind.RelativeOrAbsolute, out var candidate)) continue;
+
+            if (candidate.IsAbsoluteUri)
+            {
+                if (IsSupportedArtworkUri(candidate)) return candidate;
+                continue;
+            }
+
+            if (Uri.TryCreate(homeAssistantBaseUri, trimmed.TrimStart('/'), out var resolved)
+                && IsSupportedArtworkUri(resolved))
+            {
+                return resolved;
+            }
         }
 
-        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
-            ? absolute!
-            : new Uri(homeAssistantBaseUri, value!.TrimStart('/'));
+        return null;
     }
+
+    private static bool IsSupportedArtworkUri(Uri value)
+        => (value.Scheme == Uri.UriSchemeHttp || value.Scheme == Uri.UriSchemeHttps)
+            && string.IsNullOrEmpty(value.UserInfo);
 
     public static HomeAssistantMediaPlayerStatus FromState(HomeAssistantState state)
     {

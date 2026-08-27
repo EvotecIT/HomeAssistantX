@@ -147,6 +147,40 @@ public sealed class MediaAndRemoteContractTests
             status.ResolveArtworkUri(new Uri("https://ha.example.test/")));
     }
 
+    [Fact]
+    public void MediaStatusSkipsMalformedArtworkBeforeSelectingFallback()
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.fallback\",\"state\":\"idle\",\"attributes\":{" +
+            "\"media_image_url\":\"http://[\",\"entity_picture_local\":\"/api/media/local-artwork\"}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Equal(
+            new Uri("https://ha.example.test/api/media/local-artwork"),
+            status.ResolveArtworkUri(new Uri("https://ha.example.test/")));
+        Assert.Equal(
+            new Uri("https://ha.example.test/home-assistant/api/media/local-artwork"),
+            status.ResolveArtworkUri(new Uri("https://ha.example.test/home-assistant/")));
+    }
+
+    [Theory]
+    [InlineData("file:///private/artwork.png")]
+    [InlineData("mailto:artwork@example.test")]
+    [InlineData("https://user:password@example.test/artwork.png")]
+    public void MediaStatusSkipsUnsupportedOrCredentialBearingArtworkBeforeFallback(string primary)
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.fallback\",\"state\":\"idle\",\"attributes\":{" +
+            "\"media_image_url\":" + JsonSerializer.Serialize(primary) + ",\"entity_picture_local\":\"/api/media/local-artwork\"}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Equal(
+            new Uri("https://ha.example.test/api/media/local-artwork"),
+            status.ResolveArtworkUri(new Uri("https://ha.example.test/")));
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"attributes\":null}")]
