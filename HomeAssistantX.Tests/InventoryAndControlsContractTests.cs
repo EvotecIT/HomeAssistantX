@@ -304,6 +304,28 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task TypedControlsRejectWrongDomainOrMalformedEntityTargetsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Lights.TurnOnAsync(
+            HomeAssistantTarget.ForEntity("switch.kitchen")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Lights.TurnOnAsync(
+            HomeAssistantTarget.ForEntity("light.")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Lights.TurnOnAsync(
+            HomeAssistantTarget.ForEntity("light.kitchen.extra")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Lights.TurnOnAsync(
+            new HomeAssistantTarget
+            {
+                EntityIds = new[] { "light.kitchen", "switch.kitchen" },
+                AreaIds = new[] { "kitchen" }
+            }));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task ClimateShapeValidationFailsBeforeAnyServiceCall()
     {
         using var server = new TestHomeAssistantServer();

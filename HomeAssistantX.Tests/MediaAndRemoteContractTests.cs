@@ -424,6 +424,20 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task TypedMediaAndRemoteGettersRejectInvalidEntityIdsBeforeRestDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.GetAsync("light.kitchen"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.GetAsync("media_player.kitchen.extra"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.GetAsync("switch.remote"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.GetAsync("remote."));
+
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Fact]
     public async Task RemoteActionsMapPowerSendLearnAndDeleteParameterContracts()
     {
         using var server = new TestHomeAssistantServer();

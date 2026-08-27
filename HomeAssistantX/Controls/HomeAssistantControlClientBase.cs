@@ -20,7 +20,8 @@ public abstract class HomeAssistantControlClientBase
         Action<HomeAssistantServiceCall>? configure,
         CancellationToken cancellationToken)
     {
-        var call = HomeAssistantServiceCall.Create(Domain, action).ForTarget(target);
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        var call = HomeAssistantServiceCall.Create(Domain, action).ForTarget(target.NormalizeForDomain(Domain));
         configure?.Invoke(call);
         return Services.CallControlAsync(call, cancellationToken);
     }

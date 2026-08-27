@@ -84,6 +84,26 @@ public sealed class HomeAssistantTarget
         };
     }
 
+    internal HomeAssistantTarget NormalizeForDomain(string domain)
+    {
+        var normalized = Normalize();
+        if (normalized.EntityIds is not null)
+        {
+            var entityIds = new string[normalized.EntityIds.Count];
+            for (var index = 0; index < normalized.EntityIds.Count; index++)
+            {
+                if (!HomeAssistantEntityId.TryNormalizeForDomain(normalized.EntityIds[index], domain, out entityIds[index]))
+                {
+                    throw new ArgumentException($"Target entity identifiers must belong to the '{domain}' domain.", nameof(EntityIds));
+                }
+            }
+
+            normalized.EntityIds = entityIds;
+        }
+
+        return normalized;
+    }
+
     private static IReadOnlyList<string> ValidateIds(string[] ids, string parameterName)
     {
         if (ids is null || ids.Length == 0 || ids.Any(string.IsNullOrWhiteSpace))
