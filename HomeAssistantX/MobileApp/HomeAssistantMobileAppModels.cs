@@ -50,11 +50,10 @@ public sealed class HomeAssistantMobileAppRegistrationRequest
         Required(Manufacturer, nameof(Manufacturer));
         Required(Model, nameof(Model));
         Required(OperatingSystemName, nameof(OperatingSystemName));
-        Required(OperatingSystemVersion, nameof(OperatingSystemVersion));
         if (AppData is null) throw new ArgumentNullException(nameof(AppData));
     }
 
-    private static void Required(string? value, string name)
+    private static void Required(string value, string name)
     {
         if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", name);
     }

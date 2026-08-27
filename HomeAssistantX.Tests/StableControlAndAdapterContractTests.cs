@@ -708,20 +708,18 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Null(server.LastRequestBody);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData(" ")]
-    public async Task MobileAppRegistrationRequiresOperatingSystemVersionBeforeDispatch(string? osVersion)
+    [Fact]
+    public async Task MobileAppRegistrationAllowsHomeAssistantsOptionalOperatingSystemVersion()
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
         var request = RegistrationRequest(false);
-        request.OperatingSystemVersion = osVersion;
+        request.OperatingSystemVersion = null;
 
-        await Assert.ThrowsAsync<ArgumentException>(() => client.MobileApp.RegisterAsync(request));
+        _ = await client.MobileApp.RegisterAsync(request);
 
-        Assert.Null(server.LastRequestBody);
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.False(body.RootElement.TryGetProperty("os_version", out _));
     }
 
     [Theory]
