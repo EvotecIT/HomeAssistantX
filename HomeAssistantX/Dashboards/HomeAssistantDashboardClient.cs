@@ -124,16 +124,33 @@ public sealed class HomeAssistantDashboardClient
     }
 
     public Task<HomeAssistantDashboardResource> CreateResourceAsync(string url, HomeAssistantDashboardResourceType type, CancellationToken cancellationToken = default)
-        => RequestResourceAsync("lovelace/resources/create", new Dictionary<string, object?> { ["url"] = Require(url, nameof(url)), ["res_type"] = ResourceTypeName(type) }, cancellationToken);
+    {
+        var normalizedUrl = Require(url, nameof(url));
+        var normalizedType = ResourceTypeName(type);
+        return RequestResourceAsync(
+            "lovelace/resources/create",
+            new Dictionary<string, object?> { ["url"] = normalizedUrl, ["res_type"] = normalizedType },
+            cancellationToken,
+            expectedUrl: normalizedUrl,
+            expectedType: normalizedType);
+    }
 
     public Task<HomeAssistantDashboardResource> UpdateResourceAsync(string resourceId, string? url = null, HomeAssistantDashboardResourceType? type = null, CancellationToken cancellationToken = default)
     {
         var normalizedResourceId = Require(resourceId, nameof(resourceId));
         var payload = new Dictionary<string, object?> { ["resource_id"] = normalizedResourceId };
-        if (url is not null) payload["url"] = Require(url, nameof(url));
-        if (type.HasValue) payload["res_type"] = ResourceTypeName(type.Value);
+        var normalizedUrl = url is null ? null : Require(url, nameof(url));
+        var normalizedType = type.HasValue ? ResourceTypeName(type.Value) : null;
+        if (normalizedUrl is not null) payload["url"] = normalizedUrl;
+        if (normalizedType is not null) payload["res_type"] = normalizedType;
         if (payload.Count == 1) throw new ArgumentException("At least one resource update is required.");
-        return RequestResourceAsync("lovelace/resources/update", payload, cancellationToken, normalizedResourceId);
+        return RequestResourceAsync(
+            "lovelace/resources/update",
+            payload,
+            cancellationToken,
+            normalizedResourceId,
+            normalizedUrl,
+            normalizedType);
     }
 
     public Task<JsonElement> DeleteResourceAsync(string resourceId, CancellationToken cancellationToken = default)
@@ -161,7 +178,9 @@ public sealed class HomeAssistantDashboardClient
         string command,
         IReadOnlyDictionary<string, object?> payload,
         CancellationToken cancellationToken,
-        string? expectedResourceId = null)
+        string? expectedResourceId = null,
+        string? expectedUrl = null,
+        string? expectedType = null)
     {
         var resource = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource>(
             await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false),
@@ -169,6 +188,10 @@ public sealed class HomeAssistantDashboardClient
         ValidateStorageResource(resource);
         if (expectedResourceId is not null && !string.Equals(resource.Id, expectedResourceId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested identifier.");
+        if (expectedUrl is not null && !string.Equals(resource.Url, expectedUrl, StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested URL.");
+        if (expectedType is not null && !string.Equals(resource.Type, expectedType, StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested type.");
         return resource;
     }
 

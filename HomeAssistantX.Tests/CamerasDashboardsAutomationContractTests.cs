@@ -244,7 +244,7 @@ public sealed class CamerasDashboardsAutomationContractTests
         await client.Dashboards.CreateResourceAsync("/local/card.js", HomeAssistantDashboardResourceType.Module);
         using (var resource = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/resources/create"))))
             Assert.Equal("module", resource.RootElement.GetProperty("res_type").GetString());
-        await client.Dashboards.UpdateResourceAsync("resource-1", url: "/local/card-v2.js");
+        await client.Dashboards.UpdateResourceAsync("resource-1", url: "/local/card.js");
 
         server.ClearLastWebSocketCommand("lovelace/dashboards/create");
         await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house", Title = "House" }));
@@ -324,6 +324,11 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateResourceAsync(
             "resource-1",
             url: "/local/card-v2.js"));
+
+        server.DashboardResourceMutationResponseJson = "{\"id\":\"resource-2\",\"url\":\"/local/other.js\",\"type\":\"css\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateResourceAsync(
+            "/local/card.js",
+            HomeAssistantDashboardResourceType.Module));
     }
 
     [Fact]
