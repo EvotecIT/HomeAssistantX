@@ -205,7 +205,8 @@ public sealed class HomeAssistantRegistryClient
             return new LabelLoadResult(await GetLabelsAsync(cancellationToken).ConfigureAwait(false), true);
         }
         catch (HomeAssistantCommandException exception)
-            when (string.Equals(exception.Code, "unknown_command", StringComparison.OrdinalIgnoreCase))
+            when (string.Equals(exception.Code, "unknown_command", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(exception.Code, "unauthorized", StringComparison.OrdinalIgnoreCase))
         {
             return new LabelLoadResult(Array.Empty<HomeAssistantLabel>(), false);
         }
@@ -270,13 +271,17 @@ public sealed class HomeAssistantRegistryClient
 
     private static void ValidateLabel(HomeAssistantLabel label)
     {
-        if (string.IsNullOrWhiteSpace(label.LabelId) || string.IsNullOrWhiteSpace(label.Name))
+        if (string.IsNullOrWhiteSpace(label.LabelId)
+            || !string.Equals(label.LabelId, label.LabelId.Trim(), StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(label.Name))
             throw new HomeAssistantProtocolException("A Home Assistant label did not contain its required identifier and name.");
     }
 
     private static void ValidateCategory(HomeAssistantCategory category)
     {
-        if (string.IsNullOrWhiteSpace(category.CategoryId) || string.IsNullOrWhiteSpace(category.Name))
+        if (string.IsNullOrWhiteSpace(category.CategoryId)
+            || !string.Equals(category.CategoryId, category.CategoryId.Trim(), StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(category.Name))
             throw new HomeAssistantProtocolException("A Home Assistant category did not contain its required identifier and name.");
     }
 

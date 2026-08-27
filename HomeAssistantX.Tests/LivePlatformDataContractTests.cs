@@ -97,13 +97,16 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
-    public async Task RegistrySnapshotTreatsOnlyAnUnsupportedLabelRegistryAsOptionalEnrichment()
+    public async Task RegistrySnapshotTreatsUnsupportedOrUnauthorizedLabelsAsOptionalEnrichment()
     {
-        using var unsupportedServer = new TestHomeAssistantServer { LabelRegistryErrorCode = "unknown_command" };
-        using var unsupportedClient = TestClientFactory.Create(unsupportedServer);
-        var snapshot = await unsupportedClient.Registries.GetSnapshotAsync();
-        Assert.False(snapshot.IsLabelRegistryAvailable);
-        Assert.Empty(snapshot.Labels);
+        foreach (var errorCode in new[] { "unknown_command", "unauthorized" })
+        {
+            using var unavailableServer = new TestHomeAssistantServer { LabelRegistryErrorCode = errorCode };
+            using var unavailableClient = TestClientFactory.Create(unavailableServer);
+            var snapshot = await unavailableClient.Registries.GetSnapshotAsync();
+            Assert.False(snapshot.IsLabelRegistryAvailable);
+            Assert.Empty(snapshot.Labels);
+        }
 
         using var failedServer = new TestHomeAssistantServer { LabelRegistryErrorCode = "internal_error" };
         using var failedClient = TestClientFactory.Create(failedServer);
@@ -353,9 +356,11 @@ public sealed class LivePlatformDataContractTests
     [InlineData("[{}]", true)]
     [InlineData("[{\"label_id\":\"security\"}]", true)]
     [InlineData("[{\"name\":\"Security\"}]", true)]
+    [InlineData("[{\"label_id\":\" security \",\"name\":\"Security\"}]", true)]
     [InlineData("[{}]", false)]
     [InlineData("[{\"category_id\":\"comfort\"}]", false)]
     [InlineData("[{\"name\":\"Comfort\"}]", false)]
+    [InlineData("[{\"category_id\":\" comfort \",\"name\":\"Comfort\"}]", false)]
     public async Task RegistryListsRejectIncompleteLabelsAndCategories(string response, bool labels)
     {
         using var server = new TestHomeAssistantServer();
