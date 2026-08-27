@@ -58,12 +58,13 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
         object? result;
         if (ParameterSetName == EntityParameterSet)
         {
-            if (!ShouldProcess(EntityId, "Install Home Assistant update"))
+            var entityId = NormalizeUpdateEntityId(EntityId);
+            if (!ShouldProcess(entityId, "Install Home Assistant update"))
             {
                 return;
             }
 
-            result = await Client.Operations.Updates.InstallAsync(EntityId, Version, Backup, CancelToken).ConfigureAwait(false);
+            result = await Client.Operations.Updates.InstallAsync(entityId, Version, Backup, CancelToken).ConfigureAwait(false);
         }
         else
         {
@@ -88,5 +89,30 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
         {
             WriteObject(result);
         }
+    }
+
+    private static string NormalizeUpdateEntityId(string value)
+    {
+        var normalized = value?.Trim();
+        if (normalized is null || normalized.Length == 0)
+        {
+            throw new ArgumentException("An update entity identifier is required.", nameof(EntityId));
+        }
+
+        var separator = normalized.IndexOf('.');
+        if (separator <= 0
+            || separator != normalized.LastIndexOf('.')
+            || separator == normalized.Length - 1
+            || !string.Equals(normalized.Substring(0, separator), "update", StringComparison.OrdinalIgnoreCase)
+            || normalized.Substring(separator + 1).Any(character =>
+                !((character >= 'a' && character <= 'z')
+                    || (character >= 'A' && character <= 'Z')
+                    || (character >= '0' && character <= '9')
+                    || character == '_')))
+        {
+            throw new ArgumentException("An update entity identifier is required.", nameof(EntityId));
+        }
+
+        return normalized;
     }
 }

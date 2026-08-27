@@ -40,12 +40,7 @@ public sealed class HomeAssistantUpdateClient
         string entityId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(entityId))
-        {
-            throw new ArgumentException("An update entity identifier is required.", nameof(entityId));
-        }
-
-        var normalizedEntityId = entityId.Trim();
+        var normalizedEntityId = NormalizeEntityId(entityId);
         var result = await _webSocket.RequestAsync(
             "update/release_notes",
             new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId },
@@ -59,7 +54,7 @@ public sealed class HomeAssistantUpdateClient
         bool? backup = null,
         CancellationToken cancellationToken = default)
     {
-        var call = HomeAssistantServiceCall.Create("update", "install").ForEntity(entityId);
+        var call = HomeAssistantServiceCall.Create("update", "install").ForEntity(NormalizeEntityId(entityId));
         if (!string.IsNullOrWhiteSpace(version))
         {
             call.WithData("version", version);
@@ -71,6 +66,16 @@ public sealed class HomeAssistantUpdateClient
         }
 
         return _services.CallAsync(call, cancellationToken);
+    }
+
+    private static string NormalizeEntityId(string entityId)
+    {
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "update", out var normalized))
+        {
+            throw new ArgumentException("An update entity identifier is required.", nameof(entityId));
+        }
+
+        return normalized;
     }
 
     private static HomeAssistantUpdate ToUpdate(HomeAssistantState state)

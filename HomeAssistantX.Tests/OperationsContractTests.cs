@@ -116,6 +116,20 @@ public sealed class OperationsContractTests
     }
 
     [Fact]
+    public async Task UpdateOperationsRejectMalformedOrWrongDomainEntityIdsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.GetReleaseNotesAsync("light.kitchen"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update."));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.core.extra"));
+
+        Assert.Null(server.GetLastWebSocketCommand("update/release_notes"));
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task CoreSupervisorProxySupportsInventoryLogsAndBoundedMutations()
     {
         using var server = new TestHomeAssistantServer();

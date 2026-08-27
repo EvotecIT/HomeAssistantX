@@ -317,7 +317,8 @@ try {
         { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCover -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop },
+        { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }
     )) {
         $invalidEnumRejected = $false
         try {
@@ -326,7 +327,7 @@ try {
             $invalidEnumRejected = $true
         }
         if (-not $invalidEnumRejected) {
-            throw 'A typed-control cmdlet accepted an undefined enum value under WhatIf.'
+            throw 'A typed operation accepted invalid input under WhatIf.'
         }
     }
 
