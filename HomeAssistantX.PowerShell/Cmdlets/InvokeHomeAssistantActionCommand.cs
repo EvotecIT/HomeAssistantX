@@ -14,18 +14,6 @@ namespace HomeAssistantX.PowerShell;
 [OutputType(typeof(HomeAssistantServiceCallResult))]
 public sealed class InvokeHomeAssistantActionCommand : HomeAssistantCmdlet
 {
-    private static readonly HashSet<string> SafeStandardActions = new(StringComparer.Ordinal)
-    {
-        "alarm_control_panel.alarm_arm_away", "alarm_control_panel.alarm_arm_home", "alarm_control_panel.alarm_arm_night", "alarm_control_panel.alarm_disarm",
-        "automation.trigger", "automation.turn_off", "automation.turn_on", "automation.toggle",
-        "climate.set_fan_mode", "climate.set_hvac_mode", "climate.set_preset_mode", "climate.set_temperature", "climate.turn_off", "climate.turn_on",
-        "cover.close_cover", "cover.close_cover_tilt", "cover.open_cover", "cover.open_cover_tilt", "cover.set_cover_position", "cover.set_cover_tilt_position", "cover.stop_cover", "cover.stop_cover_tilt", "cover.toggle", "cover.toggle_cover_tilt",
-        "fan.set_percentage", "fan.turn_off", "fan.turn_on", "fan.toggle",
-        "light.turn_off", "light.turn_on", "light.toggle",
-        "lock.lock", "lock.open", "lock.unlock",
-        "media_player.media_next_track", "media_player.media_pause", "media_player.media_play", "media_player.media_play_pause", "media_player.media_previous_track", "media_player.media_stop", "media_player.play_media", "media_player.turn_off", "media_player.turn_on", "media_player.volume_down", "media_player.volume_mute", "media_player.volume_set", "media_player.volume_up",
-        "scene.turn_on", "script.turn_off", "script.turn_on", "switch.turn_off", "switch.turn_on", "switch.toggle"
-    };
     private const string DataParameterSet = "Data";
     private const string EntityParameterSet = "Entity";
     private const string DeviceParameterSet = "Device";
@@ -141,7 +129,7 @@ public sealed class InvokeHomeAssistantActionCommand : HomeAssistantCmdlet
     private string DescribeAction(HomeAssistantServiceCall call)
     {
         var service = call.Domain + "." + call.Service;
-        return SafeStandardActions.Contains(service)
+        return HomeAssistantStandardActionCatalog.IsKnown(call.Domain, call.Service)
             ? "Invoke Home Assistant action " + service
             : "Invoke Home Assistant action " + ConfirmationAction("service " + service);
     }
