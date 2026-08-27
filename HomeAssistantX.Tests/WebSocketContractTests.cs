@@ -617,6 +617,19 @@ public sealed class WebSocketContractTests
         Assert.Equal(int.MaxValue, command.RootElement.GetProperty("expires").GetInt32());
     }
 
+    [Fact]
+    public async Task WebSocketConversationRejectsExplicitBlankSelectorsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.ProcessConversationAsync("hello", language: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.ProcessConversationAsync("hello", agentId: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.ProcessConversationAsync("hello", conversationId: " "));
+
+        Assert.Null(server.GetLastWebSocketCommand("conversation/process"));
+    }
+
     private static async Task<T> WithTimeoutAsync<T>(Task<T> task)
     {
         var winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(3)));

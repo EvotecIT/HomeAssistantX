@@ -278,22 +278,27 @@ public sealed partial class HomeAssistantRestClient
         string? agentId,
         string? conversationId)
     {
-        var payload = new Dictionary<string, object?> { ["text"] = text };
-        if (!string.IsNullOrWhiteSpace(language))
+        var payload = new Dictionary<string, object?> { ["text"] = text.Trim() };
+        if (language is not null)
         {
-            payload["language"] = language;
+            payload["language"] = RequireConversationSelector(language, nameof(language));
         }
 
-        if (!string.IsNullOrWhiteSpace(agentId))
+        if (agentId is not null)
         {
-            payload["agent_id"] = agentId;
+            payload["agent_id"] = RequireConversationSelector(agentId, nameof(agentId));
         }
 
-        if (!string.IsNullOrWhiteSpace(conversationId))
+        if (conversationId is not null)
         {
-            payload["conversation_id"] = conversationId;
+            payload["conversation_id"] = RequireConversationSelector(conversationId, nameof(conversationId));
         }
 
         return payload;
     }
+
+    private static string RequireConversationSelector(string value, string parameterName)
+        => string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A supplied conversation selector cannot be empty.", parameterName)
+            : value.Trim();
 }

@@ -9,6 +9,19 @@ namespace HomeAssistantX.Tests;
 
 public sealed class OperationsContractTests
 {
+    [Fact]
+    public async Task OptionalOperationalSelectorsRejectExplicitBlanksBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Integrations.GetAllAsync(" "));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.Operations.Traces.GetContextsAsync(" "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Traces.GetContextsAsync(itemId: " "));
+
+        Assert.Null(server.GetLastWebSocketCommand("config_entries/get"));
+        Assert.Null(server.GetLastWebSocketCommand("trace/contexts"));
+    }
 #if !NET472
     [Fact]
     public async Task OperationalReadsUseTheActualWebSocketAndRestContracts()
@@ -126,6 +139,7 @@ public sealed class OperationsContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update."));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.core.extra"));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.Kitchen"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.core", " "));
 
         Assert.Null(server.GetLastWebSocketCommand("update/release_notes"));
         Assert.Null(server.LastServiceCallBody);
@@ -193,6 +207,8 @@ public sealed class OperationsContractTests
         });
         await Assert.ThrowsAsync<ArgumentException>(() =>
             client.Supervisor.InstallUpdateAsync(HomeAssistantSupervisorUpdateTarget.App, ".."));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Supervisor.InstallUpdateAsync(HomeAssistantSupervisorUpdateTarget.Core, version: " "));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             client.Supervisor.InvokeAppAsync("test/app", HomeAssistantAppOperation.Restart));
         server.ClearLastWebSocketCommand("supervisor/api");

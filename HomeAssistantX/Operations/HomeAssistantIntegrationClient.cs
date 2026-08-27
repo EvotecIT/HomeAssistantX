@@ -24,9 +24,9 @@ public sealed class HomeAssistantIntegrationClient
         string? domain = null,
         CancellationToken cancellationToken = default)
     {
-        var payload = string.IsNullOrWhiteSpace(domain)
+        var payload = domain is null
             ? null
-            : new Dictionary<string, object?> { ["domain"] = domain };
+            : new Dictionary<string, object?> { ["domain"] = Required(domain, nameof(domain)).Trim() };
         var result = await _webSocket.RequestAsync("config_entries/get", payload, cancellationToken).ConfigureAwait(false);
         return DecodeEntries(result);
     }

@@ -107,7 +107,7 @@ public sealed class InvokeHomeAssistantActionCommand : HomeAssistantCmdlet
 
         call.WithResponse(ReturnResponse);
         var target = DescribeTarget();
-        if (ShouldProcess(target, Domain + "." + Action))
+        if (ShouldProcess(target, "Invoke Home Assistant action"))
         {
             WriteObject(await Client.Services.CallAsync(call, CancelToken).ConfigureAwait(false));
         }

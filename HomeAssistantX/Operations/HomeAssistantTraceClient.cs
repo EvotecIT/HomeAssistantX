@@ -56,15 +56,15 @@ public sealed class HomeAssistantTraceClient
         CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, object?>();
-        if (!string.IsNullOrWhiteSpace(domain))
+        if (domain is not null)
         {
-            ValidateDomain(domain!);
-            payload["domain"] = domain;
+            ValidateDomain(domain);
+            payload["domain"] = domain.Trim();
         }
 
-        if (!string.IsNullOrWhiteSpace(itemId))
+        if (itemId is not null)
         {
-            payload["item_id"] = itemId;
+            payload["item_id"] = Required(itemId, nameof(itemId)).Trim();
         }
 
         return _webSocket.RequestAsync("trace/contexts", payload, cancellationToken);

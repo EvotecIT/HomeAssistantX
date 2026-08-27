@@ -30,22 +30,25 @@ public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
     /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
     public new bool ShouldProcess(string? target)
     {
-        _ = RequireUsableConnection();
-        return base.ShouldProcess(target);
+        var connection = RequireUsableConnection();
+        return base.ShouldProcess(connection.ConfirmationName);
     }
 
     /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
     public new bool ShouldProcess(string? target, string action)
     {
-        _ = RequireUsableConnection();
-        return base.ShouldProcess(target, action);
+        var connection = RequireUsableConnection();
+        return base.ShouldProcess(connection.ConfirmationName, action);
     }
 
     /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
     public new bool ShouldProcess(string verboseDescription, string verboseWarning, string caption)
     {
-        _ = RequireUsableConnection();
-        return base.ShouldProcess(verboseDescription, verboseWarning, caption);
+        var connection = RequireUsableConnection();
+        return base.ShouldProcess(
+            "Perform the requested Home Assistant operation on " + connection.ConfirmationName + ".",
+            "Perform the requested Home Assistant operation on " + connection.ConfirmationName + "?",
+            "Confirm Home Assistant operation");
     }
 
     /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
@@ -55,8 +58,12 @@ public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
         string caption,
         out ShouldProcessReason shouldProcessReason)
     {
-        _ = RequireUsableConnection();
-        return base.ShouldProcess(verboseDescription, verboseWarning, caption, out shouldProcessReason);
+        var connection = RequireUsableConnection();
+        return base.ShouldProcess(
+            "Perform the requested Home Assistant operation on " + connection.ConfirmationName + ".",
+            "Perform the requested Home Assistant operation on " + connection.ConfirmationName + "?",
+            "Confirm Home Assistant operation",
+            out shouldProcessReason);
     }
 
     private HomeAssistantConnection RequireUsableConnection()

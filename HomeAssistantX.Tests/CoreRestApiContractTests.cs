@@ -102,6 +102,19 @@ public sealed class CoreRestApiContractTests
     }
 
     [Fact]
+    public async Task RestConversationRejectsExplicitBlankSelectorsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.ProcessConversationAsync("hello", language: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.ProcessConversationAsync("hello", agentId: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.ProcessConversationAsync("hello", conversationId: " "));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
     public async Task RestEntityIdentifiersAreTrimmedAtSharedPathAndHistoryBoundaries()
     {
         using var server = new TestHomeAssistantServer();

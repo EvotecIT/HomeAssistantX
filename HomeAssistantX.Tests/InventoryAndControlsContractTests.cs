@@ -10,6 +10,29 @@ namespace HomeAssistantX.Tests;
 
 public sealed class InventoryAndControlsContractTests
 {
+    [Fact]
+    public async Task InventoryRejectsExplicitEmptySelectorsBeforeDiscovery()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var invalid = new HomeAssistantEntityQuery?[]
+        {
+            new() { Entity = Array.Empty<string>() },
+            new() { Entity = new[] { " " } },
+            new() { Name = " " },
+            new() { Domain = " " },
+            new() { Device = " " },
+            new() { Area = " " },
+            new() { Floor = " " }
+        };
+
+        foreach (var query in invalid)
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => client.Inventory.GetEntitiesAsync(query));
+        }
+
+        Assert.Null(server.GetLastWebSocketCommand("config/floor_registry/list"));
+    }
     [Theory]
     [InlineData("{\"light\":null}")]
     [InlineData("{\"light\":{\"turn_on\":null}}")]
@@ -258,6 +281,14 @@ public sealed class InventoryAndControlsContractTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.MediaPlayers.SetAsync(
             HomeAssistantTarget.ForEntity("media_player.kitchen"),
             new HomeAssistantMediaPlayerOptions { Playback = (HomeAssistantMediaPlaybackAction)99 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Locks.ActAsync(
+            target,
+            HomeAssistantLockAction.Unlock,
+            " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Alarms.ActAsync(
+            HomeAssistantTarget.ForEntity("alarm_control_panel.home"),
+            HomeAssistantAlarmAction.Disarm,
+            " "));
 
         Assert.Null(server.LastServiceCallBody);
     }

@@ -41,6 +41,7 @@ public sealed class HomeAssistantInventoryClient
         HomeAssistantEntityQuery? query = null,
         CancellationToken cancellationToken = default)
     {
+        ValidateQuery(query);
         var snapshot = await GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
         return FilterEntities(snapshot, query).ToArray();
     }
@@ -246,29 +247,29 @@ public sealed class HomeAssistantInventoryClient
             entities = entities.Where(x => selectedEntityIds.Contains(x.EntityId));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Name))
+        if (query.Name is not null)
         {
-            entities = entities.Where(x => x.Name.IndexOf(query.Name!, StringComparison.OrdinalIgnoreCase) >= 0);
+            entities = entities.Where(x => x.Name.IndexOf(query.Name.Trim(), StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Domain))
+        if (query.Domain is not null)
         {
-            entities = entities.Where(x => Matches(x.Domain, query.Domain!));
+            entities = entities.Where(x => Matches(x.Domain, query.Domain.Trim()));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Device))
+        if (query.Device is not null)
         {
             var device = ResolveUnique(snapshot.Devices, query.Device!, x => x.DeviceId, x => x.Name, null, "device");
             entities = entities.Where(x => Matches(x.DeviceId, device.DeviceId));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Area))
+        if (query.Area is not null)
         {
             var area = ResolveUnique(snapshot.Areas, query.Area!, x => x.AreaId, x => x.Name, x => x.Aliases, "area");
             entities = entities.Where(x => Matches(x.AreaId, area.AreaId));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Floor))
+        if (query.Floor is not null)
         {
             var floor = ResolveUnique(snapshot.Floors, query.Floor!, x => x.FloorId, x => x.Name, x => x.Aliases, "floor");
             entities = entities.Where(x => Matches(x.FloorId, floor.FloorId));
@@ -290,6 +291,18 @@ public sealed class HomeAssistantInventoryClient
         }
 
         return entities;
+    }
+
+    private static void ValidateQuery(HomeAssistantEntityQuery? query)
+    {
+        if (query is null) return;
+        if (query.Entity is not null && (query.Entity.Count == 0 || query.Entity.Any(string.IsNullOrWhiteSpace)))
+            throw new ArgumentException("Entity filters must contain at least one non-empty value.", nameof(query));
+        if (query.Name is not null && string.IsNullOrWhiteSpace(query.Name)) throw new ArgumentException("Name cannot be empty.", nameof(query));
+        if (query.Domain is not null && string.IsNullOrWhiteSpace(query.Domain)) throw new ArgumentException("Domain cannot be empty.", nameof(query));
+        if (query.Device is not null && string.IsNullOrWhiteSpace(query.Device)) throw new ArgumentException("Device cannot be empty.", nameof(query));
+        if (query.Area is not null && string.IsNullOrWhiteSpace(query.Area)) throw new ArgumentException("Area cannot be empty.", nameof(query));
+        if (query.Floor is not null && string.IsNullOrWhiteSpace(query.Floor)) throw new ArgumentException("Floor cannot be empty.", nameof(query));
     }
 
     private static T ResolveUnique<T>(
