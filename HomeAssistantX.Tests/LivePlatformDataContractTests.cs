@@ -223,6 +223,12 @@ public sealed class LivePlatformDataContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<ArgumentException>(() => client.Notifications.SendAsync(HomeAssistantTarget.Create(), "Message"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Notifications.SendAsync(
+            HomeAssistantTarget.ForEntity("sensor.kitchen"),
+            "Message"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Notifications.SendAsync(
+            HomeAssistantTarget.ForEntity("notify.mobile.extra"),
+            "Message"));
         Assert.Null(server.LastServiceCallBody);
     }
 

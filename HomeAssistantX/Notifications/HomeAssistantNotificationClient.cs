@@ -63,13 +63,14 @@ public sealed class HomeAssistantNotificationClient
             throw new ArgumentNullException(nameof(target));
         }
 
-        if (!target.HasAnySelection())
+        var normalizedTarget = target.NormalizeForDomain("notify");
+        if (!normalizedTarget.HasAnySelection())
         {
             throw new ArgumentException("At least one notification target is required.", nameof(target));
         }
 
         return _services.CallControlAsync(
-            CreateCall("notify", "send_message", MessageData(message, title)).ForTarget(target),
+            CreateCall("notify", "send_message", MessageData(message, title)).ForTarget(normalizedTarget),
             cancellationToken);
     }
 
