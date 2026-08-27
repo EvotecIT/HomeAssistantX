@@ -69,7 +69,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         string? activity = null,
         CancellationToken cancellationToken = default)
     {
-        var normalizedActivity = activity is null ? null : ControlValidation.Required(activity, nameof(activity));
+        var normalizedActivity = activity is null ? null : RequiredSelector(activity, nameof(activity));
         var service = action switch
         {
             HomeAssistantPowerAction.On => "turn_on",
@@ -93,7 +93,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         var values = ValidateCommands(commands, nameof(commands));
-        var device = options?.Device is null ? null : ControlValidation.Required(options.Device, nameof(options.Device));
+        var device = options?.Device is null ? null : RequiredSelector(options.Device, nameof(options.Device));
         return CallAsync(
             "send_command",
             target,
@@ -128,7 +128,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         HomeAssistantRemoteLearnOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var device = options?.Device is null ? null : ControlValidation.Required(options.Device, nameof(options.Device));
+        var device = options?.Device is null ? null : RequiredSelector(options.Device, nameof(options.Device));
         var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(
             options?.Timeout,
             _options.RequestTimeout,
@@ -212,7 +212,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         var values = ValidateCommands(commands, nameof(commands));
-        var normalizedDevice = device is null ? null : ControlValidation.Required(device, nameof(device));
+        var normalizedDevice = device is null ? null : RequiredSelector(device, nameof(device));
         return CallAsync(
             "delete_command",
             target,
@@ -245,6 +245,13 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         }
 
         return values;
+    }
+
+    private static string RequiredSelector(string value, string parameterName)
+    {
+        var normalized = value.Trim();
+        if (normalized.Length == 0) throw new ArgumentException("A non-empty selector is required.", parameterName);
+        return normalized;
     }
 
     private static HomeAssistantRemoteStatus? ToStatus(HomeAssistantState? state)
