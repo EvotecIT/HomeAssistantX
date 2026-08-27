@@ -231,8 +231,9 @@ public sealed class HomeAssistantRecorderClient
                 || source.GetString() is not string sourceValue
                 || !HomeAssistantStatisticIdentifier.IsSlug(sourceValue)
                 || (statisticIdValue.Contains(':')
-                    && (!HomeAssistantStatisticIdentifier.TryNormalizeExternal(statisticIdValue, out _, out var statisticSource)
-                        || !string.Equals(sourceValue, statisticSource, StringComparison.Ordinal)))
+                    ? !HomeAssistantStatisticIdentifier.TryNormalizeExternal(statisticIdValue, out _, out var statisticSource)
+                        || !string.Equals(sourceValue, statisticSource, StringComparison.Ordinal)
+                    : !string.Equals(sourceValue, "recorder", StringComparison.Ordinal))
                 || !item.TryGetProperty("has_mean", out var hasMean)
                 || hasMean.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
                 || !item.TryGetProperty("has_sum", out var hasSum)

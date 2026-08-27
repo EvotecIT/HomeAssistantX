@@ -624,6 +624,7 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("[{\"statistic_id\":\"not an id\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true}]")]
     [InlineData("[{\"statistic_id\":\" sensor.energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true}]")]
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\" \",\"has_mean\":false,\"has_sum\":true}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"beta\",\"has_mean\":false,\"has_sum\":true}]")]
     [InlineData("[{\"statistic_id\":\"alpha:energy\",\"source\":\"beta\",\"has_mean\":false,\"has_sum\":true}]")]
     [InlineData("[{\"statistic_id\":\"alpha:energy\",\"source\":\" Alpha \",\"has_mean\":false,\"has_sum\":true}]")]
     public async Task RecorderMetadataRequiresIdentityAndCapabilityFields(string response)
