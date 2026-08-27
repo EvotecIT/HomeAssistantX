@@ -189,7 +189,7 @@ public sealed partial class HomeAssistantWebSocketClient
                     await Task.Delay(ApplyJitter(delay), _disposeSource.Token).ConfigureAwait(false);
                 }
 
-                await ConnectAsync(_disposeSource.Token).ConfigureAwait(false);
+                await ConnectAsync(_disposeSource.Token, stopOnPermanentNegotiationFailure: true).ConfigureAwait(false);
                 return;
             }
             catch (OperationCanceledException) when (_disposeSource.IsCancellationRequested)
@@ -204,6 +204,18 @@ public sealed partial class HomeAssistantWebSocketClient
                     "websocket.reconnect_authentication_failed",
                     "Home Assistant rejected the recovered WebSocket credentials; automatic reconnect stopped.",
                     ex);
+                await FailSubscriptionsAsync(ex).ConfigureAwait(false);
+                return;
+            }
+            catch (PermanentReconnectNegotiationException ex)
+            {
+                SetState(HomeAssistantConnectionState.Faulted, ex.Failure);
+                WriteDiagnostic(
+                    HomeAssistantDiagnosticLevel.Error,
+                    "websocket.reconnect_permanent_failure",
+                    "Home Assistant rejected WebSocket negotiation or returned an invalid protocol response; automatic reconnect stopped.",
+                    ex.Failure);
+                await FailSubscriptionsAsync(ex.Failure).ConfigureAwait(false);
                 return;
             }
             catch (Exception ex)
@@ -213,6 +225,13 @@ public sealed partial class HomeAssistantWebSocketClient
                 delay = TimeSpan.FromTicks(Math.Min(doubledTicks, _options.ReconnectMaximumDelay.Ticks));
             }
         }
+    }
+
+    private async Task FailSubscriptionsAsync(Exception failure)
+    {
+        var registrations = _subscriptions.Values.ToArray();
+        await Task.WhenAll(registrations.Select(registration => registration.FailAndStopAsync(failure)))
+            .ConfigureAwait(false);
     }
 
     private async Task<string> ReceiveTextAsync(ClientWebSocket socket, CancellationToken cancellationToken)
@@ -243,5 +262,16 @@ public sealed partial class HomeAssistantWebSocketClient
                 return Encoding.UTF8.GetString(stream.ToArray());
             }
         }
+    }
+
+    private sealed class PermanentReconnectNegotiationException : Exception
+    {
+        internal PermanentReconnectNegotiationException(HomeAssistantException failure)
+            : base(failure.Message, failure)
+        {
+            Failure = failure;
+        }
+
+        internal HomeAssistantException Failure { get; }
     }
 }

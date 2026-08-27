@@ -10,6 +10,32 @@ namespace HomeAssistantX.Tests;
 
 public sealed class InventoryAndControlsContractTests
 {
+    [Theory]
+    [InlineData("{\"light\":null}")]
+    [InlineData("{\"light\":{\"turn_on\":null}}")]
+    public async Task TypedActionCatalogRejectsMalformedDomainAndActionDefinitions(string catalogJson)
+    {
+        using var server = new TestHomeAssistantServer { ActionCatalogResponseJson = catalogJson };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Services.GetActionsAsync());
+    }
+
+    [Fact]
+    public async Task ExtendedEntityRegistryKeepsDocumentedNullFallbackEntries()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExtendedEntityRegistryResponseJson = "{\"sensor.kitchen_temperature\":null}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var snapshot = await client.Inventory.GetSnapshotAsync();
+        var temperature = Assert.Single(snapshot.Entities, item => item.EntityId == "sensor.kitchen_temperature");
+
+        Assert.NotNull(temperature.RegistryEntry);
+    }
+
     [Fact]
     public async Task InventoryJoinsInheritedAreaFloorDeviceStateAndActions()
     {

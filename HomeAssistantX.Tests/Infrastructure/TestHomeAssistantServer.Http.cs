@@ -93,9 +93,7 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, "{\"message\":\"API running.\",\"custom_api_field\":true}").ConfigureAwait(false);
                 break;
             case "GET /api/config":
-                await WriteHttpResponseAsync(stream, 200,
-                    "{\"location_name\":\"Test Home\",\"Location_Name\":\"Case-distinct extension\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}")
-                    .ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, ConfigurationResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/test/raw-dto":
                 await WriteHttpResponseAsync(stream, 200, "{\"value\":1}").ConfigureAwait(false);
@@ -112,7 +110,7 @@ internal sealed partial class TestHomeAssistantServer
                     .ConfigureAwait(false);
                 break;
             case "GET /api/history/period/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
-                await WriteHttpResponseAsync(stream, 200, "[[" + KitchenTemperatureStateJson + "]]").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, HistoryResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/logbook/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
                 await WriteHttpResponseAsync(stream, 200,

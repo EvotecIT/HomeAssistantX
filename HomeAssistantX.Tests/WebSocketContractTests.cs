@@ -168,12 +168,71 @@ public sealed class WebSocketContractTests
         server.RequiredAccessToken = "replacement-token";
         await server.DropWebSocketsAsync();
         await WithTimeoutAsync(faulted.Task);
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
         var stoppedAt = server.WebSocketConnectionCount;
         await Task.Delay(250);
 
         Assert.Equal(1, provider.RecoveryCount);
         Assert.Equal(stoppedAt, server.WebSocketConnectionCount);
         Assert.Equal(HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted, client.WebSocket.State);
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, "invalid_format")]
+    public async Task PermanentReconnectNegotiationFailureStopsTheReconnectEpisode(
+        bool malformedResponse,
+        string? commandErrorCode)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+        var faulted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WebSocket.ConnectionStateChanged += (_, args) =>
+        {
+            if (args.CurrentState == HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted
+                && (args.Exception is HomeAssistantProtocolException || args.Exception is HomeAssistantCommandException))
+            {
+                faulted.TrySetResult(true);
+            }
+        };
+
+        server.ReturnMalformedSupportedFeatures = malformedResponse;
+        server.SupportedFeaturesErrorCode = commandErrorCode;
+        await server.DropWebSocketsAsync();
+        await WithTimeoutAsync(faulted.Task);
+        if (malformedResponse)
+        {
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+                async () => await WithTimeoutAsync(subscription.Completion));
+        }
+        else
+        {
+            await Assert.ThrowsAsync<HomeAssistantCommandException>(
+                async () => await WithTimeoutAsync(subscription.Completion));
+        }
+        var stoppedAt = server.WebSocketConnectionCount;
+        await Task.Delay(250);
+
+        Assert.Equal(stoppedAt, server.WebSocketConnectionCount);
+        Assert.Equal(HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted, client.WebSocket.State);
+    }
+
+    [Fact]
+    public async Task EventSubscriptionRejectsNullRequiredDataDictionary()
+    {
+        using var server = new TestHomeAssistantServer { PublishNullStateEventData = true };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            TestHomeAssistantServer.KitchenLightOnStateJson);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
     }
 
     [Fact]

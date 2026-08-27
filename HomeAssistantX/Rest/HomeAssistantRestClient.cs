@@ -129,13 +129,17 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         return SendTypedAsync<T>(method, pathOrAbsoluteUri, body, HomeAssistantJson.RawSerializerOptions, cancellationToken);
     }
 
-    internal Task<T> SendHomeAssistantAsync<T>(
+    internal async Task<T> SendHomeAssistantAsync<T>(
         HttpMethod method,
         string pathOrAbsoluteUri,
         object? body = null,
         CancellationToken cancellationToken = default)
     {
-        return SendTypedAsync<T>(method, pathOrAbsoluteUri, body, HomeAssistantJson.SerializerOptions, cancellationToken);
+        var value = await SendTypedAsync<T>(method, pathOrAbsoluteUri, body, HomeAssistantJson.SerializerOptions, cancellationToken)
+            .ConfigureAwait(false);
+        return HomeAssistantJson.RequireNoNullCollectionEntries(
+            value,
+            "The Home Assistant response contained a null collection entry.");
     }
 
     /// <summary>Sends an authenticated request and returns its bounded response body as text.</summary>

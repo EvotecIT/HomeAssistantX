@@ -124,10 +124,23 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public bool RejectSupportedFeatures { get; set; }
 
+    public string? SupportedFeaturesErrorCode { get; set; }
+
     public bool ReturnMalformedSupportedFeatures { get; set; }
 
     public bool ReturnInvalidUpdateReleaseNotes { get; set; }
 
+    public string HistoryResponseJson { get; set; } = "[[" + KitchenTemperatureStateJson + "]]";
+
+    public string ActionCatalogResponseJson { get; set; } =
+        "{\"light\":{\"turn_on\":{\"name\":\"Turn on\",\"description\":\"Turns on a light.\",\"fields\":{\"brightness_pct\":{\"name\":\"Brightness\",\"description\":\"Brightness percentage.\",\"required\":false,\"example\":45,\"selector\":{\"number\":{\"min\":0,\"max\":100}}}},\"target\":{\"entity\":[{\"domain\":\"light\"}]}},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}},\"switch\":{\"turn_on\":{\"name\":\"Turn on\"},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}}}";
+
+    public string ConfigurationResponseJson { get; set; } =
+        "{\"location_name\":\"Test Home\",\"Location_Name\":\"Case-distinct extension\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}";
+
+    public string? ExtendedEntityRegistryResponseJson { get; set; }
+
+    public bool PublishNullStateEventData { get; set; }
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;
@@ -207,7 +220,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ["event"] = new Dictionary<string, object?>
                     {
                         ["event_type"] = "state_changed",
-                        ["data"] = data,
+                        ["data"] = PublishNullStateEventData ? null : data,
                         ["origin"] = "LOCAL",
                         ["time_fired"] = DateTimeOffset.UtcNow,
                         ["context"] = new Dictionary<string, object?>
@@ -425,6 +438,13 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     return;
                 }
 
+                if (SupportedFeaturesErrorCode is string supportedFeaturesErrorCode
+                    && !string.IsNullOrWhiteSpace(supportedFeaturesErrorCode))
+                {
+                    await session.SendErrorAsync(id, supportedFeaturesErrorCode, "Feature negotiation was rejected.", supportedFeaturesErrorCode, _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
                 session.MessageCoalescingEnabled = command.TryGetProperty("features", out var features)
                     && features.ValueKind == JsonValueKind.Object
                     && features.TryGetProperty("coalesce_messages", out var coalesce)
@@ -448,7 +468,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("{\"location_name\":\"Test Home\",\"version\":\"2026.8.3\",\"components\":[\"api\"]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "get_services":
-                await session.SendResultAsync(id, ParseJson("{\"light\":{\"turn_on\":{\"name\":\"Turn on\",\"description\":\"Turns on a light.\",\"fields\":{\"brightness_pct\":{\"name\":\"Brightness\",\"description\":\"Brightness percentage.\",\"required\":false,\"example\":45,\"selector\":{\"number\":{\"min\":0,\"max\":100}}}},\"target\":{\"entity\":[{\"domain\":\"light\"}]}},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}},\"switch\":{\"turn_on\":{\"name\":\"Turn on\"},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}}}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(ActionCatalogResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "get_panels":
                 await session.SendResultAsync(id, ParseJson("{\"lovelace\":{\"title\":\"Overview\"}}"), false, _source.Token).ConfigureAwait(false);
@@ -624,7 +644,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"list_only\":{\"source\":\"partial\"}},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"},{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\"}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/entity_registry/get_entries":
-                await session.SendResultAsync(id, ParseJson("{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true,\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"light.kitchen\":{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"aliases\":[null,\"Island fixture\"],\"capabilities\":{},\"extended_only\":true},\"sensor.disabled_temperature\":{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"sensor.legacy_disabled\":{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}}}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(ExtendedEntityRegistryResponseJson
+                    ?? "{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true,\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"light.kitchen\":{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"aliases\":[null,\"Island fixture\"],\"capabilities\":{},\"extended_only\":true},\"sensor.disabled_temperature\":{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"sensor.legacy_disabled\":{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}}}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get":
                 if (!string.IsNullOrWhiteSpace(ConfigEntriesErrorCode))

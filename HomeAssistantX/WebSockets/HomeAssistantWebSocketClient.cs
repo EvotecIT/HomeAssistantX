@@ -43,7 +43,12 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
 
     public HomeAssistantConnectionState State => _state;
 
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    public Task ConnectAsync(CancellationToken cancellationToken = default)
+        => ConnectAsync(cancellationToken, stopOnPermanentNegotiationFailure: false);
+
+    private async Task ConnectAsync(
+        CancellationToken cancellationToken,
+        bool stopOnPermanentNegotiationFailure)
     {
         ThrowIfDisposed();
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -102,6 +107,12 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                     throw new HomeAssistantConnectionException(
                         "The Home Assistant WebSocket connection timed out.",
                         new TimeoutException());
+                }
+
+                if (stopOnPermanentNegotiationFailure
+                    && (ex is HomeAssistantProtocolException || ex is HomeAssistantCommandException))
+                {
+                    throw new PermanentReconnectNegotiationException((HomeAssistantException)ex);
                 }
 
                 if (ex is HomeAssistantException || ex is OperationCanceledException)

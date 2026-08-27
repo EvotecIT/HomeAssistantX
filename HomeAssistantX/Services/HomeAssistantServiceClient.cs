@@ -44,14 +44,16 @@ public sealed class HomeAssistantServiceClient
         {
             if (domain.Value.ValueKind != JsonValueKind.Object)
             {
-                continue;
+                throw new Exceptions.HomeAssistantProtocolException(
+                    "The Home Assistant action catalog contained a non-object domain definition.");
             }
 
             foreach (var action in domain.Value.EnumerateObject())
             {
                 if (action.Value.ValueKind != JsonValueKind.Object)
                 {
-                    continue;
+                    throw new Exceptions.HomeAssistantProtocolException(
+                        "The Home Assistant action catalog contained a non-object action definition.");
                 }
 
                 actions.Add(ParseAction(domain.Name, action.Name, action.Value));

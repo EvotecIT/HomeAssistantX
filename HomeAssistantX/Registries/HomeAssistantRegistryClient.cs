@@ -77,7 +77,8 @@ public sealed class HomeAssistantRegistryClient
 
         var extendedEntries = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantEntityRegistryEntry?>>(
             value,
-            "The Home Assistant extended entity registry response could not be decoded.");
+            "The Home Assistant extended entity registry response could not be decoded.",
+            allowNullCollectionEntries: true);
 
         return partialEntries.Select(partial =>
         {

@@ -50,6 +50,33 @@ public sealed class RestClientContractTests
         Assert.Equal("Bearer " + TestHomeAssistantServer.AccessToken, server.LastAuthorization);
     }
 
+    [Theory]
+    [InlineData("[null]")]
+    [InlineData("[[null]]")]
+    public async Task RestHistoryRejectsNullSeriesAndRows(string responseJson)
+    {
+        using var server = new TestHomeAssistantServer { HistoryResponseJson = responseJson };
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantX.Rest.HomeAssistantHistoryQuery("sensor.kitchen_temperature")
+        {
+            StartTime = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero)
+        };
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetHistoryAsync(query));
+    }
+
+    [Fact]
+    public async Task ConfigurationRejectsNullEntriesInRequiredComponentCollection()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ConfigurationResponseJson = "{\"components\":[\"api\",null]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetConfigurationAsync());
+    }
+
     [Fact]
     public async Task RawGenericResponsesRemainCaseInsensitiveForConsumerDtos()
     {

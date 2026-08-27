@@ -1,5 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections;
+using System.Reflection;
 using HomeAssistantX.Exceptions;
 
 namespace HomeAssistantX.Protocol;
@@ -38,16 +40,165 @@ internal static class HomeAssistantJson
     }
 
     /// <summary>Decodes a built-in Home Assistant response while preserving the classified protocol-failure contract.</summary>
-    public static T DeserializeResponse<T>(JsonElement value, string failureMessage)
+    public static T DeserializeResponse<T>(
+        JsonElement value,
+        string failureMessage,
+        bool allowNullCollectionEntries = false)
     {
         try
         {
-            return value.Deserialize<T>(SerializerOptions)
+            var result = value.Deserialize<T>(SerializerOptions)
                 ?? throw new HomeAssistantProtocolException(failureMessage);
+            return RequireNoNullCollectionEntries(result, failureMessage, allowNullCollectionEntries);
         }
         catch (JsonException ex)
         {
             throw new HomeAssistantProtocolException(failureMessage, ex);
         }
+    }
+
+    /// <summary>Rejects null entries in a built-in response collection, including nested collections.</summary>
+    public static T RequireNoNullCollectionEntries<T>(
+        T value,
+        string failureMessage,
+        bool allowNullCollectionEntries = false)
+    {
+        ValidateValue(value, typeof(T), failureMessage, allowNullCollection: false, allowNullEntries: allowNullCollectionEntries);
+        return value;
+    }
+
+    private static void ValidateValue(
+        object? value,
+        Type declaredType,
+        string failureMessage,
+        bool allowNullCollection,
+        bool allowNullEntries)
+    {
+        if (value is null)
+        {
+            if (!allowNullCollection && IsCollectionType(declaredType))
+                throw new HomeAssistantProtocolException(failureMessage);
+            return;
+        }
+
+        if (value is IDictionary dictionary)
+        {
+            var valueType = GetDictionaryValueType(declaredType) ?? typeof(object);
+            foreach (DictionaryEntry entry in dictionary)
+            {
+                if (entry.Value is null && !allowNullEntries)
+                    throw new HomeAssistantProtocolException(failureMessage);
+                ValidateValue(entry.Value, valueType, failureMessage, allowNullCollection: allowNullEntries, allowNullEntries: false);
+            }
+
+            return;
+        }
+
+        if (value is not IEnumerable enumerable || value is string)
+        {
+            ValidateCollectionProperties(value, failureMessage);
+            return;
+        }
+
+        var elementType = GetCollectionElementType(declaredType) ?? typeof(object);
+        foreach (var item in enumerable)
+        {
+            if (item is null && !allowNullEntries)
+                throw new HomeAssistantProtocolException(failureMessage);
+            ValidateValue(item, elementType, failureMessage, allowNullCollection: allowNullEntries, allowNullEntries: false);
+        }
+    }
+
+    private static void ValidateCollectionProperties(object value, string failureMessage)
+    {
+        var type = value.GetType();
+        if (type.IsValueType || type.Namespace?.StartsWith("HomeAssistantX", StringComparison.Ordinal) != true)
+        {
+            return;
+        }
+
+        foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (!property.CanRead || property.SetMethod?.IsPublic != true || property.GetIndexParameters().Length != 0)
+            {
+                continue;
+            }
+
+            var propertyValue = property.GetValue(value);
+            if (IsCollectionType(property.PropertyType))
+            {
+                var nullability = GetCollectionNullability(property);
+                ValidateValue(
+                    propertyValue,
+                    property.PropertyType,
+                    failureMessage,
+                    nullability.Collection,
+                    nullability.Entry);
+            }
+            else if (propertyValue is not null)
+            {
+                ValidateCollectionProperties(propertyValue, failureMessage);
+            }
+        }
+    }
+
+    private static (bool Collection, bool Entry) GetCollectionNullability(PropertyInfo property)
+    {
+        var flags = ReadNullableFlags(property);
+        var context = ReadNullableContext(property);
+        byte At(int index) => flags.Length == 1 ? flags[0] : index < flags.Length ? flags[index] : context;
+        var entryIndex = GetDictionaryValueType(property.PropertyType) is null ? 1 : 2;
+        return (At(0) == 2, At(entryIndex) == 2);
+    }
+
+    private static byte[] ReadNullableFlags(PropertyInfo property)
+    {
+        var attribute = CustomAttributeData.GetCustomAttributes(property).FirstOrDefault(value =>
+            string.Equals(value.AttributeType.FullName, "System.Runtime.CompilerServices.NullableAttribute", StringComparison.Ordinal));
+        if (attribute is null || attribute.ConstructorArguments.Count == 0) return Array.Empty<byte>();
+        var argument = attribute.ConstructorArguments[0];
+        if (argument.Value is byte single) return new[] { single };
+        if (argument.Value is IEnumerable<CustomAttributeTypedArgument> values)
+            return values.Select(value => Convert.ToByte(value.Value, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        return Array.Empty<byte>();
+    }
+
+    private static byte ReadNullableContext(PropertyInfo property)
+    {
+        for (MemberInfo? current = property; current is not null; current = current.DeclaringType)
+        {
+            var attribute = CustomAttributeData.GetCustomAttributes(current).FirstOrDefault(value =>
+                string.Equals(value.AttributeType.FullName, "System.Runtime.CompilerServices.NullableContextAttribute", StringComparison.Ordinal));
+            if (attribute is not null && attribute.ConstructorArguments.Count == 1
+                && attribute.ConstructorArguments[0].Value is byte flag)
+                return flag;
+        }
+
+        return 0;
+    }
+
+    private static bool IsCollectionType(Type type)
+        => type != typeof(string) && typeof(IEnumerable).IsAssignableFrom(type);
+
+    private static Type? GetCollectionElementType(Type type)
+    {
+        if (type.IsArray) return type.GetElementType();
+        var enumerable = type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)
+            ? type
+            : type.GetInterfaces().FirstOrDefault(value =>
+                value.IsGenericType && value.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+        return enumerable?.GetGenericArguments()[0];
+    }
+
+    private static Type? GetDictionaryValueType(Type type)
+    {
+        var dictionary = type.IsGenericType
+            && (type.GetGenericTypeDefinition() == typeof(IDictionary<,>)
+                || type.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
+            ? type
+            : type.GetInterfaces().FirstOrDefault(value => value.IsGenericType
+                && (value.GetGenericTypeDefinition() == typeof(IDictionary<,>)
+                    || value.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
+        return dictionary?.GetGenericArguments()[1];
     }
 }
