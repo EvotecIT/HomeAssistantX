@@ -68,6 +68,32 @@ public sealed class LivePlatformDataContractTests
         AssertServiceCall(server, "persistent_notification", "dismiss_all", data => Assert.Equal(JsonValueKind.Undefined, data.ValueKind));
     }
 
+    [Theory]
+    [InlineData("[{\"message\":\"Door open\"}]")]
+    [InlineData("[{\"notification_id\":\"notice-1\"}]")]
+    [InlineData("[null]")]
+    public async Task PersistentNotificationReadsRejectIncompleteItems(string response)
+    {
+        using var server = new TestHomeAssistantServer { PersistentNotificationResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Notifications.GetPersistentAsync());
+    }
+
+    [Fact]
+    public async Task RegistrySnapshotTreatsOnlyAnUnsupportedLabelRegistryAsOptionalEnrichment()
+    {
+        using var unsupportedServer = new TestHomeAssistantServer { LabelRegistryErrorCode = "unknown_command" };
+        using var unsupportedClient = TestClientFactory.Create(unsupportedServer);
+        var snapshot = await unsupportedClient.Registries.GetSnapshotAsync();
+        Assert.False(snapshot.IsLabelRegistryAvailable);
+        Assert.Empty(snapshot.Labels);
+
+        using var failedServer = new TestHomeAssistantServer { LabelRegistryErrorCode = "internal_error" };
+        using var failedClient = TestClientFactory.Create(failedServer);
+        await Assert.ThrowsAsync<HomeAssistantCommandException>(() => failedClient.Registries.GetSnapshotAsync());
+    }
+
     [Fact]
     public async Task PersistentNotificationSubscriptionRejectsNullDictionaryValues()
     {
@@ -75,6 +101,18 @@ public sealed class LivePlatformDataContractTests
         {
             PersistentNotificationSubscriptionEventJson = "{\"type\":\"Current\",\"notifications\":{\"notice-1\":null}}"
         };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"message\":\"Door open\"}}}")]
+    [InlineData("{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\"}}}")]
+    public async Task PersistentNotificationSubscriptionRejectsIncompleteItems(string payload)
+    {
+        using var server = new TestHomeAssistantServer { PersistentNotificationSubscriptionEventJson = payload };
         using var client = TestClientFactory.Create(server);
         using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);
 

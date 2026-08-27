@@ -22,7 +22,7 @@ public sealed class HomeAssistantRegistryClient
         var devicesTask = _webSocket.RequestAsync("config/device_registry/list", null, cancellationToken);
         var partialEntitiesTask = _webSocket.RequestAsync("config/entity_registry/list", null, cancellationToken);
         var configEntriesTask = GetConfigEntriesAsync(cancellationToken);
-        var labelsTask = GetLabelsAsync(cancellationToken);
+        var labelsTask = GetLabelsForSnapshotAsync(cancellationToken);
         await Task.WhenAll(areasTask, floorsTask, devicesTask, partialEntitiesTask, configEntriesTask, labelsTask).ConfigureAwait(false);
 
         var partialEntities = DeserializeArray<HomeAssistantEntityRegistryEntry>(
@@ -50,8 +50,9 @@ public sealed class HomeAssistantRegistryClient
             Devices = DeserializeArray<HomeAssistantDeviceRegistryEntry>(await devicesTask.ConfigureAwait(false), "device registry", cancellationToken),
             Entities = entities,
             ConfigEntries = configEntries.Entries,
-            Labels = await labelsTask.ConfigureAwait(false),
-            IsConfigEntryEnrichmentAvailable = configEntries.IsAvailable
+            Labels = (await labelsTask.ConfigureAwait(false)).Entries,
+            IsConfigEntryEnrichmentAvailable = configEntries.IsAvailable,
+            IsLabelRegistryAvailable = (await labelsTask.ConfigureAwait(false)).IsAvailable
         };
     }
 
@@ -181,6 +182,19 @@ public sealed class HomeAssistantRegistryClient
         }
     }
 
+    private async Task<LabelLoadResult> GetLabelsForSnapshotAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return new LabelLoadResult(await GetLabelsAsync(cancellationToken).ConfigureAwait(false), true);
+        }
+        catch (HomeAssistantCommandException exception)
+            when (string.Equals(exception.Code, "unknown_command", StringComparison.OrdinalIgnoreCase))
+        {
+            return new LabelLoadResult(Array.Empty<HomeAssistantLabel>(), false);
+        }
+    }
+
     private static IReadOnlyList<HomeAssistantEntityRegistryEntry> DeserializeExtendedEntities(
         JsonElement value,
         IReadOnlyList<HomeAssistantEntityRegistryEntry> partialEntries,
@@ -303,5 +317,18 @@ public sealed class HomeAssistantRegistryClient
         public IReadOnlyList<HomeAssistantConfigEntry> Entries { get; }
 
         public bool IsAvailable { get; }
+    }
+
+    private sealed class LabelLoadResult
+    {
+        internal LabelLoadResult(IReadOnlyList<HomeAssistantLabel> entries, bool isAvailable)
+        {
+            Entries = entries;
+            IsAvailable = isAvailable;
+        }
+
+        internal IReadOnlyList<HomeAssistantLabel> Entries { get; }
+
+        internal bool IsAvailable { get; }
     }
 }

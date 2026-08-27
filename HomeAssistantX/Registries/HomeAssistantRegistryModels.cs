@@ -345,4 +345,7 @@ public sealed class HomeAssistantRegistrySnapshot
 
     /// <summary>Whether configuration-entry enrichment was available to the current Home Assistant user.</summary>
     public bool IsConfigEntryEnrichmentAvailable { get; set; } = true;
+
+    /// <summary>Whether the connected Home Assistant installation exposes the label registry.</summary>
+    public bool IsLabelRegistryAvailable { get; set; } = true;
 }

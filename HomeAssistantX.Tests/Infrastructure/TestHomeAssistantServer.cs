@@ -153,6 +153,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? ConfigEntriesErrorCode { get; set; }
 
+    public string? LabelRegistryErrorCode { get; set; }
+
     public bool OmitSystemHealthFinish { get; set; }
     public string SystemHealthInitialEventJson { get; set; } =
         "{\"type\":\"initial\",\"data\":{\"homeassistant\":{\"info\":{\"version\":\"2026.8.3\",\"installation_type\":\"Home Assistant OS\",\"hassio\":true}}}}";
@@ -192,6 +194,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string PersistentNotificationSubscriptionEventJson { get; set; } =
         "{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\"},\"Alert\":{\"notification_id\":\"Alert\",\"message\":\"Upper\"},\"alert\":{\"notification_id\":\"alert\",\"message\":\"Lower\"}}}";
+
+    public string PersistentNotificationResponseJson { get; set; } =
+        "[{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\",\"source\":\"fixture\"}]";
 
     public string CalendarSubscriptionEventJson { get; set; } =
         "[{\"summary\":\"Dinner\",\"start\":\"2026-08-26T18:00:00+02:00\",\"end\":\"2026-08-26T20:00:00+02:00\",\"uid\":\"event-1\",\"rrule\":\"FREQ=WEEKLY\"}]";
@@ -715,7 +720,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 }, false, _source.Token).ConfigureAwait(false);
                 return;
             case "persistent_notification/get":
-                await session.SendResultAsync(id, ParseJson("[{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\",\"source\":\"fixture\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(PersistentNotificationResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "persistent_notification/subscribe":
                 session.SubscriptionIds.Add(id);
@@ -961,6 +966,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\",\"labels\":[\"security\"]}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/label_registry/list":
+                if (LabelRegistryErrorCode is not null)
+                {
+                    await session.SendErrorAsync(id, LabelRegistryErrorCode, "Label registry is unavailable.", LabelRegistryErrorCode, _source.Token).ConfigureAwait(false);
+                    return;
+                }
                 await session.SendResultAsync(id, ParseJson("[{\"label_id\":\"security\",\"name\":\"Safety\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300},{\"label_id\":\"security-name\",\"name\":\"Security\",\"color\":null,\"description\":\"Identifier collision fixture\",\"icon\":null,\"created_at\":1787731200,\"modified_at\":1787731300}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/label_registry/create":

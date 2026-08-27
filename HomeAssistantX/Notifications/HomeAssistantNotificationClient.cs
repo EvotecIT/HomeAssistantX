@@ -23,7 +23,9 @@ public sealed class HomeAssistantNotificationClient
         CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("persistent_notification/get", null, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification[]>(value, "The Home Assistant persistent-notification response could not be decoded.");
+        var notifications = HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification[]>(value, "The Home Assistant persistent-notification response could not be decoded.");
+        ValidateNotifications(notifications, "The Home Assistant persistent-notification response");
+        return notifications;
     }
 
     public Task<HomeAssistantServiceCallResult> CreatePersistentAsync(
@@ -97,6 +99,7 @@ public sealed class HomeAssistantNotificationClient
             var notifications = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantPersistentNotification>>(
                 notificationsValue,
                 "The Home Assistant persistent-notification update could not be decoded.");
+            ValidateNotifications(notifications.Values, "The Home Assistant persistent-notification update");
             await handler(new HomeAssistantPersistentNotificationUpdate
             {
                 RawType = rawType,
@@ -105,6 +108,15 @@ public sealed class HomeAssistantNotificationClient
                 Raw = value.Clone()
             }, token).ConfigureAwait(false);
         }, cancellationToken);
+    }
+
+    private static void ValidateNotifications(
+        IEnumerable<HomeAssistantPersistentNotification> notifications,
+        string responseName)
+    {
+        HomeAssistantJson.RequireNoNullCollectionEntries(notifications, responseName + " contained a null item.");
+        if (notifications.Any(item => string.IsNullOrWhiteSpace(item.NotificationId) || string.IsNullOrWhiteSpace(item.Message)))
+            throw new HomeAssistantProtocolException(responseName + " contained an incomplete item.");
     }
 
     private static Dictionary<string, object?> MessageData(string message, string? title)
