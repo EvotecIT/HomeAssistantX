@@ -169,7 +169,7 @@ public sealed class CamerasDashboardsAutomationContractTests
     {
         using var server = new TestHomeAssistantServer
         {
-            MediaBrowseResponseJson = "{\"title\":\"Provider unavailable\",\"can_play\":false,\"can_expand\":false,\"children\":[]}"
+            MediaBrowseResponseJson = "{\"title\":\"Provider unavailable\",\"media_class\":\"message\",\"media_content_id\":\"\",\"media_content_type\":\"\",\"can_play\":false,\"can_expand\":false,\"can_search\":false,\"children\":[]}"
         };
         using var client = TestClientFactory.Create(server);
 
