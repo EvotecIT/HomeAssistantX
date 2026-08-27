@@ -94,7 +94,10 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 {
                     if (document.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("ConfigurationJson must be a JSON object.", nameof(ConfigurationJson));
                     var configuration = document.RootElement.Clone();
-                    var configurationUrlPath = UrlPath is null ? null : Require(UrlPath, nameof(UrlPath));
+                    string? configurationUrlPath = null;
+                    if (UrlPath is not null
+                        && !HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, allowSingleWord: true, out configurationUrlPath))
+                        throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", nameof(UrlPath));
                     target = configurationUrlPath ?? "default"; action = "Replace Home Assistant dashboard configuration";
                     if (!ShouldProcess(target, action)) return;
                     result = await Client.Dashboards.SaveConfigurationAsync(configuration, configurationUrlPath, CancelToken).ConfigureAwait(false);

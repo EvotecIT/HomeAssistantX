@@ -232,7 +232,16 @@ public sealed class CamerasDashboardsAutomationContractTests
         server.ClearLastWebSocketCommand("lovelace/dashboards/create");
         await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house", Title = "House" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House", Icon = "home" }));
+        using var emptyConfiguration = JsonDocument.Parse("{}");
+        foreach (var invalidPath in new[] { "House-main", "house--main", "house-main-", "house main" })
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.GetConfigurationAsync(invalidPath));
+            await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.SaveConfigurationAsync(emptyConfiguration.RootElement, invalidPath));
+            await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.DeleteConfigurationAsync(invalidPath));
+        }
         Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/config/save"));
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/config/delete"));
     }
 
     [Fact]

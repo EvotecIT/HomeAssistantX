@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using HomeAssistantX.Dashboards;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -20,7 +21,10 @@ public sealed class RemoveHomeAssistantDashboardCommand : HomeAssistantCmdlet
         switch (ParameterSetName)
         {
             case ConfigurationSet:
-                var urlPath = UrlPath is null ? null : Require(UrlPath, nameof(UrlPath));
+                string? urlPath = null;
+                if (UrlPath is not null
+                    && !HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, allowSingleWord: true, out urlPath))
+                    throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", nameof(UrlPath));
                 if (ShouldProcess(urlPath ?? "default", "Delete Home Assistant dashboard configuration")) await Client.Dashboards.DeleteConfigurationAsync(urlPath, CancelToken).ConfigureAwait(false);
                 break;
             case ResourceSet:

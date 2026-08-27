@@ -86,7 +86,7 @@ public sealed class HomeAssistantDashboardClient
     {
         var payload = new Dictionary<string, object?>();
         if (force) payload["force"] = true;
-        if (urlPath is not null) payload["url_path"] = Require(urlPath, nameof(urlPath));
+        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
         return _webSocket.RequestAsync("lovelace/config", payload, cancellationToken);
     }
 
@@ -94,14 +94,14 @@ public sealed class HomeAssistantDashboardClient
     {
         if (configuration.ValueKind != JsonValueKind.Object) throw new ArgumentException("A Lovelace configuration JSON object is required.", nameof(configuration));
         var payload = new Dictionary<string, object?> { ["config"] = configuration.Clone() };
-        if (urlPath is not null) payload["url_path"] = Require(urlPath, nameof(urlPath));
+        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
         return _webSocket.RequestAsync("lovelace/config/save", payload, cancellationToken);
     }
 
     public Task<JsonElement> DeleteConfigurationAsync(string? urlPath = null, CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, object?>();
-        if (urlPath is not null) payload["url_path"] = Require(urlPath, nameof(urlPath));
+        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
         return _webSocket.RequestAsync("lovelace/config/delete", payload, cancellationToken);
     }
 
@@ -199,6 +199,13 @@ public sealed class HomeAssistantDashboardClient
     {
         if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", parameterName);
         return value.Trim();
+    }
+
+    private static string RequireConfigurationUrlPath(string? value, string parameterName)
+    {
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(value, allowSingleWord: true, out var normalized))
+            throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", parameterName);
+        return normalized;
     }
 
     private static string RequireIcon(string value, string parameterName)
