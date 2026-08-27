@@ -319,6 +319,7 @@ try {
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop },
         { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -EntityId update.Kitchen -WhatIf -ErrorAction Stop }
     )) {
         $invalidEnumRejected = $false
         try {

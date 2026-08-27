@@ -50,7 +50,6 @@ internal static class HomeAssistantEntityId
             }
 
             if (!((character >= 'a' && character <= 'z')
-                  || (character >= 'A' && character <= 'Z')
                   || (character >= '0' && character <= '9')
                   || character == '_'))
             {

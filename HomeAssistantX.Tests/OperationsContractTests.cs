@@ -124,6 +124,7 @@ public sealed class OperationsContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.GetReleaseNotesAsync("light.kitchen"));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update."));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.core.extra"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.Kitchen"));
 
         Assert.Null(server.GetLastWebSocketCommand("update/release_notes"));
         Assert.Null(server.LastServiceCallBody);

@@ -106,7 +106,6 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
             || !string.Equals(normalized.Substring(0, separator), "update", StringComparison.OrdinalIgnoreCase)
             || normalized.Substring(separator + 1).Any(character =>
                 !((character >= 'a' && character <= 'z')
-                    || (character >= 'A' && character <= 'Z')
                     || (character >= '0' && character <= '9')
                     || character == '_')))
         {
