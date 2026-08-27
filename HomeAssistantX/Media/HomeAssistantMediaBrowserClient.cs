@@ -103,13 +103,13 @@ public sealed class HomeAssistantMediaBrowserClient
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "media_player", out entityId))
             throw new ArgumentException("A media-player entity identifier is required.", nameof(entityId));
         var payload = new Dictionary<string, object?> { ["entity_id"] = entityId };
-        if (!string.IsNullOrWhiteSpace(mediaContentType))
+        if (mediaContentType is not null)
         {
-            payload["media_content_type"] = mediaContentType!.Trim();
+            payload["media_content_type"] = Require(mediaContentType, nameof(mediaContentType));
         }
-        if (!string.IsNullOrWhiteSpace(mediaContentId))
+        if (mediaContentId is not null)
         {
-            payload["media_content_id"] = mediaContentId!.Trim();
+            payload["media_content_id"] = Require(mediaContentId, nameof(mediaContentId));
         }
         return payload;
     }
@@ -117,7 +117,7 @@ public sealed class HomeAssistantMediaBrowserClient
     private static Dictionary<string, object?> OptionalContentId(string? mediaContentId)
     {
         var payload = new Dictionary<string, object?>();
-        if (!string.IsNullOrWhiteSpace(mediaContentId)) payload["media_content_id"] = mediaContentId!.Trim();
+        if (mediaContentId is not null) payload["media_content_id"] = Require(mediaContentId, nameof(mediaContentId));
         return payload;
     }
 

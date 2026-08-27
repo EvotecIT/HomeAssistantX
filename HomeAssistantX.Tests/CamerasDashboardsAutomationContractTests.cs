@@ -14,6 +14,20 @@ namespace HomeAssistantX.Tests;
 
 public sealed class CamerasDashboardsAutomationContractTests
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task GlobalMediaSelectorsRejectBlankValuesBeforeDispatch(string selector)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Media.BrowseSourcesAsync(selector));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Media.SearchSourcesResponseAsync("music", selector));
+        Assert.Null(server.GetLastWebSocketCommand("media_source/browse_media"));
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+    }
+
     [Fact]
     public async Task CameraSurfaceIsTypedBoundedSignedAndPushCapable()
     {
