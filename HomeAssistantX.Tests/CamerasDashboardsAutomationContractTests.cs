@@ -251,6 +251,29 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Empty(item.MediaContentType);
     }
 
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"not_shown\":-1,\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[{\"title\":\"Hidden\",\"media_class\":\"music\",\"media_content_id\":\"child\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"not_shown\":-1}]}")]
+    public async Task MediaBrowseRejectsNegativeHiddenCounts(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task MediaSearchRejectsNegativeHiddenCounts()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaSearchResponseJson = "{\"result\":[{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\"item\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"not_shown\":-1}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.SearchSourcesAsync("music"));
+    }
+
     [Fact]
     public async Task CameraAndAutomationBulkReadsRejectMalformedServerEntityIds()
     {

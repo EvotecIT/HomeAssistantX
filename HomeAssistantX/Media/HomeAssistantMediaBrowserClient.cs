@@ -104,7 +104,9 @@ public sealed class HomeAssistantMediaBrowserClient
             || !value.TryGetProperty("can_expand", out var canExpand)
             || canExpand.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
             || !value.TryGetProperty("can_search", out var canSearch)
-            || canSearch.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            || canSearch.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+            || value.TryGetProperty("not_shown", out var notShown)
+                && (notShown.ValueKind != JsonValueKind.Number || !notShown.TryGetInt32(out var hiddenCount) || hiddenCount < 0))
         {
             throw new HomeAssistantProtocolException("The media response omitted its required identity or actionability fields.");
         }
