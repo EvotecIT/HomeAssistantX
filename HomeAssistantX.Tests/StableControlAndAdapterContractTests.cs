@@ -125,6 +125,12 @@ public sealed class StableControlAndAdapterContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Routines.RunScriptAsync(
             HomeAssistantTarget.ForEntity("script.evening"),
             cyclicVariables));
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Routines.RunScriptAsync(
+            HomeAssistantTarget.ForEntity("script.evening"),
+            cyclicVariables,
+            canceled.Token));
         Assert.Null(server.LastServiceCallBody);
     }
 

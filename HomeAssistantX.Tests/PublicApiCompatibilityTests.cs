@@ -236,6 +236,28 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void MethodFormatterPreservesModernCallBindingMetadata()
+    {
+        var generalizedParams = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(GeneralizedParamsFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var prioritized = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(PrioritizedOverloadFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var prioritizedConstructor = typeof(PrioritizedMemberFixture).GetConstructors().Single();
+        var prioritizedProperty = typeof(PrioritizedMemberFixture).GetProperty("Item")!;
+        var handler = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(InterpolatedHandlerFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal("params scoped System.ReadOnlySpan<System.Int32> values", FormatParameters(generalizedParams.GetParameters()));
+        Assert.StartsWith("overload-priority(2) PrioritizedOverloadFixture", FormatMethod(prioritized), StringComparison.Ordinal);
+        Assert.Contains("overload-priority(3) ", FormatConstructor(prioritizedConstructor), StringComparison.Ordinal);
+        Assert.Contains("overload-priority(4) ", FormatProperty(prioritizedProperty), StringComparison.Ordinal);
+        Assert.Contains("handler(\"context\") ref ", FormatParameters(handler.GetParameters()), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void GenericConstraintFormatterPreservesNullableContracts()
     {
         Assert.Equal(
@@ -389,7 +411,7 @@ public sealed class PublicApiCompatibilityTests
             foreach (var constructor in type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                          .Where(IsExternallyAccessibleConstructor)
                          .OrderBy(FormatMethod, StringComparer.Ordinal))
-                lines.Add("  C " + ConstructorAccess(constructor) + ObsoleteContract(constructor) + RequiredMemberSatisfaction(constructor) + FormatType(type) + "(" + FormatParameters(constructor.GetParameters()) + ")");
+                lines.Add("  " + FormatConstructor(constructor));
             foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleField)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
@@ -398,12 +420,7 @@ public sealed class PublicApiCompatibilityTests
                          .Where(IsExternallyAccessibleProperty)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
-                var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
-                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(
-                    property,
-                    IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null,
-                    IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null)
-                    + RequiredMember(property) + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
+                lines.Add("  " + FormatProperty(property));
             }
             foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleEvent)
@@ -461,7 +478,24 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return ObsoleteContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return ObsoleteContract(method) + OverloadResolutionPriorityContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+    }
+
+    private static string FormatConstructor(ConstructorInfo constructor)
+        => "C " + ConstructorAccess(constructor) + ObsoleteContract(constructor)
+            + OverloadResolutionPriorityContract(constructor) + RequiredMemberSatisfaction(constructor)
+            + FormatType(constructor.DeclaringType!) + "(" + FormatParameters(constructor.GetParameters()) + ")";
+
+    private static string FormatProperty(PropertyInfo property)
+    {
+        var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
+        return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(
+            property,
+            IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null,
+            IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null)
+            + OverloadResolutionPriorityContract(property) + RequiredMember(property)
+            + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property)
+            + " {" + FormatPropertyAccessors(property) + "}";
     }
 
     private static void ParameterDirectionFixture(ref int byReference, out int output, in int input)
@@ -643,6 +677,48 @@ public sealed class PublicApiCompatibilityTests
     }
 
 #if NET10_0
+    private static void GeneralizedParamsFixture(params ReadOnlySpan<int> values)
+    {
+    }
+
+    [OverloadResolutionPriority(2)]
+    private static void PrioritizedOverloadFixture(int value)
+    {
+    }
+
+    private sealed class PrioritizedMemberFixture
+    {
+        [OverloadResolutionPriority(3)]
+        public PrioritizedMemberFixture(int value)
+        {
+        }
+
+        [OverloadResolutionPriority(4)]
+        public int this[int index] => index;
+    }
+
+    private static void InterpolatedHandlerFixture(
+        int context,
+        [InterpolatedStringHandlerArgument(nameof(context))] ref ApiBaselineInterpolatedStringHandler handler)
+    {
+    }
+
+    [InterpolatedStringHandler]
+    private ref struct ApiBaselineInterpolatedStringHandler
+    {
+        public ApiBaselineInterpolatedStringHandler(int literalLength, int formattedCount, int context)
+        {
+        }
+
+        public void AppendLiteral(string value)
+        {
+        }
+
+        public void AppendFormatted<T>(T value)
+        {
+        }
+    }
+
     private interface StaticDispatchFixture
     {
         static abstract int Abstract();
@@ -801,6 +877,18 @@ public sealed class PublicApiCompatibilityTests
         return string.Empty;
     }
 
+    private static string OverloadResolutionPriorityContract(ICustomAttributeProvider provider)
+    {
+        var attribute = GetCustomAttributes(provider).FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Runtime.CompilerServices.OverloadResolutionPriorityAttribute",
+            StringComparison.Ordinal));
+        return attribute?.ConstructorArguments.Count == 1
+            && attribute.ConstructorArguments[0].Value is int priority
+                ? "overload-priority(" + priority.ToString(CultureInfo.InvariantCulture) + ") "
+                : string.Empty;
+    }
+
     private static string FormatPropertyAccessors(PropertyInfo property)
     {
         var propertyAccess = MemberAccess(MostAccessible(property.GetMethod, property.SetMethod)!);
@@ -893,11 +981,15 @@ public sealed class PublicApiCompatibilityTests
 
     private static string FormatParameterType(ParameterInfo parameter)
     {
-        var paramsPrefix = parameter.GetCustomAttribute<ParamArrayAttribute>() is null ? string.Empty : "params ";
+        var paramsPrefix = parameter.GetCustomAttribute<ParamArrayAttribute>() is not null
+            || HasAttribute(parameter, "System.Runtime.CompilerServices.ParamCollectionAttribute")
+                ? "params "
+                : string.Empty;
+        var handlerPrefix = InterpolatedStringHandlerArguments(parameter);
         var safetyPrefix = RefSafetyPrefix(parameter);
         if (!parameter.ParameterType.IsByRef)
         {
-            return paramsPrefix + safetyPrefix + FormatAnnotatedType(parameter.ParameterType, parameter);
+            return paramsPrefix + handlerPrefix + safetyPrefix + FormatAnnotatedType(parameter.ParameterType, parameter);
         }
 
         var direction = HasAttribute(parameter, "System.Runtime.CompilerServices.RequiresLocationAttribute")
@@ -907,7 +999,25 @@ public sealed class PublicApiCompatibilityTests
             : parameter.IsIn
                 ? "in "
                 : "ref ";
-        return safetyPrefix + direction + FormatAnnotatedType(parameter.ParameterType.GetElementType()!, parameter);
+        return paramsPrefix + handlerPrefix + safetyPrefix + direction + FormatAnnotatedType(parameter.ParameterType.GetElementType()!, parameter);
+    }
+
+    private static string InterpolatedStringHandlerArguments(ParameterInfo parameter)
+    {
+        var attribute = GetCustomAttributes(parameter).FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Runtime.CompilerServices.InterpolatedStringHandlerArgumentAttribute",
+            StringComparison.Ordinal));
+        if (attribute is null || attribute.ConstructorArguments.Count != 1) return string.Empty;
+
+        var argument = attribute.ConstructorArguments[0];
+        if (argument.Value is IEnumerable<CustomAttributeTypedArgument> values)
+        {
+            return "handler(" + string.Join(",", values.Select(value => FormatDefault(value.Value))) + ") ";
+        }
+        return argument.Value is string value
+            ? "handler(" + FormatDefault(value) + ") "
+            : string.Empty;
     }
 
     private static string FormatReturnType(MethodInfo method)
