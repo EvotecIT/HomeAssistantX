@@ -698,10 +698,35 @@ public sealed class WebSocketContractTests
     }
 
     [Theory]
+    [InlineData("//other.example/api/camera_proxy/camera.front")]
+    [InlineData("/api\\camera_proxy\\camera.front")]
+    [InlineData(" /api/camera_proxy/camera.front")]
+    [InlineData("/api/camera_proxy/camera.front ")]
+    [InlineData("/api/camera_proxy/camera.front#fragment")]
+    [InlineData("/api/one/../camera_proxy/camera.front")]
+    [InlineData("/api/%2e%2e/camera_proxy/camera.front")]
+    public async Task SignPathRejectsNoncanonicalRequestedRoutesBeforeDispatch(string path)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.SignPathAsync(path));
+
+        Assert.Null(server.GetLastWebSocketCommand("auth/sign_path"));
+    }
+
+    [Theory]
     [InlineData("/api/other?authSig=signed")]
     [InlineData("/api/camera_proxy/camera.front-stale?authSig=signed")]
     [InlineData("/api/camera_proxy/camera.front&other?authSig=signed")]
     [InlineData("/api/camera_proxy/camera.front")]
+    [InlineData("//other.example/api/camera_proxy/camera.front?authSig=signed")]
+    [InlineData("/api\\camera_proxy\\camera.front?authSig=signed")]
+    [InlineData(" /api/camera_proxy/camera.front?authSig=signed")]
+    [InlineData("/api/camera_proxy/camera.front?authSig=signed ")]
+    [InlineData("/api/camera_proxy/camera.front?authSig=signed#fragment")]
+    [InlineData("/api/camera_proxy/../camera_proxy/camera.front?authSig=signed")]
+    [InlineData("/api/%2e%2e/api/camera_proxy/camera.front?authSig=signed")]
     public async Task SignPathRejectsResponsesForDifferentRoutes(string returnedPath)
     {
         using var server = new TestHomeAssistantServer

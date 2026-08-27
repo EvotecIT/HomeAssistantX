@@ -161,7 +161,7 @@ public sealed class HomeAssistantSystemClient
         TimeSpan? expiration = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith("/", StringComparison.Ordinal))
+        if (!HomeAssistantRootRelativePath.IsValid(path))
         {
             throw new ArgumentException("A root-relative Home Assistant path is required.", nameof(path));
         }
@@ -188,8 +188,7 @@ public sealed class HomeAssistantSystemClient
 
         var signed = signedPath.GetString()!;
         var expectedSeparator = path.IndexOf('?') >= 0 ? '&' : '?';
-        if (string.IsNullOrWhiteSpace(signed)
-            || !string.Equals(signed, signed.Trim(), StringComparison.Ordinal)
+        if (!HomeAssistantRootRelativePath.IsValid(signed)
             || !signed.StartsWith(path, StringComparison.Ordinal)
             || signed.Length <= path.Length
             || signed[path.Length] != expectedSeparator)

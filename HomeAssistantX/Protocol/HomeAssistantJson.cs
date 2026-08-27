@@ -35,7 +35,8 @@ internal static class HomeAssistantJson
     internal static IReadOnlyDictionary<string, object?>? FreezeObject(
         IReadOnlyDictionary<string, object?>? value,
         string parameterName,
-        string displayName)
+        string displayName,
+        CancellationToken cancellationToken = default)
     {
         if (value is null)
         {
@@ -44,8 +45,11 @@ internal static class HomeAssistantJson
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var json = JsonSerializer.Serialize(value, SerializerOptions);
+            cancellationToken.ThrowIfCancellationRequested();
             using var document = JsonDocument.Parse(json);
+            cancellationToken.ThrowIfCancellationRequested();
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
                 throw new JsonException("The serialized value was not a JSON object.");
@@ -58,6 +62,7 @@ internal static class HomeAssistantJson
         }
         catch (Exception ex) when (ex is JsonException || ex is NotSupportedException || ex is InvalidOperationException)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             throw new ArgumentException(displayName + " must be a serializable JSON object.", parameterName, ex);
         }
     }
