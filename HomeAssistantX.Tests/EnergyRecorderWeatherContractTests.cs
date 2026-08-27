@@ -522,6 +522,9 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"has_mean\":false}]")]
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"has_mean\":0,\"has_sum\":true}]")]
     [InlineData("[{\"statistic_id\":\" \",\"has_mean\":false,\"has_sum\":true}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.Bad\",\"has_mean\":false,\"has_sum\":true}]")]
+    [InlineData("[{\"statistic_id\":\"not an id\",\"has_mean\":false,\"has_sum\":true}]")]
+    [InlineData("[{\"statistic_id\":\" sensor.energy\",\"has_mean\":false,\"has_sum\":true}]")]
     public async Task RecorderMetadataRequiresIdentityAndCapabilityFields(string response)
     {
         using var server = new TestHomeAssistantServer { RecorderMetadataResponseJson = response };
@@ -561,6 +564,7 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("[]")]
     [InlineData("[{\"statistic_id\":\"sensor.other\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true}]")]
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true},{\"statistic_id\":\"SENSOR.ENERGY\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true}]")]
     public async Task FilteredRecorderMetadataCorrelatesReturnedIdentifiers(string response)
