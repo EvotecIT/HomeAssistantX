@@ -633,6 +633,7 @@ try {
         { $invalidRangeRow | Set-HomeAssistantStatistic -ImportMetadata $invalidRangeMetadata -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum ([double]::NaN) -StartTime '2026-08-26T00:00:00Z' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitClass energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
         { Remove-HomeAssistantStatistic ' ' -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }
