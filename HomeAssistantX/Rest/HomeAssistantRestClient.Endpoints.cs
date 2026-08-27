@@ -201,7 +201,7 @@ public sealed partial class HomeAssistantRestClient
         var payload = new Dictionary<string, object?> { ["template"] = template };
         if (variables is not null)
         {
-            payload["variables"] = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables");
+            payload["variables"] = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables", cancellationToken);
         }
 
         return SendTextAsync(HttpMethod.Post, "api/template", payload, cancellationToken);

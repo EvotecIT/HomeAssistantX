@@ -61,7 +61,7 @@ public sealed class HomeAssistantEventClient
         var payload = new Dictionary<string, object?> { ["event_type"] = eventType.Trim() };
         if (eventData is not null)
         {
-            payload["event_data"] = HomeAssistantJson.FreezeObject(eventData, nameof(eventData), "EventData");
+            payload["event_data"] = HomeAssistantJson.FreezeObject(eventData, nameof(eventData), "EventData", cancellationToken);
         }
 
         return _webSocket.RequestAsync("fire_event", payload, cancellationToken);
@@ -84,10 +84,11 @@ public sealed class HomeAssistantEventClient
             throw new ArgumentNullException(nameof(handler));
         }
 
-        var payload = new Dictionary<string, object?> { ["trigger"] = HomeAssistantJson.FreezeValue(trigger, nameof(trigger), "Trigger") };
+        cancellationToken.ThrowIfCancellationRequested();
+        var payload = new Dictionary<string, object?> { ["trigger"] = HomeAssistantJson.FreezeValue(trigger, nameof(trigger), "Trigger", cancellationToken) };
         if (variables is not null)
         {
-            payload["variables"] = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables");
+            payload["variables"] = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables", cancellationToken);
         }
 
         return _webSocket.SubscribeAsync("subscribe_trigger", payload, handler, cancellationToken);
