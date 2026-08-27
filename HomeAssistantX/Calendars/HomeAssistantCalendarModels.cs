@@ -115,18 +115,7 @@ public sealed class HomeAssistantCalendarEventInput
 
     private static void ValidateRecurrenceRule(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new ArgumentException("A recurrence rule cannot be empty.", nameof(value));
-        }
-
-        var frequency = value.Split(';')
-            .Select(part => part.Split(new[] { '=' }, 2))
-            .FirstOrDefault(part => part.Length == 2 && string.Equals(part[0], "FREQ", StringComparison.OrdinalIgnoreCase));
-        if (frequency is null || !(new[] { "DAILY", "WEEKLY", "MONTHLY", "YEARLY" }).Contains(frequency[1], StringComparer.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException("The recurrence rule must contain a supported FREQ value: DAILY, WEEKLY, MONTHLY, or YEARLY.", nameof(value));
-        }
+        HomeAssistantRecurrenceRuleValidator.Validate(value, nameof(value));
     }
 }
 

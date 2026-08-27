@@ -138,8 +138,14 @@ public sealed class LivePlatformDataContractTests
         Assert.Throws<ArgumentOutOfRangeException>(() => HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-27", "Invalid"));
         var input = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Invalid recurrence");
         Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=SECONDLY");
-        input.RecurrenceRule = "freq=weekly";
-        Assert.Equal("freq=weekly", input.RecurrenceRule);
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "freq=weekly");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=WEEKLY;COUNT=abc");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=WEEKLY;FREQ=DAILY");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=WEEKLY;INTERVAL=0");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=WEEKLY;BYDAY=MONDAY");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=WEEKLY;COUNT=5;UNTIL=20261231");
+        input.RecurrenceRule = "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR;COUNT=10";
+        Assert.Equal("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR;COUNT=10", input.RecurrenceRule);
         Assert.Throws<ArgumentException>(() => new HomeAssistantCalendarEventReference("event-1") { RecurrenceRange = "THISANDFUTURE" }.Validate());
         Assert.Throws<ArgumentException>(() => new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "THIS" }.Validate());
         var recurrence = new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "thisandfuture" };
