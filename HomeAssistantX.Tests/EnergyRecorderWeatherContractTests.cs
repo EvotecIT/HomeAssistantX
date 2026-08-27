@@ -94,6 +94,21 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Equal(JsonValueKind.Undefined, (await client.Energy.GetPreferencesAsync()).DeviceConsumptionWater.ValueKind);
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"cost_sensors\":{},\"solar_forecast_domains\":null}")]
+    [InlineData("{\"cost_sensors\":null,\"solar_forecast_domains\":[]}")]
+    [InlineData("{\"cost_sensors\":[],\"solar_forecast_domains\":[]}")]
+    [InlineData("{\"cost_sensors\":{},\"solar_forecast_domains\":[null]}")]
+    [InlineData("{\"cost_sensors\":{},\"solar_forecast_domains\":[\" \" ]}")]
+    public async Task EnergyInfoRequiresBothTypedCapabilityCollections(string response)
+    {
+        using var server = new TestHomeAssistantServer { EnergyInfoResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetInfoAsync());
+    }
+
     [Fact]
     public async Task WeatherGetterRejectsAValidButDifferentResponseEntity()
     {
@@ -144,9 +159,12 @@ public sealed class EnergyRecorderWeatherContractTests
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
 
-        await client.Recorder.UpdateStatisticsMetadataAsync("sensor.grid_energy", "energy", "kWh");
+        await client.Recorder.UpdateStatisticsMetadataAsync("sensor.grid_energy", " energy ", " kWh ");
         using (var metadata = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/update_statistics_metadata"))))
+        {
             Assert.Equal("energy", metadata.RootElement.GetProperty("unit_class").GetString());
+            Assert.Equal("kWh", metadata.RootElement.GetProperty("unit_of_measurement").GetString());
+        }
         await client.Recorder.AdjustSumStatisticsAsync("sensor.grid_energy", DateTimeOffset.UtcNow, 1.25, "kWh");
         await client.Recorder.ClearStatisticsAsync(new[] { "sensor.grid_energy" });
         await client.Recorder.UpdateStatisticsIssuesAsync();
@@ -154,11 +172,26 @@ public sealed class EnergyRecorderWeatherContractTests
             new HomeAssistantStatisticImportMetadata
             {
                 StatisticId = "external:daily_energy", Source = "external", Name = "Daily energy",
-                HasMean = false, HasSum = true, MeanType = HomeAssistantStatisticMeanType.None, UnitClass = "energy", UnitOfMeasurement = "kWh"
+                HasMean = false, HasSum = true, MeanType = HomeAssistantStatisticMeanType.None, UnitClass = " energy ", UnitOfMeasurement = " kWh "
             },
             new[] { new HomeAssistantStatisticImportRow { Start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero), Sum = 1.5 } });
         using (var import = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/import_statistics"))))
+        {
             Assert.False(import.RootElement.GetProperty("metadata").GetProperty("has_mean").GetBoolean());
+            Assert.Equal("energy", import.RootElement.GetProperty("metadata").GetProperty("unit_class").GetString());
+            Assert.Equal("kWh", import.RootElement.GetProperty("metadata").GetProperty("unit_of_measurement").GetString());
+        }
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.UpdateStatisticsMetadataAsync(
+            "sensor.grid_energy", " ", "kWh"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ImportStatisticsAsync(
+            new HomeAssistantStatisticImportMetadata
+            {
+                StatisticId = "external:blank_unit", Source = "external",
+                HasMean = false, HasSum = true, MeanType = HomeAssistantStatisticMeanType.None,
+                UnitOfMeasurement = " "
+            },
+            new[] { new HomeAssistantStatisticImportRow { Start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero), Sum = 1.5 } }));
 
         foreach (var invalidStatisticId in new[]
         {
@@ -445,6 +478,19 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("{\"sensor.other\":[{\"start\":1,\"end\":2}]}")]
+    [InlineData("{\"sensor.energy\":[{\"start\":2,\"end\":2}]}")]
+    [InlineData("{\"sensor.energy\":[{\"start\":3,\"end\":2}]}")]
+    public async Task RecorderStatisticsCorrelateIdentifiersAndRequirePositiveIntervals(string response)
+    {
+        using var server = new TestHomeAssistantServer { RecorderStatisticsResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, "sensor.energy")));
+    }
+
+    [Theory]
     [InlineData("2026-08-27T12:00:00")]
     [InlineData("2026-08-27 12:00:00Z")]
     public async Task WeatherForecastRequiresAnExplicitStrictOffset(string timestamp)
@@ -521,6 +567,8 @@ public sealed class EnergyRecorderWeatherContractTests
             HomeAssistantWeatherForecastType.Daily));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Recorder.AdjustSumStatisticsAsync(
             "sensor.energy", now, double.NaN, "kWh"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.AdjustSumStatisticsAsync(
+            "sensor.energy", now, 1, " "));
         Assert.Null(server.GetLastWebSocketCommand("energy/fossil_energy_consumption"));
         Assert.Null(server.GetLastWebSocketCommand("recorder/adjust_sum_statistics"));
     }

@@ -38,10 +38,17 @@ public sealed class HomeAssistantEnergyClient
     public async Task<HomeAssistantEnergyInfo> GetInfoAsync(CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("energy/info", null, cancellationToken).ConfigureAwait(false);
+        if (value.ValueKind != JsonValueKind.Object
+            || !value.TryGetProperty("cost_sensors", out var costSensors)
+            || costSensors.ValueKind != JsonValueKind.Object
+            || !value.TryGetProperty("solar_forecast_domains", out var forecastDomains)
+            || forecastDomains.ValueKind != JsonValueKind.Array
+            || forecastDomains.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(item.GetString())))
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant Energy information was malformed.");
+        }
+
         var result = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyInfo>(value, "The Home Assistant Energy information could not be decoded.");
-        if (result.SolarForecastDomains is null)
-            throw new HomeAssistantProtocolException("The Home Assistant Energy information contained a null solar-forecast domain collection.");
-        HomeAssistantJson.RequireNoNullCollectionEntries(result.SolarForecastDomains, "The Home Assistant Energy information contained a null solar-forecast domain.");
         return result;
     }
 

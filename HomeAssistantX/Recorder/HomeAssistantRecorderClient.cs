@@ -70,8 +70,12 @@ public sealed class HomeAssistantRecorderClient
         var value = await _webSocket.RequestAsync("recorder/statistics_during_period", payload, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Recorder statistics were not an object.");
         var series = new List<HomeAssistantStatisticSeries>();
+        var requestedIds = new HashSet<string>(query.StatisticIds, StringComparer.OrdinalIgnoreCase);
+        var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in value.EnumerateObject())
         {
+            if (!requestedIds.Contains(property.Name) || !responseIds.Add(property.Name))
+                throw new HomeAssistantProtocolException("Recorder statistics contained an unexpected or duplicate statistic identifier.");
             ValidateStatisticRows(property.Value);
             var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(property.Value, "A Recorder statistics series could not be decoded.");
             series.Add(new HomeAssistantStatisticSeries { StatisticId = property.Name, Rows = rows });
@@ -89,12 +93,16 @@ public sealed class HomeAssistantRecorderClient
         => _ = await _webSocket.RequestAsync("recorder/clear_statistics", new Dictionary<string, object?> { ["statistic_ids"] = RequireIds(statisticIds, nameof(statisticIds)) }, cancellationToken).ConfigureAwait(false);
 
     public async Task UpdateStatisticsMetadataAsync(string statisticId, string? unitClass, string? unitOfMeasurement, CancellationToken cancellationToken = default)
-        => _ = await _webSocket.RequestAsync("recorder/update_statistics_metadata", new Dictionary<string, object?>
+    {
+        unitClass = NormalizeOptionalUnit(unitClass, nameof(unitClass));
+        unitOfMeasurement = NormalizeOptionalUnit(unitOfMeasurement, nameof(unitOfMeasurement));
+        _ = await _webSocket.RequestAsync("recorder/update_statistics_metadata", new Dictionary<string, object?>
         {
             ["statistic_id"] = Require(statisticId, nameof(statisticId)),
             ["unit_class"] = unitClass,
             ["unit_of_measurement"] = unitOfMeasurement
         }, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task ChangeStatisticsUnitAsync(string statisticId, string? oldUnit, string? newUnit, CancellationToken cancellationToken = default)
     {
@@ -113,6 +121,7 @@ public sealed class HomeAssistantRecorderClient
     public async Task AdjustSumStatisticsAsync(string statisticId, DateTimeOffset start, double adjustment, string? unit, CancellationToken cancellationToken = default)
     {
         if (double.IsNaN(adjustment) || double.IsInfinity(adjustment)) throw new ArgumentOutOfRangeException(nameof(adjustment));
+        unit = NormalizeOptionalUnit(unit, nameof(unit));
         _ = await _webSocket.RequestAsync("recorder/adjust_sum_statistics", new Dictionary<string, object?>
         {
             ["statistic_id"] = Require(statisticId, nameof(statisticId)),
@@ -126,6 +135,8 @@ public sealed class HomeAssistantRecorderClient
     {
         if (metadata is null) throw new ArgumentNullException(nameof(metadata));
         metadata.ValidateRows(rows);
+        var unitClass = NormalizeOptionalUnit(metadata.UnitClass, nameof(metadata.UnitClass));
+        var unitOfMeasurement = NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement));
         var metadataPayload = new Dictionary<string, object?>
         {
             ["statistic_id"] = Require(metadata.StatisticId, nameof(metadata.StatisticId)),
@@ -133,8 +144,8 @@ public sealed class HomeAssistantRecorderClient
             ["name"] = metadata.Name,
             ["has_mean"] = metadata.HasMean,
             ["has_sum"] = metadata.HasSum,
-            ["unit_class"] = metadata.UnitClass,
-            ["unit_of_measurement"] = metadata.UnitOfMeasurement
+            ["unit_class"] = unitClass,
+            ["unit_of_measurement"] = unitOfMeasurement
         };
         metadataPayload["mean_type"] = (int)metadata.MeanType;
         var rowPayload = rows.Select(ToImportPayload).ToArray();
@@ -203,11 +214,16 @@ public sealed class HomeAssistantRecorderClient
         foreach (var row in value.EnumerateArray())
         {
             if (row.ValueKind != JsonValueKind.Object
-                || !TryGetUnixMilliseconds(row, "start", required: true, out _)
-                || !TryGetUnixMilliseconds(row, "end", required: true, out _)
+                || !TryGetUnixMilliseconds(row, "start", required: true, out var start)
+                || !TryGetUnixMilliseconds(row, "end", required: true, out var end)
                 || !TryGetUnixMilliseconds(row, "last_reset", required: false, out _))
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained an invalid timestamp.");
+            }
+
+            if (end <= start)
+            {
+                throw new HomeAssistantProtocolException("A Recorder statistics series contained a non-positive interval.");
             }
         }
     }

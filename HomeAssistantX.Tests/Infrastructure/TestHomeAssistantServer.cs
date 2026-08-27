@@ -245,6 +245,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string EnergyPreferencesResponseJson { get; set; } =
         "{\"energy_sources\":[{\"type\":\"solar\",\"stat_energy_from\":\"sensor.solar_energy\",\"provider_extension\":true}],\"device_consumption\":[{\"stat_consumption\":\"sensor.ev_energy\"}],\"device_consumption_water\":[]}";
 
+    public string EnergyInfoResponseJson { get; set; } =
+        "{\"cost_sensors\":{\"sensor.grid_energy\":\"sensor.grid_cost\"},\"solar_forecast_domains\":[\"forecast_solar\"]}";
+
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;
@@ -797,7 +800,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(EnergyPreferencesResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "energy/info":
-                await session.SendResultAsync(id, ParseJson("{\"cost_sensors\":{\"sensor.grid_energy\":\"sensor.grid_cost\"},\"solar_forecast_domains\":[\"forecast_solar\"]}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(EnergyInfoResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "energy/validate":
                 await session.SendResultAsync(id, ParseJson("{\"energy_sources\":[],\"device_consumption\":[],\"future_validation\":{\"valid\":true}}"), false, _source.Token).ConfigureAwait(false);

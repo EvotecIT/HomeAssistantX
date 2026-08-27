@@ -68,8 +68,10 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                     var metadata = await Client.Recorder.GetStatisticsMetadataAsync(new[] { statisticId }, CancelToken).ConfigureAwait(false);
                     unitClass = metadata.FirstOrDefault(item => string.Equals(item.StatisticId, statisticId, StringComparison.OrdinalIgnoreCase))?.UnitClass;
                 }
+                unitClass = NormalizeOptionalUnit(unitClass, nameof(UnitClass));
+                var unitOfMeasurement = ClearUnitOfMeasurement ? null : NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement));
                 if (!ShouldProcess(ConnectionDisplayName, "Update Recorder statistics metadata for 1 identifier")) return;
-                await Client.Recorder.UpdateStatisticsMetadataAsync(statisticId, unitClass, ClearUnitOfMeasurement ? null : UnitOfMeasurement, CancelToken).ConfigureAwait(false);
+                await Client.Recorder.UpdateStatisticsMetadataAsync(statisticId, unitClass, unitOfMeasurement, CancelToken).ConfigureAwait(false);
                 return;
             case UnitSet:
                 RequireExclusive(OldUnit, ClearOldUnit, nameof(OldUnit), nameof(ClearOldUnit), required: true);
@@ -83,8 +85,13 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 return;
             case AdjustSet:
                 if (double.IsNaN(AdjustSum) || double.IsInfinity(AdjustSum)) throw new ArgumentOutOfRangeException(nameof(AdjustSum));
+                var adjustmentUnit = Unit is null
+                    ? null
+                    : string.IsNullOrWhiteSpace(Unit)
+                        ? throw new ArgumentException("Unit must not be blank.", nameof(Unit))
+                        : Unit.Trim();
                 if (!ShouldProcess(ConnectionDisplayName, $"Adjust Recorder sum by {AdjustSum} for 1 identifier")) return;
-                await Client.Recorder.AdjustSumStatisticsAsync(statisticId, StartTime, AdjustSum, Unit, CancelToken).ConfigureAwait(false);
+                await Client.Recorder.AdjustSumStatisticsAsync(statisticId, StartTime, AdjustSum, adjustmentUnit, CancelToken).ConfigureAwait(false);
                 return;
             default:
                 throw new InvalidOperationException("Unexpected statistics parameter set.");
@@ -114,8 +121,8 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             HasMean = metadata.HasMean,
             HasSum = metadata.HasSum,
             MeanType = metadata.MeanType,
-            UnitClass = metadata.UnitClass,
-            UnitOfMeasurement = metadata.UnitOfMeasurement
+            UnitClass = NormalizeOptionalUnit(metadata.UnitClass, nameof(metadata.UnitClass)),
+            UnitOfMeasurement = NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement))
         };
         normalized.ValidateRows(rows);
         return normalized;
@@ -126,5 +133,12 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
         if (value is not null && clear) throw new ArgumentException($"{valueName} and {clearName} cannot be combined.");
         if (required && value is null && !clear) throw new ArgumentException($"Specify {valueName} or {clearName}.");
         if (value is not null && string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{valueName} must not be blank.", valueName);
+    }
+
+    private static string? NormalizeOptionalUnit(string? value, string parameterName)
+    {
+        if (value is null) return null;
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{parameterName} must not be blank.", parameterName);
+        return value.Trim();
     }
 }

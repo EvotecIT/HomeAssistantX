@@ -99,18 +99,23 @@ public sealed class LiveHomeAssistantTests
         if (weather.Count > 0)
         {
             _ = await client.Weather.GetConvertibleUnitsAsync();
-            var supportedForecast = new[]
+            var forecastTypes = new[]
             {
                 HomeAssistantWeatherForecastType.Daily,
                 HomeAssistantWeatherForecastType.Hourly,
                 HomeAssistantWeatherForecastType.TwiceDaily
-            }.FirstOrDefault(weather[0].Supports);
-            if (weather[0].Supports(supportedForecast))
+            };
+            var forecastTarget = weather
+                .SelectMany(entity => forecastTypes
+                    .Where(entity.Supports)
+                    .Select(type => new { Entity = entity, Type = type }))
+                .FirstOrDefault();
+            if (forecastTarget is not null)
             {
                 var forecastReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 using var weatherSubscription = await client.Weather.SubscribeForecastAsync(
-                    weather[0].EntityId,
-                    supportedForecast,
+                    forecastTarget.Entity.EntityId,
+                    forecastTarget.Type,
                     (_, _) => { forecastReceived.TrySetResult(true); return Task.CompletedTask; });
                 await forecastReceived.Task.WaitAsync(TimeSpan.FromSeconds(15));
                 await weatherSubscription.StopAsync();
