@@ -50,10 +50,11 @@ public sealed class ReceiveHomeAssistantCalendarEventCommand : HomeAssistantCmdl
                 if (Count.HasValue && number >= Count.Value) countReached.TrySetResult(true);
                 return Task.CompletedTask;
             }, CancelToken).ConfigureAwait(false);
-            var canceled = Task.Delay(Timeout.Infinite, CancelToken);
-            var timeout = TimeoutSeconds.HasValue ? Task.Delay(TimeSpan.FromSeconds(TimeoutSeconds.Value), CancelToken) : Task.Delay(Timeout.Infinite, CancelToken);
-            var completed = await Task.WhenAny(subscription.Completion, canceled, countReached.Task, timeout).ConfigureAwait(false);
-            if (completed != countReached.Task && completed != timeout) await completed.ConfigureAwait(false);
+            await HomeAssistantReceiveWaiter.WaitAsync(
+                subscription,
+                countReached.Task,
+                TimeoutSeconds,
+                CancelToken).ConfigureAwait(false);
         }
         finally
         {
