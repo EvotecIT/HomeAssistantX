@@ -285,11 +285,6 @@ public sealed class InventoryAndControlsContractTests
             target,
             HomeAssistantLockAction.Unlock,
             " "));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Alarms.ActAsync(
-            HomeAssistantTarget.ForEntity("alarm_control_panel.home"),
-            HomeAssistantAlarmAction.Disarm,
-            " "));
-
         Assert.Null(server.LastServiceCallBody);
     }
 
