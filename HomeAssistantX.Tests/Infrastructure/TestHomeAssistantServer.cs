@@ -280,14 +280,13 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         "{\"preload_stream\":true,\"orientation\":3,\"future_preference\":true}";
     public string CameraCapabilitiesResponseJson { get; set; } =
         "{\"frontend_stream_types\":[\"hls\",\"web_rtc\"],\"future_capability\":true}";
-
     public string CameraImageResponse { get; set; } = "test-image-bytes";
 
     public string LovelaceInfoResponseJson { get; set; } =
         "{\"resource_mode\":\"storage\",\"future_info\":true}";
 
     public string FrontendPanelsResponseJson { get; set; } =
-        "{\"lovelace\":{\"title\":\"Overview\",\"component_name\":\"lovelace\",\"show_in_sidebar\":true,\"require_admin\":false,\"future_panel\":true}}";
+        "{\"lovelace\":{\"title\":\"Overview\",\"component_name\":\"lovelace\",\"default_visible\":true,\"show_in_sidebar\":true,\"require_admin\":false,\"future_panel\":true}}";
 
     public Task WaitForSystemHealthEventsAsync()
     {

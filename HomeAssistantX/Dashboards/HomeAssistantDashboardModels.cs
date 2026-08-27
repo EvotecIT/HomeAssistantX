@@ -31,6 +31,9 @@ public sealed class HomeAssistantPanel
     [JsonPropertyName("show_in_sidebar")]
     public bool ShowInSidebar { get; set; }
 
+    [JsonPropertyName("default_visible")]
+    public bool DefaultVisible { get; set; }
+
     [JsonPropertyName("config")]
     public JsonElement? Configuration { get; set; }
 

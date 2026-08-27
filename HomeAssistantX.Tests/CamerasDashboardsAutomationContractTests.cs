@@ -310,6 +310,7 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
         var panel = Assert.Single(await client.Dashboards.GetPanelsAsync());
         Assert.Equal("lovelace", panel.UrlPath);
+        Assert.True(panel.DefaultVisible);
         Assert.True(panel.AdditionalData["future_panel"].GetBoolean());
         Assert.Equal("storage", (await client.Dashboards.GetInfoAsync()).ResourceMode);
         Assert.True(Assert.Single(await client.Dashboards.GetDashboardsAsync()).AdditionalData["future_dashboard"].GetBoolean());
@@ -460,7 +461,7 @@ public sealed class CamerasDashboardsAutomationContractTests
     {
         using var server = new TestHomeAssistantServer
         {
-            FrontendPanelsResponseJson = "{\"config/integrations\":{\"component_name\":\"config\",\"require_admin\":true}}"
+            FrontendPanelsResponseJson = "{\"config/integrations\":{\"component_name\":\"config\",\"default_visible\":false,\"require_admin\":true,\"show_in_sidebar\":true}}"
         };
         using var client = TestClientFactory.Create(server);
 

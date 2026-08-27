@@ -23,10 +23,7 @@ public sealed class HomeAssistantDashboardClient
             var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.");
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
-            if (property.Value.ValueKind != JsonValueKind.Object
-                || !property.Value.TryGetProperty("require_admin", out var requireAdmin)
-                || requireAdmin.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-                throw new HomeAssistantProtocolException("A frontend panel did not contain its required administrator requirement.");
+            RequirePanelBooleans(property.Value);
             var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(property.Value, "A frontend panel could not be decoded.");
             if (string.IsNullOrWhiteSpace(panel.UrlPath))
             {
@@ -297,6 +294,21 @@ public sealed class HomeAssistantDashboardClient
             throw new HomeAssistantProtocolException(failureMessage);
         }
     }
+
+    private static void RequirePanelBooleans(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object
+            || !HasBooleanProperty(value, "default_visible")
+            || !HasBooleanProperty(value, "require_admin")
+            || !HasBooleanProperty(value, "show_in_sidebar"))
+        {
+            throw new HomeAssistantProtocolException("A frontend panel did not contain its required Boolean fields.");
+        }
+    }
+
+    private static bool HasBooleanProperty(JsonElement value, string propertyName)
+        => value.TryGetProperty(propertyName, out var property)
+            && property.ValueKind is JsonValueKind.True or JsonValueKind.False;
 
     private static void ValidateStorageDashboard(HomeAssistantDashboard dashboard)
     {
