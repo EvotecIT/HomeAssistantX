@@ -39,8 +39,7 @@ public sealed class SetHomeAssistantLockCommand : HomeAssistantTargetCmdlet
 
     private static string RequireCode(string value)
     {
-        var normalized = value.Trim();
-        if (normalized.Length == 0) throw new ArgumentException("A non-empty lock code is required.", nameof(Code));
-        return normalized;
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty lock code is required.", nameof(Code));
+        return value;
     }
 }

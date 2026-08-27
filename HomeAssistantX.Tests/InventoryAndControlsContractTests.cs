@@ -274,6 +274,14 @@ public sealed class InventoryAndControlsContractTests
         using var lockCall = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
         Assert.Equal("unlock", lockCall.RootElement.GetProperty("service").GetString());
         Assert.Equal(" 1234 ", lockCall.RootElement.GetProperty("service_data").GetProperty("code").GetString());
+
+        await client.Controls.Alarms.ActAsync(
+            HomeAssistantTarget.ForEntity("alarm_control_panel.home"),
+            HomeAssistantAlarmAction.ArmNight,
+            " 5678 ");
+        using var alarmCall = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
+        Assert.Equal("alarm_arm_night", alarmCall.RootElement.GetProperty("service").GetString());
+        Assert.Equal(" 5678 ", alarmCall.RootElement.GetProperty("service_data").GetProperty("code").GetString());
     }
 
     [Fact]
