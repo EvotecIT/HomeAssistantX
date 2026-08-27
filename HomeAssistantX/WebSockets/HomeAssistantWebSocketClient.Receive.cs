@@ -26,6 +26,9 @@ public sealed partial class HomeAssistantWebSocketClient
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
+        catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
         catch (Exception ex)
         {
             failure = ex;

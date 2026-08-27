@@ -99,28 +99,32 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             {
                 socket?.Dispose();
                 connectionSource.Dispose();
-                SetState(HomeAssistantConnectionState.Faulted, ex);
-                if (ex is OperationCanceledException
-                    && !cancellationToken.IsCancellationRequested
-                    && !_disposeSource.IsCancellationRequested)
+                var failure = ClassifyConnectFailure(
+                    ex,
+                    cancellationToken,
+                    _disposeSource.Token,
+                    connectTimeout.Token);
+                if (failure is OperationCanceledException
+                    && (cancellationToken.IsCancellationRequested || _disposeSource.IsCancellationRequested))
                 {
-                    throw new HomeAssistantConnectionException(
-                        "The Home Assistant WebSocket connection timed out.",
-                        new TimeoutException());
+                    SetState(HomeAssistantConnectionState.Disconnected);
+                    throw failure;
                 }
+
+                SetState(HomeAssistantConnectionState.Faulted, failure);
 
                 if (stopOnPermanentNegotiationFailure
-                    && (ex is HomeAssistantProtocolException || ex is HomeAssistantCommandException))
+                    && (failure is HomeAssistantProtocolException || failure is HomeAssistantCommandException))
                 {
-                    throw new PermanentReconnectNegotiationException((HomeAssistantException)ex);
+                    throw new PermanentReconnectNegotiationException((HomeAssistantException)failure);
                 }
 
-                if (ex is HomeAssistantException || ex is OperationCanceledException)
+                if (failure is HomeAssistantException || failure is OperationCanceledException)
                 {
-                    throw;
+                    throw failure;
                 }
 
-                throw new HomeAssistantConnectionException("The Home Assistant WebSocket connection failed.", ex);
+                throw new HomeAssistantConnectionException("The Home Assistant WebSocket connection failed.", failure);
             }
 
             _socket = socket;
@@ -607,6 +611,28 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         return new HomeAssistantConnectionException(
             "The Home Assistant WebSocket is not connected.",
             new WebSocketException(WebSocketError.InvalidState));
+    }
+
+    internal static Exception ClassifyConnectFailure(
+        Exception exception,
+        CancellationToken callerToken,
+        CancellationToken disposalToken,
+        CancellationToken deadlineToken)
+    {
+        if (exception is not OperationCanceledException && exception is not ObjectDisposedException) return exception;
+        if (callerToken.IsCancellationRequested)
+            return exception is OperationCanceledException
+                ? exception
+                : new OperationCanceledException("The Home Assistant WebSocket connection was canceled.", exception, callerToken);
+        if (disposalToken.IsCancellationRequested)
+            return exception is OperationCanceledException
+                ? exception
+                : new OperationCanceledException("The Home Assistant WebSocket connection was canceled because the client was disposed.", exception, disposalToken);
+        if (deadlineToken.IsCancellationRequested)
+            return new HomeAssistantConnectionException(
+                "The Home Assistant WebSocket connection timed out.",
+                new TimeoutException());
+        return exception;
     }
 
     private static Task SendJsonAsync(ClientWebSocket socket, object payload, CancellationToken cancellationToken)

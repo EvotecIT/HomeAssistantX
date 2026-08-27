@@ -13,6 +13,27 @@ namespace HomeAssistantX.Tests;
 public sealed class WebSocketContractTests
 {
     [Fact]
+    public void ConnectFailureClassificationPreservesCallerCancellationAndTimeouts()
+    {
+        using var caller = new CancellationTokenSource();
+        using var disposal = new CancellationTokenSource();
+        using var deadline = new CancellationTokenSource();
+        caller.Cancel();
+        var disposed = new ObjectDisposedException("socket");
+
+        var callerFailure = HomeAssistantX.WebSockets.HomeAssistantWebSocketClient.ClassifyConnectFailure(
+            disposed, caller.Token, disposal.Token, deadline.Token);
+
+        Assert.IsType<OperationCanceledException>(callerFailure);
+        using var timeoutCaller = new CancellationTokenSource();
+        using var timeoutDeadline = new CancellationTokenSource();
+        timeoutDeadline.Cancel();
+        var timeoutFailure = HomeAssistantX.WebSockets.HomeAssistantWebSocketClient.ClassifyConnectFailure(
+            disposed, timeoutCaller.Token, disposal.Token, timeoutDeadline.Token);
+        Assert.IsType<HomeAssistantConnectionException>(timeoutFailure);
+    }
+
+    [Fact]
     public async Task RequestDeadlineIncludesWaitingForTheSharedSendGate()
     {
         using var server = new TestHomeAssistantServer();
