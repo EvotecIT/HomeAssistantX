@@ -4008,7 +4008,7 @@
         <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>StatisticId</maml:name>
           <maml:description>
-            <maml:para>Specifies one or more values for statistic id.</maml:para>
+            <maml:para>Filters metadata when used with -Metadata and is required when requesting aggregated values.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -4078,7 +4078,7 @@
         <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>StatisticId</maml:name>
           <maml:description>
-            <maml:para>Specifies one or more values for statistic id.</maml:para>
+            <maml:para>Filters metadata when used with -Metadata and is required when requesting aggregated values.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -4210,7 +4210,7 @@
       <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="None">
         <maml:name>StatisticId</maml:name>
         <maml:description>
-          <maml:para>Specifies one or more values for statistic id.</maml:para>
+          <maml:para>Filters metadata when used with -Metadata and is required when requesting aggregated values.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
         <dev:type>
@@ -4700,7 +4700,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>EntityId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for entity id.</maml:para>
+            <maml:para>Filters current observations when provided and is required when requesting a forecast.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -4727,7 +4727,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>EntityId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for entity id.</maml:para>
+            <maml:para>Filters current observations when provided and is required when requesting a forecast.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -4822,7 +4822,7 @@
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
         <maml:name>EntityId</maml:name>
         <maml:description>
-          <maml:para>Specifies a value for entity id.</maml:para>
+          <maml:para>Filters current observations when provided and is required when requesting a forecast.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>

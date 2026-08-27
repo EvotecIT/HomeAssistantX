@@ -53,12 +53,23 @@ public sealed class HomeAssistantWeatherClient
                 .WithData("type", TypeName(type))
                 .WithResponse(),
             cancellationToken).ConfigureAwait(false);
-        if (!result.Response.HasValue || result.Response.Value.ValueKind != JsonValueKind.Object
-            || !result.Response.Value.TryGetProperty(normalizedEntityId, out var entityResult)
-            || entityResult.ValueKind != JsonValueKind.Object
-            || !entityResult.TryGetProperty("forecast", out var forecast))
+        if (!result.Response.HasValue || result.Response.Value.ValueKind != JsonValueKind.Object)
         {
             throw new HomeAssistantProtocolException("The weather forecast response did not contain the requested entity.");
+        }
+
+        var entities = result.Response.Value.EnumerateObject().ToArray();
+        if (entities.Length != 1
+            || !string.Equals(entities[0].Name, normalizedEntityId, StringComparison.Ordinal)
+            || entities[0].Value.ValueKind != JsonValueKind.Object)
+        {
+            throw new HomeAssistantProtocolException("The weather forecast response did not contain exactly the requested entity.");
+        }
+
+        var entityResult = entities[0].Value;
+        if (!entityResult.TryGetProperty("forecast", out var forecast))
+        {
+            throw new HomeAssistantProtocolException("The weather forecast response did not contain a forecast.");
         }
 
         return ParseUpdate(normalizedEntityId, type, forecast, entityResult);
@@ -72,15 +83,17 @@ public sealed class HomeAssistantWeatherClient
         var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in units.EnumerateObject())
         {
-            if (string.IsNullOrWhiteSpace(property.Name)
-                || !string.Equals(property.Name, property.Name.Trim(), StringComparison.Ordinal)
+            if (!HomeAssistantEntityId.TryNormalizeDomain(property.Name, out var normalizedCategory)
+                || !string.Equals(property.Name, normalizedCategory, StringComparison.Ordinal)
                 || result.ContainsKey(property.Name))
-                throw new HomeAssistantProtocolException("The weather convertible-unit response contained a duplicate unit category.");
+                throw new HomeAssistantProtocolException("The weather convertible-unit response contained a noncanonical or duplicate unit category.");
             if (property.Value.ValueKind != JsonValueKind.Array)
                 throw new HomeAssistantProtocolException("A weather convertible-unit list was not an array.");
             var values = property.Value.EnumerateArray().ToArray();
-            if (values.Any(item => item.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(item.GetString())))
-                throw new HomeAssistantProtocolException("A weather convertible-unit list contained a non-string value.");
+            if (values.Any(item => item.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(item.GetString())
+                || !string.Equals(item.GetString(), item.GetString()!.Trim(), StringComparison.Ordinal)))
+                throw new HomeAssistantProtocolException("A weather convertible-unit list contained a noncanonical value.");
             var names = values.Select(item => item.GetString()!).ToArray();
             if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
                 throw new HomeAssistantProtocolException("A weather convertible-unit list contained a duplicate value.");

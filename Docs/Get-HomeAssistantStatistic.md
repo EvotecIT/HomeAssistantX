@@ -140,7 +140,7 @@ Accept wildcard characters: False
 ```
 
 ### -StatisticId
-Specifies one or more values for statistic id.
+Filters metadata when used with -Metadata and is required when requesting aggregated values.
 
 ```yaml
 Type: String[]

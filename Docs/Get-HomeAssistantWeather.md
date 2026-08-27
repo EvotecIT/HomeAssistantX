@@ -76,7 +76,7 @@ Accept wildcard characters: False
 ```
 
 ### -EntityId
-Specifies a value for entity id.
+Filters current observations when provided and is required when requesting a forecast.
 
 ```yaml
 Type: String

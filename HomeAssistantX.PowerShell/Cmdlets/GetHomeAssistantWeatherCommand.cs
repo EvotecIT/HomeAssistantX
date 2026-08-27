@@ -15,6 +15,7 @@ public sealed class GetHomeAssistantWeatherCommand : HomeAssistantCmdlet
     private const string CurrentSet = "Current";
     private const string ForecastSet = "Forecast";
     private const string UnitsSet = "Units";
+    /// <summary>Filters current observations when provided and is required when requesting a forecast.</summary>
     [Parameter(Position = 0, ParameterSetName = CurrentSet)]
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = ForecastSet)]
     [ValidateNotNullOrEmpty]

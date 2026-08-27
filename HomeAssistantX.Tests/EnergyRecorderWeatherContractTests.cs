@@ -551,6 +551,18 @@ public sealed class EnergyRecorderWeatherContractTests
             "weather.home", HomeAssistantWeatherForecastType.Hourly));
     }
 
+    [Theory]
+    [InlineData("{\"weather.home\":{\"forecast\":[]},\"weather.garden\":{\"forecast\":[]}}")]
+    [InlineData("{\"weather.home\":{\"forecast\":[]},\"weather.home\":{\"forecast\":[]}}")]
+    public async Task WeatherForecastRequiresExactlyOneCanonicalResponseEntity(string response)
+    {
+        using var server = new TestHomeAssistantServer { WeatherForecastResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetForecastAsync(
+            "weather.home", HomeAssistantWeatherForecastType.Hourly));
+    }
+
     [Fact]
     public async Task WeatherTypedReadsAndUnitCategoriesRejectAmbiguousResponses()
     {
@@ -568,7 +580,10 @@ public sealed class EnergyRecorderWeatherContractTests
     [Theory]
     [InlineData("{\"units\":{\"temperature_unit\":[\"°C\",\"\"]}}")]
     [InlineData("{\"units\":{\"temperature_unit\":[\"°C\",\"°C\"]}}")]
+    [InlineData("{\"units\":{\"temperature_unit\":[\" °C \"]}}")]
     [InlineData("{\"units\":{\" \":[\"°C\"]}}")]
+    [InlineData("{\"units\":{\"TEMPERATURE_UNIT\":[\"°C\"]}}")]
+    [InlineData("{\"units\":{\"not a unit\":[\"°C\"]}}")]
     public async Task WeatherConvertibleUnitsRejectBlankAndDuplicateValues(string response)
     {
         using var server = new TestHomeAssistantServer { WeatherConvertibleUnitsResponseJson = response };
@@ -830,6 +845,59 @@ public sealed class EnergyRecorderWeatherContractTests
             "sensor.energy", now, 1, " "));
         Assert.Null(server.GetLastWebSocketCommand("energy/fossil_energy_consumption"));
         Assert.Null(server.GetLastWebSocketCommand("recorder/adjust_sum_statistics"));
+    }
+
+    [Theory]
+    [InlineData("sensor.Energy", "sensor.co2")]
+    [InlineData("external-source", "sensor.co2")]
+    [InlineData("sensor.energy", "source:Carbon")]
+    public async Task FossilEnergyRejectsNoncanonicalStatisticIdentifiersBeforeDispatch(string energyStatisticId, string co2StatisticId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            DateTimeOffset.UtcNow.AddHours(-1),
+            DateTimeOffset.UtcNow,
+            new[] { energyStatisticId },
+            co2StatisticId,
+            HomeAssistantEnergyPeriod.Hour));
+
+        Assert.Null(server.GetLastWebSocketCommand("energy/fossil_energy_consumption"));
+    }
+
+    [Fact]
+    public async Task FossilEnergyRejectsDuplicateStatisticIdentifiersBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            DateTimeOffset.UtcNow.AddHours(-1),
+            DateTimeOffset.UtcNow,
+            new[] { "sensor.energy", " sensor.energy " },
+            "sensor.co2",
+            HomeAssistantEnergyPeriod.Hour));
+
+        Assert.Null(server.GetLastWebSocketCommand("energy/fossil_energy_consumption"));
+    }
+
+    [Fact]
+    public async Task FossilEnergyNormalizesValidStatisticIdentifiersBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Energy.GetFossilEnergyConsumptionAsync(
+            DateTimeOffset.UtcNow.AddHours(-1),
+            DateTimeOffset.UtcNow,
+            new[] { " sensor.energy ", " source:grid_energy " },
+            " sensor.co2 ",
+            HomeAssistantEnergyPeriod.Hour);
+
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("energy/fossil_energy_consumption")));
+        Assert.Equal(new[] { "sensor.energy", "source:grid_energy" }, command.RootElement.GetProperty("energy_statistic_ids").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal("sensor.co2", command.RootElement.GetProperty("co2_statistic_id").GetString());
     }
 
     private sealed class BlockingTokenProvider : IHomeAssistantAccessTokenProvider

@@ -16,6 +16,7 @@ public sealed class GetHomeAssistantStatisticCommand : HomeAssistantCmdlet
     private const string ValuesSet = "Values";
     [Parameter(ParameterSetName = CatalogSet)] public HomeAssistantStatisticKind Kind { get; set; }
     [Parameter(Mandatory = true, ParameterSetName = MetadataSet)][ValidateSwitchPresent] public SwitchParameter Metadata { get; set; }
+    /// <summary>Filters metadata when used with -Metadata and is required when requesting aggregated values.</summary>
     [Parameter(ParameterSetName = MetadataSet)][Parameter(Mandatory = true, Position = 0, ParameterSetName = ValuesSet)][ValidateNotNullOrEmpty] public string[]? StatisticId { get; set; }
     [Parameter(Mandatory = true, ParameterSetName = ValuesSet)] public DateTimeOffset StartTime { get; set; }
     [Parameter(ParameterSetName = ValuesSet)] public DateTimeOffset? EndTime { get; set; }

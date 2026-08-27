@@ -3,6 +3,7 @@ using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
+using HomeAssistantX.Recorder;
 using HomeAssistantX.WebSockets;
 
 namespace HomeAssistantX.Energy;
@@ -114,13 +115,13 @@ public sealed class HomeAssistantEnergyClient
     {
         if (end <= start) throw new ArgumentOutOfRangeException(nameof(end), "The end must be after the start.");
         var ids = RequireIds(energyStatisticIds, nameof(energyStatisticIds));
-        if (string.IsNullOrWhiteSpace(co2StatisticId)) throw new ArgumentException("A CO2 statistic identifier is required.", nameof(co2StatisticId));
+        var normalizedCo2StatisticId = RequireStatisticId(co2StatisticId, nameof(co2StatisticId));
         var value = await _webSocket.RequestAsync("energy/fossil_energy_consumption", new Dictionary<string, object?>
         {
             ["start_time"] = start.ToString("O", CultureInfo.InvariantCulture),
             ["end_time"] = end.ToString("O", CultureInfo.InvariantCulture),
             ["energy_statistic_ids"] = ids,
-            ["co2_statistic_id"] = co2StatisticId.Trim(),
+            ["co2_statistic_id"] = normalizedCo2StatisticId,
             ["period"] = PeriodName(period)
         }, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object)
@@ -154,9 +155,19 @@ public sealed class HomeAssistantEnergyClient
 
     private static string[] RequireIds(IReadOnlyCollection<string> values, string parameterName)
     {
-        if (values is null || values.Count == 0 || values.Any(string.IsNullOrWhiteSpace))
-            throw new ArgumentException("At least one non-empty statistic identifier is required.", parameterName);
-        return values.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (values is null || values.Count == 0)
+            throw new ArgumentException("At least one statistic identifier is required.", parameterName);
+        var normalized = values.Select(value => RequireStatisticId(value, parameterName)).ToArray();
+        if (normalized.Distinct(StringComparer.Ordinal).Count() != normalized.Length)
+            throw new ArgumentException("Statistic identifiers must be unique.", parameterName);
+        return normalized;
+    }
+
+    private static string RequireStatisticId(string value, string parameterName)
+    {
+        if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var normalized))
+            throw new ArgumentException("A canonical statistic identifier is required.", parameterName);
+        return normalized;
     }
 
     private static void ValidatePreferences(HomeAssistantEnergyPreferences preferences)
