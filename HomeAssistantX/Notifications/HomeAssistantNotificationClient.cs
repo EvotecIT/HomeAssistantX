@@ -146,13 +146,14 @@ public sealed class HomeAssistantNotificationClient
 
     private static HomeAssistantPersistentNotificationUpdateType ParseType(string value)
     {
-        return value switch
-        {
-            "current" => HomeAssistantPersistentNotificationUpdateType.Current,
-            "added" => HomeAssistantPersistentNotificationUpdateType.Added,
-            "updated" => HomeAssistantPersistentNotificationUpdateType.Updated,
-            "removed" => HomeAssistantPersistentNotificationUpdateType.Removed,
-            _ => HomeAssistantPersistentNotificationUpdateType.Unknown
-        };
+        if (string.Equals(value, "current", StringComparison.OrdinalIgnoreCase))
+            return HomeAssistantPersistentNotificationUpdateType.Current;
+        if (string.Equals(value, "added", StringComparison.OrdinalIgnoreCase))
+            return HomeAssistantPersistentNotificationUpdateType.Added;
+        if (string.Equals(value, "updated", StringComparison.OrdinalIgnoreCase))
+            return HomeAssistantPersistentNotificationUpdateType.Updated;
+        if (string.Equals(value, "removed", StringComparison.OrdinalIgnoreCase))
+            return HomeAssistantPersistentNotificationUpdateType.Removed;
+        return HomeAssistantPersistentNotificationUpdateType.Unknown;
     }
 }

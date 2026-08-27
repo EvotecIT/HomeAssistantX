@@ -40,6 +40,7 @@ public sealed class LivePlatformDataContractTests
         });
         var update = await updateReceived.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(HomeAssistantPersistentNotificationUpdateType.Current, update.Type);
+        Assert.Equal("Current", update.RawType);
         Assert.Equal("Door open", update.Notifications["notice-1"].Message);
         Assert.Equal("Upper", update.Notifications["Alert"].Message);
         Assert.Equal("Lower", update.Notifications["alert"].Message);
