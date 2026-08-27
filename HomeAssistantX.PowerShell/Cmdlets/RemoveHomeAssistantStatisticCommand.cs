@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using HomeAssistantX.Recorder;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -11,16 +12,19 @@ public sealed class RemoveHomeAssistantStatisticCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        var statisticIds = StatisticId
-            .Select(value => value?.Trim() ?? string.Empty)
-            .ToArray();
-        if (statisticIds.Length == 0 || statisticIds.Any(value => value.Length == 0))
+        if (StatisticId.Length == 0)
         {
             throw new ArgumentException("At least one statistic identifier is required.", nameof(StatisticId));
         }
 
-        statisticIds = statisticIds.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var count = statisticIds.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var statisticIds = new List<string>(StatisticId.Length);
+        foreach (var value in StatisticId)
+        {
+            if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var normalized))
+                throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", nameof(StatisticId));
+            if (!statisticIds.Contains(normalized, StringComparer.Ordinal)) statisticIds.Add(normalized);
+        }
+        var count = statisticIds.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (!ShouldProcess(ConnectionDisplayName, "Permanently clear " + count + " Recorder statistic identifier(s)")) return;
         await Client.Recorder.ClearStatisticsAsync(statisticIds, CancelToken).ConfigureAwait(false);
     }
