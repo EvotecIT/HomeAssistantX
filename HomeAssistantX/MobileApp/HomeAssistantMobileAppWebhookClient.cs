@@ -71,7 +71,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             "Home Assistant returned an invalid camera-stream response.");
         var hasMjpeg = !string.IsNullOrWhiteSpace(stream.MjpegPath);
         var hasHls = !string.IsNullOrWhiteSpace(stream.HlsPath);
-        if (stream.Success != true
+        if (stream.Success == false
             || (stream.MjpegPath is not null && !hasMjpeg)
             || (stream.HlsPath is not null && !hasHls)
             || (!hasMjpeg && !hasHls))

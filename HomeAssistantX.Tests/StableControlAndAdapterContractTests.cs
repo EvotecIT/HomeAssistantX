@@ -1024,7 +1024,26 @@ public sealed class StableControlAndAdapterContractTests
 
         Assert.Null(stream.MjpegPath);
         Assert.Equal("/api/hls/front/master_playlist.m3u8", stream.HlsPath);
-        Assert.True(stream.Success);
+        Assert.Null(stream.Success);
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookAcceptsTheNativeMjpegResponseWithoutASuccessFlag()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "mjpeg-only-camera-response",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/mjpeg-only-camera-response")
+            });
+
+        var stream = await webhook.GetCameraStreamAsync("camera.front");
+
+        Assert.Equal("/api/camera_proxy_stream/camera.front", stream.MjpegPath);
+        Assert.Null(stream.HlsPath);
+        Assert.Null(stream.Success);
     }
 
     [Fact]

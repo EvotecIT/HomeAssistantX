@@ -107,6 +107,13 @@ public sealed class PublicApiCompatibilityTests
             BindingFlags.NonPublic | BindingFlags.Static)!;
 
         Assert.StartsWith("error obsolete ", FormatMethod(method), StringComparison.Ordinal);
+        Assert.Equal(
+            "error obsolete ",
+            ObsoleteContract(typeof(CompileBlockingObsoleteEnumFixture).GetField("Legacy")!));
+        var property = typeof(CompileBlockingObsoleteAccessorFixture).GetProperty(nameof(CompileBlockingObsoleteAccessorFixture.Value))!;
+        Assert.Equal("error obsolete ", ObsoleteContract(property, property.GetMethod, property.SetMethod));
+        var eventInfo = typeof(CompileBlockingObsoleteAccessorFixture).GetEvent("Changed")!;
+        Assert.Equal("error obsolete ", ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod));
     }
 
     [Fact]
@@ -332,7 +339,8 @@ public sealed class PublicApiCompatibilityTests
                 foreach (var name in Enum.GetNames(type))
                 {
                     var value = Enum.Parse(type, name);
-                    lines.Add("  F " + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type)));
+                    var field = type.GetField(name, BindingFlags.Public | BindingFlags.Static)!;
+                    lines.Add("  F " + ObsoleteContract(field) + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type)));
                 }
                 continue;
             }
@@ -350,14 +358,14 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
-                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(property) + RequiredMember(property) + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
+                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(property, property.GetMethod, property.SetMethod) + RequiredMember(property) + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
             }
             foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleEvent)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(eventInfo) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -436,6 +444,30 @@ public sealed class PublicApiCompatibilityTests
     [Obsolete("This fixture must remain a compile-time error.", true)]
     private static void CompileBlockingObsoleteFixture()
     {
+    }
+
+    private enum CompileBlockingObsoleteEnumFixture
+    {
+        Current,
+        [Obsolete("This fixture must remain a compile-time error.", true)]
+        Legacy
+    }
+
+    private sealed class CompileBlockingObsoleteAccessorFixture
+    {
+        public int Value
+        {
+            [Obsolete("This getter must remain a compile-time error.", true)]
+            get;
+            set;
+        }
+
+        [Obsolete("This event must remain a compile-time error.", true)]
+        public event EventHandler? Changed
+        {
+            add { }
+            remove { }
+        }
     }
 
     private enum EnumStorageFixture : ulong
@@ -660,15 +692,19 @@ public sealed class PublicApiCompatibilityTests
         return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + RequiredMember(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
-    private static string ObsoleteContract(ICustomAttributeProvider provider)
+    private static string ObsoleteContract(params ICustomAttributeProvider?[] providers)
     {
-        var attribute = GetCustomAttributes(provider).FirstOrDefault(value =>
-            string.Equals(value.AttributeType.FullName, typeof(ObsoleteAttribute).FullName, StringComparison.Ordinal));
-        if (attribute is null) return string.Empty;
-        var isError = attribute.ConstructorArguments.Count > 1
-            && attribute.ConstructorArguments[1].Value is bool value
-            && value;
-        return isError ? "error obsolete " : string.Empty;
+        foreach (var provider in providers.Where(value => value is not null))
+        {
+            var attribute = GetCustomAttributes(provider!).FirstOrDefault(value =>
+                string.Equals(value.AttributeType.FullName, typeof(ObsoleteAttribute).FullName, StringComparison.Ordinal));
+            var isError = attribute is not null
+                && attribute.ConstructorArguments.Count > 1
+                && attribute.ConstructorArguments[1].Value is bool value
+                && value;
+            if (isError) return "error obsolete ";
+        }
+        return string.Empty;
     }
 
     private static string FormatPropertyAccessors(PropertyInfo property)
