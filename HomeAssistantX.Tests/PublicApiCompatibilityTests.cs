@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 #if NET10_0
 using System.Runtime.Loader;
 #endif
@@ -34,6 +35,17 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void MethodFormatterPreservesExtensionMethodStatus()
+    {
+        var method = typeof(Enumerable).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(value => value.Name == nameof(Enumerable.Select)
+                && value.GetParameters().Length == 2
+                && value.GetParameters()[1].ParameterType.GetGenericArguments().Length == 2);
+
+        Assert.StartsWith("extension Select", FormatMethod(method), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TypeFormatterPreservesEnumStorageAndGenericVariance()
     {
         Assert.Equal("System.UInt64", FormatEnumUnderlyingType(typeof(EnumStorageFixture)));
@@ -55,6 +67,7 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("System.String[,]", FormatType(typeof(string[,])));
         Assert.Equal("System.String[,,]?", FormatAnnotatedType(typeof(string[,,]), typeof(FieldFixture).GetField(nameof(FieldFixture.Mutable))!));
         Assert.Equal("F const System.Int32 Constant = 42", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.Constant))!));
+        Assert.Equal("F const System.Decimal DecimalConstant = 1.25", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.DecimalConstant))!));
         Assert.Equal("F static readonly System.String ReadOnly", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.ReadOnly))!));
         Assert.Equal("F instance System.String[,,]? Mutable", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.Mutable))!));
     }
@@ -370,7 +383,8 @@ public sealed class PublicApiCompatibilityTests
         var genericList = genericArguments.Length == 0
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
-        return method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
+        return extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static void ParameterDirectionFixture(ref int byReference, out int output, in int input)
@@ -432,6 +446,7 @@ public sealed class PublicApiCompatibilityTests
     private sealed class FieldFixture
     {
         public const int Constant = 42;
+        public const decimal DecimalConstant = 1.25m;
         public static readonly string ReadOnly = string.Empty;
         public string[,,]? Mutable = new string[1, 1, 1];
     }
@@ -601,10 +616,13 @@ public sealed class PublicApiCompatibilityTests
 
     private static string FormatField(FieldInfo field)
     {
-        var scope = field.IsLiteral
+        var decimalConstant = field.GetCustomAttribute<DecimalConstantAttribute>();
+        var isConstant = field.IsLiteral || decimalConstant is not null;
+        var scope = isConstant
             ? "const"
             : (field.IsStatic ? "static" : "instance") + (field.IsInitOnly ? " readonly" : string.Empty);
-        var value = field.IsLiteral ? " = " + FormatDefault(field.GetRawConstantValue()) : string.Empty;
+        var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
+        var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
         return "F " + FieldAccess(field) + scope + " " + RequiredMember(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 

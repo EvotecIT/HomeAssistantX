@@ -709,6 +709,22 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task MobileAppRegistrationRequiresOperatingSystemVersionBeforeDispatch(string? osVersion)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var request = RegistrationRequest(false);
+        request.OperatingSystemVersion = osVersion;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.MobileApp.RegisterAsync(request));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Theory]
     [InlineData("secret")]
     [InlineData("")]
     public async Task MobileAppRegistrationRejectsSecretsWhenEncryptionWasNotRequested(string secret)
@@ -1045,6 +1061,7 @@ public sealed class StableControlAndAdapterContractTests
         Manufacturer = "Example",
         Model = "Test",
         OperatingSystemName = "Windows",
+        OperatingSystemVersion = "11.0",
         SupportsEncryption = encryption
     };
 

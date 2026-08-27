@@ -42,7 +42,7 @@ T sealed class HomeAssistantX.Automations.HomeAssistantAutomationStatus
   C HomeAssistantX.Automations.HomeAssistantAutomationStatus()
   P instance System.Nullable<System.Int64> CurrentRuns {get;set;}
   P instance System.String EntityId {get;set;}
-  P instance System.Boolean IsEnabled {get;set;}
+  P instance System.Nullable<System.Boolean> IsEnabled {get;set;}
   P instance System.Nullable<System.DateTimeOffset> LastTriggered {get;set;}
   P instance System.String? Mode {get;set;}
   P instance System.String? Name {get;set;}
