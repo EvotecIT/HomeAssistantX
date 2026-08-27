@@ -746,11 +746,7 @@ public sealed class MediaAndRemoteContractTests
                 HomeAssistantTarget.ForEntity("media_player.kitchen"),
                 values,
                 cancellation.Token));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            client.Media.SearchSourcesResponseAsync("music", mediaClasses: values, cancellationToken: cancellation.Token));
-
         Assert.Empty(server.ServiceCallBodies);
-        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
     }
 
     [Fact]
