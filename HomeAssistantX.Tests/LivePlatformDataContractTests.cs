@@ -75,13 +75,13 @@ public sealed class LivePlatformDataContractTests
         var end = start.AddDays(2);
 
         Assert.Equal("calendar.home", Assert.Single(await client.Calendars.GetAsync()).EntityId);
-        var restEvent = Assert.Single(await client.Calendars.GetEventsAsync("calendar.home", start, end));
+        var restEvent = Assert.Single(await client.Calendars.GetEventsAsync(" calendar.home ", start, end));
         Assert.Equal(18, restEvent.Start!.DateTime!.Value.Hour);
         Assert.Equal(1, restEvent.Start.AdditionalData["future"].GetInt32());
         Assert.Equal(2, restEvent.Start.AdditionalData["Future"].GetInt32());
 
         var updateReceived = new TaskCompletionSource<HomeAssistantCalendarEventUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var subscription = await client.Calendars.SubscribeAsync("calendar.home", start, end, (update, _) =>
+        using var subscription = await client.Calendars.SubscribeAsync(" calendar.home ", start, end, (update, _) =>
         {
             updateReceived.TrySetResult(update);
             return Task.CompletedTask;
@@ -90,14 +90,17 @@ public sealed class LivePlatformDataContractTests
         Assert.Equal("event-1", streamed.Uid);
         Assert.Equal("FREQ=WEEKLY", streamed.RecurrenceRule);
         Assert.Equal(18, streamed.Start!.DateTime!.Value.Hour);
+        using (var subscribe = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("calendar/event/subscribe"))))
+            Assert.Equal("calendar.home", subscribe.RootElement.GetProperty("entity_id").GetString());
 
         var timed = HomeAssistantCalendarEventInput.Timed(start.AddHours(10), start.AddHours(11), "Planning");
         timed.Description = "Weekly planning";
         timed.RecurrenceRule = "FREQ=WEEKLY";
-        await client.Calendars.CreateEventAsync("calendar.home", timed);
+        await client.Calendars.CreateEventAsync(" calendar.home ", timed);
         using (var create = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("calendar/event/create"))))
         {
             var eventData = create.RootElement.GetProperty("event");
+            Assert.Equal("calendar.home", create.RootElement.GetProperty("entity_id").GetString());
             Assert.Equal("Planning", eventData.GetProperty("summary").GetString());
             Assert.Contains("T10:00:00", eventData.GetProperty("start").GetString());
             Assert.Equal("FREQ=WEEKLY", eventData.GetProperty("rrule").GetString());
@@ -105,16 +108,18 @@ public sealed class LivePlatformDataContractTests
 
         var allDay = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Holiday");
         var reference = new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "THISANDFUTURE" };
-        await client.Calendars.UpdateEventAsync("calendar.home", reference, allDay);
+        await client.Calendars.UpdateEventAsync(" calendar.home ", reference, allDay);
         using (var update = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("calendar/event/update"))))
         {
             Assert.Equal("2026-08-27", update.RootElement.GetProperty("event").GetProperty("start").GetString());
+            Assert.Equal("calendar.home", update.RootElement.GetProperty("entity_id").GetString());
             Assert.Equal("THISANDFUTURE", update.RootElement.GetProperty("recurrence_range").GetString());
         }
 
-        await client.Calendars.DeleteEventAsync("calendar.home", reference);
+        await client.Calendars.DeleteEventAsync(" calendar.home ", reference);
         using var delete = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("calendar/event/delete")));
         Assert.Equal("event-1", delete.RootElement.GetProperty("uid").GetString());
+        Assert.Equal("calendar.home", delete.RootElement.GetProperty("entity_id").GetString());
     }
 
     [Fact]

@@ -28,8 +28,9 @@ public sealed class HomeAssistantCalendarClient
         DateTimeOffset end,
         CancellationToken cancellationToken = default)
     {
-        ValidateRange(entityId, start, end);
-        return _rest.GetCalendarEventsAsync(entityId, start, end, cancellationToken);
+        var normalizedEntityId = NormalizeEntityId(entityId);
+        ValidateRange(start, end);
+        return _rest.GetCalendarEventsAsync(normalizedEntityId, start, end, cancellationToken);
     }
 
     public async Task CreateEventAsync(
@@ -37,7 +38,7 @@ public sealed class HomeAssistantCalendarClient
         HomeAssistantCalendarEventInput eventInput,
         CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId);
         if (eventInput is null)
         {
             throw new ArgumentNullException(nameof(eventInput));
@@ -45,7 +46,7 @@ public sealed class HomeAssistantCalendarClient
 
         await _webSocket.RequestAsync("calendar/event/create", new Dictionary<string, object?>
         {
-            ["entity_id"] = entityId,
+            ["entity_id"] = normalizedEntityId,
             ["event"] = eventInput.ToPayload()
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -56,7 +57,7 @@ public sealed class HomeAssistantCalendarClient
         HomeAssistantCalendarEventInput eventInput,
         CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId);
         if (eventReference is null)
         {
             throw new ArgumentNullException(nameof(eventReference));
@@ -69,7 +70,7 @@ public sealed class HomeAssistantCalendarClient
 
         var payload = new Dictionary<string, object?>
         {
-            ["entity_id"] = entityId,
+            ["entity_id"] = normalizedEntityId,
             ["event"] = eventInput.ToPayload()
         };
         eventReference.AddTo(payload);
@@ -81,13 +82,13 @@ public sealed class HomeAssistantCalendarClient
         HomeAssistantCalendarEventReference eventReference,
         CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId);
         if (eventReference is null)
         {
             throw new ArgumentNullException(nameof(eventReference));
         }
 
-        var payload = new Dictionary<string, object?> { ["entity_id"] = entityId };
+        var payload = new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId };
         eventReference.AddTo(payload);
         await _webSocket.RequestAsync("calendar/event/delete", payload, cancellationToken).ConfigureAwait(false);
     }
@@ -99,7 +100,8 @@ public sealed class HomeAssistantCalendarClient
         Func<HomeAssistantCalendarEventUpdate, CancellationToken, Task> handler,
         CancellationToken cancellationToken = default)
     {
-        ValidateRange(entityId, start, end);
+        var normalizedEntityId = NormalizeEntityId(entityId);
+        ValidateRange(start, end);
         if (handler is null)
         {
             throw new ArgumentNullException(nameof(handler));
@@ -107,7 +109,7 @@ public sealed class HomeAssistantCalendarClient
 
         var payload = new Dictionary<string, object?>
         {
-            ["entity_id"] = entityId,
+            ["entity_id"] = normalizedEntityId,
             ["start"] = start.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
             ["end"] = end.ToString("O", System.Globalization.CultureInfo.InvariantCulture)
         };
@@ -128,20 +130,22 @@ public sealed class HomeAssistantCalendarClient
         }, cancellationToken);
     }
 
-    private static void ValidateRange(string entityId, DateTimeOffset start, DateTimeOffset end)
+    private static void ValidateRange(DateTimeOffset start, DateTimeOffset end)
     {
-        ValidateEntityId(entityId);
         if (end <= start)
         {
             throw new ArgumentOutOfRangeException(nameof(end), "The calendar range end must be after its start.");
         }
     }
 
-    private static void ValidateEntityId(string entityId)
+    private static string NormalizeEntityId(string entityId)
     {
-        if (string.IsNullOrWhiteSpace(entityId))
+        var normalized = entityId?.Trim();
+        if (normalized is null || normalized.Length == 0)
         {
             throw new ArgumentException("A calendar entity identifier is required.", nameof(entityId));
         }
+
+        return normalized;
     }
 }
