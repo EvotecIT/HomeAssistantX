@@ -112,6 +112,13 @@ public sealed class PublicApiCompatibilityTests
             ObsoleteContract(typeof(CompileBlockingObsoleteEnumFixture).GetField("Legacy")!));
         var property = typeof(CompileBlockingObsoleteAccessorFixture).GetProperty(nameof(CompileBlockingObsoleteAccessorFixture.Value))!;
         Assert.Equal("error obsolete ", ObsoleteContract(property, property.GetMethod, property.SetMethod));
+        var implementationOnlySetter = typeof(CompileBlockingObsoleteAccessorFixture).GetProperty("ImplementationOnlySetter")!;
+        Assert.Equal(
+            string.Empty,
+            ObsoleteContract(
+                implementationOnlySetter,
+                IsExternallyAccessibleMethod(implementationOnlySetter.GetMethod) ? implementationOnlySetter.GetMethod : null,
+                IsExternallyAccessibleMethod(implementationOnlySetter.SetMethod) ? implementationOnlySetter.SetMethod : null));
         var eventInfo = typeof(CompileBlockingObsoleteAccessorFixture).GetEvent("Changed")!;
         Assert.Equal("error obsolete ", ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod));
     }
@@ -358,7 +365,11 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
-                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(property, property.GetMethod, property.SetMethod) + RequiredMember(property) + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
+                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(
+                    property,
+                    IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null,
+                    IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null)
+                    + RequiredMember(property) + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
             }
             foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleEvent)
@@ -460,6 +471,13 @@ public sealed class PublicApiCompatibilityTests
             [Obsolete("This getter must remain a compile-time error.", true)]
             get;
             set;
+        }
+
+        public int ImplementationOnlySetter
+        {
+            get;
+            [Obsolete("This private setter is not part of the external contract.", true)]
+            private set;
         }
 
         [Obsolete("This event must remain a compile-time error.", true)]
