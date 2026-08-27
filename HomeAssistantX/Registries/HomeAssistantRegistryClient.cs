@@ -59,7 +59,9 @@ public sealed class HomeAssistantRegistryClient
     public async Task<IReadOnlyList<HomeAssistantLabel>> GetLabelsAsync(CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("config/label_registry/list", null, cancellationToken).ConfigureAwait(false);
-        return DeserializeArray<HomeAssistantLabel>(value, "label registry", cancellationToken);
+        var labels = DeserializeArray<HomeAssistantLabel>(value, "label registry", cancellationToken);
+        foreach (var label in labels) ValidateLabel(label);
+        return labels;
     }
 
     public async Task<HomeAssistantLabel> CreateLabelAsync(
@@ -75,10 +77,12 @@ public sealed class HomeAssistantRegistryClient
         AddOptional(payload, "color", label.Color);
         AddOptional(payload, "description", label.Description);
         AddOptional(payload, "icon", label.Icon);
-        return DeserializeObject<HomeAssistantLabel>(
+        var created = DeserializeObject<HomeAssistantLabel>(
             await _webSocket.RequestAsync("config/label_registry/create", payload, cancellationToken).ConfigureAwait(false),
             "created label",
             cancellationToken);
+        ValidateLabel(created);
+        return created;
     }
 
     public async Task<HomeAssistantLabel> UpdateLabelAsync(
@@ -93,10 +97,12 @@ public sealed class HomeAssistantRegistryClient
         }
 
         var payload = BeginUpdate("label_id", labelId, update.GetChanges(), nameof(update));
-        return DeserializeObject<HomeAssistantLabel>(
+        var updated = DeserializeObject<HomeAssistantLabel>(
             await _webSocket.RequestAsync("config/label_registry/update", payload, cancellationToken).ConfigureAwait(false),
             "updated label",
             cancellationToken);
+        ValidateLabel(updated);
+        return updated;
     }
 
     public Task DeleteLabelAsync(string labelId, CancellationToken cancellationToken = default)
@@ -114,7 +120,9 @@ public sealed class HomeAssistantRegistryClient
         {
             ["scope"] = scope
         }, cancellationToken).ConfigureAwait(false);
-        return DeserializeArray<HomeAssistantCategory>(value, "category registry", cancellationToken);
+        var categories = DeserializeArray<HomeAssistantCategory>(value, "category registry", cancellationToken);
+        foreach (var category in categories) ValidateCategory(category);
+        return categories;
     }
 
     public async Task<HomeAssistantCategory> CreateCategoryAsync(
@@ -130,10 +138,12 @@ public sealed class HomeAssistantRegistryClient
 
         var payload = new Dictionary<string, object?> { ["scope"] = scope, ["name"] = category.Name };
         AddOptional(payload, "icon", category.Icon);
-        return DeserializeObject<HomeAssistantCategory>(
+        var created = DeserializeObject<HomeAssistantCategory>(
             await _webSocket.RequestAsync("config/category_registry/create", payload, cancellationToken).ConfigureAwait(false),
             "created category",
             cancellationToken);
+        ValidateCategory(created);
+        return created;
     }
 
     public async Task<HomeAssistantCategory> UpdateCategoryAsync(
@@ -151,10 +161,12 @@ public sealed class HomeAssistantRegistryClient
 
         var payload = BeginUpdate("category_id", categoryId, update.GetChanges(), nameof(update));
         payload["scope"] = scope;
-        return DeserializeObject<HomeAssistantCategory>(
+        var updated = DeserializeObject<HomeAssistantCategory>(
             await _webSocket.RequestAsync("config/category_registry/update", payload, cancellationToken).ConfigureAwait(false),
             "updated category",
             cancellationToken);
+        ValidateCategory(updated);
+        return updated;
     }
 
     public Task DeleteCategoryAsync(string scope, string categoryId, CancellationToken cancellationToken = default)
@@ -250,6 +262,18 @@ public sealed class HomeAssistantRegistryClient
             value,
             "The Home Assistant " + name + " response could not be decoded.",
             cancellationToken: cancellationToken);
+    }
+
+    private static void ValidateLabel(HomeAssistantLabel label)
+    {
+        if (string.IsNullOrWhiteSpace(label.LabelId) || string.IsNullOrWhiteSpace(label.Name))
+            throw new HomeAssistantProtocolException("A Home Assistant label did not contain its required identifier and name.");
+    }
+
+    private static void ValidateCategory(HomeAssistantCategory category)
+    {
+        if (string.IsNullOrWhiteSpace(category.CategoryId) || string.IsNullOrWhiteSpace(category.Name))
+            throw new HomeAssistantProtocolException("A Home Assistant category did not contain its required identifier and name.");
     }
 
     private async Task IgnoreResultAsync(

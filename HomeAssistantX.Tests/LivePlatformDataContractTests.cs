@@ -306,6 +306,46 @@ public sealed class LivePlatformDataContractTests
         Assert.Null(server.GetLastWebSocketCommand("config/label_registry/update"));
     }
 
+    [Theory]
+    [InlineData("[{}]", true)]
+    [InlineData("[{\"label_id\":\"security\"}]", true)]
+    [InlineData("[{\"name\":\"Security\"}]", true)]
+    [InlineData("[{}]", false)]
+    [InlineData("[{\"category_id\":\"comfort\"}]", false)]
+    [InlineData("[{\"name\":\"Comfort\"}]", false)]
+    public async Task RegistryListsRejectIncompleteLabelsAndCategories(string response, bool labels)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        if (labels) server.LabelRegistryResponseJson = response;
+        else server.CategoryRegistryResponseJson = response;
+
+        if (labels)
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetLabelsAsync());
+        else
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetCategoriesAsync("automation"));
+    }
+
+    [Fact]
+    public async Task RegistryMutationsRejectIncompleteLabelsAndCategories()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            LabelMutationResponseJson = "{}",
+            CategoryMutationResponseJson = "{}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.CreateLabelAsync(new HomeAssistantLabelCreate("Security")));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.UpdateLabelAsync("security", new HomeAssistantLabelUpdate().WithName("Security")));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.CreateCategoryAsync("automation", new HomeAssistantCategoryCreate("Comfort")));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.UpdateCategoryAsync("automation", "comfort", new HomeAssistantCategoryUpdate().WithName("Comfort")));
+    }
+
     [Fact]
     public async Task EmptyNotificationTargetFailsBeforeDispatch()
     {

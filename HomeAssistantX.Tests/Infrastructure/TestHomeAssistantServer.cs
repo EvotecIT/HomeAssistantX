@@ -155,6 +155,18 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? LabelRegistryErrorCode { get; set; }
 
+    public string LabelRegistryResponseJson { get; set; } =
+        "[{\"label_id\":\"security\",\"name\":\"Safety\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300},{\"label_id\":\"security-name\",\"name\":\"Security\",\"color\":null,\"description\":\"Identifier collision fixture\",\"icon\":null,\"created_at\":1787731200,\"modified_at\":1787731300}]";
+
+    public string LabelMutationResponseJson { get; set; } =
+        "{\"label_id\":\"security\",\"name\":\"Security\",\"color\":null,\"description\":\"Safety devices\",\"icon\":\"mdi:shield\"}";
+
+    public string CategoryRegistryResponseJson { get; set; } =
+        "[{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"icon\":\"mdi:sofa\",\"created_at\":1787731200,\"modified_at\":1787731300}]";
+
+    public string CategoryMutationResponseJson { get; set; } =
+        "{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"icon\":null}";
+
     public bool OmitSystemHealthFinish { get; set; }
     public string SystemHealthInitialEventJson { get; set; } =
         "{\"type\":\"initial\",\"data\":{\"homeassistant\":{\"info\":{\"version\":\"2026.8.3\",\"installation_type\":\"Home Assistant OS\",\"hassio\":true}}}}";
@@ -971,21 +983,21 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     await session.SendErrorAsync(id, LabelRegistryErrorCode, "Label registry is unavailable.", LabelRegistryErrorCode, _source.Token).ConfigureAwait(false);
                     return;
                 }
-                await session.SendResultAsync(id, ParseJson("[{\"label_id\":\"security\",\"name\":\"Safety\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300},{\"label_id\":\"security-name\",\"name\":\"Security\",\"color\":null,\"description\":\"Identifier collision fixture\",\"icon\":null,\"created_at\":1787731200,\"modified_at\":1787731300}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(LabelRegistryResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/label_registry/create":
             case "config/label_registry/update":
-                await session.SendResultAsync(id, ParseJson("{\"label_id\":\"security\",\"name\":\"Security\",\"color\":null,\"description\":\"Safety devices\",\"icon\":\"mdi:shield\"}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(LabelMutationResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/label_registry/delete":
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/category_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"icon\":\"mdi:sofa\",\"created_at\":1787731200,\"modified_at\":1787731300}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(CategoryRegistryResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/category_registry/create":
             case "config/category_registry/update":
-                await session.SendResultAsync(id, ParseJson("{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"icon\":null}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(CategoryMutationResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/category_registry/delete":
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
