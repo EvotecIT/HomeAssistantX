@@ -1266,6 +1266,7 @@ T sealed class HomeAssistantX.Registries.HomeAssistantRegistrySnapshot
   P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantEntityRegistryEntry> Entities {get;set;}
   P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantFloor> Floors {get;set;}
   P instance System.Boolean IsConfigEntryEnrichmentAvailable {get;set;}
+  P instance System.Boolean IsLabelRegistryAvailable {get;set;}
   P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantLabel> Labels {get;set;}
 T sealed class HomeAssistantX.Rest.HomeAssistantCalendar
   C HomeAssistantX.Rest.HomeAssistantCalendar()
