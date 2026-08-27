@@ -66,6 +66,20 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task AlarmCodesRejectExplicitBlanksBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Alarms.ActAsync(
+            HomeAssistantTarget.ForEntity("alarm_control_panel.home"),
+            HomeAssistantAlarmAction.Disarm,
+            " "));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task RoutineAndHelperControlsKeepDomainsAndValueShapesTyped()
     {
         using var server = new TestHomeAssistantServer();
@@ -382,9 +396,92 @@ public sealed class StableControlAndAdapterContractTests
 
         var instances = await client.DiscoverAsync(TimeSpan.FromMilliseconds(100));
 
-        Assert.Equal(2, instances.Count);
+        Assert.Single(instances);
         Assert.Equal(addresses.OrderBy(value => value.ToString()), factory.CreatedAddresses.OrderBy(value => value.ToString()));
         Assert.Equal(addresses.OrderBy(value => value.ToString()), factory.SentAddresses.OrderBy(value => value.ToString()));
+    }
+
+    [Fact]
+    public async Task DnsSdDiscoveryRetainsValidResponsesBeforeLateInterfaceFailures()
+    {
+        var address = IPAddress.Parse("192.0.2.10");
+        var client = new HomeAssistantDiscoveryClient(
+            new TestDiscoveryTransportFactory(new[] { address }, CreateDiscoveryPacket(), failAfterPacket: true));
+
+        Assert.Single(await client.DiscoverAsync(TimeSpan.FromMilliseconds(100)));
+    }
+
+    [Fact]
+    public async Task DnsSdDiscoveryRetainsHealthyInterfacesWhenOneTransportCannotBeCreated()
+    {
+        var failed = IPAddress.Parse("192.0.2.10");
+        var healthy = IPAddress.Parse("198.51.100.20");
+        var client = new HomeAssistantDiscoveryClient(
+            new TestDiscoveryTransportFactory(new[] { failed, healthy }, CreateDiscoveryPacket(), failCreateAddress: failed));
+
+        Assert.Single(await client.DiscoverAsync(TimeSpan.FromMilliseconds(100)));
+    }
+
+    [Fact]
+    public void DnsSdMergeKeepsDifferentHostsSeparateAndReappliesPublicBounds()
+    {
+        var properties = Enumerable.Range(0, 70).ToDictionary(value => "key" + value, value => (string?)value.ToString());
+        var addresses = Enumerable.Range(1, 20).Select(value => IPAddress.Parse("192.0.2." + value)).ToArray();
+        var first = new HomeAssistantDiscoveredInstance
+        {
+            ServiceInstanceName = "Home._home-assistant._tcp.local",
+            HostName = "first.local",
+            Port = 8123,
+            InstanceId = "same-claimed-id",
+            Addresses = addresses,
+            Properties = properties
+        };
+        var second = new HomeAssistantDiscoveredInstance
+        {
+            ServiceInstanceName = first.ServiceInstanceName,
+            HostName = "second.local",
+            Port = 8123,
+            InstanceId = first.InstanceId,
+            Addresses = new[] { IPAddress.Parse("198.51.100.20") }
+        };
+
+        var merged = HomeAssistantDiscoveryClient.MergeInstances(new[] { first, first, second });
+
+        Assert.Equal(2, merged.Count);
+        var bounded = Assert.Single(merged, value => value.HostName == "first.local");
+        Assert.Equal(64, bounded.Properties.Count);
+        Assert.Equal(16, bounded.Addresses.Count);
+
+        var fallback = new HomeAssistantDiscoveredInstance
+        {
+            ServiceInstanceName = "Partial._home-assistant._tcp.local",
+            Name = "Partial",
+            HostName = "partial.local",
+            Port = 8123
+        };
+        var advertised = new HomeAssistantDiscoveredInstance
+        {
+            ServiceInstanceName = fallback.ServiceInstanceName,
+            Name = "Advertised Home",
+            HostName = fallback.HostName,
+            Port = fallback.Port,
+            Properties = new Dictionary<string, string?> { ["location_name"] = "Advertised Home" }
+        };
+        Assert.Equal("Advertised Home", Assert.Single(HomeAssistantDiscoveryClient.MergeInstances(new[] { fallback, advertised })).Name);
+    }
+
+
+    [Fact]
+    public void DnsSdTunnelEligibilityDependsOnStateAndMulticastSupport()
+    {
+        Assert.True(UdpHomeAssistantDiscoveryTransportFactory.IsEligible(
+            OperationalStatus.Up, supportsMulticast: true, NetworkInterfaceType.Tunnel));
+        Assert.False(UdpHomeAssistantDiscoveryTransportFactory.IsEligible(
+            OperationalStatus.Down, supportsMulticast: true, NetworkInterfaceType.Tunnel));
+        Assert.False(UdpHomeAssistantDiscoveryTransportFactory.IsEligible(
+            OperationalStatus.Up, supportsMulticast: false, NetworkInterfaceType.Tunnel));
+        Assert.False(UdpHomeAssistantDiscoveryTransportFactory.IsEligible(
+            OperationalStatus.Up, supportsMulticast: true, NetworkInterfaceType.Loopback));
     }
 
     [Fact]
@@ -441,6 +538,22 @@ public sealed class StableControlAndAdapterContractTests
             });
 
         Assert.Equal(healthy, Assert.Single(addresses));
+    }
+
+    [Fact]
+    public void DnsSdAddressBudgetRetainsEveryEligibleInterfaceBeforeAliases()
+    {
+        var aliases = Enumerable.Range(1, 32).Select(value => IPAddress.Parse("192.0.2." + value)).ToArray();
+        var tunnel = IPAddress.Parse("198.51.100.20");
+        var interfaces = UdpHomeAssistantDiscoveryTransportFactory.CollectLocalInterfaces(
+            new Func<HomeAssistantDiscoveryInterface?>[]
+            {
+                () => new HomeAssistantDiscoveryInterface("ethernet", aliases),
+                () => new HomeAssistantDiscoveryInterface("tunnel", new[] { tunnel })
+            });
+
+        Assert.Equal(32, interfaces.Sum(value => value.Addresses.Count));
+        Assert.Contains(interfaces, value => value.Id == "tunnel" && value.Addresses.Contains(tunnel));
     }
 
     [Fact]
@@ -864,26 +977,34 @@ public sealed class StableControlAndAdapterContractTests
         private readonly IReadOnlyList<IPAddress> _addresses;
         private readonly byte[] _packet;
         private readonly bool _blockSend;
+        private readonly bool _failAfterPacket;
+        private readonly IPAddress? _failCreateAddress;
         private readonly object _gate = new();
         private readonly List<IPAddress> _createdAddresses = new();
         private readonly List<IPAddress> _sentAddresses = new();
 
-        internal TestDiscoveryTransportFactory(IReadOnlyList<IPAddress> addresses, byte[] packet, bool blockSend = false)
+        internal TestDiscoveryTransportFactory(IReadOnlyList<IPAddress> addresses, byte[] packet, bool blockSend = false, bool failAfterPacket = false, IPAddress? failCreateAddress = null)
         {
             _addresses = addresses;
             _packet = packet;
             _blockSend = blockSend;
+            _failAfterPacket = failAfterPacket;
+            _failCreateAddress = failCreateAddress;
         }
 
         internal IReadOnlyList<IPAddress> CreatedAddresses { get { lock (_gate) return _createdAddresses.ToArray(); } }
         internal IReadOnlyList<IPAddress> SentAddresses { get { lock (_gate) return _sentAddresses.ToArray(); } }
 
-        public IReadOnlyList<IPAddress> GetLocalAddresses() => _addresses;
+        public IReadOnlyList<HomeAssistantDiscoveryInterface> GetLocalInterfaces()
+            => _addresses.Select((address, index) => new HomeAssistantDiscoveryInterface(
+                "test-" + index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                new[] { address })).ToArray();
 
         public IHomeAssistantDiscoveryTransport Create(IPAddress localAddress)
         {
+            if (localAddress.Equals(_failCreateAddress)) throw new SocketException((int)SocketError.AddressNotAvailable);
             lock (_gate) _createdAddresses.Add(localAddress);
-            return new TestDiscoveryTransport(_packet, _blockSend, () =>
+            return new TestDiscoveryTransport(_packet, _blockSend, _failAfterPacket, () =>
             {
                 lock (_gate) _sentAddresses.Add(localAddress);
             });
@@ -894,13 +1015,15 @@ public sealed class StableControlAndAdapterContractTests
     {
         private readonly byte[] _packet;
         private readonly bool _blockSend;
+        private readonly bool _failAfterPacket;
         private readonly Action _sent;
         private int _received;
 
-        internal TestDiscoveryTransport(byte[] packet, bool blockSend, Action sent)
+        internal TestDiscoveryTransport(byte[] packet, bool blockSend, bool failAfterPacket, Action sent)
         {
             _packet = packet;
             _blockSend = blockSend;
+            _failAfterPacket = failAfterPacket;
             _sent = sent;
         }
 
@@ -924,6 +1047,7 @@ public sealed class StableControlAndAdapterContractTests
         public async Task<byte[]> ReceiveAsync(CancellationToken cancellationToken)
         {
             if (Interlocked.Exchange(ref _received, 1) == 0) return _packet;
+            if (_failAfterPacket) throw new SocketException((int)SocketError.NetworkDown);
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new InvalidOperationException("Unreachable receive continuation.");
         }

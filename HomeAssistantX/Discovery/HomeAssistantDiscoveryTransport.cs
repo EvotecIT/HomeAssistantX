@@ -6,9 +6,21 @@ namespace HomeAssistantX.Discovery;
 
 internal interface IHomeAssistantDiscoveryTransportFactory
 {
-    IReadOnlyList<IPAddress> GetLocalAddresses();
+    IReadOnlyList<HomeAssistantDiscoveryInterface> GetLocalInterfaces();
 
     IHomeAssistantDiscoveryTransport Create(IPAddress localAddress);
+}
+
+internal sealed class HomeAssistantDiscoveryInterface
+{
+    internal HomeAssistantDiscoveryInterface(string id, IReadOnlyList<IPAddress> addresses)
+    {
+        Id = id;
+        Addresses = addresses;
+    }
+
+    internal string Id { get; }
+    internal IReadOnlyList<IPAddress> Addresses { get; }
 }
 
 internal interface IHomeAssistantDiscoveryTransport : IDisposable
@@ -22,26 +34,23 @@ internal sealed class UdpHomeAssistantDiscoveryTransportFactory : IHomeAssistant
 {
     private static readonly IPAddress MulticastAddress = IPAddress.Parse("224.0.0.251");
     private const int MulticastPort = 5353;
-    private const int MaximumInterfaces = 32;
+    private const int MaximumAddresses = 32;
 
-    public IReadOnlyList<IPAddress> GetLocalAddresses()
+    public IReadOnlyList<HomeAssistantDiscoveryInterface> GetLocalInterfaces()
     {
-        var addressReaders = new List<Func<IReadOnlyList<IPAddress>>>();
+        var readers = new List<Func<HomeAssistantDiscoveryInterface?>>();
         foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
         {
             try
             {
-                if (network.OperationalStatus != OperationalStatus.Up
-                    || !network.SupportsMulticast
-                    || network.NetworkInterfaceType == NetworkInterfaceType.Loopback
-                    || network.NetworkInterfaceType == NetworkInterfaceType.Tunnel)
+                if (!IsEligible(network.OperationalStatus, network.SupportsMulticast, network.NetworkInterfaceType))
                 {
                     continue;
                 }
 
-                addressReaders.Add(() => network.GetIPProperties().UnicastAddresses
-                    .Select(address => address.Address)
-                    .ToArray());
+                readers.Add(() => new HomeAssistantDiscoveryInterface(
+                    network.Id,
+                    network.GetIPProperties().UnicastAddresses.Select(address => address.Address).ToArray()));
             }
             catch (NetworkInformationException)
             {
@@ -49,38 +58,74 @@ internal sealed class UdpHomeAssistantDiscoveryTransportFactory : IHomeAssistant
             }
         }
 
-        return CollectLocalAddresses(addressReaders);
+        return CollectLocalInterfaces(readers);
     }
+
+    internal static IReadOnlyList<HomeAssistantDiscoveryInterface> CollectLocalInterfaces(
+        IEnumerable<Func<HomeAssistantDiscoveryInterface?>> readers)
+    {
+        var interfaces = new List<HomeAssistantDiscoveryInterface>();
+        foreach (var reader in readers)
+        {
+            try
+            {
+                var network = reader();
+                if (network is null) continue;
+                var addresses = FilterAddresses(network.Addresses);
+                if (addresses.Count > 0) interfaces.Add(new HomeAssistantDiscoveryInterface(network.Id, addresses));
+            }
+            catch (NetworkInformationException) { }
+            catch (SocketException) { }
+        }
+
+        var ordered = interfaces
+            .OrderBy(value => value.Id, StringComparer.Ordinal)
+            .ToArray();
+        var selected = ordered.ToDictionary(value => value.Id, _ => new List<IPAddress>(), StringComparer.Ordinal);
+        for (var addressIndex = 0; selected.Sum(value => value.Value.Count) < MaximumAddresses; addressIndex++)
+        {
+            var added = false;
+            foreach (var network in ordered)
+            {
+                if (addressIndex >= network.Addresses.Count) continue;
+                selected[network.Id].Add(network.Addresses[addressIndex]);
+                added = true;
+                if (selected.Sum(value => value.Value.Count) >= MaximumAddresses) break;
+            }
+            if (!added) break;
+        }
+
+        return ordered
+            .Where(value => selected[value.Id].Count > 0)
+            .Select(value => new HomeAssistantDiscoveryInterface(value.Id, selected[value.Id].ToArray()))
+            .ToArray();
+    }
+
+    internal static bool IsEligible(
+        OperationalStatus operationalStatus,
+        bool supportsMulticast,
+        NetworkInterfaceType interfaceType)
+        => operationalStatus == OperationalStatus.Up
+            && supportsMulticast
+            && interfaceType != NetworkInterfaceType.Loopback;
 
     internal static IReadOnlyList<IPAddress> CollectLocalAddresses(
         IEnumerable<Func<IReadOnlyList<IPAddress>>> addressReaders)
     {
-        var addresses = new List<IPAddress>();
-        foreach (var readAddresses in addressReaders)
-        {
-            try
-            {
-                addresses.AddRange(readAddresses());
-            }
-            catch (NetworkInformationException)
-            {
-                // Retain healthy interfaces when one adapter disappears or becomes unreadable.
-            }
-            catch (SocketException)
-            {
-                // A failed adapter must not suppress discovery on unrelated healthy adapters.
-            }
-        }
+        return CollectLocalInterfaces(addressReaders.Select((reader, index) =>
+                new Func<HomeAssistantDiscoveryInterface?>(() => new HomeAssistantDiscoveryInterface(index.ToString(System.Globalization.CultureInfo.InvariantCulture), reader()))))
+            .SelectMany(value => value.Addresses)
+            .ToArray();
+    }
 
-        return addresses
+    private static IReadOnlyList<IPAddress> FilterAddresses(IEnumerable<IPAddress> addresses)
+        => addresses
             .Where(address => address.AddressFamily == AddressFamily.InterNetwork
                 && !IPAddress.IsLoopback(address)
                 && !address.Equals(IPAddress.Any))
             .Distinct()
             .OrderBy(address => address.ToString(), StringComparer.Ordinal)
-            .Take(MaximumInterfaces)
             .ToArray();
-    }
 
     public IHomeAssistantDiscoveryTransport Create(IPAddress localAddress)
         => new UdpHomeAssistantDiscoveryTransport(localAddress, MulticastAddress, MulticastPort);

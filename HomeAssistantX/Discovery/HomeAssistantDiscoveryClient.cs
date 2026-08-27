@@ -30,32 +30,32 @@ public sealed class HomeAssistantDiscoveryClient
 
         try
         {
-            var localAddresses = _transportFactory.GetLocalAddresses()
-                .Distinct()
-                .OrderBy(address => address.ToString(), StringComparer.Ordinal)
+            var interfaces = _transportFactory.GetLocalInterfaces()
+                .Where(value => value.Addresses.Count > 0)
+                .OrderBy(value => value.Id, StringComparer.Ordinal)
                 .ToArray();
-            if (localAddresses.Length == 0)
+            if (interfaces.Length == 0)
             {
                 return Array.Empty<HomeAssistantDiscoveredInstance>();
             }
 
             using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutSource.CancelAfter(duration);
-            var results = await Task.WhenAll(localAddresses.Select((address, index) =>
+            var results = await Task.WhenAll(interfaces.Select((network, index) =>
                 DiscoverOnInterfaceAsync(
-                    address,
-                    DnsDiscoveryLimits.ForInterface(index, localAddresses.Length),
+                    network,
+                    DnsDiscoveryLimits.ForInterface(index, interfaces.Length),
                     timeoutSource.Token))).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var errors = results.Where(result => result.Error is not null).Select(result => result.Error!).ToArray();
-            if (errors.Length == localAddresses.Length)
+            if (errors.Length == interfaces.Length && results.All(result => result.Instances.Count == 0))
             {
                 throw new HomeAssistantConnectionException(
                     "Home Assistant mDNS discovery failed on every eligible network interface.",
                     new AggregateException(errors));
             }
 
-            return results.SelectMany(result => result.Instances)
+            return MergeInstances(results.SelectMany(result => result.Instances))
                 .OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(value => value.ServiceInstanceName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(value => value.ServiceInstanceName, StringComparer.Ordinal)
@@ -76,13 +76,77 @@ public sealed class HomeAssistantDiscoveryClient
         }
     }
 
+    internal static IReadOnlyList<HomeAssistantDiscoveredInstance> MergeInstances(
+        IEnumerable<HomeAssistantDiscoveredInstance> instances)
+    {
+        if (instances is null) throw new ArgumentNullException(nameof(instances));
+        return instances
+            .GroupBy(
+                value => value.ServiceInstanceName + "\0" + (value.HostName ?? string.Empty) + "\0" + (value.Port?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty),
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var ordered = group
+                    .OrderBy(value => value.ServiceInstanceName, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(value => value.ServiceInstanceName, StringComparer.Ordinal)
+                    .ToArray();
+                var first = ordered[0];
+                var properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                foreach (var instance in ordered)
+                {
+                    foreach (var property in instance.Properties)
+                    {
+                        if (properties.Count >= 64 && !properties.ContainsKey(property.Key)) continue;
+                        if (!properties.ContainsKey(property.Key)) properties[property.Key] = property.Value;
+                    }
+                }
+
+                return new HomeAssistantDiscoveredInstance
+                {
+                    ServiceInstanceName = first.ServiceInstanceName,
+                    Name = ordered.Select(value => value.Properties.TryGetValue("location_name", out var name) ? name : null)
+                        .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+                        ?? first.Name,
+                    InstanceId = ordered.Select(value => value.InstanceId).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)),
+                    Version = ordered.Select(value => value.Version).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)),
+                    HostName = first.HostName,
+                    Port = first.Port,
+                    InternalUri = ordered.Select(value => value.InternalUri).FirstOrDefault(value => value is not null),
+                    ExternalUri = ordered.Select(value => value.ExternalUri).FirstOrDefault(value => value is not null),
+                    BaseUri = ordered.Select(value => value.BaseUri).FirstOrDefault(value => value is not null),
+                    RequiresApiPassword = ordered.Any(value => value.RequiresApiPassword),
+                    Addresses = ordered.SelectMany(value => value.Addresses)
+                        .Distinct()
+                        .OrderBy(value => value.AddressFamily)
+                        .ThenBy(value => value.ToString(), StringComparer.Ordinal)
+                        .Take(16)
+                        .ToArray(),
+                    Properties = properties
+                };
+            })
+            .ToArray();
+    }
+
     private async Task<DiscoveryInterfaceResult> DiscoverOnInterfaceAsync(
-        IPAddress localAddress,
+        HomeAssistantDiscoveryInterface network,
         DnsDiscoveryLimits limits,
         CancellationToken cancellationToken)
     {
-        IHomeAssistantDiscoveryTransport? transport = null;
         var aggregate = new DnsDiscoveryAggregate(limits);
+        var errors = await Task.WhenAll(network.Addresses.Select(address =>
+            DiscoverOnAddressAsync(address, aggregate, cancellationToken))).ConfigureAwait(false);
+        var failures = errors.Where(error => error is not null).Cast<Exception>().ToArray();
+        return new DiscoveryInterfaceResult(
+            aggregate.Build(),
+            failures.Length == network.Addresses.Count ? new AggregateException(failures) : null);
+    }
+
+    private async Task<Exception?> DiscoverOnAddressAsync(
+        IPAddress localAddress,
+        DnsDiscoveryAggregate aggregate,
+        CancellationToken cancellationToken)
+    {
+        IHomeAssistantDiscoveryTransport? transport = null;
         try
         {
             transport = _transportFactory.Create(localAddress);
@@ -93,24 +157,12 @@ public sealed class HomeAssistantDiscoveryClient
                 if (!aggregate.TryConsumeDatagram()) break;
                 DnsDiscoveryPacket.ReadInto(packet, aggregate);
             }
-            return new DiscoveryInterfaceResult(aggregate.Build(), null);
+            return null;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            return new DiscoveryInterfaceResult(aggregate.Build(), null);
-        }
-        catch (Exception ex) when ((ex is ObjectDisposedException || ex is SocketException) && cancellationToken.IsCancellationRequested)
-        {
-            return new DiscoveryInterfaceResult(aggregate.Build(), null);
-        }
-        catch (Exception ex) when (ex is ObjectDisposedException || ex is SocketException)
-        {
-            return new DiscoveryInterfaceResult(aggregate.Build(), ex);
-        }
-        finally
-        {
-            transport?.Dispose();
-        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return null; }
+        catch (Exception ex) when ((ex is ObjectDisposedException || ex is SocketException) && cancellationToken.IsCancellationRequested) { return null; }
+        catch (Exception ex) when (ex is ObjectDisposedException || ex is SocketException) { return ex; }
+        finally { transport?.Dispose(); }
     }
 
     private sealed class DiscoveryInterfaceResult
