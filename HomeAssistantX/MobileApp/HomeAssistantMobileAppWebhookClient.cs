@@ -69,9 +69,12 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantMobileAppCameraStream>(
             result,
             "Home Assistant returned an invalid camera-stream response.");
-        if (stream.Success == false
-            || string.IsNullOrWhiteSpace(stream.MjpegPath)
-            || (stream.HlsPath is not null && string.IsNullOrWhiteSpace(stream.HlsPath)))
+        var hasMjpeg = !string.IsNullOrWhiteSpace(stream.MjpegPath);
+        var hasHls = !string.IsNullOrWhiteSpace(stream.HlsPath);
+        if (stream.Success != true
+            || (stream.MjpegPath is not null && !hasMjpeg)
+            || (stream.HlsPath is not null && !hasHls)
+            || (!hasMjpeg && !hasHls))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned an unsuccessful camera-stream response.");
         }

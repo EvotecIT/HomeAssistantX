@@ -993,7 +993,6 @@ public sealed class StableControlAndAdapterContractTests
     [Theory]
     [InlineData("incomplete-camera-response")]
     [InlineData("failed-camera-response")]
-    [InlineData("hls-only-camera-response")]
     public async Task MobileAppWebhookRejectsCameraResponsesWithoutAUsableStream(string webhookId)
     {
         using var server = new TestHomeAssistantServer();
@@ -1007,6 +1006,25 @@ public sealed class StableControlAndAdapterContractTests
 
         await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
             () => webhook.GetCameraStreamAsync("camera.front"));
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookAcceptsAnHlsOnlyCameraStream()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "hls-only-camera-response",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/hls-only-camera-response")
+            });
+
+        var stream = await webhook.GetCameraStreamAsync("camera.front");
+
+        Assert.Null(stream.MjpegPath);
+        Assert.Equal("/api/hls/front/master_playlist.m3u8", stream.HlsPath);
+        Assert.True(stream.Success);
     }
 
     [Fact]

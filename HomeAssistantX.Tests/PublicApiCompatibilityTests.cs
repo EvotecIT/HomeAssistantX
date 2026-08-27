@@ -87,6 +87,29 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void TypeFormatterPreservesDynamicMetadataAcrossNestedContracts()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            "DynamicMetadataFixture",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal("dynamic", FormatReturnType(method));
+        Assert.Equal(
+            "dynamic value, System.Collections.Generic.IReadOnlyDictionary<System.String,dynamic[]> nested",
+            FormatParameters(method.GetParameters()));
+    }
+
+    [Fact]
+    public void MethodFormatterPreservesCompileBlockingObsoleteContracts()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            "CompileBlockingObsoleteFixture",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.StartsWith("error obsolete ", FormatMethod(method), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MethodSelectionPreservesUserDefinedOperatorsAndExcludesAccessors()
     {
         var operatorMethod = typeof(OperatorFixture).GetMethod("op_Addition", BindingFlags.Public | BindingFlags.Static)!;
@@ -303,7 +326,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -317,7 +340,7 @@ public sealed class PublicApiCompatibilityTests
             foreach (var constructor in type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                          .Where(IsExternallyAccessibleConstructor)
                          .OrderBy(FormatMethod, StringComparer.Ordinal))
-                lines.Add("  C " + ConstructorAccess(constructor) + RequiredMemberSatisfaction(constructor) + FormatType(type) + "(" + FormatParameters(constructor.GetParameters()) + ")");
+                lines.Add("  C " + ConstructorAccess(constructor) + ObsoleteContract(constructor) + RequiredMemberSatisfaction(constructor) + FormatType(type) + "(" + FormatParameters(constructor.GetParameters()) + ")");
             foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleField)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
@@ -327,14 +350,14 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
-                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + RequiredMember(property) + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
+                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(property) + RequiredMember(property) + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
             }
             foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleEvent)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(eventInfo) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -364,14 +387,15 @@ public sealed class PublicApiCompatibilityTests
         var contracts = new List<string>();
         var nullability = new NullabilityCursor(ReadNullableFlags(type), ReadNullableContext(type));
         var tupleNames = new TupleNameCursor(ReadTupleNames(type));
+        var dynamicFlags = new DynamicCursor(ReadDynamicFlags(type));
         if (type.BaseType is not null && type.BaseType != typeof(object) && type.BaseType != typeof(ValueType))
         {
-            contracts.Add(FormatAnnotatedType(type.BaseType, nullability, tupleNames));
+            contracts.Add(FormatAnnotatedType(type.BaseType, nullability, tupleNames, dynamicFlags));
         }
 
         foreach (var contract in GetDirectInterfaces(type))
         {
-            contracts.Add(FormatAnnotatedType(contract, nullability, tupleNames));
+            contracts.Add(FormatAnnotatedType(contract, nullability, tupleNames, dynamicFlags));
         }
 
         return contracts.OrderBy(value => value, StringComparer.Ordinal).ToArray();
@@ -384,7 +408,7 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return ObsoleteContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static void ParameterDirectionFixture(ref int byReference, out int output, in int input)
@@ -403,6 +427,16 @@ public sealed class PublicApiCompatibilityTests
 
     private static Task<(string Host, int Port)> WrappedNamedTupleFixture()
         => Task.FromResult(("localhost", 8123));
+
+    private static dynamic DynamicMetadataFixture(
+        dynamic value,
+        IReadOnlyDictionary<string, dynamic[]> nested)
+        => value;
+
+    [Obsolete("This fixture must remain a compile-time error.", true)]
+    private static void CompileBlockingObsoleteFixture()
+    {
+    }
 
     private enum EnumStorageFixture : ulong
     {
@@ -623,7 +657,18 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + RequiredMember(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + RequiredMember(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+    }
+
+    private static string ObsoleteContract(ICustomAttributeProvider provider)
+    {
+        var attribute = GetCustomAttributes(provider).FirstOrDefault(value =>
+            string.Equals(value.AttributeType.FullName, typeof(ObsoleteAttribute).FullName, StringComparison.Ordinal));
+        if (attribute is null) return string.Empty;
+        var isError = attribute.ConstructorArguments.Count > 1
+            && attribute.ConstructorArguments[1].Value is bool value
+            && value;
+        return isError ? "error obsolete " : string.Empty;
     }
 
     private static string FormatPropertyAccessors(PropertyInfo property)
@@ -889,15 +934,17 @@ public sealed class PublicApiCompatibilityTests
         var flags = ReadNullableFlags(provider);
         var context = ReadNullableContext(provider);
         var tupleNames = ReadTupleNames(provider);
-        return FormatAnnotatedType(type, new NullabilityCursor(flags, context), new TupleNameCursor(tupleNames));
+        var dynamicFlags = ReadDynamicFlags(provider);
+        return FormatAnnotatedType(type, new NullabilityCursor(flags, context), new TupleNameCursor(tupleNames), new DynamicCursor(dynamicFlags));
     }
 
-    private static string FormatAnnotatedType(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames)
+    private static string FormatAnnotatedType(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames, DynamicCursor dynamicFlags)
     {
         var flag = cursor.Next();
+        var isDynamic = dynamicFlags.Next();
         if (type.IsArray)
         {
-            var array = FormatAnnotatedType(type.GetElementType()!, cursor, tupleNames) + ArraySuffix(type);
+            var array = FormatAnnotatedType(type.GetElementType()!, cursor, tupleNames, dynamicFlags) + ArraySuffix(type);
             return flag == 2 ? array + "?" : array;
         }
 
@@ -906,23 +953,23 @@ public sealed class PublicApiCompatibilityTests
             var definition = type.GetGenericTypeDefinition();
             if (IsTupleDefinition(definition) && tupleNames.HasNames)
             {
-                return FormatTuple(type, cursor, tupleNames);
+                return FormatTuple(type, cursor, tupleNames, dynamicFlags);
             }
             var arguments = type.GetGenericArguments()
-                .Select(argument => FormatAnnotatedType(argument, cursor, tupleNames))
+                .Select(argument => FormatAnnotatedType(argument, cursor, tupleNames, dynamicFlags))
                 .ToArray();
             var formatted = FormatGenericTypeName(type, arguments);
             return !type.IsValueType && flag == 2 ? formatted + "?" : formatted;
         }
 
-        var result = type.FullName ?? type.Name;
+        var result = type == typeof(object) && isDynamic ? "dynamic" : type.FullName ?? type.Name;
         return (!type.IsValueType || type.IsGenericParameter) && flag == 2 ? result + "?" : result;
     }
 
-    private static string FormatTuple(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames)
+    private static string FormatTuple(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames, DynamicCursor dynamicFlags)
     {
         var elements = new List<string>();
-        AddTupleElements(type, cursor, tupleNames, elements);
+        AddTupleElements(type, cursor, tupleNames, dynamicFlags, elements);
         return "(" + string.Join(", ", elements) + ")";
     }
 
@@ -930,6 +977,7 @@ public sealed class PublicApiCompatibilityTests
         Type tupleType,
         NullabilityCursor cursor,
         TupleNameCursor tupleNames,
+        DynamicCursor dynamicFlags,
         ICollection<string> elements)
     {
         var arguments = tupleType.GetGenericArguments();
@@ -937,14 +985,15 @@ public sealed class PublicApiCompatibilityTests
         for (var index = 0; index < logicalCount; index++)
         {
             var elementName = tupleNames.Next();
-            var formatted = FormatAnnotatedType(arguments[index], cursor, tupleNames);
+            var formatted = FormatAnnotatedType(arguments[index], cursor, tupleNames, dynamicFlags);
             elements.Add(formatted + (string.IsNullOrEmpty(elementName) ? string.Empty : " " + elementName));
         }
 
         if (arguments.Length == 8)
         {
             _ = cursor.Next();
-            AddTupleElements(arguments[7], cursor, tupleNames, elements);
+            _ = dynamicFlags.Next();
+            AddTupleElements(arguments[7], cursor, tupleNames, dynamicFlags, elements);
         }
     }
 
@@ -1025,6 +1074,19 @@ public sealed class PublicApiCompatibilityTests
         return values.Select(value => value.Value as string).ToArray();
     }
 
+    private static bool[] ReadDynamicFlags(ICustomAttributeProvider provider)
+    {
+        var attribute = GetCustomAttributes(provider).FirstOrDefault(value =>
+            string.Equals(value.AttributeType.FullName, "System.Runtime.CompilerServices.DynamicAttribute", StringComparison.Ordinal));
+        if (attribute is null) return Array.Empty<bool>();
+        if (attribute.ConstructorArguments.Count == 0) return new[] { true };
+        var argument = attribute.ConstructorArguments[0];
+        if (argument.Value is bool single) return new[] { single };
+        if (argument.Value is IEnumerable<CustomAttributeTypedArgument> values)
+            return values.Select(value => Convert.ToBoolean(value.Value, CultureInfo.InvariantCulture)).ToArray();
+        return Array.Empty<bool>();
+    }
+
     private static IList<CustomAttributeData> GetCustomAttributes(ICustomAttributeProvider provider)
         => provider switch
         {
@@ -1067,6 +1129,19 @@ public sealed class PublicApiCompatibilityTests
         public bool HasNames => _names.Length > 0;
 
         public string? Next() => _index < _names.Length ? _names[_index++] : null;
+    }
+
+    private sealed class DynamicCursor
+    {
+        private readonly bool[] _flags;
+        private int _index;
+
+        public DynamicCursor(bool[] flags)
+        {
+            _flags = flags;
+        }
+
+        public bool Next() => _index < _flags.Length && _flags[_index++];
     }
 }
 
