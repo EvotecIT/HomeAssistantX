@@ -69,6 +69,8 @@ public sealed class HomeAssistantWeatherClient
         var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in units.EnumerateObject())
         {
+            if (result.ContainsKey(property.Name))
+                throw new HomeAssistantProtocolException("The weather convertible-unit response contained a duplicate unit category.");
             if (property.Value.ValueKind != JsonValueKind.Array)
                 throw new HomeAssistantProtocolException("A weather convertible-unit list was not an array.");
             var values = property.Value.EnumerateArray().ToArray();
@@ -104,6 +106,8 @@ public sealed class HomeAssistantWeatherClient
     {
         if (!string.Equals(state.Domain, "weather", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("The entity is not a weather entity.", nameof(state));
+        if (string.IsNullOrWhiteSpace(state.State))
+            throw new HomeAssistantProtocolException("The Home Assistant weather state omitted its required state value.");
         return new HomeAssistantWeatherObservation
         {
             EntityId = state.EntityId,
@@ -147,11 +151,15 @@ public sealed class HomeAssistantWeatherClient
             }
         }
         var items = HomeAssistantJson.DeserializeResponse<HomeAssistantWeatherForecast[]>(forecast, "The weather forecast could not be decoded.");
+        DateTimeOffset? previous = null;
         foreach (var item in items)
         {
             if (item is null || item.DateTime == default
                 || (type == HomeAssistantWeatherForecastType.TwiceDaily && !item.IsDaytime.HasValue))
                 throw new HomeAssistantProtocolException("The weather forecast omitted a required period field.");
+            if (previous.HasValue && item.DateTime <= previous.Value)
+                throw new HomeAssistantProtocolException("The weather forecast periods were not strictly increasing.");
+            previous = item.DateTime;
         }
         return new HomeAssistantWeatherForecastUpdate
         {

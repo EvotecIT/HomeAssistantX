@@ -242,6 +242,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string FossilEnergyResponseJson { get; set; } =
         "{\"2026-08-26T10:00:00+00:00\":0.42,\"2026-08-26T11:00:00+00:00\":0.25}";
 
+    public string SolarForecastResponseJson { get; set; } =
+        "{\"entry-solar\":{\"wh_hours\":{\"2026-08-27T10:00:00+00:00\":1250},\"future_provider_field\":true}}";
+
     public string EnergyPreferencesResponseJson { get; set; } =
         "{\"energy_sources\":[{\"type\":\"solar\",\"stat_energy_from\":\"sensor.solar_energy\",\"provider_extension\":true}],\"device_consumption\":[{\"stat_consumption\":\"sensor.ev_energy\"}],\"device_consumption_water\":[]}";
 
@@ -806,7 +809,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("{\"energy_sources\":[],\"device_consumption\":[],\"future_validation\":{\"valid\":true}}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "energy/solar_forecast":
-                await session.SendResultAsync(id, ParseJson("{\"entry-solar\":{\"wh_hours\":{\"2026-08-27T10:00:00+00:00\":1250},\"future_provider_field\":true}}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(SolarForecastResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "energy/fossil_energy_consumption":
                 await session.SendResultAsync(id, ParseJson(FossilEnergyResponseJson), false, _source.Token).ConfigureAwait(false);

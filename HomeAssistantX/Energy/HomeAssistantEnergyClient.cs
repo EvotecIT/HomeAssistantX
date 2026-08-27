@@ -65,10 +65,18 @@ public sealed class HomeAssistantEnergyClient
             throw new HomeAssistantProtocolException("The Home Assistant solar forecast was not an object.");
         }
 
-        return value.EnumerateObject().ToDictionary(
-            property => property.Name,
-            property => property.Value.Clone(),
-            StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in value.EnumerateObject())
+        {
+            if (result.ContainsKey(property.Name))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained a duplicate configuration-entry identifier.");
+            }
+
+            result.Add(property.Name, property.Value.Clone());
+        }
+
+        return result;
     }
 
     public async Task<IReadOnlyList<HomeAssistantFossilEnergyPeriod>> GetFossilEnergyConsumptionAsync(
@@ -96,6 +104,7 @@ public sealed class HomeAssistantEnergyClient
         }
 
         var result = new List<HomeAssistantFossilEnergyPeriod>();
+        var starts = new HashSet<long>();
         foreach (var property in value.EnumerateObject())
         {
             if (!HomeAssistantTimestamp.TryParse(property.Name, out var timestamp)
@@ -105,6 +114,11 @@ public sealed class HomeAssistantEnergyClient
                 || double.IsInfinity(amount))
             {
                 throw new HomeAssistantProtocolException("The Home Assistant fossil-energy response contained an invalid period.");
+            }
+
+            if (!starts.Add(timestamp.UtcDateTime.Ticks))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant fossil-energy response contained a duplicate period.");
             }
 
             result.Add(new HomeAssistantFossilEnergyPeriod { Start = timestamp, EnergyKiloWattHours = amount });

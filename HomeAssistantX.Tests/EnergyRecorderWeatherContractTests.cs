@@ -460,6 +460,63 @@ public sealed class EnergyRecorderWeatherContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
     }
 
+    [Fact]
+    public async Task RecorderCatalogRejectsDuplicateIdentifiersCaseInsensitively()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.energy\",\"has_mean\":false,\"has_sum\":true},{\"statistic_id\":\"SENSOR.ENERGY\",\"has_mean\":false,\"has_sum\":true}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.ListStatisticsAsync());
+    }
+
+    [Fact]
+    public async Task EnergyResponsesRejectDuplicateLogicalKeys()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SolarForecastResponseJson = "{\"entry-a\":{},\"ENTRY-A\":{}}",
+            FossilEnergyResponseJson = "{\"2026-08-26T10:00:00Z\":0.4,\"2026-08-26T12:00:00+02:00\":0.5}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetSolarForecastAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            DateTimeOffset.Parse("2026-08-26T00:00:00Z"),
+            DateTimeOffset.Parse("2026-08-27T00:00:00Z"),
+            new[] { "sensor.grid_energy" },
+            "sensor.co2",
+            HomeAssistantEnergyPeriod.Hour));
+    }
+
+    [Theory]
+    [InlineData("{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T11:00:00Z\"},{\"datetime\":\"2026-08-27T10:00:00Z\"}]}}")]
+    [InlineData("{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T10:00:00Z\"},{\"datetime\":\"2026-08-27T12:00:00+02:00\"}]}}")]
+    public async Task WeatherForecastRequiresStrictlyIncreasingPeriods(string response)
+    {
+        using var server = new TestHomeAssistantServer { WeatherForecastResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetForecastAsync(
+            "weather.home", HomeAssistantWeatherForecastType.Hourly));
+    }
+
+    [Fact]
+    public async Task WeatherTypedReadsAndUnitCategoriesRejectAmbiguousResponses()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExactStateResponseJson = "{\"entity_id\":\"weather.home\",\"state\":null,\"attributes\":{}}",
+            WeatherConvertibleUnitsResponseJson = "{\"units\":{\"temperature_unit\":[\"°C\"],\"TEMPERATURE_UNIT\":[\"°F\"]}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync("weather.home"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetConvertibleUnitsAsync());
+    }
+
     [Theory]
     [InlineData("[{}]")]
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"has_mean\":false}]")]

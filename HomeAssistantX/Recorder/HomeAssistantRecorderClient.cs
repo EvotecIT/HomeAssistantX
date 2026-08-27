@@ -47,7 +47,14 @@ public sealed class HomeAssistantRecorderClient
             ["statistic_type"] = kind == HomeAssistantStatisticKind.Mean ? "mean" : kind == HomeAssistantStatisticKind.Sum ? "sum" : throw new ArgumentOutOfRangeException(nameof(kind))
         };
         var value = await _webSocket.RequestAsync("recorder/list_statistic_ids", payload, cancellationToken).ConfigureAwait(false);
-        return DecodeMetadata(value, "Recorder statistic identifiers could not be decoded.");
+        var metadata = DecodeMetadata(value, "Recorder statistic identifiers could not be decoded.");
+        var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (metadata.Any(item => !responseIds.Add(item.StatisticId)))
+        {
+            throw new HomeAssistantProtocolException("Recorder statistic identifiers contained a duplicate identifier.");
+        }
+
+        return metadata;
     }
 
     public async Task<IReadOnlyList<HomeAssistantStatisticSeries>> GetStatisticsAsync(
