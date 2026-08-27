@@ -44,6 +44,17 @@ public sealed class ProtocolResponseContractTests
         Assert.IsType<JsonException>(exception.InnerException);
     }
 
+    [Fact]
+    public void JsonSnapshotHelpersClassifyInvalidValuesBeforeTransport()
+    {
+        var undefined = new Dictionary<string, object?> { ["value"] = default(JsonElement) };
+        var cyclic = new Dictionary<string, object?>();
+        cyclic["self"] = cyclic;
+
+        Assert.Throws<ArgumentException>(() => HomeAssistantJson.FreezeObject(undefined, "value", "Value"));
+        Assert.Throws<ArgumentException>(() => HomeAssistantJson.FreezeValue(cyclic, "value", "Value"));
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]

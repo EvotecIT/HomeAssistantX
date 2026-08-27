@@ -26,6 +26,52 @@ internal static class HomeAssistantJson
         return value.Clone();
     }
 
+    /// <summary>Snapshots an arbitrary dictionary as a JSON object before asynchronous dispatch.</summary>
+    internal static IReadOnlyDictionary<string, object?>? FreezeObject(
+        IReadOnlyDictionary<string, object?>? value,
+        string parameterName,
+        string displayName)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = JsonSerializer.Serialize(value, SerializerOptions);
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException("The serialized value was not a JSON object.");
+            }
+
+            return document.RootElement.EnumerateObject().ToDictionary(
+                property => property.Name,
+                property => (object?)property.Value.Clone(),
+                StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is JsonException || ex is NotSupportedException || ex is InvalidOperationException)
+        {
+            throw new ArgumentException(displayName + " must be a serializable JSON object.", parameterName, ex);
+        }
+    }
+
+    /// <summary>Snapshots an arbitrary provider-specific JSON value before asynchronous dispatch.</summary>
+    internal static JsonElement FreezeValue(object? value, string parameterName, string displayName)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(value, SerializerOptions);
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.Clone();
+        }
+        catch (Exception ex) when (ex is JsonException || ex is NotSupportedException || ex is InvalidOperationException)
+        {
+            throw new ArgumentException(displayName + " must be a serializable JSON value.", parameterName, ex);
+        }
+    }
+
     /// <summary>Parses a Home Assistant response while preserving the classified protocol-failure contract.</summary>
     public static JsonDocument ParseResponse(string value, string failureMessage)
     {
