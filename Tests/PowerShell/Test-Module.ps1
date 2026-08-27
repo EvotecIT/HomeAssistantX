@@ -539,7 +539,7 @@ try {
     $null = Set-HomeAssistantLabel -Name Security -ClearColor:$false -ClearDescription:$false -ClearIcon:$false -WhatIf
     $null = Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Holiday -StartDate 2026-08-27 -EndDate 2026-08-28 -Confirm:$false
     $null = Set-HomeAssistantEnergy -DeviceConsumptionJson '[]' -WhatIf
-    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement kWh -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement MWh -WhatIf
     $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1.5 -StartTime '2026-08-26T00:00:00Z' -Unit kWh -WhatIf
     $null = Remove-HomeAssistantStatistic sensor.grid_energy -WhatIf
     $null = Invoke-HomeAssistantRecorderMaintenance -Purge -KeepDays 30 -WhatIf
@@ -634,6 +634,7 @@ try {
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum ([double]::NaN) -StartTime '2026-08-26T00:00:00Z' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitClass energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
         { Remove-HomeAssistantStatistic ' ' -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }

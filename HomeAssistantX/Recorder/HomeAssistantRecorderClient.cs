@@ -24,7 +24,7 @@ public sealed class HomeAssistantRecorderClient
         IReadOnlyCollection<string>? statisticIds = null,
         CancellationToken cancellationToken = default)
     {
-        var requestedIdSnapshot = statisticIds is null ? null : RequireIds(statisticIds, nameof(statisticIds));
+        var requestedIdSnapshot = statisticIds is null ? null : RequireStatisticIds(statisticIds, nameof(statisticIds));
         var payload = requestedIdSnapshot is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = requestedIdSnapshot };
         var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
         var metadata = DecodeMetadata(value, "Recorder statistics metadata could not be decoded.");

@@ -540,6 +540,19 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("{\"entry-a\":null}")]
+    [InlineData("{\"entry-a\":[]}")]
+    [InlineData("{\"entry-a\":1}")]
+    [InlineData("{\"entry-a\":\"forecast\"}")]
+    public async Task SolarForecastRequiresObjectEntries(string response)
+    {
+        using var server = new TestHomeAssistantServer { SolarForecastResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetSolarForecastAsync());
+    }
+
+    [Theory]
     [InlineData("{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T11:00:00Z\"},{\"datetime\":\"2026-08-27T10:00:00Z\"}]}}")]
     [InlineData("{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T10:00:00Z\"},{\"datetime\":\"2026-08-27T12:00:00+02:00\"}]}}")]
     public async Task WeatherForecastRequiresStrictlyIncreasingPeriods(string response)
@@ -670,6 +683,22 @@ public sealed class EnergyRecorderWeatherContractTests
         using var client = TestClientFactory.Create(server);
 
         Assert.Empty(await client.Recorder.GetStatisticsMetadataAsync(new[] { "sensor.missing" }));
+    }
+
+    [Theory]
+    [InlineData("sensor.Bad")]
+    [InlineData("source:Bad")]
+    [InlineData("not an id")]
+    public async Task RecorderReadsRejectMalformedStatisticIdentifiersBeforeDispatch(string statisticId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.GetStatisticsMetadataAsync(new[] { statisticId }));
+        Assert.Throws<ArgumentException>(() => new HomeAssistantStatisticsQuery(
+            DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, statisticId));
+        Assert.Null(server.GetLastWebSocketCommand("recorder/get_statistics_metadata"));
+        Assert.Null(server.GetLastWebSocketCommand("recorder/statistics_during_period"));
     }
 
     [Fact]

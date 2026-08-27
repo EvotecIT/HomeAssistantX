@@ -72,6 +72,11 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 }
                 unitClass = NormalizeOptionalUnit(unitClass, nameof(UnitClass));
                 var unitOfMeasurement = ClearUnitOfMeasurement ? null : NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement));
+                if (string.Equals(unitClass, matchingMetadata.UnitClass, StringComparison.Ordinal)
+                    && string.Equals(unitOfMeasurement, matchingMetadata.UnitOfMeasurement, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The requested Recorder statistic metadata already matches the current values.");
+                }
                 if (!ShouldProcess(ConnectionDisplayName, "Update Recorder statistics metadata for 1 identifier")) return;
                 await Client.Recorder.UpdateStatisticsMetadataAsync(statisticId, unitClass, unitOfMeasurement, CancelToken).ConfigureAwait(false);
                 return;

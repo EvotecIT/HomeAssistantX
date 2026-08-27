@@ -133,11 +133,19 @@ public sealed class HomeAssistantStatisticsQuery
 {
     public HomeAssistantStatisticsQuery(DateTimeOffset startTime, HomeAssistantStatisticPeriod period, params string[] statisticIds)
     {
-        if (statisticIds is null || statisticIds.Length == 0 || statisticIds.Any(string.IsNullOrWhiteSpace))
+        if (statisticIds is null || statisticIds.Length == 0)
             throw new ArgumentException("At least one statistic identifier is required.", nameof(statisticIds));
+        var normalizedStatisticIds = new List<string>(statisticIds.Length);
+        foreach (var statisticId in statisticIds)
+        {
+            if (!HomeAssistantStatisticIdentifier.TryNormalize(statisticId, out var normalized))
+                throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", nameof(statisticIds));
+            if (!normalizedStatisticIds.Contains(normalized, StringComparer.Ordinal))
+                normalizedStatisticIds.Add(normalized);
+        }
         StartTime = startTime;
         Period = period;
-        StatisticIds = statisticIds.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        StatisticIds = normalizedStatisticIds.ToArray();
     }
 
     public DateTimeOffset StartTime { get; }

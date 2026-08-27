@@ -71,9 +71,10 @@ public sealed class HomeAssistantEnergyClient
         foreach (var property in value.EnumerateObject())
         {
             if (string.IsNullOrWhiteSpace(property.Name)
-                || !string.Equals(property.Name, property.Name.Trim(), StringComparison.Ordinal))
+                || !string.Equals(property.Name, property.Name.Trim(), StringComparison.Ordinal)
+                || property.Value.ValueKind != JsonValueKind.Object)
             {
-                throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained an invalid configuration-entry identifier.");
+                throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained an invalid entry.");
             }
 
             if (result.ContainsKey(property.Name))
