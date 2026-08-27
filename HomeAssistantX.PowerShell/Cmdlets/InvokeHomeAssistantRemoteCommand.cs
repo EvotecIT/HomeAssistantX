@@ -89,6 +89,7 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
         ValidateFiniteDuration(HoldSeconds, nameof(HoldSeconds), allowZero: true);
         ValidateFiniteDuration(TimeoutSeconds, nameof(TimeoutSeconds), allowZero: false);
         ValidateShape();
+        var target = await ResolveTargetAsync("remote").ConfigureAwait(false);
         var learningTimeout = ToDuration(TimeoutSeconds);
         var learningResponseMargin = TimeSpan.FromSeconds(1);
         var availableLearningTime = Client.Options.RequestTimeout > learningResponseMargin
@@ -112,7 +113,6 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
                 $"TimeoutSeconds must leave at least one second inside the configured request timeout of {Client.Options.RequestTimeout.TotalSeconds:g} seconds for dispatch and response handling.");
         }
 
-        var target = await ResolveTargetAsync("remote").ConfigureAwait(false);
         if (!ShouldProcess(target.Description, Action.ToString()))
         {
             return;

@@ -133,6 +133,12 @@ try {
         }
     }
 
+    $server.StandardInput.WriteLine('SET_REMOTE_STATES')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'REMOTE_STATES_SET') {
+        throw 'Could not load the provenance control state fixture.'
+    }
+
     $connection = Connect-HomeAssistant -Uri $uri -AccessToken 'test-access-token'
     $defaultConnection = Get-HomeAssistantConnection
     $secondaryConnection = Connect-HomeAssistant -Uri $uri -AccessToken 'test-access-token' -Name Secondary -NoDefault
@@ -154,6 +160,7 @@ try {
             $confirmationOutput -notmatch '^Home Assistant target \[[0-9A-F]{8}\] on Home Assistant connection \[[0-9A-F]{8}\]$') {
             throw 'WhatIf confirmation exposed an explicit connection name or failed to provide a privacy-safe connection tag.'
         }
+        $secondaryRemotes = @($secondaryConnection | Get-HomeAssistantEntity -Domain remote)
         $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
         $server.StandardInput.Flush()
         if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
@@ -182,6 +189,20 @@ try {
         $provenanceCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
         if ($provenanceCall.service -ne 'turn_off' -or @($provenanceCall.target.entity_id)[0] -ne 'light.kitchen') {
             throw 'Piped entities did not retain their non-default source connection.'
+        }
+
+        $null = $secondaryRemotes | Invoke-HomeAssistantRemote -Action TurnOn -Confirm:$false
+        $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        $remoteProvenanceCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+        if ($remoteProvenanceCall.service -ne 'turn_on' -or @($remoteProvenanceCall.target.entity_id)[0] -ne 'remote.living_room') {
+            throw 'The remote cmdlet did not bind pipeline connection provenance before reading client options.'
+        }
+
+        $server.StandardInput.WriteLine('SET_DEFAULT_STATES')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'DEFAULT_STATES_SET') {
+            throw 'Could not restore the default state fixture after the provenance regression.'
         }
 
         $connection = Connect-HomeAssistant -Uri $uri -AccessToken 'test-access-token'
