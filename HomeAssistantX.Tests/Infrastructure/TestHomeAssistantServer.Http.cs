@@ -93,6 +93,24 @@ internal sealed partial class TestHomeAssistantServer
             return;
         }
 
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/incomplete-camera-response")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/failed-camera-response")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"success\":false}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/hls-only-camera-response")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"success\":true,\"hls_path\":\"/api/hls/front/master_playlist.m3u8\"}").ConfigureAwait(false);
+            return;
+        }
+
         if (method == "POST" && pathWithoutQuery == "/api/webhook/redirect")
         {
             if (WebhookRedirectUri is null)

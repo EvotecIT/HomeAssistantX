@@ -1455,6 +1455,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         + "{\"entity_id\":\"siren.house\",\"state\":\"off\",\"attributes\":{\"friendly_name\":\"House siren\"}},"
         + "{\"entity_id\":\"humidifier.bedroom\",\"state\":\"off\",\"attributes\":{\"friendly_name\":\"Bedroom humidifier\"}},"
         + "{\"entity_id\":\"water_heater.tank\",\"state\":\"eco\",\"attributes\":{\"friendly_name\":\"Water tank\"}},"
+        + "{\"entity_id\":\"media_player.kitchen\",\"state\":\"idle\",\"attributes\":{\"friendly_name\":\"Kitchen speaker\"}},"
         + "{\"entity_id\":\"input_number.volume\",\"state\":\"10\",\"attributes\":{\"friendly_name\":\"Volume helper\"}}";
 
     public const string DefaultStatesJson = "[" + KitchenTemperatureStateJson + "," + KitchenLightOffStateJson + "]";
