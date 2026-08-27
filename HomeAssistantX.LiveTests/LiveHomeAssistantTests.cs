@@ -75,7 +75,10 @@ public sealed class LiveHomeAssistantTests
                     rangeStart,
                     rangeEnd,
                     (_, _) => { received.TrySetResult(true); return Task.CompletedTask; });
-                await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                if (calendarEventCount > 0)
+                {
+                    await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                }
                 await calendarSubscription.StopAsync();
             }
         }

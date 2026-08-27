@@ -193,6 +193,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string PersistentNotificationSubscriptionEventJson { get; set; } =
         "{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\"},\"Alert\":{\"notification_id\":\"Alert\",\"message\":\"Upper\"},\"alert\":{\"notification_id\":\"alert\",\"message\":\"Lower\"}}}";
 
+    public string CalendarSubscriptionEventJson { get; set; } =
+        "[{\"summary\":\"Dinner\",\"start\":\"2026-08-26T18:00:00+02:00\",\"end\":\"2026-08-26T20:00:00+02:00\",\"uid\":\"event-1\",\"rrule\":\"FREQ=WEEKLY\"}]";
+
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;
@@ -727,7 +730,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             case "calendar/event/subscribe":
                 session.SubscriptionIds.Add(id);
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
-                await session.SendSubscriptionEventAsync(id, ParseJson("[{\"summary\":\"Dinner\",\"start\":\"2026-08-26T18:00:00+02:00\",\"end\":\"2026-08-26T20:00:00+02:00\",\"uid\":\"event-1\",\"rrule\":\"FREQ=WEEKLY\"}]"), _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson(CalendarSubscriptionEventJson), _source.Token).ConfigureAwait(false);
                 return;
             case "test/error":
                 await session.SendErrorAsync(id, "service_validation_error", "Option is not supported.", "unsupported_option", _source.Token)

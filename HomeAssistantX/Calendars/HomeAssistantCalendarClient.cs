@@ -116,6 +116,11 @@ public sealed class HomeAssistantCalendarClient
         };
         return _webSocket.SubscribeAsync("calendar/event/subscribe", payload, async (value, token) =>
         {
+            if (value.ValueKind != JsonValueKind.Null && value.ValueKind != JsonValueKind.Array)
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant calendar subscription had an unexpected shape.");
+            }
+
             var update = new HomeAssistantCalendarEventUpdate
             {
                 IsAvailable = value.ValueKind == JsonValueKind.Array,

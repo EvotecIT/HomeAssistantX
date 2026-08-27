@@ -137,6 +137,25 @@ public sealed class LivePlatformDataContractTests
         Assert.Equal("calendar.home", delete.RootElement.GetProperty("entity_id").GetString());
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("\"malformed\"")]
+    [InlineData("1")]
+    [InlineData("true")]
+    public async Task CalendarSubscriptionRejectsMalformedNonNullPayloads(string payload)
+    {
+        using var server = new TestHomeAssistantServer { CalendarSubscriptionEventJson = payload };
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero);
+        using var subscription = await client.Calendars.SubscribeAsync(
+            "calendar.home",
+            start,
+            start.AddDays(1),
+            (_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
     [Fact]
     public void CalendarInputAcceptsOffsetTransitionsAndRejectsInvalidRangesBeforeNetworkUse()
     {
