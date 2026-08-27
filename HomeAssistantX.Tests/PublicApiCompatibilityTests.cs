@@ -108,9 +108,39 @@ public sealed class PublicApiCompatibilityTests
     public void TypeAndMemberFormattersPreserveProtectedNestingAndAbstractDispatch()
     {
         Assert.True(IsExternallyAccessibleType(PublicApiProtectedNestedFixture.NestedType));
+        Assert.Equal("protected ", TypeAccess(PublicApiProtectedNestedFixture.NestedType));
+        Assert.Equal("public ", TypeAccess(typeof(PublicApiProtectedNestedFixture.PublicNested)));
+        Assert.Equal("protected internal ", TypeAccess(typeof(PublicApiProtectedNestedFixture).GetNestedType("ProtectedInternalNested", BindingFlags.NonPublic)!));
         Assert.Equal("abstract", MemberScope(typeof(AbstractSurfaceFixture).GetMethod("Transform", BindingFlags.Instance | BindingFlags.NonPublic)!));
         Assert.Equal("abstract override", MemberScope(typeof(AbstractOverrideFixture).GetMethod(nameof(NullableDispatchFixture.Transform))!));
         Assert.Equal("sealed override", MemberScope(typeof(SealedOverrideFixture).GetMethod(nameof(NullableDispatchFixture.Transform))!));
+    }
+
+    [Fact]
+    public void TypeFormatterPreservesTupleElementNames()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(NamedTupleFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal(
+            "(System.String Host, System.Int32 Port)",
+            FormatAnnotatedType(method.ReturnType, method.ReturnParameter));
+        Assert.Equal(
+            "(System.String Name, (System.Int32 Width, System.Int32 Height) Size) value",
+            FormatParameters(method.GetParameters()));
+
+        var wrapped = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(WrappedNamedTupleFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Equal(
+            "System.Threading.Tasks.Task<(System.String Host, System.Int32 Port)>",
+            FormatAnnotatedType(wrapped.ReturnType, wrapped.ReturnParameter));
+
+        var property = typeof(NamedTuplePropertyFixture).GetProperty(nameof(NamedTuplePropertyFixture.Endpoint))!;
+        Assert.Equal(
+            "(System.String Host, System.Int32 Port)",
+            FormatAnnotatedType(property.PropertyType, property));
     }
 
 #if NET10_0
@@ -193,7 +223,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(GetDirectInterfaces(type).Select(FormatType).OrderBy(value => value, StringComparer.Ordinal));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -267,6 +297,13 @@ public sealed class PublicApiCompatibilityTests
         where TInput : class, IDisposable, new()
         where TResult : struct
         => default;
+
+    private static (string Host, int Port) NamedTupleFixture(
+        (string Name, (int Width, int Height) Size) value)
+        => (value.Name, value.Size.Width);
+
+    private static Task<(string Host, int Port)> WrappedNamedTupleFixture()
+        => Task.FromResult(("localhost", 8123));
 
     private enum EnumStorageFixture : ulong
     {
@@ -381,6 +418,20 @@ public sealed class PublicApiCompatibilityTests
         return (type.IsNestedPublic || type.IsNestedFamily || type.IsNestedFamORAssem)
             && type.DeclaringType is not null
             && IsExternallyAccessibleType(type.DeclaringType);
+    }
+
+    private sealed class NamedTuplePropertyFixture
+    {
+        public (string Host, int Port) Endpoint { get; set; }
+    }
+
+    private static string TypeAccess(Type type)
+    {
+        if (!type.IsNested) return string.Empty;
+        if (type.IsNestedPublic) return "public ";
+        if (type.IsNestedFamORAssem) return "protected internal ";
+        if (type.IsNestedFamily) return "protected ";
+        throw new InvalidOperationException("The type is not externally accessible.");
     }
 
     private static string FormatField(FieldInfo field)
@@ -582,29 +633,68 @@ public sealed class PublicApiCompatibilityTests
     {
         var flags = ReadNullableFlags(provider);
         var context = ReadNullableContext(provider);
-        return FormatAnnotatedType(type, new NullabilityCursor(flags, context));
+        var tupleNames = ReadTupleNames(provider);
+        return FormatAnnotatedType(type, new NullabilityCursor(flags, context), new TupleNameCursor(tupleNames));
     }
 
-    private static string FormatAnnotatedType(Type type, NullabilityCursor cursor)
+    private static string FormatAnnotatedType(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames)
     {
         var flag = cursor.Next();
         if (type.IsArray)
         {
-            var array = FormatAnnotatedType(type.GetElementType()!, cursor) + ArraySuffix(type);
+            var array = FormatAnnotatedType(type.GetElementType()!, cursor, tupleNames) + ArraySuffix(type);
             return flag == 2 ? array + "?" : array;
         }
 
         if (type.IsGenericType)
         {
             var definition = type.GetGenericTypeDefinition();
+            if (IsTupleDefinition(definition) && tupleNames.HasNames)
+            {
+                return FormatTuple(type, cursor, tupleNames);
+            }
             var name = (definition.FullName ?? definition.Name).Split('`')[0];
-            var formatted = name + "<" + string.Join(",", type.GetGenericArguments().Select(argument => FormatAnnotatedType(argument, cursor))) + ">";
+            var formatted = name + "<" + string.Join(",", type.GetGenericArguments().Select(argument => FormatAnnotatedType(argument, cursor, tupleNames))) + ">";
             return !type.IsValueType && flag == 2 ? formatted + "?" : formatted;
         }
 
         var result = type.FullName ?? type.Name;
         return (!type.IsValueType || type.IsGenericParameter) && flag == 2 ? result + "?" : result;
     }
+
+    private static string FormatTuple(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames)
+    {
+        var elements = new List<string>();
+        AddTupleElements(type, cursor, tupleNames, elements);
+        return "(" + string.Join(", ", elements) + ")";
+    }
+
+    private static void AddTupleElements(
+        Type tupleType,
+        NullabilityCursor cursor,
+        TupleNameCursor tupleNames,
+        ICollection<string> elements)
+    {
+        var arguments = tupleType.GetGenericArguments();
+        var logicalCount = arguments.Length == 8 ? 7 : arguments.Length;
+        for (var index = 0; index < logicalCount; index++)
+        {
+            var elementName = tupleNames.Next();
+            var formatted = FormatAnnotatedType(arguments[index], cursor, tupleNames);
+            elements.Add(formatted + (string.IsNullOrEmpty(elementName) ? string.Empty : " " + elementName));
+        }
+
+        if (arguments.Length == 8)
+        {
+            _ = cursor.Next();
+            AddTupleElements(arguments[7], cursor, tupleNames, elements);
+        }
+    }
+
+    private static bool IsTupleDefinition(Type type)
+        => type.Namespace == "System"
+            && type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal)
+            && type.IsGenericTypeDefinition;
 
     private static string ArraySuffix(Type type) => "[" + new string(',', type.GetArrayRank() - 1) + "]";
 
@@ -640,6 +730,16 @@ public sealed class PublicApiCompatibilityTests
         return 0;
     }
 
+    private static string?[] ReadTupleNames(ICustomAttributeProvider provider)
+    {
+        var attribute = GetCustomAttributes(provider).FirstOrDefault(value =>
+            string.Equals(value.AttributeType.FullName, "System.Runtime.CompilerServices.TupleElementNamesAttribute", StringComparison.Ordinal));
+        if (attribute is null || attribute.ConstructorArguments.Count != 1) return Array.Empty<string?>();
+        if (attribute.ConstructorArguments[0].Value is not IEnumerable<CustomAttributeTypedArgument> values)
+            return Array.Empty<string?>();
+        return values.Select(value => value.Value as string).ToArray();
+    }
+
     private static IList<CustomAttributeData> GetCustomAttributes(ICustomAttributeProvider provider)
         => provider switch
         {
@@ -668,11 +768,34 @@ public sealed class PublicApiCompatibilityTests
             return _index < _flags.Length ? _flags[_index++] : _context;
         }
     }
+
+    private sealed class TupleNameCursor
+    {
+        private readonly string?[] _names;
+        private int _index;
+
+        public TupleNameCursor(string?[] names)
+        {
+            _names = names;
+        }
+
+        public bool HasNames => _names.Length > 0;
+
+        public string? Next() => _index < _names.Length ? _names[_index++] : null;
+    }
 }
 
 public class PublicApiProtectedNestedFixture
 {
     protected class ProtectedNested
+    {
+    }
+
+    public class PublicNested
+    {
+    }
+
+    protected internal class ProtectedInternalNested
     {
     }
 
