@@ -276,7 +276,7 @@ Parameter Sets: ResourceCreate, ResourceUpdate
 Aliases: None
 Possible values: JavaScript, Css, Module, Html
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -292,7 +292,7 @@ Parameter Sets: ResourceCreate, ResourceUpdate
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -324,7 +324,7 @@ Parameter Sets: Create, Update
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -340,7 +340,7 @@ Parameter Sets: Configuration, Create
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False

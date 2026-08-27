@@ -99,7 +99,7 @@ Parameter Sets: Status, Capabilities, Stream, Preferences, SignedImage, SignedMj
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: 0
 Default value: None
 Accept pipeline input: False
