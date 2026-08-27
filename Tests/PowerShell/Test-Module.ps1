@@ -836,6 +836,8 @@ try {
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -OldUnit kWh -NewUnit kWh -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ClearOldUnit -ClearNewUnit -WhatIf -ErrorAction Stop },
         { Remove-HomeAssistantStatistic ' ' -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantStatistic sensor.Grid_Energy -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantStatistic external:Daily_Energy -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain SENSOR -WhatIf -ErrorAction Stop }
@@ -881,11 +883,19 @@ try {
     $createServiceCall = $serviceCallType.GetMethod('Create', [Reflection.BindingFlags]'Public, Static')
     $standardAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('light', 'turn_on'))))
     $customAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('private_domain', 'private_action'))))
+    $standardVacuumAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('vacuum', 'start'))))
+    $standardSirenAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('siren', 'turn_on'))))
+    $standardValveAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('valve', 'open_valve'))))
     if (-not $standardAction.Contains('light.turn_on')) {
         throw 'WhatIf output did not identify a validated standard Home Assistant action.'
     }
     if ($customAction.Contains('private_domain') -or $customAction.Contains('private_action')) {
         throw 'WhatIf output exposed a custom Home Assistant service name.'
+    }
+    foreach ($standardDescriptor in $standardVacuumAction, $standardSirenAction, $standardValveAction) {
+        if ($standardDescriptor -like '*Home Assistant target*') {
+            throw 'A HomeAssistantX-owned standard action was reduced to an opaque confirmation fingerprint.'
+        }
     }
     $null = $connection | Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId light.kitchen -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
