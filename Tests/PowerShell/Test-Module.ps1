@@ -324,7 +324,9 @@ try {
     $calendarUpdates = @(Receive-HomeAssistantCalendarEvent -EntityId calendar.home -StartTime '2026-08-26T00:00:00Z' -EndTime '2026-08-28T00:00:00Z' -Count 1 -TimeoutSeconds 5)
     $labels = @(Get-HomeAssistantLabel)
     $labelByNativeId = @(Get-HomeAssistantLabel -Label Security)
+    $labelByPaddedNativeId = @(Get-HomeAssistantLabel -Label ' security ')
     $categories = @(Get-HomeAssistantCategory -Scope automation)
+    $categoryByPaddedName = @(Get-HomeAssistantCategory -Scope automation -Category ' Comfort ')
 
     if ($info.Version -ne '2026.8.3') { throw 'Core information was not returned.' }
     if (-not [object]::ReferenceEquals($connection, $defaultConnection)) { throw 'Connect-HomeAssistant did not establish the runspace default.' }
@@ -347,7 +349,47 @@ try {
     if ($calendarUpdates.Count -ne 1 -or $calendarUpdates[0].Events[0].Uid -ne 'event-1') { throw 'Calendar event streaming did not return an event list.' }
     if ($labels.Count -ne 2 -or -not ($labels | Where-Object LabelId -EQ 'security')) { throw 'Label discovery was not returned.' }
     if ($labelByNativeId.Count -ne 1 -or $labelByNativeId[0].LabelId -ne 'security') { throw 'A native label ID did not take precedence over a colliding friendly name.' }
+    if ($labelByPaddedNativeId.Count -ne 1 -or $labelByPaddedNativeId[0].LabelId -ne 'security') { throw 'A padded label filter was not normalized.' }
     if ($categories.Count -ne 1 -or $categories[0].CategoryId -ne 'comfort') { throw 'Scoped category discovery was not returned.' }
+    if ($categoryByPaddedName.Count -ne 1 -or $categoryByPaddedName[0].CategoryId -ne 'comfort') { throw 'A padded category filter was not normalized.' }
+
+    $server.StandardInput.WriteLine('CLEAR_LAST_LABEL_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'LABEL_LIST_CLEARED') { throw 'The label-list dispatch fixture did not clear.' }
+    $server.StandardInput.WriteLine('CLEAR_LAST_CATEGORY_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'CATEGORY_LIST_CLEARED') { throw 'The category-list dispatch fixture did not clear.' }
+    foreach ($invalidRegistryFilter in @(
+        { Get-HomeAssistantLabel -Label ' ' -ErrorAction Stop },
+        { Get-HomeAssistantCategory -Scope automation -Category ' ' -ErrorAction Stop }
+    )) {
+        $rejected = $false
+        try { & $invalidRegistryFilter } catch { $rejected = $true }
+        if (-not $rejected) { throw 'A whitespace-only registry filter was accepted.' }
+    }
+    $server.StandardInput.WriteLine('GET_LAST_LABEL_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'LABEL_LIST_NONE') { throw 'A whitespace-only label filter dispatched before validation.' }
+    $server.StandardInput.WriteLine('GET_LAST_CATEGORY_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'CATEGORY_LIST_NONE') { throw 'A whitespace-only category filter dispatched before validation.' }
+
+    $server.StandardInput.WriteLine('SET_LABEL_REGISTRY_UNAVAILABLE')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'LABEL_REGISTRY_UNAVAILABLE') { throw 'The label-registry availability fixture did not activate.' }
+    try {
+        Set-HomeAssistantLight -Label security -Power On -Confirm:$false
+        $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+        $server.StandardInput.Flush()
+        $nativeLabelCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+        if ($nativeLabelCall.target.label_id.Count -ne 1 -or $nativeLabelCall.target.label_id[0] -ne 'security') {
+            throw 'A native label target was not retained when label-registry enrichment was unavailable.'
+        }
+    } finally {
+        $server.StandardInput.WriteLine('SET_LABEL_REGISTRY_AVAILABLE')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'LABEL_REGISTRY_AVAILABLE') { throw 'The label-registry availability fixture did not reset.' }
+    }
 
     $diagnosticPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')
     try {

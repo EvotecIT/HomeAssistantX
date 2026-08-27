@@ -97,6 +97,18 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task PersistentNotificationReadsRejectDuplicateIdentifiers()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            PersistentNotificationResponseJson = "[{\"notification_id\":\"notice-1\",\"message\":\"First\"},{\"notification_id\":\"notice-1\",\"message\":\"Second\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Notifications.GetPersistentAsync());
+    }
+
+    [Fact]
     public async Task RegistrySnapshotTreatsUnsupportedOrUnauthorizedLabelsAsOptionalEnrichment()
     {
         foreach (var errorCode in new[] { "unknown_command", "unauthorized" })
@@ -144,6 +156,19 @@ public sealed class LivePlatformDataContractTests
         using var server = new TestHomeAssistantServer
         {
             PersistentNotificationSubscriptionEventJson = "{\"type\":\"Current\",\"notifications\":{\"notice-a\":{\"notification_id\":\"notice-b\",\"message\":\"Door open\"}}}"
+        };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
+    [Fact]
+    public async Task PersistentNotificationSubscriptionRejectsDuplicateObjectKeys()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            PersistentNotificationSubscriptionEventJson = "{\"type\":\"Current\",\"notifications\":{\"notice\":{\"notification_id\":\"notice\",\"message\":\"First\"},\"notice\":{\"notification_id\":\"notice\",\"message\":\"Second\"}}}"
         };
         using var client = TestClientFactory.Create(server);
         using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);

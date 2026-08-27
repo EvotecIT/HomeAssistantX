@@ -116,8 +116,13 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
             case LabelParameterSet:
             {
                 var labels = snapshot.Registries.Labels;
-                var resolved = Label.Select(value => ResolveLabel(labels, value)).ToArray();
-                var labelIds = resolved.Select(x => x.LabelId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var selectors = Label.Select(value => RequireLookupValue(value, nameof(Label))).ToArray();
+                var resolved = snapshot.Registries.IsLabelRegistryAvailable
+                    ? selectors.Select(value => ResolveLabel(labels, value)).ToArray()
+                    : Array.Empty<Registries.HomeAssistantLabel>();
+                var labelIds = snapshot.Registries.IsLabelRegistryAvailable
+                    ? resolved.Select(x => x.LabelId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+                    : selectors.Select(value => ResolveAssignedLabelId(snapshot, value)).Distinct(StringComparer.Ordinal).ToArray();
                 var matching = snapshot.Entities.Count(entity => IsSelectedByLabel(snapshot, entity, labelIds)
                     && string.Equals(entity.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase));
                 if (matching == 0)
@@ -125,7 +130,10 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
                     throw new HomeAssistantLookupException("The selected labels contain no '" + expectedDomain + "' entities.");
                 }
 
-                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithLabels(labelIds), Describe("labels", resolved.Select(x => x.Name), matching), matching);
+                var names = snapshot.Registries.IsLabelRegistryAvailable
+                    ? resolved.Select(x => x.Name)
+                    : labelIds;
+                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithLabels(labelIds), Describe("labels", names, matching), matching);
             }
             default:
                 throw new InvalidOperationException("A Home Assistant entity, device, area, or floor target is required.");
@@ -223,12 +231,35 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         };
     }
 
+    private static string ResolveAssignedLabelId(HomeAssistantInventorySnapshot snapshot, string value)
+    {
+        var matches = snapshot.Entities.SelectMany(entity => entity.RegistryEntry?.Labels ?? Array.Empty<string>())
+            .Concat(snapshot.Devices.SelectMany(device => device.Raw.Labels))
+            .Concat(snapshot.Areas.SelectMany(area => area.Raw.Labels))
+            .Where(labelId => string.Equals(labelId, value, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new HomeAssistantLookupException("No assigned Home Assistant label has the native ID '" + value + "'. Friendly-name lookup requires label-registry access."),
+            _ => throw new HomeAssistantLookupException("More than one assigned Home Assistant label differs only by casing for native ID '" + value + "'.")
+        };
+    }
+
+    private static string RequireLookupValue(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("A non-empty lookup value is required.", parameterName);
+        return value.Trim();
+    }
+
     private static bool IsSelectedByLabel(
         HomeAssistantInventorySnapshot snapshot,
         HomeAssistantEntityInfo entity,
         IReadOnlyCollection<string> labelIds)
     {
-        if (entity.RegistryEntry?.Labels.Any(labelIds.Contains) == true)
+        if (entity.RegistryEntry?.Labels.Any(value => labelIds.Contains(value, StringComparer.Ordinal)) == true)
         {
             return true;
         }
@@ -236,7 +267,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         if (entity.DeviceId is not null
             && snapshot.Devices.FirstOrDefault(device => string.Equals(device.DeviceId, entity.DeviceId, StringComparison.OrdinalIgnoreCase))
                 is { } device
-            && device.Raw.Labels.Any(labelIds.Contains))
+            && device.Raw.Labels.Any(value => labelIds.Contains(value, StringComparer.Ordinal)))
         {
             return true;
         }
@@ -244,7 +275,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         return entity.AreaId is not null
             && snapshot.Areas.FirstOrDefault(area => string.Equals(area.AreaId, entity.AreaId, StringComparison.OrdinalIgnoreCase))
                 is { } area
-            && area.Raw.Labels.Any(labelIds.Contains);
+            && area.Raw.Labels.Any(value => labelIds.Contains(value, StringComparer.Ordinal));
     }
 
     private static string Describe(string kind, IEnumerable<string> names, int count)

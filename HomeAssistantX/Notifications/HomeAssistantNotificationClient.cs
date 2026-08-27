@@ -96,6 +96,11 @@ public sealed class HomeAssistantNotificationClient
             }
 
             var rawType = typeValue.GetString() ?? string.Empty;
+            var notificationKeys = new HashSet<string>(StringComparer.Ordinal);
+            if (notificationsValue.EnumerateObject().Any(item => !notificationKeys.Add(item.Name)))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notification identifier.");
+            }
             var notifications = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantPersistentNotification>>(
                 notificationsValue,
                 "The Home Assistant persistent-notification update could not be decoded.");
@@ -121,6 +126,9 @@ public sealed class HomeAssistantNotificationClient
         HomeAssistantJson.RequireNoNullCollectionEntries(notifications, responseName + " contained a null item.");
         if (notifications.Any(item => string.IsNullOrWhiteSpace(item.NotificationId) || string.IsNullOrWhiteSpace(item.Message)))
             throw new HomeAssistantProtocolException(responseName + " contained an incomplete item.");
+        var identifiers = new HashSet<string>(StringComparer.Ordinal);
+        if (notifications.Any(item => !identifiers.Add(item.NotificationId)))
+            throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification identifier.");
     }
 
     private static Dictionary<string, object?> MessageData(string message, string? title)

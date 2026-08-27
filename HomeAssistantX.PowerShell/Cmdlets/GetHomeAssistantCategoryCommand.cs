@@ -21,15 +21,23 @@ public sealed class GetHomeAssistantCategoryCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        string? filter = null;
+        if (MyInvocation.BoundParameters.ContainsKey(nameof(Category)))
+        {
+            if (string.IsNullOrWhiteSpace(Category))
+                throw new ArgumentException("A non-empty category name or native ID is required.", nameof(Category));
+            filter = Category!.Trim();
+        }
+
         var categories = await Client.Registries.GetCategoriesAsync(Scope, CancelToken).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(Category))
+        if (filter is not null)
         {
             var nativeMatches = categories
-                .Where(value => string.Equals(value.CategoryId, Category, StringComparison.OrdinalIgnoreCase))
+                .Where(value => string.Equals(value.CategoryId, filter, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             categories = nativeMatches.Length > 0
                 ? nativeMatches
-                : categories.Where(value => string.Equals(value.Name, Category, StringComparison.OrdinalIgnoreCase)).ToArray();
+                : categories.Where(value => string.Equals(value.Name, filter, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
         WriteObject(categories, true);

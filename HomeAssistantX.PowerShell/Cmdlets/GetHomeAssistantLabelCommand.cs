@@ -17,15 +17,23 @@ public sealed class GetHomeAssistantLabelCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        string? filter = null;
+        if (MyInvocation.BoundParameters.ContainsKey(nameof(Label)))
+        {
+            if (string.IsNullOrWhiteSpace(Label))
+                throw new ArgumentException("A non-empty label name or native ID is required.", nameof(Label));
+            filter = Label!.Trim();
+        }
+
         var labels = await Client.Registries.GetLabelsAsync(CancelToken).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(Label))
+        if (filter is not null)
         {
             var nativeMatches = labels
-                .Where(value => string.Equals(value.LabelId, Label, StringComparison.OrdinalIgnoreCase))
+                .Where(value => string.Equals(value.LabelId, filter, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             labels = nativeMatches.Length > 0
                 ? nativeMatches
-                : labels.Where(value => string.Equals(value.Name, Label, StringComparison.OrdinalIgnoreCase)).ToArray();
+                : labels.Where(value => string.Equals(value.Name, filter, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
         WriteObject(labels, true);
