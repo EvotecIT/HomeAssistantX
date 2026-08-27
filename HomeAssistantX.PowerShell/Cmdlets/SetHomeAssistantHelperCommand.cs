@@ -43,6 +43,7 @@ public sealed class SetHomeAssistantHelperCommand : HomeAssistantTargetCmdlet
     {
         if (!Enum.IsDefined(typeof(HomeAssistantHelperDomain), Domain)) throw new ArgumentOutOfRangeException(nameof(Domain));
         if (Number.HasValue && (double.IsNaN(Number.Value) || double.IsInfinity(Number.Value))) throw new ArgumentOutOfRangeException(nameof(Number));
+        if (Time.HasValue && Time.Value.Ticks % TimeSpan.TicksPerSecond != 0) throw new ArgumentException("Time must use whole-second precision.", nameof(Time));
         var textBound = MyInvocation.BoundParameters.ContainsKey(nameof(Text));
         var operationCount = (Boolean.HasValue ? 1 : 0) + (Number.HasValue ? 1 : 0) + (Increment ? 1 : 0) + (Decrement ? 1 : 0)
             + (textBound ? 1 : 0) + (Option is not null ? 1 : 0) + (Options is { Length: > 0 } ? 1 : 0) + (Next ? 1 : 0) + (Previous ? 1 : 0)

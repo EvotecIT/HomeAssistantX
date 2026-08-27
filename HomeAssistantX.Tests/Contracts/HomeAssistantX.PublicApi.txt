@@ -1115,14 +1115,14 @@ T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticRow
   P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
   P instance System.Nullable<System.Double> Change {get;set;}
   P instance System.DateTimeOffset End {get;}
-  P instance System.Double EndSeconds {get;set;}
+  P instance System.Int64 EndMilliseconds {get;set;}
   P instance System.Nullable<System.DateTimeOffset> LastReset {get;}
-  P instance System.Nullable<System.Double> LastResetSeconds {get;set;}
+  P instance System.Nullable<System.Int64> LastResetMilliseconds {get;set;}
   P instance System.Nullable<System.Double> Maximum {get;set;}
   P instance System.Nullable<System.Double> Mean {get;set;}
   P instance System.Nullable<System.Double> Minimum {get;set;}
   P instance System.DateTimeOffset Start {get;}
-  P instance System.Double StartSeconds {get;set;}
+  P instance System.Int64 StartMilliseconds {get;set;}
   P instance System.Nullable<System.Double> State {get;set;}
   P instance System.Nullable<System.Double> Sum {get;set;}
 T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticSeries

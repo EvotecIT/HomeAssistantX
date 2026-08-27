@@ -16,7 +16,15 @@ public sealed class SetHomeAssistantAlarmCommand : HomeAssistantTargetCmdlet
     protected override async Task ProcessTargetRecordAsync()
     {
         if (!Enum.IsDefined(typeof(HomeAssistantAlarmAction), Action)) throw new ArgumentOutOfRangeException(nameof(Action));
+        var code = Code is null ? null : RequireCode(Code);
         var target = await ResolveTargetAsync("alarm_control_panel").ConfigureAwait(false);
-        if (ShouldProcess(target.Description, Action.ToString())) WriteObject(await Client.Controls.Alarms.ActAsync(target.Target, Action, Code, CancelToken).ConfigureAwait(false));
+        if (ShouldProcess(target.Description, Action.ToString())) WriteObject(await Client.Controls.Alarms.ActAsync(target.Target, Action, code, CancelToken).ConfigureAwait(false));
+    }
+
+    private static string RequireCode(string value)
+    {
+        var normalized = value.Trim();
+        if (normalized.Length == 0) throw new ArgumentException("A non-empty alarm code is required.", nameof(Code));
+        return normalized;
     }
 }

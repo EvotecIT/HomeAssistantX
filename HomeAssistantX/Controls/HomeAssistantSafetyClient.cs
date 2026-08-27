@@ -79,7 +79,9 @@ public sealed class HomeAssistantAlarmClient : HomeAssistantControlClientBase
     internal HomeAssistantAlarmClient(HomeAssistantServiceClient services) : base(services, "alarm_control_panel") { }
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantAlarmAction action, string? code = null, CancellationToken cancellationToken = default)
-        => CallAsync(action switch
+    {
+        var normalizedCode = code is null ? null : ControlValidation.Required(code, nameof(code));
+        return CallAsync(action switch
         {
             HomeAssistantAlarmAction.Disarm => "alarm_disarm",
             HomeAssistantAlarmAction.ArmHome => "alarm_arm_home",
@@ -91,8 +93,9 @@ public sealed class HomeAssistantAlarmClient : HomeAssistantControlClientBase
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported alarm action.")
         }, target, call =>
         {
-            if (!string.IsNullOrWhiteSpace(code)) call.WithData("code", code);
+            if (normalizedCode is not null) call.WithData("code", normalizedCode);
         }, cancellationToken);
+    }
 }
 
 /// <summary>Controls standard siren actions and their portable optional fields.</summary>

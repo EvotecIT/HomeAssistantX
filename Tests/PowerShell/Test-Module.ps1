@@ -690,6 +690,21 @@ try {
     $null = Remove-HomeAssistantAutomation morning-routine -WhatIf
     $null = Remove-HomeAssistantDashboard -Configuration -UrlPath house-main -WhatIf
 
+    $privatePreview = @(
+        Set-HomeAssistantCamera camera.private_front -PreloadStream $true -WhatIf 6>&1
+        Set-HomeAssistantDashboard -New -UrlPath private-house-main -Title 'Private House' -WhatIf 6>&1
+        Set-HomeAssistantAutomation private-morning-routine '{"alias":"Private Morning","triggers":[],"actions":[]}' -WhatIf 6>&1
+        Remove-HomeAssistantAutomation private-morning-routine -WhatIf 6>&1
+        Remove-HomeAssistantDashboard -Configuration -UrlPath private-house-main -WhatIf 6>&1
+        Set-HomeAssistantLight -Entity light.kitchen -Power On -WhatIf 6>&1
+        Invoke-HomeAssistantAction -Domain private_domain -Action private_action -EntityId light.kitchen -WhatIf 6>&1
+    ) | Out-String
+    foreach ($privateValue in 'camera.private_front', 'private-house-main', 'private-morning-routine', 'Private House', 'Private Morning', 'light.kitchen', 'Kitchen light', 'private_domain', 'private_action') {
+        if ($privatePreview.Contains($privateValue)) {
+            throw "WhatIf output exposed private Home Assistant data: $privateValue"
+        }
+    }
+
     $null = Set-HomeAssistantStatistic -StatisticId ' sensor.grid_energy ' -UnitOfMeasurement MWh -Confirm:$false
     $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_UPDATE')
     $server.StandardInput.Flush()
@@ -804,6 +819,8 @@ try {
         { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitClass energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -OldUnit kWh -NewUnit kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ClearOldUnit -ClearNewUnit -WhatIf -ErrorAction Stop },
         { Remove-HomeAssistantStatistic ' ' -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }
@@ -941,6 +958,27 @@ try {
         if ($_.Exception.Message -notlike "*no 'remote' entities*") { throw }
     }
 
+    $cyclicMediaExtra = @{}
+    $cyclicMediaExtra.self = $cyclicMediaExtra
+    $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
+        throw 'Could not reset the media preflight action baseline.'
+    }
+    $cyclicMediaRejected = $false
+    try {
+        $null = Set-HomeAssistantMediaPlayer -Entity media_player.kitchen -VolumePercent 30 -MediaContentId test -MediaContentType music -MediaExtra $cyclicMediaExtra -Confirm:$false -ErrorAction Stop
+    } catch {
+        $cyclicMediaRejected = $true
+    }
+    if (-not $cyclicMediaRejected) {
+        throw 'The media-player cmdlet accepted cyclic MediaExtra.'
+    }
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+        throw 'The media-player cmdlet dispatched a settings mutation before rejecting cyclic MediaExtra.'
+    }
     foreach ($invalidMedia in @(
         { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaContentId test -MediaContentType music -Enqueue Add -Announce -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent 30 -VolumeStep Up -WhatIf -ErrorAction Stop },
@@ -972,7 +1010,11 @@ try {
         { Invoke-HomeAssistantRemote -Area Kitchen -Action SendCommand -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -TimeoutSeconds 1e-10 -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRemote -Area Kitchen -Action DeleteCommand -Command Power -TimeoutSeconds 10 -WhatIf -ErrorAction Stop },
-        { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -TimeoutSeconds 30 -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -TimeoutSeconds 30 -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action TurnOn -Activity ' ' -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action SendCommand -Command Power -RemoteDevice ' ' -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -RemoteDevice ' ' -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action DeleteCommand -Command Power -RemoteDevice ' ' -WhatIf -ErrorAction Stop }
     )) {
         $invalidRemoteShapeRejected = $false
         try {
@@ -994,6 +1036,7 @@ try {
     foreach ($invalidControl in @(
         { Set-HomeAssistantLight -Area Kitchen -ColorTemperatureKelvin 3000 -RgbColor 10, 20, 30 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLock -Area Kitchen -Action Unlock -Code ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCover -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop },

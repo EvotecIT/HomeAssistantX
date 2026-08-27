@@ -42,6 +42,16 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void TypeAndFieldFormattersPreserveArrayRankAndFieldContracts()
+    {
+        Assert.Equal("System.String[,]", FormatType(typeof(string[,])));
+        Assert.Equal("System.String[,,]?", FormatAnnotatedType(typeof(string[,,]), typeof(FieldFixture).GetField(nameof(FieldFixture.Mutable))!));
+        Assert.Equal("F const System.Int32 Constant = 42", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.Constant))!));
+        Assert.Equal("F static readonly System.String ReadOnly", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.ReadOnly))!));
+        Assert.Equal("F instance System.String[,,]? Mutable", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.Mutable))!));
+    }
+
+    [Fact]
     public void MemberFormatterPreservesNullableAndDispatchContracts()
     {
         var baseMethod = typeof(NullableDispatchFixture).GetMethod(nameof(NullableDispatchFixture.Transform))!;
@@ -148,6 +158,8 @@ public sealed class PublicApiCompatibilityTests
 
             foreach (var constructor in type.GetConstructors(BindingFlags.Instance | BindingFlags.Public).OrderBy(FormatMethod, StringComparer.Ordinal))
                 lines.Add("  C " + FormatType(type) + "(" + FormatParameters(constructor.GetParameters()) + ")");
+            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).OrderBy(value => value.Name, StringComparer.Ordinal))
+                lines.Add("  " + FormatField(field));
             foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).OrderBy(value => value.Name, StringComparer.Ordinal))
                 lines.Add("  P " + MemberScope(property.GetMethod ?? property.SetMethod!) + " " + FormatAnnotatedType(property.PropertyType, property) + " " + property.Name + " {" + FormatPropertyAccessors(property) + "}");
             foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).OrderBy(value => value.Name, StringComparer.Ordinal))
@@ -218,6 +230,13 @@ public sealed class PublicApiCompatibilityTests
         public override string? Transform(string? value) => value;
     }
 
+    private sealed class FieldFixture
+    {
+        public const int Constant = 42;
+        public static readonly string ReadOnly = string.Empty;
+        public string[,,]? Mutable = new string[1, 1, 1];
+    }
+
     private interface VariantFixture<out TResult>
     {
     }
@@ -240,6 +259,15 @@ public sealed class PublicApiCompatibilityTests
             if (!methodInfo.IsAbstract && !methodInfo.IsFinal) return "virtual";
         }
         return "instance";
+    }
+
+    private static string FormatField(FieldInfo field)
+    {
+        var scope = field.IsLiteral
+            ? "const"
+            : (field.IsStatic ? "static" : "instance") + (field.IsInitOnly ? " readonly" : string.Empty);
+        var value = field.IsLiteral ? " = " + FormatDefault(field.GetRawConstantValue()) : string.Empty;
+        return "F " + scope + " " + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
     private static string FormatPropertyAccessors(PropertyInfo property)
@@ -372,7 +400,7 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatType(Type type)
     {
         if (type.IsByRef) return "ref " + FormatType(type.GetElementType()!);
-        if (type.IsArray) return FormatType(type.GetElementType()!) + "[]";
+        if (type.IsArray) return FormatType(type.GetElementType()!) + ArraySuffix(type);
         if (!type.IsGenericType) return type.FullName ?? type.Name;
         var definition = type.GetGenericTypeDefinition();
         var name = (definition.FullName ?? definition.Name).Split('`')[0];
@@ -391,7 +419,7 @@ public sealed class PublicApiCompatibilityTests
         var flag = cursor.Next();
         if (type.IsArray)
         {
-            var array = FormatAnnotatedType(type.GetElementType()!, cursor) + "[]";
+            var array = FormatAnnotatedType(type.GetElementType()!, cursor) + ArraySuffix(type);
             return flag == 2 ? array + "?" : array;
         }
 
@@ -406,6 +434,8 @@ public sealed class PublicApiCompatibilityTests
         var result = type.FullName ?? type.Name;
         return (!type.IsValueType || type.IsGenericParameter) && flag == 2 ? result + "?" : result;
     }
+
+    private static string ArraySuffix(Type type) => "[" + new string(',', type.GetArrayRank() - 1) + "]";
 
     private static byte[] ReadNullableFlags(ICustomAttributeProvider provider)
     {

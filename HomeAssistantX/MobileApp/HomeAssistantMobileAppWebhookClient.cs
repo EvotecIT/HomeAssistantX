@@ -66,9 +66,16 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", out var normalizedEntityId))
             throw new ArgumentException("A camera entity ID is required.", nameof(entityId));
         var result = await SendAsync("stream_camera", new Dictionary<string, object?> { ["camera_entity_id"] = normalizedEntityId }, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantMobileAppCameraStream>(
+        var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantMobileAppCameraStream>(
             result,
             "Home Assistant returned an invalid camera-stream response.");
+        if (stream.Success == false
+            || string.IsNullOrWhiteSpace(stream.MjpegPath)
+            || (stream.HlsPath is not null && string.IsNullOrWhiteSpace(stream.HlsPath)))
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned an unsuccessful camera-stream response.");
+        }
+        return stream;
     }
 
     public Task<JsonElement> UpdateRegistrationAsync(HomeAssistantMobileAppRegistrationUpdate update, CancellationToken cancellationToken = default)

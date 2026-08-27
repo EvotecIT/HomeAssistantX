@@ -70,6 +70,7 @@ public sealed class HomeAssistantHelperClient
     {
         RequireDomain(domain, HomeAssistantHelperDomain.Time, HomeAssistantHelperDomain.InputDateTime);
         if (value < TimeSpan.Zero || value >= TimeSpan.FromDays(1)) throw new ArgumentOutOfRangeException(nameof(value), "The time must be within one day.");
+        if (value.Ticks % TimeSpan.TicksPerSecond != 0) throw new ArgumentException("The time must use whole-second precision.", nameof(value));
         return CallAsync(domain, domain == HomeAssistantHelperDomain.Time ? "set_value" : "set_datetime", target, call => call.WithData("time", value.ToString(@"hh\:mm\:ss", System.Globalization.CultureInfo.InvariantCulture)), cancellationToken);
     }
 

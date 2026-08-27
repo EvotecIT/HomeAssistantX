@@ -662,6 +662,39 @@ public sealed class StableControlAndAdapterContractTests
         Assert.IsType<JsonException>(exception.InnerException);
     }
 
+    [Theory]
+    [InlineData("incomplete-camera-response")]
+    [InlineData("failed-camera-response")]
+    [InlineData("hls-only-camera-response")]
+    public async Task MobileAppWebhookRejectsCameraResponsesWithoutAUsableStream(string webhookId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = webhookId,
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/" + webhookId)
+            });
+
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
+            () => webhook.GetCameraStreamAsync("camera.front"));
+    }
+
+    [Fact]
+    public async Task HelperTimesRejectFractionalSecondsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Helpers.SetTimeAsync(
+            HomeAssistantHelperDomain.Time,
+            HomeAssistantX.Services.HomeAssistantTarget.ForEntity("time.wakeup"),
+            TimeSpan.FromMilliseconds(500)));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
     [Fact]
     public async Task MobileAppWebhookPreservesPayloadProtectorFailureProvenance()
     {
