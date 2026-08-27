@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Models;
 
@@ -123,12 +124,9 @@ internal static class HomeAssistantAttributeReader
         IReadOnlyDictionary<string, JsonElement> attributes,
         string name)
     {
-        var value = GetString(attributes, name);
-        return DateTimeOffset.TryParse(
-            value,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
-            out var result)
+        return TryGetValue(attributes, name, out var value)
+            && value.ValueKind == JsonValueKind.String
+            && HomeAssistantTimestamp.TryParse(value.GetString(), out var result)
             ? result
             : null;
     }

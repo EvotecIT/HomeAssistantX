@@ -1,7 +1,9 @@
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.Subscriptions;
+using System.Text.Json;
 
 namespace HomeAssistantX.Controls;
 
@@ -105,6 +107,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var playbackAction = options.Playback.HasValue ? PlaybackAction(options.Playback.Value) : null;
         var repeatMode = options.Repeat.HasValue ? RepeatMode(options.Repeat.Value) : null;
         var enqueueMode = options.Enqueue.HasValue ? EnqueueMode(options.Enqueue.Value) : null;
+        var frozenMediaExtra = FreezeMediaExtra(options.MediaExtra, nameof(options.MediaExtra));
         if (powerAction is null && playbackAction is null && !hasNonPowerOperation)
         {
             throw new ArgumentException("At least one media-player value or action is required.", nameof(options));
@@ -160,7 +163,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 {
                     Enqueue = options.Enqueue,
                     Announce = options.Announce,
-                    Extra = options.MediaExtra
+                    Extra = frozenMediaExtra
                 },
                 cancellationToken).ConfigureAwait(false));
         }
@@ -307,6 +310,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var enqueue = options?.Enqueue.HasValue == true
             ? EnqueueMode(options.Enqueue.Value)
             : null;
+        var frozenExtra = FreezeMediaExtra(options?.Extra, nameof(options));
         return CallAsync(
             "play_media",
             target,
@@ -324,12 +328,36 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                     call.WithData("announce", options.Announce.Value);
                 }
 
-                if (options?.Extra is not null)
+                if (frozenExtra is not null)
                 {
-                    call.WithData("extra", options.Extra);
+                    call.WithData("extra", frozenExtra);
                 }
             },
             cancellationToken);
+    }
+
+    private static IReadOnlyDictionary<string, object?>? FreezeMediaExtra(
+        IReadOnlyDictionary<string, object?>? extra,
+        string parameterName)
+    {
+        if (extra is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = JsonSerializer.Serialize(extra, HomeAssistantJson.SerializerOptions);
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.EnumerateObject().ToDictionary(
+                property => property.Name,
+                property => (object?)property.Value.Clone(),
+                StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is JsonException || ex is NotSupportedException)
+        {
+            throw new ArgumentException("MediaExtra must be a serializable JSON object.", parameterName, ex);
+        }
     }
 
     private static string PowerAction(HomeAssistantPowerAction value) => value switch

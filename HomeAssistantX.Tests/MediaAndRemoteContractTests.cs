@@ -105,6 +105,21 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Theory]
+    [InlineData("12:00")]
+    [InlineData("2026/08/27T10:00:00Z")]
+    [InlineData("2026-08-27T10:00:00 +00:00")]
+    public void MediaStatusIgnoresInvalidPositionTimestamps(string timestamp)
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.bad\",\"state\":\"playing\",\"attributes\":{" +
+            "\"media_position\":10,\"media_position_updated_at\":\"" + timestamp + "\"}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Null(status.MediaPositionUpdatedAt);
+    }
+
+    [Theory]
     [InlineData("9223372036854775808")]
     [InlineData("\"9223372036854775808\"")]
     public void TypedStatusTreatsOutOfRangeInt64AttributesAsAbsent(string value)
@@ -436,6 +451,17 @@ public sealed class MediaAndRemoteContractTests
         {
             Timeout = TimeSpan.FromSeconds((double)int.MaxValue + 1d)
         });
+        var cyclicExtra = new Dictionary<string, object?>();
+        cyclicExtra["self"] = cyclicExtra;
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.SetAsync(
+            target,
+            new HomeAssistantMediaPlayerOptions
+            {
+                VolumePercent = 35,
+                MediaContentId = "media-source://radio/station",
+                MediaContentType = "music",
+                MediaExtra = cyclicExtra
+            }));
 
         Assert.Empty(server.ServiceCallBodies);
     }
