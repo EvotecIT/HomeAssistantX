@@ -165,6 +165,48 @@ public sealed class StateClientContractTests
             async () => await WithTimeoutAsync(subscription.Completion));
     }
 
+    [Fact]
+    public async Task TerminalReconnectFailureCancelsRunningStateHandlerAndPreservesUpstreamFailure()
+    {
+        using var server = new TestHomeAssistantServer();
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        var handlerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.States.SubscribeAsync(HomeAssistantStateFilter.All, async (_, token) =>
+        {
+            handlerStarted.TrySetResult(true);
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new ObjectDisposedException("canceled-state-handler-resource");
+            }
+        });
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            TestHomeAssistantServer.KitchenLightOnStateJson);
+        await WithTimeoutAsync(handlerStarted.Task);
+        for (var index = 0; index < 8; index++)
+        {
+            await server.PublishStateChangeAsync(
+                "light.kitchen",
+                index % 2 == 0 ? TestHomeAssistantServer.KitchenLightOnStateJson : TestHomeAssistantServer.KitchenLightOffStateJson,
+                index % 2 == 0 ? TestHomeAssistantServer.KitchenLightOffStateJson : TestHomeAssistantServer.KitchenLightOnStateJson);
+        }
+
+        server.RequiredAccessToken = "replacement-token";
+        await server.DropWebSocketsAsync();
+
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(diagnostics.Events, value => value.Name == "state.server_subscription_failed");
+        Assert.DoesNotContain(diagnostics.Events, value => value.Name == "state.subscription_handler_failed");
+    }
+
     private static async Task WaitUntilAsync(Func<bool> predicate)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);

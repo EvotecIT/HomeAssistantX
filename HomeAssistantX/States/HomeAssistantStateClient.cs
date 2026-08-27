@@ -461,6 +461,7 @@ public sealed class HomeAssistantStateClient : IDisposable
         private readonly CancellationTokenSource _source = new();
         private readonly System.Threading.Channels.Channel<HomeAssistantStateChange> _channel;
         private readonly Task _pump;
+        private Exception? _terminalFailure;
         private int _stopped;
 
         public LocalStateSubscription(
@@ -517,7 +518,9 @@ public sealed class HomeAssistantStateClient : IDisposable
                 diagnosticName,
                 diagnosticMessage,
                 exception);
+            Volatile.Write(ref _terminalFailure, exception);
             _channel.Writer.TryComplete(exception);
+            CancelSource();
         }
 
         public Task StopAsync(CancellationToken cancellationToken = default)
@@ -539,8 +542,20 @@ public sealed class HomeAssistantStateClient : IDisposable
                         {
                             await _handler(change, _source.Token).ConfigureAwait(false);
                         }
-                        catch (OperationCanceledException) when (_source.IsCancellationRequested)
+                        catch (Exception) when (_source.IsCancellationRequested)
                         {
+                            while (_channel.Reader.TryRead(out _))
+                            {
+                                // Discard buffered state changes after a terminal stop so channel
+                                // completion can settle without waiting for more handler work.
+                            }
+
+                            var terminalFailure = Volatile.Read(ref _terminalFailure);
+                            if (terminalFailure is not null)
+                            {
+                                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(terminalFailure).Throw();
+                            }
+
                             return;
                         }
                         catch (Exception ex)
@@ -555,6 +570,11 @@ public sealed class HomeAssistantStateClient : IDisposable
                                 "state.subscription_handler_failed",
                                 "A state subscription handler failed.",
                                 ex);
+                            _channel.Writer.TryComplete(ex);
+                            while (_channel.Reader.TryRead(out _))
+                            {
+                                // Release any buffered state objects now that this handler cannot continue.
+                            }
                             throw;
                         }
                     }
@@ -562,6 +582,11 @@ public sealed class HomeAssistantStateClient : IDisposable
             }
             catch (OperationCanceledException) when (_source.IsCancellationRequested)
             {
+                var terminalFailure = Volatile.Read(ref _terminalFailure);
+                if (terminalFailure is not null)
+                {
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(terminalFailure).Throw();
+                }
             }
             finally
             {
@@ -578,6 +603,11 @@ public sealed class HomeAssistantStateClient : IDisposable
 
             _remove(this);
             _channel.Writer.TryComplete();
+            CancelSource();
+        }
+
+        private void CancelSource()
+        {
             try
             {
                 _source.Cancel();
