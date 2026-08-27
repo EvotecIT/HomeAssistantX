@@ -253,6 +253,7 @@ public sealed class HomeAssistantRecorderClient
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("A Recorder statistics series could not be decoded.");
         long? previousStart = null;
+        long? previousEnd = null;
         foreach (var row in value.EnumerateArray())
         {
             if (row.ValueKind != JsonValueKind.Object
@@ -272,7 +273,12 @@ public sealed class HomeAssistantRecorderClient
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series was not ordered by strictly increasing start time.");
             }
+            if (previousEnd.HasValue && start < previousEnd.Value)
+            {
+                throw new HomeAssistantProtocolException("A Recorder statistics series contained overlapping intervals.");
+            }
             previousStart = start;
+            previousEnd = end;
         }
     }
 

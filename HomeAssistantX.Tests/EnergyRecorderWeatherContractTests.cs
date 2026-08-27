@@ -804,6 +804,22 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderStatisticsRejectOverlappingIntervals()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":1,\"end\":3},{\"start\":2,\"end\":4}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(
+            DateTimeOffset.UtcNow.AddHours(-1),
+            HomeAssistantStatisticPeriod.Hour,
+            "sensor.energy");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(query));
+    }
+
+    [Fact]
     public async Task RecorderStatisticsRejectDuplicateNormalizedUnitNamesBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();
