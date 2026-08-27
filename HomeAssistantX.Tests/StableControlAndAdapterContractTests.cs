@@ -642,11 +642,15 @@ public sealed class StableControlAndAdapterContractTests
             Assert.Equal("2026.8.3", config.GetProperty("version").GetString());
             Assert.True(string.IsNullOrEmpty(server.LastAuthorization));
 
-            await webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate
+            var updateAppData = new Dictionary<string, object?> { ["push_token"] = "updated", ["attempts"] = 1 };
+            var registrationUpdate = new HomeAssistantMobileAppRegistrationUpdate
             {
                 OperatingSystemVersion = "11.0",
-                AppData = new Dictionary<string, object?> { ["push_token"] = "updated" }
-            });
+                AppData = updateAppData
+            };
+            await webhook.UpdateRegistrationAsync(registrationUpdate);
+            Assert.Same(updateAppData, registrationUpdate.AppData);
+            Assert.IsType<int>(registrationUpdate.AppData["attempts"]);
             using var updateBody = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
             Assert.Equal("update_registration", updateBody.RootElement.GetProperty("type").GetString());
             var updateData = updateBody.RootElement.GetProperty("data");

@@ -82,8 +82,16 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     {
         if (update is null) throw new ArgumentNullException(nameof(update));
         update.Validate();
-        update.AppData = HomeAssistantJson.FreezeObject(update.AppData, nameof(update.AppData), "AppData");
-        return SendAsync("update_registration", update, cancellationToken);
+        var snapshot = new HomeAssistantMobileAppRegistrationUpdate
+        {
+            AppVersion = update.AppVersion,
+            DeviceName = update.DeviceName,
+            Manufacturer = update.Manufacturer,
+            Model = update.Model,
+            OperatingSystemVersion = update.OperatingSystemVersion,
+            AppData = HomeAssistantJson.FreezeObject(update.AppData, nameof(update.AppData), "AppData")
+        };
+        return SendAsync("update_registration", snapshot, cancellationToken);
     }
 
     /// <summary>Calls a forward-compatible mobile-app webhook command. The command data is encrypted when the registration contains a secret.</summary>

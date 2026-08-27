@@ -14,9 +14,9 @@ T sealed class HomeAssistantX.Authentication.HomeAssistantOAuthTokens
   P instance System.String? RefreshToken {get;set;}
   P instance System.String TokenType {get;set;}
 T interface HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider
-  M instance System.Threading.Tasks.Task<System.String> GetAccessTokenAsync(System.Threading.CancellationToken cancellationToken = null)
+  M abstract System.Threading.Tasks.Task<System.String> GetAccessTokenAsync(System.Threading.CancellationToken cancellationToken = null)
 T interface HomeAssistantX.Authentication.IHomeAssistantAccessTokenRecovery
-  M instance System.Threading.Tasks.Task RecoverAccessTokenAsync(System.String rejectedAccessToken, System.Threading.CancellationToken cancellationToken = null)
+  M abstract System.Threading.Tasks.Task RecoverAccessTokenAsync(System.String rejectedAccessToken, System.Threading.CancellationToken cancellationToken = null)
 T sealed class HomeAssistantX.Authentication.RefreshingAccessTokenProvider : HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider, HomeAssistantX.Authentication.IHomeAssistantAccessTokenRecovery, System.IDisposable
   C HomeAssistantX.Authentication.RefreshingAccessTokenProvider(HomeAssistantX.Authentication.HomeAssistantOAuthClient oauth, System.Uri clientId, HomeAssistantX.Authentication.HomeAssistantOAuthTokens tokens, System.Func<HomeAssistantX.Authentication.HomeAssistantOAuthTokens,System.Threading.CancellationToken,System.Threading.Tasks.Task>? persistTokens = null)
   M instance System.Void Dispose()
@@ -591,7 +591,7 @@ T enum HomeAssistantX.Diagnostics.HomeAssistantDiagnosticLevel : System.Int32
   F Warning = 2
   F Error = 3
 T interface HomeAssistantX.Diagnostics.IHomeAssistantDiagnosticsSink
-  M instance System.Void Write(HomeAssistantX.Diagnostics.HomeAssistantDiagnosticEvent diagnosticEvent)
+  M abstract System.Void Write(HomeAssistantX.Diagnostics.HomeAssistantDiagnosticEvent diagnosticEvent)
 T sealed class HomeAssistantX.Discovery.HomeAssistantDiscoveredInstance
   C HomeAssistantX.Discovery.HomeAssistantDiscoveredInstance()
   P instance System.Collections.Generic.IReadOnlyList<System.Net.IPAddress> Addresses {get;}
@@ -854,8 +854,8 @@ T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppWebhookClient : Sy
   M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SendAsync(System.String commandType, System.Object? data, System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> UpdateRegistrationAsync(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate update, System.Threading.CancellationToken cancellationToken = null)
 T interface HomeAssistantX.MobileApp.IHomeAssistantMobileAppPayloadProtector
-  M instance System.Threading.Tasks.Task<System.String> ProtectAsync(System.Byte[] plaintextJson, System.String secret, System.Threading.CancellationToken cancellationToken = null)
-  M instance System.Threading.Tasks.Task<System.Byte[]> UnprotectAsync(System.String protectedPayload, System.String secret, System.Threading.CancellationToken cancellationToken = null)
+  M abstract System.Threading.Tasks.Task<System.String> ProtectAsync(System.Byte[] plaintextJson, System.String secret, System.Threading.CancellationToken cancellationToken = null)
+  M abstract System.Threading.Tasks.Task<System.Byte[]> UnprotectAsync(System.String protectedPayload, System.String secret, System.Threading.CancellationToken cancellationToken = null)
 T sealed class HomeAssistantX.Models.HomeAssistantApiStatus
   C HomeAssistantX.Models.HomeAssistantApiStatus()
   P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
@@ -1437,9 +1437,9 @@ T sealed class HomeAssistantX.States.HomeAssistantStateFilter
   M static HomeAssistantX.States.HomeAssistantStateFilter ForDomains(params System.String[] domains)
   M static HomeAssistantX.States.HomeAssistantStateFilter ForEntities(params System.String[] entityIds)
 T interface HomeAssistantX.Subscriptions.IHomeAssistantSubscription : System.IDisposable
-  P instance System.Threading.Tasks.Task Completion {get;}
-  P instance System.Guid Id {get;}
-  M instance System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken = null)
+  P abstract System.Threading.Tasks.Task Completion {get;}
+  P abstract System.Guid Id {get;}
+  M abstract System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken = null)
 T sealed class HomeAssistantX.Supervisor.HomeAssistantApp
   C HomeAssistantX.Supervisor.HomeAssistantApp()
   P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}

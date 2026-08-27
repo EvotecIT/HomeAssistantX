@@ -93,6 +93,15 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("get;protected set;", FormatPropertyAccessors(property));
     }
 
+    [Fact]
+    public void TypeAndMemberFormattersPreserveProtectedNestingAndAbstractDispatch()
+    {
+        Assert.True(IsExternallyAccessibleType(PublicApiProtectedNestedFixture.NestedType));
+        Assert.Equal("abstract", MemberScope(typeof(AbstractSurfaceFixture).GetMethod("Transform", BindingFlags.Instance | BindingFlags.NonPublic)!));
+        Assert.Equal("abstract override", MemberScope(typeof(AbstractOverrideFixture).GetMethod(nameof(NullableDispatchFixture.Transform))!));
+        Assert.Equal("sealed override", MemberScope(typeof(SealedOverrideFixture).GetMethod(nameof(NullableDispatchFixture.Transform))!));
+    }
+
 #if NET10_0
     [Fact]
     public void PropertyFormatterPreservesInitOnlyAccessors()
@@ -156,7 +165,7 @@ public sealed class PublicApiCompatibilityTests
     private static string BuildSurface(Assembly assembly)
     {
         var lines = new List<string>();
-        foreach (var type in assembly.GetExportedTypes().OrderBy(FormatType, StringComparer.Ordinal))
+        foreach (var type in assembly.GetTypes().Where(IsExternallyAccessibleType).OrderBy(FormatType, StringComparer.Ordinal))
         {
             var kind = FormatTypeKind(type);
             var contracts = new List<string>();
@@ -272,6 +281,21 @@ public sealed class PublicApiCompatibilityTests
         public override string? Transform(string? value) => value;
     }
 
+    private abstract class AbstractSurfaceFixture
+    {
+        protected abstract string Transform(string value);
+    }
+
+    private abstract class AbstractOverrideFixture : NullableDispatchFixture
+    {
+        public abstract override string? Transform(string? value);
+    }
+
+    private sealed class SealedOverrideFixture : NullableDispatchFixture
+    {
+        public sealed override string? Transform(string? value) => value;
+    }
+
     private sealed class FieldFixture
     {
         public const int Constant = 42;
@@ -322,10 +346,20 @@ public sealed class PublicApiCompatibilityTests
         if (method.IsStatic) return "static";
         if (method is MethodInfo methodInfo && methodInfo.IsVirtual)
         {
-            if (methodInfo.GetBaseDefinition().DeclaringType != methodInfo.DeclaringType) return "override";
-            if (!methodInfo.IsAbstract && !methodInfo.IsFinal) return "virtual";
+            var isOverride = methodInfo.GetBaseDefinition().DeclaringType != methodInfo.DeclaringType;
+            if (methodInfo.IsAbstract) return isOverride ? "abstract override" : "abstract";
+            if (isOverride) return methodInfo.IsFinal ? "sealed override" : "override";
+            if (!methodInfo.IsFinal) return "virtual";
         }
         return "instance";
+    }
+
+    private static bool IsExternallyAccessibleType(Type type)
+    {
+        if (!type.IsNested) return type.IsPublic;
+        return (type.IsNestedPublic || type.IsNestedFamily || type.IsNestedFamORAssem)
+            && type.DeclaringType is not null
+            && IsExternallyAccessibleType(type.DeclaringType);
     }
 
     private static string FormatField(FieldInfo field)
@@ -609,4 +643,13 @@ public sealed class PublicApiCompatibilityTests
             return _index < _flags.Length ? _flags[_index++] : _context;
         }
     }
+}
+
+public class PublicApiProtectedNestedFixture
+{
+    protected class ProtectedNested
+    {
+    }
+
+    public static Type NestedType => typeof(ProtectedNested);
 }
