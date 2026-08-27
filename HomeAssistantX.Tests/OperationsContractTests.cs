@@ -142,6 +142,19 @@ public sealed class OperationsContractTests
             () => client.Operations.Updates.GetAllAsync());
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\" update.core\"")]
+    public async Task UpdateBulkReadValidatesBeforeInspectingTheDomain(string entityIdJson)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":" + entityIdJson + ",\"state\":\"on\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Operations.Updates.GetAllAsync());
+    }
+
     [Fact]
     public async Task UpdateReleaseNotesClassifyUnexpectedServerShapes()
     {

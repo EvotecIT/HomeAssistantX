@@ -35,6 +35,7 @@ public sealed class HomeAssistantState
     {
         get
         {
+            if (string.IsNullOrEmpty(EntityId)) return string.Empty;
             var separator = EntityId.IndexOf('.');
             return separator <= 0 ? string.Empty : EntityId.Substring(0, separator);
         }

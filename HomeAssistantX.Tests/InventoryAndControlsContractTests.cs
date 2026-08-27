@@ -120,6 +120,19 @@ public sealed class InventoryAndControlsContractTests
             () => client.Inventory.GetSnapshotAsync());
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\" camera.front\"")]
+    public async Task InventoryClassifiesNullAndWhitespacePrefixedStateIds(string entityIdJson)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":" + entityIdJson + ",\"state\":\"idle\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Inventory.GetSnapshotAsync());
+    }
+
     [Fact]
     public async Task TypedLightControlProducesTheNativeValidatedPayload()
     {

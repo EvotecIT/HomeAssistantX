@@ -78,4 +78,25 @@ public static class HomeAssistantEntityId
 
         return state;
     }
+
+    internal static IEnumerable<HomeAssistantState> RequireResponseDomainStates(
+        IEnumerable<HomeAssistantState> states,
+        string domain)
+    {
+        foreach (var state in states)
+        {
+            if (state is null)
+            {
+                throw new HomeAssistantProtocolException(
+                    "Home Assistant returned a null entity state.");
+            }
+
+            var entityId = RequireResponseEntityId(state.EntityId);
+            var separator = entityId.IndexOf('.');
+            if (string.Equals(entityId.Substring(0, separator), domain, StringComparison.Ordinal))
+            {
+                yield return state;
+            }
+        }
+    }
 }
