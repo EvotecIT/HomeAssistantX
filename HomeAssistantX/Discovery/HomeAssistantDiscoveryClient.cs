@@ -167,22 +167,24 @@ internal sealed class DnsDiscoveryAggregate
     private const int MaximumPropertiesPerOwner = 64;
     private const int MaximumAddressesPerHost = 16;
     private readonly DnsDiscoveryLimits _limits;
+    private readonly Func<TimeSpan> _clock;
     private readonly object _gate = new();
-    private readonly HashSet<string> _instances = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, (string Host, int Port)> _services = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Dictionary<string, string?>> _text = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, HashSet<IPAddress>> _addresses = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CachedPtr> _instances = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<CachedService>> _services = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<CachedText>> _text = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Dictionary<IPAddress, CachedAddress>> _addresses = new(StringComparer.OrdinalIgnoreCase);
     private int _datagrams;
 
-    internal DnsDiscoveryAggregate(DnsDiscoveryLimits? limits = null)
+    internal DnsDiscoveryAggregate(DnsDiscoveryLimits? limits = null, Func<TimeSpan>? clock = null)
     {
         _limits = limits ?? DnsDiscoveryLimits.Default;
+        _clock = clock ?? MonotonicNow;
     }
 
-    internal int InstanceCount { get { lock (_gate) return _instances.Count; } }
-    internal int ServiceCount { get { lock (_gate) return _services.Count; } }
-    internal int TextOwnerCount { get { lock (_gate) return _text.Count; } }
-    internal int AddressHostCount { get { lock (_gate) return _addresses.Count; } }
+    internal int InstanceCount { get { lock (_gate) { Prune(_clock()); return _instances.Count; } } }
+    internal int ServiceCount { get { lock (_gate) { Prune(_clock()); return _services.Count; } } }
+    internal int TextOwnerCount { get { lock (_gate) { Prune(_clock()); return _text.Count; } } }
+    internal int AddressHostCount { get { lock (_gate) { Prune(_clock()); return _addresses.Count; } } }
     internal int DatagramCount => Volatile.Read(ref _datagrams);
 
     internal bool TryConsumeDatagram()
@@ -199,7 +201,10 @@ internal sealed class DnsDiscoveryAggregate
     {
         lock (_gate)
         {
-            if (_instances.Contains(instance) || _instances.Count < _limits.Instances) _instances.Add(instance);
+            var now = _clock();
+            Prune(now);
+            if (_instances.ContainsKey(instance) || _instances.Count < _limits.Instances)
+                _instances[instance] = new CachedPtr(instance, now, Expiry(now, 120));
         }
     }
 
@@ -207,7 +212,15 @@ internal sealed class DnsDiscoveryAggregate
     {
         lock (_gate)
         {
-            if (_services.ContainsKey(instance) || _services.Count < _limits.Services) _services[instance] = (host, port);
+            var now = _clock();
+            Prune(now);
+            if (!_services.TryGetValue(instance, out var services))
+            {
+                if (_services.Count >= _limits.Services) return;
+                _services[instance] = services = new List<CachedService>();
+            }
+            services.RemoveAll(value => string.Equals(value.DataKey, ServiceKey(host, port), StringComparison.Ordinal));
+            services.Add(new CachedService(host, port, ServiceKey(host, port), now, Expiry(now, 120)));
         }
     }
 
@@ -215,13 +228,22 @@ internal sealed class DnsDiscoveryAggregate
     {
         lock (_gate)
         {
-            if (!_text.TryGetValue(instance, out var properties))
+            var now = _clock();
+            Prune(now);
+            if (!_text.TryGetValue(instance, out var records))
             {
                 if (_text.Count >= _limits.TextOwners) return;
-                _text[instance] = properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                _text[instance] = records = new List<CachedText>();
+            }
+            var cached = records.OrderByDescending(value => value.ReceivedAt).FirstOrDefault();
+            if (cached is null)
+            {
+                cached = new CachedText(new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), string.Empty, now, Expiry(now, 120));
+                records.Add(cached);
             }
 
-            if (properties.ContainsKey(key) || properties.Count < MaximumPropertiesPerOwner) properties[key] = value;
+            if (cached.Properties.ContainsKey(key) || cached.Properties.Count < MaximumPropertiesPerOwner)
+                cached.Properties[key] = value;
         }
     }
 
@@ -229,13 +251,41 @@ internal sealed class DnsDiscoveryAggregate
     {
         lock (_gate)
         {
+            var now = _clock();
+            Prune(now);
             if (!_addresses.TryGetValue(host, out var addresses))
             {
                 if (_addresses.Count >= _limits.AddressHosts) return;
-                _addresses[host] = addresses = new HashSet<IPAddress>();
+                _addresses[host] = addresses = new Dictionary<IPAddress, CachedAddress>();
             }
 
-            if (addresses.Contains(address) || addresses.Count < MaximumAddressesPerHost) addresses.Add(address);
+            if (addresses.ContainsKey(address) || addresses.Count < MaximumAddressesPerHost)
+                addresses[address] = new CachedAddress(now, Expiry(now, 120));
+        }
+    }
+
+    internal void ApplyPacket(IReadOnlyList<DnsDiscoveryUpdate> updates)
+    {
+        lock (_gate)
+        {
+            var now = _clock();
+            Prune(now);
+            var acceptedInstances = new HashSet<string>(_instances.Keys, StringComparer.OrdinalIgnoreCase);
+            foreach (var update in updates.Where(value => value.Kind == DnsDiscoveryRecordKind.Ptr && IsHomeAssistantPtr(value)))
+            {
+                acceptedInstances.Add(update.Target!);
+                ApplyPtr(update, now);
+            }
+
+            acceptedInstances.IntersectWith(_instances.Keys);
+            foreach (var update in updates.Where(value => value.Kind == DnsDiscoveryRecordKind.Srv && acceptedInstances.Contains(value.Name))) ApplyService(update, now, updates);
+            foreach (var update in updates.Where(value => value.Kind == DnsDiscoveryRecordKind.Txt && acceptedInstances.Contains(value.Name))) ApplyText(update, now, updates);
+
+            var acceptedHosts = new HashSet<string>(
+                _services.Where(value => acceptedInstances.Contains(value.Key)).SelectMany(value => value.Value).Select(value => value.Host),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var update in updates.Where(value => (value.Kind == DnsDiscoveryRecordKind.A || value.Kind == DnsDiscoveryRecordKind.Aaaa) && acceptedHosts.Contains(value.Name)))
+                ApplyAddress(update, now, updates);
         }
     }
 
@@ -243,13 +293,16 @@ internal sealed class DnsDiscoveryAggregate
     {
         lock (_gate)
         {
-            return _instances.Select(instance =>
+            Prune(_clock());
+            return _instances.Keys.Select(instance =>
             {
-                _services.TryGetValue(instance, out var service);
-                _text.TryGetValue(instance, out var properties);
-                properties ??= new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-                var addressValues = !string.IsNullOrWhiteSpace(service.Host) && _addresses.TryGetValue(service.Host, out var found)
-                    ? found.OrderBy(value => value.AddressFamily).ThenBy(value => value.ToString(), StringComparer.Ordinal).ToArray()
+                _services.TryGetValue(instance, out var serviceRecords);
+                var service = serviceRecords?.OrderByDescending(value => value.ReceivedAt).FirstOrDefault();
+                _text.TryGetValue(instance, out var textRecords);
+                var cachedText = textRecords?.OrderByDescending(value => value.ReceivedAt).FirstOrDefault();
+                var properties = cachedText?.Properties ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                var addressValues = service is not null && !string.IsNullOrWhiteSpace(service.Host) && _addresses.TryGetValue(service.Host, out var found)
+                    ? found.Keys.OrderBy(value => value.AddressFamily).ThenBy(value => value.ToString(), StringComparer.Ordinal).ToArray()
                     : Array.Empty<IPAddress>();
                 return new HomeAssistantDiscoveredInstance
                 {
@@ -257,8 +310,8 @@ internal sealed class DnsDiscoveryAggregate
                     Name = Value(properties, "location_name") ?? FriendlyInstanceName(instance),
                     InstanceId = Value(properties, "uuid"),
                     Version = Value(properties, "version"),
-                    HostName = string.IsNullOrWhiteSpace(service.Host) ? null : service.Host,
-                    Port = service.Port == 0 ? null : service.Port,
+                    HostName = service is null || string.IsNullOrWhiteSpace(service.Host) ? null : service.Host,
+                    Port = service is null || service.Port == 0 ? null : service.Port,
                     InternalUri = ReadHttpUri(Value(properties, "internal_url")),
                     ExternalUri = ReadHttpUri(Value(properties, "external_url")),
                     BaseUri = ReadHttpUri(Value(properties, "base_url")),
@@ -272,6 +325,124 @@ internal sealed class DnsDiscoveryAggregate
                 .ToArray();
         }
     }
+
+    private void ApplyPtr(DnsDiscoveryUpdate update, TimeSpan now)
+    {
+        var instance = update.Target!;
+        if (update.Ttl == 0)
+        {
+            if (_instances.TryGetValue(instance, out var existing))
+                existing.ExpiresAt = Earlier(existing.ExpiresAt, now + TimeSpan.FromSeconds(1));
+            return;
+        }
+        if (_instances.ContainsKey(instance) || _instances.Count < _limits.Instances)
+            _instances[instance] = new CachedPtr(update.DataKey, now, Expiry(now, update.Ttl));
+    }
+
+    private void ApplyService(DnsDiscoveryUpdate update, TimeSpan now, IReadOnlyList<DnsDiscoveryUpdate> packet)
+    {
+        if (!_services.TryGetValue(update.Name, out var records))
+        {
+            if (update.Ttl == 0 || _services.Count >= _limits.Services) return;
+            _services[update.Name] = records = new List<CachedService>();
+        }
+        if (update.Ttl == 0)
+        {
+            foreach (var existing in records.Where(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal)))
+                existing.ExpiresAt = Earlier(existing.ExpiresAt, now + TimeSpan.FromSeconds(1));
+            return;
+        }
+        if (update.CacheFlush)
+        {
+            var announced = new HashSet<string>(packet.Where(value => value.Kind == DnsDiscoveryRecordKind.Srv && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.DataKey), StringComparer.Ordinal);
+            foreach (var old in records.Where(value => !announced.Contains(value.DataKey) && now - value.ReceivedAt >= TimeSpan.FromSeconds(1)))
+                old.ExpiresAt = Earlier(old.ExpiresAt, now + TimeSpan.FromSeconds(1));
+        }
+        records.RemoveAll(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal));
+        if (records.Count < 8) records.Add(new CachedService(update.Host!, update.Port, update.DataKey, now, Expiry(now, update.Ttl)));
+    }
+
+    private void ApplyText(DnsDiscoveryUpdate update, TimeSpan now, IReadOnlyList<DnsDiscoveryUpdate> packet)
+    {
+        if (!_text.TryGetValue(update.Name, out var records))
+        {
+            if (update.Ttl == 0 || _text.Count >= _limits.TextOwners) return;
+            _text[update.Name] = records = new List<CachedText>();
+        }
+        if (update.Ttl == 0)
+        {
+            foreach (var existing in records.Where(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal)))
+                existing.ExpiresAt = Earlier(existing.ExpiresAt, now + TimeSpan.FromSeconds(1));
+            return;
+        }
+        if (update.CacheFlush)
+        {
+            var announced = new HashSet<string>(packet.Where(value => value.Kind == DnsDiscoveryRecordKind.Txt && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.DataKey), StringComparer.Ordinal);
+            foreach (var old in records.Where(value => !announced.Contains(value.DataKey) && now - value.ReceivedAt >= TimeSpan.FromSeconds(1)))
+                old.ExpiresAt = Earlier(old.ExpiresAt, now + TimeSpan.FromSeconds(1));
+        }
+        records.RemoveAll(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal));
+        if (records.Count < 8) records.Add(new CachedText(update.Properties!, update.DataKey, now, Expiry(now, update.Ttl)));
+    }
+
+    private void ApplyAddress(DnsDiscoveryUpdate update, TimeSpan now, IReadOnlyList<DnsDiscoveryUpdate> packet)
+    {
+        if (!_addresses.TryGetValue(update.Name, out var addresses))
+        {
+            if (update.Ttl == 0 || _addresses.Count >= _limits.AddressHosts) return;
+            _addresses[update.Name] = addresses = new Dictionary<IPAddress, CachedAddress>();
+        }
+        var address = update.Address!;
+        if (update.Ttl == 0)
+        {
+            if (addresses.TryGetValue(address, out var existing))
+                existing.ExpiresAt = Earlier(existing.ExpiresAt, now + TimeSpan.FromSeconds(1));
+            return;
+        }
+        if (update.CacheFlush)
+        {
+            var announced = new HashSet<IPAddress>(packet.Where(value => value.Kind == update.Kind && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.Address!));
+            foreach (var pair in addresses.Where(pair => pair.Key.AddressFamily == address.AddressFamily && !announced.Contains(pair.Key) && now - pair.Value.ReceivedAt >= TimeSpan.FromSeconds(1)).ToArray())
+                pair.Value.ExpiresAt = Earlier(pair.Value.ExpiresAt, now + TimeSpan.FromSeconds(1));
+        }
+        if (addresses.ContainsKey(address) || addresses.Count < MaximumAddressesPerHost)
+            addresses[address] = new CachedAddress(now, Expiry(now, update.Ttl));
+    }
+
+    private void Prune(TimeSpan now)
+    {
+        foreach (var key in _instances.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) _instances.Remove(key);
+        foreach (var owner in _services.Keys.ToArray()) { _services[owner].RemoveAll(value => value.ExpiresAt <= now); if (_services[owner].Count == 0) _services.Remove(owner); }
+        foreach (var owner in _text.Keys.ToArray()) { _text[owner].RemoveAll(value => value.ExpiresAt <= now); if (_text[owner].Count == 0) _text.Remove(owner); }
+        foreach (var owner in _addresses.Keys.ToArray())
+        {
+            var values = _addresses[owner];
+            foreach (var address in values.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) values.Remove(address);
+            if (values.Count == 0) _addresses.Remove(owner);
+        }
+    }
+
+    private static bool IsHomeAssistantPtr(DnsDiscoveryUpdate update)
+        => string.Equals(update.Name, ServiceName, StringComparison.OrdinalIgnoreCase)
+            && update.Target is not null
+            && update.Target.Length > ServiceName.Length + 1
+            && update.Target.EndsWith("." + ServiceName, StringComparison.OrdinalIgnoreCase);
+    private static string ServiceKey(string host, int port) => host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    private static TimeSpan Expiry(TimeSpan now, uint ttl) => now + TimeSpan.FromSeconds(ttl == 0 ? 1 : ttl);
+    private static TimeSpan Earlier(TimeSpan left, TimeSpan right) => left <= right ? left : right;
+    private static TimeSpan MonotonicNow() => TimeSpan.FromSeconds((double)System.Diagnostics.Stopwatch.GetTimestamp() / System.Diagnostics.Stopwatch.Frequency);
+
+    private abstract class CachedRecord
+    {
+        protected CachedRecord(string dataKey, TimeSpan receivedAt, TimeSpan expiresAt) { DataKey = dataKey; ReceivedAt = receivedAt; ExpiresAt = expiresAt; }
+        internal string DataKey { get; }
+        internal TimeSpan ReceivedAt { get; }
+        internal TimeSpan ExpiresAt { get; set; }
+    }
+    private sealed class CachedPtr : CachedRecord { internal CachedPtr(string key, TimeSpan receivedAt, TimeSpan expiresAt) : base(key, receivedAt, expiresAt) { } }
+    private sealed class CachedService : CachedRecord { internal CachedService(string host, int port, string key, TimeSpan receivedAt, TimeSpan expiresAt) : base(key, receivedAt, expiresAt) { Host = host; Port = port; } internal string Host { get; } internal int Port { get; } }
+    private sealed class CachedText : CachedRecord { internal CachedText(Dictionary<string, string?> properties, string key, TimeSpan receivedAt, TimeSpan expiresAt) : base(key, receivedAt, expiresAt) { Properties = properties; } internal Dictionary<string, string?> Properties { get; } }
+    private sealed class CachedAddress { internal CachedAddress(TimeSpan receivedAt, TimeSpan expiresAt) { ReceivedAt = receivedAt; ExpiresAt = expiresAt; } internal TimeSpan ReceivedAt { get; } internal TimeSpan ExpiresAt { get; set; } }
 
     private static string FriendlyInstanceName(string instance)
     {
@@ -287,9 +458,27 @@ internal sealed class DnsDiscoveryAggregate
         => Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) ? uri : null;
 }
 
+internal enum DnsDiscoveryRecordKind { Ptr, Srv, Txt, A, Aaaa }
+
+internal sealed class DnsDiscoveryUpdate
+{
+    internal DnsDiscoveryRecordKind Kind { get; set; }
+    internal string Name { get; set; } = string.Empty;
+    internal string DataKey { get; set; } = string.Empty;
+    internal uint Ttl { get; set; }
+    internal bool CacheFlush { get; set; }
+    internal string? Target { get; set; }
+    internal string? Host { get; set; }
+    internal int Port { get; set; }
+    internal Dictionary<string, string?>? Properties { get; set; }
+    internal IPAddress? Address { get; set; }
+}
+
 internal static class DnsDiscoveryPacket
 {
     private const string ServiceName = "_home-assistant._tcp.local";
+    private const int MaximumTextProperties = 64;
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
     internal static byte[] CreateQuery()
     {
@@ -308,14 +497,17 @@ internal static class DnsDiscoveryPacket
 
     internal static void ReadInto(byte[] packet, DnsDiscoveryAggregate aggregate)
     {
-        if (packet is null || packet.Length < 12) return;
-        var offset = 4;
-        var questionCount = ReadUInt16(packet, ref offset);
-        var answerCount = ReadUInt16(packet, ref offset);
-        var authorityCount = ReadUInt16(packet, ref offset);
-        var additionalCount = ReadUInt16(packet, ref offset);
         try
         {
+            if (packet is null || packet.Length < 12) return;
+            var offset = 0;
+            ReadUInt16(packet, ref offset);
+            var flags = ReadUInt16(packet, ref offset);
+            if ((flags & 0x8000) == 0 || (flags & 0x7800) != 0 || (flags & 0x000F) != 0) return;
+            var questionCount = ReadUInt16(packet, ref offset);
+            var answerCount = ReadUInt16(packet, ref offset);
+            var authorityCount = ReadUInt16(packet, ref offset);
+            var additionalCount = ReadUInt16(packet, ref offset);
             for (var index = 0; index < questionCount; index++)
             {
                 ReadName(packet, ref offset);
@@ -324,61 +516,90 @@ internal static class DnsDiscoveryPacket
             }
 
             var recordCount = checked(answerCount + authorityCount + additionalCount);
+            var updates = new List<DnsDiscoveryUpdate>();
             for (var index = 0; index < recordCount; index++)
             {
                 var name = ReadName(packet, ref offset);
                 var type = ReadUInt16(packet, ref offset);
-                ReadUInt16(packet, ref offset);
-                Require(packet, offset, 4);
-                offset += 4;
+                var recordClass = ReadUInt16(packet, ref offset);
+                var ttl = ReadUInt32(packet, ref offset);
                 var length = ReadUInt16(packet, ref offset);
                 Require(packet, offset, length);
                 var dataOffset = offset;
                 var end = offset + length;
+                if ((recordClass & 0x7FFF) != 1)
+                {
+                    offset = end;
+                    continue;
+                }
+                var cacheFlush = (recordClass & 0x8000) != 0;
                 switch (type)
                 {
                     case 12:
                     {
                         var instance = ReadName(packet, ref dataOffset);
-                        if (dataOffset > end) throw new InvalidDataException("Invalid PTR record length.");
-                        if (string.Equals(name, ServiceName, StringComparison.OrdinalIgnoreCase)) aggregate.AddInstance(instance);
+                        if (dataOffset != end) throw new InvalidDataException("Invalid PTR record length.");
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Ptr, Name = name, Target = instance, DataKey = instance.ToUpperInvariant(), Ttl = ttl, CacheFlush = cacheFlush });
                         break;
                     }
-                    case 33 when length >= 6:
+                    case 33:
                     {
-                        dataOffset += 4;
+                        if (length < 6) throw new InvalidDataException("Invalid SRV record length.");
+                        var priority = ReadUInt16(packet, ref dataOffset);
+                        var weight = ReadUInt16(packet, ref dataOffset);
                         var port = ReadUInt16(packet, ref dataOffset);
                         var host = ReadName(packet, ref dataOffset);
-                        if (dataOffset > end) throw new InvalidDataException("Invalid SRV record length.");
-                        aggregate.AddService(name, host, port);
+                        if (dataOffset != end) throw new InvalidDataException("Invalid SRV record length.");
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Srv, Name = name, Host = host, Port = port, DataKey = priority.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + weight.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture), Ttl = ttl, CacheFlush = cacheFlush });
                         break;
                     }
                     case 16:
                     {
+                        var properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
                         while (dataOffset < end)
                         {
                             var textLength = packet[dataOffset++];
                             if (dataOffset > end - textLength) throw new InvalidDataException("Invalid TXT record length.");
-                            var item = Encoding.UTF8.GetString(packet, dataOffset, textLength);
+                            var itemOffset = dataOffset;
                             dataOffset += textLength;
-                            var separator = item.IndexOf('=');
-                            aggregate.AddText(name, separator < 0 ? item : item.Substring(0, separator), separator < 0 ? null : item.Substring(separator + 1));
+                            var separator = -1;
+                            for (var position = 0; position < textLength; position++) if (packet[itemOffset + position] == (byte)'=') { separator = position; break; }
+                            var keyLength = separator < 0 ? textLength : separator;
+                            if (!IsValidTextKey(packet, itemOffset, keyLength)) continue;
+                            var key = Encoding.ASCII.GetString(packet, itemOffset, keyLength);
+                            if (properties.ContainsKey(key) || properties.Count >= MaximumTextProperties) continue;
+                            try
+                            {
+                                properties[key] = separator < 0 ? null : StrictUtf8.GetString(packet, itemOffset + separator + 1, textLength - separator - 1);
+                            }
+                            catch (DecoderFallbackException)
+                            {
+                            }
                         }
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Txt, Name = name, Properties = properties, DataKey = Convert.ToBase64String(packet, offset, length), Ttl = ttl, CacheFlush = cacheFlush });
                         break;
                     }
-                    case 1 when length == 4:
-                        aggregate.AddAddress(name, new IPAddress(new[] { packet[offset], packet[offset + 1], packet[offset + 2], packet[offset + 3] }));
-                        break;
-                    case 28 when length == 16:
+                    case 1:
                     {
+                        if (length != 4) throw new InvalidDataException("Invalid A record length.");
+                        var address = new IPAddress(new[] { packet[offset], packet[offset + 1], packet[offset + 2], packet[offset + 3] });
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.A, Name = name, Address = address, DataKey = address.ToString(), Ttl = ttl, CacheFlush = cacheFlush });
+                        break;
+                    }
+                    case 28:
+                    {
+                        if (length != 16) throw new InvalidDataException("Invalid AAAA record length.");
                         var bytes = new byte[16];
                         Buffer.BlockCopy(packet, offset, bytes, 0, 16);
-                        aggregate.AddAddress(name, new IPAddress(bytes));
+                        var address = new IPAddress(bytes);
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Aaaa, Name = name, Address = address, DataKey = address.ToString(), Ttl = ttl, CacheFlush = cacheFlush });
                         break;
                     }
                 }
                 offset = end;
             }
+            if (offset != packet.Length) throw new InvalidDataException("Unexpected trailing DNS packet data.");
+            aggregate.ApplyPacket(updates);
         }
         catch (InvalidDataException)
         {
@@ -387,6 +608,17 @@ internal static class DnsDiscoveryPacket
         catch (OverflowException)
         {
         }
+    }
+
+    private static bool IsValidTextKey(byte[] packet, int offset, int length)
+    {
+        if (length <= 0) return false;
+        for (var index = 0; index < length; index++)
+        {
+            var value = packet[offset + index];
+            if (value < 0x20 || value > 0x7E || value == (byte)'=') return false;
+        }
+        return true;
     }
 
     private static string ReadName(byte[] packet, ref int offset)
@@ -426,6 +658,17 @@ internal static class DnsDiscoveryPacket
         Require(packet, offset, 2);
         var value = (ushort)((packet[offset] << 8) | packet[offset + 1]);
         offset += 2;
+        return value;
+    }
+
+    private static uint ReadUInt32(byte[] packet, ref int offset)
+    {
+        Require(packet, offset, 4);
+        var value = ((uint)packet[offset] << 24)
+            | ((uint)packet[offset + 1] << 16)
+            | ((uint)packet[offset + 2] << 8)
+            | packet[offset + 3];
+        offset += 4;
         return value;
     }
 

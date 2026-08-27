@@ -152,6 +152,169 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdParserHonorsGoodbyeTtlAndCacheFlushRecordSets()
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), aggregate);
+
+        now += TimeSpan.FromSeconds(2);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(recordClass: 0x8001, addressLastOctet: 20), aggregate);
+        Assert.Equal(2, Assert.Single(aggregate.Build()).Addresses.Count);
+        now += TimeSpan.FromMilliseconds(1100);
+        Assert.Equal(IPAddress.Parse("192.0.2.20"), Assert.Single(Assert.Single(aggregate.Build()).Addresses));
+
+        now += TimeSpan.FromSeconds(2);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(ttl: 0, addressLastOctet: 20), aggregate);
+        Assert.Single(aggregate.Build());
+        now += TimeSpan.FromMilliseconds(1100);
+        Assert.Empty(aggregate.Build());
+        Assert.Equal(0, aggregate.ServiceCount);
+        Assert.Equal(0, aggregate.TextOwnerCount);
+        Assert.Equal(0, aggregate.AddressHostCount);
+    }
+
+    [Fact]
+    public void DnsSdCacheExpiresRefreshesAndMatchesGoodbyesByRdata()
+    {
+        var now = TimeSpan.Zero;
+        var expiring = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(ttl: 1), expiring);
+        now += TimeSpan.FromMilliseconds(1100);
+        Assert.Empty(expiring.Build());
+
+        now = TimeSpan.Zero;
+        var rescued = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), rescued);
+        now += TimeSpan.FromSeconds(2);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(ttl: 0), rescued);
+        now += TimeSpan.FromMilliseconds(500);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), rescued);
+        now += TimeSpan.FromSeconds(1);
+        Assert.Single(rescued.Build());
+
+        now += TimeSpan.FromSeconds(2);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(recordClass: 0x8001, host: "new.local", textItems: new[] { "location_name=New Home", "internal_url=http://new.local:8123/" }), rescued);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(0, 0, 0, "ha.local", 8123), rescued);
+        DnsDiscoveryPacket.ReadInto(CreateTxtOnlyPacket(0, new[] { "location_name=My Home", "uuid=test-uuid", "version=2026.8.3", "internal_url=http://ha.local:8123/", "external_url=file:///unsafe" }), rescued);
+        now += TimeSpan.FromMilliseconds(1100);
+        var current = Assert.Single(rescued.Build());
+        Assert.Equal("new.local", current.HostName);
+        Assert.Equal("New Home", current.Name);
+    }
+
+    [Fact]
+    public void DnsSdRecentGoodbyeExpiresEveryMatchingRecordAfterOneSecond()
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(ttl: 0), aggregate);
+        Assert.Single(aggregate.Build());
+        now += TimeSpan.FromMilliseconds(1100);
+        Assert.Empty(aggregate.Build());
+        Assert.Equal(0, aggregate.ServiceCount);
+        Assert.Equal(0, aggregate.TextOwnerCount);
+        Assert.Equal(0, aggregate.AddressHostCount);
+    }
+
+    [Fact]
+    public void DnsSdSrvGoodbyeIncludesPriorityAndWeightInRdataIdentity()
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), aggregate);
+        now += TimeSpan.FromSeconds(2);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 2, "ha.local", 8123, cacheFlush: true), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(0, 0, 0, "ha.local", 8123), aggregate);
+        now += TimeSpan.FromMilliseconds(1100);
+        Assert.Equal("ha.local", Assert.Single(aggregate.Build()).HostName);
+    }
+
+    [Fact]
+    public void DnsSdParserAppliesOnlyCompleteValidResponseDatagrams()
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), aggregate);
+        now += TimeSpan.FromSeconds(2);
+
+        var malformedGoodbye = CreateDiscoveryPacket(ttl: 0).Concat(new byte[] { 0 }).ToArray();
+        malformedGoodbye[7] = 5;
+        DnsDiscoveryPacket.ReadInto(malformedGoodbye, aggregate);
+        now += TimeSpan.FromSeconds(2);
+        Assert.Single(aggregate.Build());
+
+        var query = CreateDiscoveryPacket();
+        query[2] = 0;
+        query[3] = 0;
+        var wrongOpcode = CreateDiscoveryPacket();
+        wrongOpcode[2] = 0x88;
+        var wrongRcode = CreateDiscoveryPacket();
+        wrongRcode[3] = 1;
+        var invalid = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(query, invalid);
+        DnsDiscoveryPacket.ReadInto(wrongOpcode, invalid);
+        DnsDiscoveryPacket.ReadInto(wrongRcode, invalid);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(recordClass: 2), invalid);
+        Assert.Empty(invalid.Build());
+    }
+
+    [Fact]
+    public void DnsSdParserRejectsQuotaPoisoningAndInvalidTxtKeys()
+    {
+        var unrelated = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(CreateUnrelatedDiscoveryPacket(), unrelated);
+        Assert.Equal(0, unrelated.ServiceCount);
+        Assert.Equal(0, unrelated.TextOwnerCount);
+        Assert.Equal(0, unrelated.AddressHostCount);
+
+        var aggregate = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(textItems: new[]
+        {
+            "location_name=Home",
+            "internal_url=http://good.local:8123/",
+            "INTERNAL_URL=http://bad.local:8123/",
+            "=empty",
+            "\u0001control=value"
+        }), aggregate);
+        var instance = Assert.Single(aggregate.Build());
+        Assert.Equal(new Uri("http://good.local:8123/"), instance.InternalUri);
+        Assert.Equal(2, instance.Properties.Count);
+
+        var boundedText = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(textItems: Enumerable.Range(0, 80).Select(index => $"key{index}=value").ToArray()), boundedText);
+        Assert.Equal(64, Assert.Single(boundedText.Build()).Properties.Count);
+
+        var goodbyeOnly = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(ttl: 0, additionalTtl: 120), goodbyeOnly);
+        Assert.Empty(goodbyeOnly.Build());
+        Assert.Equal(0, goodbyeOnly.ServiceCount);
+        Assert.Equal(0, goodbyeOnly.TextOwnerCount);
+        Assert.Equal(0, goodbyeOnly.AddressHostCount);
+
+        var retainedOnly = new DnsDiscoveryAggregate();
+        for (var index = 0; index < 9; index++)
+            DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(host: $"host-{index}.local", srvPriority: index), retainedOnly);
+        Assert.Equal(8, retainedOnly.AddressHostCount);
+    }
+
+    [Theory]
+    [InlineData(33, 5)]
+    [InlineData(1, 3)]
+    [InlineData(28, 15)]
+    public void DnsSdMalformedKnownRecordPreventsEarlierDestructiveUpdates(int recordType, int dataLength)
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), aggregate);
+        now += TimeSpan.FromSeconds(2);
+        DnsDiscoveryPacket.ReadInto(AppendMalformedRecord(CreateDiscoveryPacket(ttl: 0), recordType, dataLength), aggregate);
+        now += TimeSpan.FromMilliseconds(1100);
+        Assert.Single(aggregate.Build());
+    }
+
+    [Fact]
     public void DnsSdAggregationRequiresTargetPtrAndBoundsUntrustedRecords()
     {
         var unrelated = new DnsDiscoveryAggregate();
@@ -557,7 +720,7 @@ public sealed class StableControlAndAdapterContractTests
         else Assert.Equal(value?.ToString(), actual.GetString());
     }
 
-    private static byte[] CreateDiscoveryPacket()
+    private static byte[] CreateDiscoveryPacket(uint ttl = 120, int recordClass = 1, byte addressLastOctet = 10, string host = "ha.local", string[]? textItems = null, uint? additionalTtl = null, int srvPriority = 0, int srvWeight = 0)
     {
         using var stream = new MemoryStream();
         U16(stream, 0); U16(stream, 0x8400); U16(stream, 1); U16(stream, 4); U16(stream, 0); U16(stream, 0);
@@ -565,13 +728,57 @@ public sealed class StableControlAndAdapterContractTests
         var serviceOffset = 12;
         U16(stream, 12); U16(stream, 1);
 
-        Pointer(stream, serviceOffset); U16(stream, 12); U16(stream, 1); U32(stream, 120); U16(stream, 7); Label(stream, "Test"); Pointer(stream, serviceOffset);
-        Label(stream, "Test"); Pointer(stream, serviceOffset); U16(stream, 33); U16(stream, 1); U32(stream, 120);
-        using (var data = new MemoryStream()) { U16(data, 0); U16(data, 0); U16(data, 8123); Name(data, "ha.local"); WriteData(stream, data.ToArray()); }
-        Label(stream, "Test"); Pointer(stream, serviceOffset); U16(stream, 16); U16(stream, 1); U32(stream, 120);
-        var text = new[] { "location_name=My Home", "uuid=test-uuid", "version=2026.8.3", "internal_url=http://ha.local:8123/", "external_url=file:///unsafe" };
+        Pointer(stream, serviceOffset); U16(stream, 12); U16(stream, recordClass); U32(stream, ttl); U16(stream, 7); Label(stream, "Test"); Pointer(stream, serviceOffset);
+        var recordTtl = additionalTtl ?? ttl;
+        Label(stream, "Test"); Pointer(stream, serviceOffset); U16(stream, 33); U16(stream, recordClass); U32(stream, recordTtl);
+        using (var data = new MemoryStream()) { U16(data, srvPriority); U16(data, srvWeight); U16(data, 8123); Name(data, host); WriteData(stream, data.ToArray()); }
+        Label(stream, "Test"); Pointer(stream, serviceOffset); U16(stream, 16); U16(stream, recordClass); U32(stream, recordTtl);
+        var text = textItems ?? new[] { "location_name=My Home", "uuid=test-uuid", "version=2026.8.3", "internal_url=http://ha.local:8123/", "external_url=file:///unsafe" };
         using (var data = new MemoryStream()) { foreach (var item in text) { var bytes = Encoding.UTF8.GetBytes(item); data.WriteByte((byte)bytes.Length); data.Write(bytes); } WriteData(stream, data.ToArray()); }
-        Name(stream, "ha.local"); U16(stream, 1); U16(stream, 1); U32(stream, 120); U16(stream, 4); stream.Write(new byte[] { 192, 0, 2, 10 });
+        Name(stream, host); U16(stream, 1); U16(stream, recordClass); U32(stream, recordTtl); U16(stream, 4); stream.Write(new byte[] { 192, 0, 2, addressLastOctet });
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateSrvOnlyPacket(uint ttl, int priority, int weight, string host, int port, bool cacheFlush = false)
+    {
+        using var stream = new MemoryStream();
+        U16(stream, 0); U16(stream, 0x8400); U16(stream, 0); U16(stream, 1); U16(stream, 0); U16(stream, 0);
+        Name(stream, "Test._home-assistant._tcp.local"); U16(stream, 33); U16(stream, cacheFlush ? 0x8001 : 1); U32(stream, ttl);
+        using var data = new MemoryStream();
+        U16(data, priority); U16(data, weight); U16(data, port); Name(data, host); WriteData(stream, data.ToArray());
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateTxtOnlyPacket(uint ttl, string[] textItems, bool cacheFlush = false)
+    {
+        using var stream = new MemoryStream();
+        U16(stream, 0); U16(stream, 0x8400); U16(stream, 0); U16(stream, 1); U16(stream, 0); U16(stream, 0);
+        Name(stream, "Test._home-assistant._tcp.local"); U16(stream, 16); U16(stream, cacheFlush ? 0x8001 : 1); U32(stream, ttl);
+        using var data = new MemoryStream();
+        foreach (var item in textItems) { var bytes = Encoding.UTF8.GetBytes(item); data.WriteByte((byte)bytes.Length); data.Write(bytes); }
+        WriteData(stream, data.ToArray());
+        return stream.ToArray();
+    }
+
+    private static byte[] AppendMalformedRecord(byte[] packet, int recordType, int dataLength)
+    {
+        packet[7]++;
+        using var stream = new MemoryStream();
+        stream.Write(packet);
+        Name(stream, "bad.local"); U16(stream, recordType); U16(stream, 1); U32(stream, 120); U16(stream, dataLength);
+        stream.Write(new byte[dataLength]);
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateUnrelatedDiscoveryPacket()
+    {
+        using var stream = new MemoryStream();
+        U16(stream, 0); U16(stream, 0x8400); U16(stream, 0); U16(stream, 3); U16(stream, 0); U16(stream, 0);
+        Name(stream, "Printer._ipp._tcp.local"); U16(stream, 33); U16(stream, 1); U32(stream, 120);
+        using (var data = new MemoryStream()) { U16(data, 0); U16(data, 0); U16(data, 631); Name(data, "printer.local"); WriteData(stream, data.ToArray()); }
+        Name(stream, "Printer._ipp._tcp.local"); U16(stream, 16); U16(stream, 1); U32(stream, 120);
+        using (var data = new MemoryStream()) { var bytes = Encoding.UTF8.GetBytes("note=not Home Assistant"); data.WriteByte((byte)bytes.Length); data.Write(bytes); WriteData(stream, data.ToArray()); }
+        Name(stream, "printer.local"); U16(stream, 1); U16(stream, 1); U32(stream, 120); U16(stream, 4); stream.Write(new byte[] { 192, 0, 2, 50 });
         return stream.ToArray();
     }
 
