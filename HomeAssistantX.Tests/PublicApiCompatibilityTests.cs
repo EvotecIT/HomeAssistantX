@@ -38,7 +38,10 @@ public sealed class PublicApiCompatibilityTests
     {
         Assert.Equal("System.UInt64", FormatEnumUnderlyingType(typeof(EnumStorageFixture)));
         Assert.Equal("flags enum", FormatTypeKind(typeof(FlagsFixture)));
+        Assert.Equal("ref struct", FormatTypeKind(typeof(RefStructFixture)));
+        Assert.Equal("readonly struct", FormatTypeKind(typeof(ReadOnlyStructFixture)));
         Assert.Contains("<out TResult>", FormatTypeDeclarationName(typeof(VariantFixture<>)), StringComparison.Ordinal);
+        Assert.Contains("+Nested", FormatTypeDeclarationName(typeof(GenericOwner<>.Nested<>)), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -163,6 +166,19 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("get;set;", FormatPropertyAccessors(mutable));
         Assert.Equal("get;init;", FormatPropertyAccessors(initOnly));
     }
+
+    [Fact]
+    public void PropertyFormatterPreservesRequiredMembers()
+    {
+        var required = typeof(PropertyAccessorFixture).GetProperty(nameof(PropertyAccessorFixture.Required))!;
+        var mutable = typeof(PropertyAccessorFixture).GetProperty(nameof(PropertyAccessorFixture.Mutable))!;
+
+        var requiredField = typeof(PropertyAccessorFixture).GetField(nameof(PropertyAccessorFixture.RequiredField))!;
+
+        Assert.Equal("required ", RequiredMember(required));
+        Assert.Equal("required ", RequiredMember(requiredField));
+        Assert.Equal(string.Empty, RequiredMember(mutable));
+    }
 #endif
 
     [Fact]
@@ -253,7 +269,7 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
-                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + FormatAnnotatedType(property.PropertyType, property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
+                lines.Add("  P " + MemberAccess(accessor) + MemberScope(accessor) + " " + RequiredMember(property) + FormatAnnotatedType(property.PropertyType, property) + " " + property.Name + FormatIndexerParameters(property) + " {" + FormatPropertyAccessors(property) + "}");
             }
             foreach (var eventInfo in type.GetEvents(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(IsExternallyAccessibleEvent)
@@ -390,6 +406,21 @@ public sealed class PublicApiCompatibilityTests
             => new(left.Value + right.Value);
     }
 
+    private ref struct RefStructFixture
+    {
+    }
+
+    private readonly struct ReadOnlyStructFixture
+    {
+    }
+
+    private sealed class GenericOwner<TOuter>
+    {
+        public sealed class Nested<TInner>
+        {
+        }
+    }
+
     private class ProtectedConstructorFixture
     {
         protected ProtectedConstructorFixture(int value)
@@ -420,6 +451,10 @@ public sealed class PublicApiCompatibilityTests
         public string Mutable { get; set; } = string.Empty;
 
         public string InitOnly { get; init; } = string.Empty;
+
+        public required string Required { get; set; }
+
+        public required string RequiredField = string.Empty;
     }
 #endif
 
@@ -473,7 +508,7 @@ public sealed class PublicApiCompatibilityTests
             ? "const"
             : (field.IsStatic ? "static" : "instance") + (field.IsInitOnly ? " readonly" : string.Empty);
         var value = field.IsLiteral ? " = " + FormatDefault(field.GetRawConstantValue()) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + RequiredMember(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
     private static string FormatPropertyAccessors(PropertyInfo property)
@@ -490,6 +525,14 @@ public sealed class PublicApiCompatibilityTests
                 StringComparison.Ordinal));
         return getter + FormatAccessor(property.SetMethod, propertyAccess, isInitOnly ? "init;" : "set;");
     }
+
+    private static string RequiredMember(MemberInfo member)
+        => member.CustomAttributes.Any(attribute => string.Equals(
+            attribute.AttributeType.FullName,
+            "System.Runtime.CompilerServices.RequiredMemberAttribute",
+            StringComparison.Ordinal))
+            ? "required "
+            : string.Empty;
 
     private static string FormatIndexerParameters(PropertyInfo property)
     {
@@ -568,16 +611,26 @@ public sealed class PublicApiCompatibilityTests
     {
         var kind = type.IsEnum
             ? (type.IsDefined(typeof(FlagsAttribute), inherit: false) ? "flags enum" : "enum")
-            : type.IsInterface ? "interface" : type.IsValueType ? "struct" : type.IsAbstract && type.IsSealed ? "static class" : type.IsAbstract ? "abstract class" : type.IsSealed ? "sealed class" : "class";
+            : type.IsInterface ? "interface" : type.IsValueType ? FormatStructKind(type) : type.IsAbstract && type.IsSealed ? "static class" : type.IsAbstract ? "abstract class" : type.IsSealed ? "sealed class" : "class";
         return kind;
     }
+
+    private static string FormatStructKind(Type type)
+    {
+        var byRefLike = HasCompilerMarker(type, "System.Runtime.CompilerServices.IsByRefLikeAttribute");
+        var readOnly = HasCompilerMarker(type, "System.Runtime.CompilerServices.IsReadOnlyAttribute");
+        return readOnly && byRefLike ? "readonly ref struct" : byRefLike ? "ref struct" : readOnly ? "readonly struct" : "struct";
+    }
+
+    private static bool HasCompilerMarker(MemberInfo member, string attributeName)
+        => member.CustomAttributes.Any(attribute => string.Equals(attribute.AttributeType.FullName, attributeName, StringComparison.Ordinal));
 
     private static string FormatEnumUnderlyingType(Type type) => FormatType(Enum.GetUnderlyingType(type));
 
     private static string FormatTypeDeclarationName(Type type)
     {
         if (!type.IsGenericTypeDefinition) return FormatType(type);
-        var name = (type.FullName ?? type.Name).Split('`')[0];
+        var name = StripGenericArities(type.FullName ?? type.Name);
         var arguments = type.GetGenericArguments().Select(argument =>
         {
             var variance = argument.GenericParameterAttributes & GenericParameterAttributes.VarianceMask;
@@ -658,7 +711,7 @@ public sealed class PublicApiCompatibilityTests
         if (type.IsArray) return FormatType(type.GetElementType()!) + ArraySuffix(type);
         if (!type.IsGenericType) return type.FullName ?? type.Name;
         var definition = type.GetGenericTypeDefinition();
-        var name = (definition.FullName ?? definition.Name).Split('`')[0];
+        var name = StripGenericArities(definition.FullName ?? definition.Name);
         return name + "<" + string.Join(",", type.GetGenericArguments().Select(FormatType)) + ">";
     }
 
@@ -686,7 +739,7 @@ public sealed class PublicApiCompatibilityTests
             {
                 return FormatTuple(type, cursor, tupleNames);
             }
-            var name = (definition.FullName ?? definition.Name).Split('`')[0];
+            var name = StripGenericArities(definition.FullName ?? definition.Name);
             var formatted = name + "<" + string.Join(",", type.GetGenericArguments().Select(argument => FormatAnnotatedType(argument, cursor, tupleNames))) + ">";
             return !type.IsValueType && flag == 2 ? formatted + "?" : formatted;
         }
@@ -730,6 +783,13 @@ public sealed class PublicApiCompatibilityTests
             && type.IsGenericTypeDefinition;
 
     private static string ArraySuffix(Type type) => "[" + new string(',', type.GetArrayRank() - 1) + "]";
+
+    private static string StripGenericArities(string name)
+        => string.Join("+", name.Split('+').Select(segment =>
+        {
+            var marker = segment.IndexOf('`');
+            return marker < 0 ? segment : segment.Substring(0, marker);
+        }));
 
     private static byte[] ReadNullableFlags(ICustomAttributeProvider provider)
     {
