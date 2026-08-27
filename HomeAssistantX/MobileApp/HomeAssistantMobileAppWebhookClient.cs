@@ -104,11 +104,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             else
             {
                 var requestPlaintext = JsonSerializer.SerializeToUtf8Bytes(
-                    new Dictionary<string, object?>
-                    {
-                        ["type"] = command,
-                        ["data"] = data ?? new Dictionary<string, object?>()
-                    },
+                    data ?? new Dictionary<string, object?>(),
                     HomeAssistantJson.SerializerOptions);
                 var encrypted = await _protector!.ProtectAsync(requestPlaintext, _secret!, operationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(encrypted)) throw new HomeAssistantProtocolException("The mobile-app payload protector returned an empty request payload.");

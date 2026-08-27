@@ -72,6 +72,19 @@ internal sealed partial class TestHomeAssistantServer
                     await WriteHttpResponseAsync(stream, 400, "{\"error\":\"missing_type\"}").ConfigureAwait(false);
                     return;
                 }
+                var encryptedRequest = root.GetProperty("encrypted_data").GetString();
+                using var decryptedDocument = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(encryptedRequest!));
+                var decrypted = decryptedDocument.RootElement;
+                if (encryptedType.GetString() == "update_registration"
+                    && (decrypted.ValueKind != System.Text.Json.JsonValueKind.Object
+                        || !decrypted.TryGetProperty("os_version", out var osVersion)
+                        || osVersion.GetString() != "12.0"
+                        || decrypted.TryGetProperty("type", out _)
+                        || decrypted.TryGetProperty("data", out _)))
+                {
+                    await WriteHttpResponseAsync(stream, 400, "{\"error\":\"invalid_encrypted_data\"}").ConfigureAwait(false);
+                    return;
+                }
                 var encryptedResponse = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"version\":\"2026.8.3\"}"));
                 await WriteHttpResponseAsync(stream, 200, "{\"encrypted\":true,\"encrypted_data\":\"" + encryptedResponse + "\"}").ConfigureAwait(false);
             }

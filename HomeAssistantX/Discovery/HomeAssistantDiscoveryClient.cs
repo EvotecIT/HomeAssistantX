@@ -155,7 +155,7 @@ public sealed class HomeAssistantDiscoveryClient
             transport = _transportFactory.Create(localAddress);
             var query = DnsDiscoveryPacket.CreateQuery();
             await transport.SendAsync(query, cancellationToken).ConfigureAwait(false);
-            var retryDelays = new[] { TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(750) };
+            var retryDelays = new[] { TimeSpan.FromSeconds(1) };
             var retryIndex = 0;
             Task? retryTask = Task.Delay(retryDelays[retryIndex], cancellationToken);
             var receiveTask = transport.ReceiveAsync(cancellationToken);

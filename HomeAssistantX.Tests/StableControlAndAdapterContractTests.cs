@@ -417,7 +417,7 @@ public sealed class StableControlAndAdapterContractTests
 
         Assert.Single(await client.DiscoverAsync(TimeSpan.FromMilliseconds(1100)));
 
-        Assert.Equal(3, factory.SentAddresses.Count(value => value.Equals(address)));
+        Assert.Equal(2, factory.SentAddresses.Count(value => value.Equals(address)));
     }
 
     [Fact]
@@ -658,8 +658,22 @@ public sealed class StableControlAndAdapterContractTests
         Assert.False(encryptedBody.RootElement.TryGetProperty("data", out _));
         var plaintext = Convert.FromBase64String(encryptedBody.RootElement.GetProperty("encrypted_data").GetString()!);
         using var plaintextBody = JsonDocument.Parse(plaintext);
-        Assert.Equal("get_config", plaintextBody.RootElement.GetProperty("type").GetString());
-        Assert.Equal(JsonValueKind.Object, plaintextBody.RootElement.GetProperty("data").ValueKind);
+        Assert.Equal(JsonValueKind.Object, plaintextBody.RootElement.ValueKind);
+        Assert.Empty(plaintextBody.RootElement.EnumerateObject());
+
+        await protectedWebhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate
+        {
+            OperatingSystemVersion = "12.0",
+            AppData = new Dictionary<string, object?> { ["push_token"] = "encrypted-update" }
+        });
+        using var encryptedUpdateBody = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.Equal("update_registration", encryptedUpdateBody.RootElement.GetProperty("type").GetString());
+        var updatePlaintext = Convert.FromBase64String(encryptedUpdateBody.RootElement.GetProperty("encrypted_data").GetString()!);
+        using var updatePlaintextBody = JsonDocument.Parse(updatePlaintext);
+        Assert.Equal("12.0", updatePlaintextBody.RootElement.GetProperty("os_version").GetString());
+        Assert.Equal("encrypted-update", updatePlaintextBody.RootElement.GetProperty("app_data").GetProperty("push_token").GetString());
+        Assert.False(updatePlaintextBody.RootElement.TryGetProperty("type", out _));
+        Assert.False(updatePlaintextBody.RootElement.TryGetProperty("data", out _));
 
         await Assert.ThrowsAsync<ArgumentException>(() => protectedWebhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate()));
     }
