@@ -857,6 +857,9 @@ try {
         { Set-HomeAssistantDashboard -DashboardId house-main -Icon home -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -NewResource -ResourceUrl ' ' -ResourceType Module -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ResourceId ' ' -ResourceUrl /local/card.js -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantFan -Entity fan.office -Action TurnOn -PresetMode ' ' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantStatistic sensor.Bad -ChangeUnit -OldUnit Wh -NewUnit kWh -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantStatistic source:Bad -AdjustSum 1 -StartTime (Get-Date) -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard -ResourceId ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard ([string]::new([char]'d', 256)) -WhatIf -ErrorAction Stop }
