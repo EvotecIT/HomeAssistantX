@@ -54,10 +54,10 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
         switch (ParameterSetName)
         {
             case CreateSet:
-                var createUrlPath = Require(UrlPath, nameof(UrlPath));
+                if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, AllowSingleWord, out var createUrlPath))
+                    throw new ArgumentException("Dashboard URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens; a hyphen is required unless AllowSingleWord is enabled.", nameof(UrlPath));
                 var createTitle = Require(Title, nameof(Title));
                 var createIcon = Icon is null ? null : RequireIcon(Icon, nameof(Icon));
-                if (!AllowSingleWord && createUrlPath.IndexOf('-') < 0) throw new ArgumentException("Dashboard URL paths must contain a hyphen unless AllowSingleWord is explicitly enabled.", nameof(UrlPath));
                 target = createUrlPath; action = "Create Home Assistant dashboard";
                 if (!ShouldProcess(target, action)) return;
                 result = await Client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = createUrlPath, Title = createTitle, Icon = createIcon, ShowInSidebar = !HideFromSidebar, RequireAdmin = RequireAdmin, AllowSingleWord = AllowSingleWord }, CancelToken).ConfigureAwait(false);
