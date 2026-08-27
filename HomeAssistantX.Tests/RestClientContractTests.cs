@@ -30,6 +30,8 @@ public sealed class RestClientContractTests
         Assert.True(temperature.TryGetAttribute<string>("unit_of_measurement", out var unit));
         Assert.Equal("°C", unit);
         Assert.Equal("good", temperature.Attributes["nested"].GetProperty("quality").GetString());
+        Assert.True(temperature.TryGetAttribute<ConsumerAttribute>("nested", out var nested));
+        Assert.Equal("good", nested!.Quality);
         Assert.Equal("test", temperature.AdditionalData["custom_state_field"].GetProperty("source").GetString());
         Assert.Equal("state-trace", temperature.Context!.AdditionalData["trace_hint"].GetString());
         Assert.Equal("Bearer " + TestHomeAssistantServer.AccessToken, server.LastAuthorization);
@@ -234,5 +236,10 @@ public sealed class RestClientContractTests
     private sealed class ConsumerResponse
     {
         public int Value { get; set; }
+    }
+
+    private sealed class ConsumerAttribute
+    {
+        public string? Quality { get; set; }
     }
 }

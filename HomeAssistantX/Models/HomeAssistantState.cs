@@ -46,7 +46,7 @@ public sealed class HomeAssistantState
         {
             try
             {
-                value = raw.Deserialize<T>(Protocol.HomeAssistantJson.SerializerOptions);
+                value = raw.Deserialize<T>(Protocol.HomeAssistantJson.RawSerializerOptions);
                 return true;
             }
             catch (JsonException)
