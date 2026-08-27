@@ -176,12 +176,27 @@ public sealed class EnergyRecorderWeatherContractTests
                 StatisticId = "external:daily_energy", Source = "external", Name = "Daily energy",
                 HasMean = false, HasSum = true, MeanType = HomeAssistantStatisticMeanType.None, UnitClass = " energy ", UnitOfMeasurement = " kWh "
             },
-            new[] { new HomeAssistantStatisticImportRow { Start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero), Sum = 1.5 } });
+            new[]
+            {
+                new HomeAssistantStatisticImportRow
+                {
+                    Start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero),
+                    LastReset = new DateTimeOffset(2026, 8, 26, 9, 0, 0, TimeSpan.Zero),
+                    Sum = 1.5
+                }
+            });
         using (var import = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/import_statistics"))))
         {
             Assert.False(import.RootElement.GetProperty("metadata").GetProperty("has_mean").GetBoolean());
             Assert.Equal("energy", import.RootElement.GetProperty("metadata").GetProperty("unit_class").GetString());
             Assert.Equal("kWh", import.RootElement.GetProperty("metadata").GetProperty("unit_of_measurement").GetString());
+            var row = Assert.Single(import.RootElement.GetProperty("stats").EnumerateArray());
+            Assert.Equal(
+                new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero).ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                row.GetProperty("start").GetString());
+            Assert.Equal(
+                new DateTimeOffset(2026, 8, 26, 9, 0, 0, TimeSpan.Zero).ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                row.GetProperty("last_reset").GetString());
         }
 
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.UpdateStatisticsMetadataAsync(
