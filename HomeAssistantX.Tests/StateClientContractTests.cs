@@ -27,7 +27,7 @@ public sealed class StateClientContractTests
         using var client = TestClientFactory.Create(server);
         var received = new TaskCompletionSource<HomeAssistantStateChange>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = await client.States.SubscribeAsync(
-            HomeAssistantStateFilter.ForDomains("light"),
+            HomeAssistantStateFilter.ForDomains(" light "),
             (change, _) =>
             {
                 received.TrySetResult(change);

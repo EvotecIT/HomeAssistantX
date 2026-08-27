@@ -1,5 +1,6 @@
 ﻿#if NET10_0
 using System.Collections.Concurrent;
+using System.Reflection;
 using System.Text.Json;
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Exceptions;
@@ -10,6 +11,28 @@ namespace HomeAssistantX.Tests;
 
 public sealed class WebSocketContractTests
 {
+    [Fact]
+    public async Task RequestDeadlineIncludesWaitingForTheSharedSendGate()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromMilliseconds(150));
+        await client.WebSocket.ConnectAsync();
+        var field = typeof(HomeAssistantX.WebSockets.HomeAssistantWebSocketClient)
+            .GetField("_sendGate", BindingFlags.Instance | BindingFlags.NonPublic);
+        var gate = Assert.IsType<SemaphoreSlim>(field!.GetValue(client.WebSocket));
+        await gate.WaitAsync();
+        try
+        {
+            var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+                () => client.WebSocket.PingAsync());
+            Assert.IsType<TimeoutException>(exception.InnerException);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     [Fact]
     public async Task ConnectNegotiatesCoalescingAsFirstCommandAndRoutesBatchedMessages()
     {
@@ -413,6 +436,22 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task MutableTargetsAreRevalidatedAndNormalizedBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = new HomeAssistantTarget { EntityIds = new[] { " light.kitchen " } };
+
+        await client.Services.CallAsync(HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target));
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
+        Assert.Equal("light.kitchen", body.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+        target.EntityIds = new[] { " " };
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => client.Services.CallAsync(HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target)));
+    }
+
+    [Fact]
     public async Task DefaultServiceCallOmitsOptionalWebSocketFields()
     {
         using var server = new TestHomeAssistantServer();
@@ -479,6 +518,23 @@ public sealed class WebSocketContractTests
         using var validationCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("validate_config")));
         Assert.True(validationCommand.RootElement.TryGetProperty("action", out _));
         Assert.False(validationCommand.RootElement.TryGetProperty("trigger", out _));
+    }
+
+    [Fact]
+    public async Task SignPathRejectsExpiryValuesOutsideTheWireIntegerRange()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => client.System.SignPathAsync("/api/camera_proxy/camera.front", TimeSpan.MaxValue));
+        var signed = await client.System.SignPathAsync(
+            "/api/camera_proxy/camera.front",
+            TimeSpan.FromSeconds(int.MaxValue - 0.25));
+
+        Assert.Contains("authSig=", signed);
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("auth/sign_path")));
+        Assert.Equal(int.MaxValue, command.RootElement.GetProperty("expires").GetInt32());
     }
 
     private static async Task<T> WithTimeoutAsync<T>(Task<T> task)

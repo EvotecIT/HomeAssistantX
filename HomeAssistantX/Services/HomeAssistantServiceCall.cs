@@ -89,29 +89,30 @@ public sealed class HomeAssistantServiceCall
     internal Dictionary<string, object?> ToRestPayload()
     {
         var payload = new Dictionary<string, object?>(_data, StringComparer.Ordinal);
-        if (Target?.EntityIds is { Count: > 0 })
+        var target = Target?.Normalize();
+        if (target?.EntityIds is { Count: > 0 })
         {
-            payload["entity_id"] = Target.EntityIds.Count == 1 ? Target.EntityIds[0] : Target.EntityIds;
+            payload["entity_id"] = target.EntityIds.Count == 1 ? target.EntityIds[0] : target.EntityIds;
         }
 
-        if (Target?.DeviceIds is { Count: > 0 })
+        if (target?.DeviceIds is { Count: > 0 })
         {
-            payload["device_id"] = Target.DeviceIds.Count == 1 ? Target.DeviceIds[0] : Target.DeviceIds;
+            payload["device_id"] = target.DeviceIds.Count == 1 ? target.DeviceIds[0] : target.DeviceIds;
         }
 
-        if (Target?.AreaIds is { Count: > 0 })
+        if (target?.AreaIds is { Count: > 0 })
         {
-            payload["area_id"] = Target.AreaIds.Count == 1 ? Target.AreaIds[0] : Target.AreaIds;
+            payload["area_id"] = target.AreaIds.Count == 1 ? target.AreaIds[0] : target.AreaIds;
         }
 
-        if (Target?.FloorIds is { Count: > 0 })
+        if (target?.FloorIds is { Count: > 0 })
         {
-            payload["floor_id"] = Target.FloorIds.Count == 1 ? Target.FloorIds[0] : Target.FloorIds;
+            payload["floor_id"] = target.FloorIds.Count == 1 ? target.FloorIds[0] : target.FloorIds;
         }
 
-        if (Target?.LabelIds is { Count: > 0 })
+        if (target?.LabelIds is { Count: > 0 })
         {
-            payload["label_id"] = Target.LabelIds.Count == 1 ? Target.LabelIds[0] : Target.LabelIds;
+            payload["label_id"] = target.LabelIds.Count == 1 ? target.LabelIds[0] : target.LabelIds;
         }
 
         return payload;
@@ -131,7 +132,7 @@ public sealed class HomeAssistantServiceCall
 
         if (Target is not null)
         {
-            payload["target"] = Target;
+            payload["target"] = Target.Normalize();
         }
 
         if (ReturnResponse)

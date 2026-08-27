@@ -70,6 +70,18 @@ public sealed class HomeAssistantTarget
         return this;
     }
 
+    internal HomeAssistantTarget Normalize()
+    {
+        return new HomeAssistantTarget
+        {
+            EntityIds = NormalizeIds(EntityIds, nameof(EntityIds)),
+            DeviceIds = NormalizeIds(DeviceIds, nameof(DeviceIds)),
+            AreaIds = NormalizeIds(AreaIds, nameof(AreaIds)),
+            FloorIds = NormalizeIds(FloorIds, nameof(FloorIds)),
+            LabelIds = NormalizeIds(LabelIds, nameof(LabelIds))
+        };
+    }
+
     private static IReadOnlyList<string> ValidateIds(string[] ids, string parameterName)
     {
         if (ids is null || ids.Length == 0 || ids.Any(string.IsNullOrWhiteSpace))
@@ -77,6 +89,21 @@ public sealed class HomeAssistantTarget
             throw new ArgumentException("At least one non-empty identifier is required.", parameterName);
         }
 
-        return ids.ToArray();
+        return ids.Select(id => id.Trim()).ToArray();
+    }
+
+    private static IReadOnlyList<string>? NormalizeIds(IReadOnlyList<string>? ids, string parameterName)
+    {
+        if (ids is null)
+        {
+            return null;
+        }
+
+        if (ids.Count == 0 || ids.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException("Target identifiers cannot be empty.", parameterName);
+        }
+
+        return ids.Select(id => id.Trim()).ToArray();
     }
 }

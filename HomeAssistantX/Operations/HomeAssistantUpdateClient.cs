@@ -45,9 +45,10 @@ public sealed class HomeAssistantUpdateClient
             throw new ArgumentException("An update entity identifier is required.", nameof(entityId));
         }
 
+        var normalizedEntityId = entityId.Trim();
         var result = await _webSocket.RequestAsync(
             "update/release_notes",
-            new Dictionary<string, object?> { ["entity_id"] = entityId },
+            new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId },
             cancellationToken).ConfigureAwait(false);
         return result.ValueKind == JsonValueKind.Null ? null : result.GetString();
     }

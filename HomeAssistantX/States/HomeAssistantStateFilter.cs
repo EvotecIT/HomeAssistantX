@@ -53,6 +53,6 @@ public sealed class HomeAssistantStateFilter
             throw new ArgumentException("At least one non-empty value is required.", parameterName);
         }
 
-        return values;
+        return values.Select(value => value.Trim()).ToArray();
     }
 }

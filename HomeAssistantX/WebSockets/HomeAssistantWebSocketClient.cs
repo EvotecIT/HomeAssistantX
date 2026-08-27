@@ -242,8 +242,17 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
 
         try
         {
-            await SendCommandAsync(socket, commandId, commandType, payload, cancellationToken).ConfigureAwait(false);
-            return await AwaitWithTimeoutAsync(completion.Task, _options.RequestTimeout, cancellationToken).ConfigureAwait(false);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(_options.RequestTimeout);
+            try
+            {
+                await SendCommandAsync(socket, commandId, commandType, payload, deadline.Token).ConfigureAwait(false);
+                return await AwaitWithDeadlineAsync(completion.Task, deadline.Token, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+            {
+                throw CreateRequestTimeoutException();
+            }
         }
         finally
         {
@@ -446,9 +455,18 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             _pendingRequests[serverId] = completion;
             try
             {
-                await SendCommandAsync(socket, serverId, registration.CommandType, registration.Payload, cancellationToken)
-                    .ConfigureAwait(false);
-                await AwaitWithTimeoutAsync(completion.Task, _options.RequestTimeout, cancellationToken).ConfigureAwait(false);
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                deadline.CancelAfter(_options.RequestTimeout);
+                try
+                {
+                    await SendCommandAsync(socket, serverId, registration.CommandType, registration.Payload, deadline.Token)
+                        .ConfigureAwait(false);
+                    await AwaitWithDeadlineAsync(completion.Task, deadline.Token, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+                {
+                    throw CreateRequestTimeoutException();
+                }
             }
             catch (HomeAssistantCommandException)
             {
@@ -564,19 +582,27 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         return socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
     }
 
-    private static async Task<T> AwaitWithTimeoutAsync<T>(Task<T> task, TimeSpan timeout, CancellationToken cancellationToken)
+    private static async Task<T> AwaitWithDeadlineAsync<T>(
+        Task<T> task,
+        CancellationToken deadlineToken,
+        CancellationToken callerToken)
     {
-        using var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var delay = Task.Delay(timeout, source.Token);
+        var delay = Task.Delay(Timeout.InfiniteTimeSpan, deadlineToken);
         var completed = await Task.WhenAny(task, delay).ConfigureAwait(false);
         if (completed == task)
         {
-            source.Cancel();
             return await task.ConfigureAwait(false);
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        throw new HomeAssistantConnectionException("The Home Assistant WebSocket command timed out.", new TimeoutException());
+        callerToken.ThrowIfCancellationRequested();
+        throw CreateRequestTimeoutException();
+    }
+
+    private static HomeAssistantConnectionException CreateRequestTimeoutException()
+    {
+        return new HomeAssistantConnectionException(
+            "The Home Assistant WebSocket command timed out.",
+            new TimeoutException());
     }
 
     private static HomeAssistantCommandException ReadCommandException(JsonElement root)

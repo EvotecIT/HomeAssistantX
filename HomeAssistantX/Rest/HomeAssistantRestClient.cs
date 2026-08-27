@@ -428,7 +428,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             throw new ArgumentException("A non-empty path identifier is required.", nameof(value));
         }
 
-        return Uri.EscapeDataString(value);
+        return Uri.EscapeDataString(value.Trim());
     }
 
     private void WriteDiagnostic(

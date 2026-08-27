@@ -135,7 +135,7 @@ public sealed class HomeAssistantHistoryQuery
             throw new ArgumentException("At least one entity identifier is required.", nameof(entityIds));
         }
 
-        EntityIds = entityIds.ToArray();
+        EntityIds = entityIds.Select(entityId => entityId.Trim()).ToArray();
     }
 
     public IReadOnlyList<string> EntityIds { get; }

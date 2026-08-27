@@ -170,12 +170,13 @@ public sealed class HomeAssistantSystemClient
         var payload = new Dictionary<string, object?> { ["path"] = path };
         if (expiration.HasValue)
         {
-            if (expiration <= TimeSpan.Zero)
+            var totalSeconds = expiration.Value.TotalSeconds;
+            if (totalSeconds <= 0 || totalSeconds > int.MaxValue)
             {
                 throw new ArgumentOutOfRangeException(nameof(expiration));
             }
 
-            payload["expires"] = (int)Math.Ceiling(expiration.Value.TotalSeconds);
+            payload["expires"] = checked((int)Math.Ceiling(totalSeconds));
         }
 
         var result = await _webSocket.RequestAsync("auth/sign_path", payload, cancellationToken).ConfigureAwait(false);

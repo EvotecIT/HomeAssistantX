@@ -100,7 +100,7 @@ public sealed class OperationsContractTests
         using var client = TestClientFactory.Create(server);
 
         var updates = await client.Operations.Updates.GetAllAsync(availableOnly: true);
-        var notes = await client.Operations.Updates.GetReleaseNotesAsync(updates[0].EntityId);
+        var notes = await client.Operations.Updates.GetReleaseNotesAsync(" " + updates[0].EntityId + " ");
         await client.Operations.Updates.InstallAsync(updates[0].EntityId, backup: true);
 
         Assert.Single(updates);
@@ -111,6 +111,8 @@ public sealed class OperationsContractTests
         Assert.Equal("install", command.RootElement.GetProperty("service").GetString());
         Assert.Equal("update.home_assistant_core_update", command.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
         Assert.True(command.RootElement.GetProperty("service_data").GetProperty("backup").GetBoolean());
+        using var notesCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("update/release_notes")));
+        Assert.Equal("update.home_assistant_core_update", notesCommand.RootElement.GetProperty("entity_id").GetString());
     }
 
     [Fact]

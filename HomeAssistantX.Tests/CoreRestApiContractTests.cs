@@ -97,4 +97,21 @@ public sealed class CoreRestApiContractTests
         Assert.Contains("no_attributes", server.LastRequestPath);
         Assert.DoesNotContain("minimal_response=", server.LastRequestPath);
     }
+
+    [Fact]
+    public async Task RestEntityIdentifiersAreTrimmedAtSharedPathAndHistoryBoundaries()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.States.GetAsync(" sensor.kitchen_temperature ");
+        Assert.Equal("/api/states/sensor.kitchen_temperature", server.LastRequestPath);
+        await client.Rest.GetHistoryAsync(new HomeAssistantHistoryQuery(" sensor.kitchen_temperature ")
+        {
+            StartTime = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero)
+        });
+
+        Assert.Contains("filter_entity_id=sensor.kitchen_temperature", server.LastRequestPath);
+        Assert.DoesNotContain("%20", server.LastRequestPath);
+    }
 }
