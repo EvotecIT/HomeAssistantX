@@ -90,12 +90,26 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
         ValidateFiniteDuration(TimeoutSeconds, nameof(TimeoutSeconds), allowZero: false);
         ValidateShape();
         var learningTimeout = ToDuration(TimeoutSeconds);
-        if (learningTimeout.HasValue
-            && TimeSpan.FromSeconds(Math.Ceiling(learningTimeout.Value.TotalSeconds)) >= Client.Options.RequestTimeout)
+        var learningResponseMargin = TimeSpan.FromSeconds(1);
+        var availableLearningTime = Client.Options.RequestTimeout > learningResponseMargin
+            ? Client.Options.RequestTimeout - learningResponseMargin
+            : TimeSpan.Zero;
+        if (Action == HomeAssistantRemoteAction.LearnCommand && !learningTimeout.HasValue)
+        {
+            var effectiveSeconds = Math.Min(30d, Math.Floor(availableLearningTime.TotalSeconds));
+            if (effectiveSeconds >= 1d)
+            {
+                learningTimeout = TimeSpan.FromSeconds(effectiveSeconds);
+            }
+        }
+
+        if (Action == HomeAssistantRemoteAction.LearnCommand
+            && (!learningTimeout.HasValue
+                || TimeSpan.FromSeconds(Math.Ceiling(learningTimeout.Value.TotalSeconds)) > availableLearningTime))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(TimeoutSeconds),
-                $"TimeoutSeconds must be shorter than the configured request timeout of {Client.Options.RequestTimeout.TotalSeconds:g} seconds.");
+                $"TimeoutSeconds must leave at least one second inside the configured request timeout of {Client.Options.RequestTimeout.TotalSeconds:g} seconds for dispatch and response handling.");
         }
 
         var target = await ResolveTargetAsync("remote").ConfigureAwait(false);

@@ -71,13 +71,13 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentException("MediaContentId and MediaContentType must be supplied together.", nameof(options));
         }
 
-        if ((options.Enqueue.HasValue || options.Announce.HasValue || options.MediaExtra is not null)
+        if ((options.Enqueue.HasValue || options.Announce == true || options.MediaExtra is not null)
             && string.IsNullOrWhiteSpace(options.MediaContentId))
         {
             throw new ArgumentException("Play-media options require media content.", nameof(options));
         }
 
-        if (options.Enqueue.HasValue && options.Announce.HasValue)
+        if (options.Enqueue.HasValue && options.Announce == true)
         {
             throw new ArgumentException("Enqueue and Announce cannot be combined by Home Assistant.", nameof(options));
         }
@@ -298,7 +298,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentException("A media content type is required.", nameof(mediaContentType));
         }
 
-        if (options?.Enqueue.HasValue == true && options.Announce.HasValue)
+        if (options?.Enqueue.HasValue == true && options.Announce == true)
         {
             throw new ArgumentException("Enqueue and Announce cannot be combined by Home Assistant.", nameof(options));
         }

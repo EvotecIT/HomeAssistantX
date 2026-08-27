@@ -352,6 +352,17 @@ try {
         throw 'The media-player cmdlet accepted contradictory power and playback operations.'
     }
 
+    try {
+        $null = Set-HomeAssistantMediaPlayer -Area Kitchen -MediaContentId test -MediaContentType music -Enqueue Add -Announce:$false -WhatIf -ErrorAction Stop
+    } catch {
+        if ($_.Exception.Message -notlike "*no 'media_player' entities*") { throw }
+    }
+    try {
+        $null = Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -WhatIf -ErrorAction Stop
+    } catch {
+        if ($_.Exception.Message -notlike "*no 'remote' entities*") { throw }
+    }
+
     foreach ($invalidMedia in @(
         { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaContentId test -MediaContentType music -Enqueue Add -Announce -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent 30 -VolumeStep Up -WhatIf -ErrorAction Stop },

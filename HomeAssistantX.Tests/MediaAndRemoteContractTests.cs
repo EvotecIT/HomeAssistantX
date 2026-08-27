@@ -255,6 +255,42 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task ExplicitFalseAnnouncementCanBeCombinedWithEnqueue()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("media_player.kitchen");
+
+        await client.Controls.MediaPlayers.PlayMediaAsync(
+            target,
+            "media-source://radio/station",
+            "music",
+            new HomeAssistantPlayMediaOptions
+            {
+                Enqueue = HomeAssistantMediaEnqueueMode.Next,
+                Announce = false
+            });
+        await client.Controls.MediaPlayers.SetAsync(
+            target,
+            new HomeAssistantMediaPlayerOptions
+            {
+                MediaContentId = "media-source://radio/second",
+                MediaContentType = "music",
+                Enqueue = HomeAssistantMediaEnqueueMode.Add,
+                Announce = false
+            });
+
+        Assert.Equal(2, server.ServiceCallBodies.Count);
+        foreach (var body in server.ServiceCallBodies)
+        {
+            using var call = JsonDocument.Parse(body);
+            var data = call.RootElement.GetProperty("service_data");
+            Assert.False(data.GetProperty("announce").GetBoolean());
+            Assert.True(data.TryGetProperty("enqueue", out _));
+        }
+    }
+
+    [Fact]
     public async Task ContradictoryOrInvalidAdvancedMediaOperationsFailBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();
@@ -341,6 +377,38 @@ public sealed class MediaAndRemoteContractTests
                 new HomeAssistantRemoteLearnOptions { Timeout = TimeSpan.FromSeconds(10) }));
 
         Assert.Empty(server.ServiceCallBodies);
+    }
+
+    [Fact]
+    public async Task RemoteLearningSendsAnEffectiveDefaultInsideTheTransportDeadline()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(10));
+
+        await client.Controls.Remotes.LearnCommandsAsync(
+            HomeAssistantTarget.ForEntity("remote.living_room"));
+
+        using var call = FindCall(server, "learn_command");
+        Assert.Equal(9, call.RootElement.GetProperty("service_data").GetProperty("timeout").GetInt32());
+
+        using var shortClient = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(1));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            shortClient.Controls.Remotes.LearnCommandsAsync(
+                HomeAssistantTarget.ForEntity("remote.living_room")));
+
+        using var fractionalClient = TestClientFactory.Create(
+            server,
+            requestTimeout: TimeSpan.FromSeconds(10.001));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            fractionalClient.Controls.Remotes.LearnCommandsAsync(
+                HomeAssistantTarget.ForEntity("remote.living_room"),
+                new HomeAssistantRemoteLearnOptions { Timeout = TimeSpan.FromSeconds(10) }));
+
+        server.ClearLastServiceCall();
+        await fractionalClient.Controls.Remotes.LearnCommandsAsync(
+            HomeAssistantTarget.ForEntity("remote.living_room"));
+        using var fractionalCall = FindCall(server, "learn_command");
+        Assert.Equal(9, fractionalCall.RootElement.GetProperty("service_data").GetProperty("timeout").GetInt32());
     }
 
     [Fact]

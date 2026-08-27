@@ -8,6 +8,8 @@ namespace HomeAssistantX.Controls;
 /// <summary>Reads and controls standard Home Assistant <c>remote</c> entities.</summary>
 public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
 {
+    private const int DefaultLearningTimeoutSeconds = 30;
+    private static readonly TimeSpan LearningResponseMargin = TimeSpan.FromSeconds(1);
     private readonly HomeAssistantStateClient _states;
     private readonly TimeSpan _requestTimeout;
 
@@ -122,7 +124,10 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         HomeAssistantRemoteLearnOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        ValidateLearningTimeout(options?.Timeout, _requestTimeout, nameof(options));
+        var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(
+            options?.Timeout,
+            _requestTimeout,
+            nameof(options));
 
         string? commandType = null;
         if (options?.CommandType.HasValue == true)
@@ -169,26 +174,30 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
                     call.WithData("alternative", options.Alternative.Value);
                 }
 
-                if (options?.Timeout.HasValue == true)
-                {
-                    call.WithData("timeout", checked((int)Math.Ceiling(options.Timeout.Value.TotalSeconds)));
-                }
+                call.WithData("timeout", learningTimeoutSeconds);
             },
             cancellationToken);
     }
 
-    internal static void ValidateLearningTimeout(
+    internal static int ResolveLearningTimeoutSeconds(
         TimeSpan? learningTimeout,
         TimeSpan requestTimeout,
         string parameterName)
     {
-        if (learningTimeout.HasValue
-            && TimeSpan.FromSeconds(Math.Ceiling(learningTimeout.Value.TotalSeconds)) >= requestTimeout)
+        var available = requestTimeout > LearningResponseMargin
+            ? requestTimeout - LearningResponseMargin
+            : TimeSpan.Zero;
+        var effectiveSeconds = learningTimeout.HasValue
+            ? Math.Ceiling(learningTimeout.Value.TotalSeconds)
+            : Math.Min(DefaultLearningTimeoutSeconds, Math.Floor(available.TotalSeconds));
+        if (effectiveSeconds < 1d || TimeSpan.FromSeconds(effectiveSeconds) > available)
         {
             throw new ArgumentOutOfRangeException(
                 parameterName,
-                $"The remote learning timeout must be shorter than the configured request timeout of {requestTimeout.TotalSeconds:g} seconds.");
+                $"The remote learning timeout must leave at least one second inside the configured request timeout of {requestTimeout.TotalSeconds:g} seconds for dispatch and response handling.");
         }
+
+        return checked((int)effectiveSeconds);
     }
 
     public Task<HomeAssistantServiceCallResult> DeleteCommandsAsync(
