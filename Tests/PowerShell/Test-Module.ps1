@@ -252,7 +252,16 @@ try {
         throw "Could not establish the action-call baseline. Received: $serviceBaseline"
     }
 
-    $null = $connection | Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId light.kitchen -WhatIf
+    $actionPreview = @(
+        $connection | Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId light.kitchen -WhatIf 6>&1
+        $connection | Invoke-HomeAssistantAction -Domain private_domain -Action private_action -EntityId light.kitchen -WhatIf 6>&1
+    ) | Out-String
+    if (-not $actionPreview.Contains('light.turn_on')) {
+        throw 'WhatIf output did not identify a validated standard Home Assistant action.'
+    }
+    if ($actionPreview.Contains('private_domain') -or $actionPreview.Contains('private_action')) {
+        throw 'WhatIf output exposed a custom Home Assistant service name.'
+    }
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {

@@ -22,6 +22,9 @@ public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
     /// <summary>Returns the operator-assigned connection name without disclosing its endpoint.</summary>
     protected string ConnectionDisplayName => RequireUsableConnection().ConfirmationName;
 
+    /// <summary>Returns a process-scoped privacy-safe descriptor for confirmation action details.</summary>
+    protected string ConfirmationAction(string? value) => ConfirmationTarget(RequireUsableConnection(), value);
+
     protected HomeAssistantClient Client
     {
         get
