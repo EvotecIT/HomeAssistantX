@@ -24,9 +24,13 @@ public sealed class HomeAssistantCalendarClient
     {
         var calendars = await _rest.GetCalendarsAsync(cancellationToken).ConfigureAwait(false);
         HomeAssistantJson.RequireNoNullCollectionEntries(calendars, "The Home Assistant calendar list contained a null item.");
-        if (calendars.Any(calendar => !HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out _)))
+        var entityIds = new HashSet<string>(StringComparer.Ordinal);
+        if (calendars.Any(calendar =>
+                !HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out var normalized)
+                || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
+                || !entityIds.Add(normalized)))
         {
-            throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid entity identifier.");
+            throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
         }
 
         return calendars;

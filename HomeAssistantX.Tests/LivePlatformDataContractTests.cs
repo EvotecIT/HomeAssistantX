@@ -208,6 +208,8 @@ public sealed class LivePlatformDataContractTests
     [InlineData("[{}]")]
     [InlineData("[{\"entity_id\":\"light.kitchen\",\"name\":\"Wrong\"}]")]
     [InlineData("[{\"entity_id\":\"calendar.Home\",\"name\":\"Noncanonical\"}]")]
+    [InlineData("[{\"entity_id\":\" calendar.home \",\"name\":\"Padded\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"First\"},{\"entity_id\":\"calendar.home\",\"name\":\"Duplicate\"}]")]
     public async Task CalendarDiscoveryRejectsInvalidEntityIdentifiers(string response)
     {
         using var server = new TestHomeAssistantServer { CalendarListResponseJson = response };
