@@ -99,11 +99,14 @@ public sealed class HomeAssistantRecorderClient
         var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in value.EnumerateObject())
         {
-            if (!requestedIds.Contains(property.Name) || !responseIds.Add(property.Name))
+            if (!HomeAssistantStatisticIdentifier.TryNormalize(property.Name, out var normalizedStatisticId)
+                || !string.Equals(property.Name, normalizedStatisticId, StringComparison.Ordinal)
+                || !requestedIds.Contains(normalizedStatisticId)
+                || !responseIds.Add(normalizedStatisticId))
                 throw new HomeAssistantProtocolException("Recorder statistics contained an unexpected or duplicate statistic identifier.");
             ValidateStatisticRows(property.Value);
             var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(property.Value, "A Recorder statistics series could not be decoded.");
-            series.Add(new HomeAssistantStatisticSeries { StatisticId = property.Name, Rows = rows });
+            series.Add(new HomeAssistantStatisticSeries { StatisticId = normalizedStatisticId, Rows = rows });
         }
         return series.OrderBy(item => item.StatisticId, StringComparer.OrdinalIgnoreCase).ToArray();
     }

@@ -465,6 +465,25 @@ public sealed class EnergyRecorderWeatherContractTests
                 "sensor.grid_energy")));
     }
 
+    [Theory]
+    [InlineData("SENSOR.GRID_ENERGY")]
+    [InlineData(" sensor.grid_energy ")]
+    [InlineData("sensor.grid_energy.extra")]
+    public async Task RecorderStatisticsRejectNoncanonicalResponseIdentifiers(string responseIdentifier)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson = "{\"" + responseIdentifier + "\":[{\"start\":1787731200000,\"end\":1787734800000}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(
+                DateTimeOffset.UtcNow.AddHours(-1),
+                HomeAssistantStatisticPeriod.Hour,
+                "sensor.grid_energy")));
+    }
+
     [Fact]
     public async Task RecorderMetadataRejectsNullEntriesAsProtocolFailures()
     {
