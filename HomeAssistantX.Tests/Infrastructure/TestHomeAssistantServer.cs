@@ -278,6 +278,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string CameraPreferencesResponseJson { get; set; } =
         "{\"preload_stream\":true,\"orientation\":3,\"future_preference\":true}";
+    public string CameraCapabilitiesResponseJson { get; set; } =
+        "{\"frontend_stream_types\":[\"hls\",\"web_rtc\"],\"future_capability\":true}";
 
     public string CameraImageResponse { get; set; } = "test-image-bytes";
 
@@ -895,7 +897,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendSubscriptionEventAsync(id, ParseJson(WeatherForecastSubscriptionEventJson), _source.Token).ConfigureAwait(false);
                 return;
             case "camera/capabilities":
-                await session.SendResultAsync(id, ParseJson("{\"frontend_stream_types\":[\"hls\",\"web_rtc\"],\"future_capability\":true}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(CameraCapabilitiesResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "camera/stream":
                 await session.SendResultAsync(id, ParseJson("{\"url\":\"/api/hls/test/master_playlist.m3u8\",\"future_stream_field\":true,\"Future_Stream_Field\":\"also-kept\"}"), false, _source.Token).ConfigureAwait(false);

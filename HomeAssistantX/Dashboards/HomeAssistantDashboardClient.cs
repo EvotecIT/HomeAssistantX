@@ -54,7 +54,17 @@ public sealed class HomeAssistantDashboardClient
         var dashboards = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard[]>(
             value,
             "The dashboard list could not be decoded.");
-        foreach (var dashboard in dashboards) ValidateListedDashboard(dashboard);
+        var urlPaths = new HashSet<string>(StringComparer.Ordinal);
+        var storageIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var dashboard in dashboards)
+        {
+            ValidateListedDashboard(dashboard);
+            if (!urlPaths.Add(dashboard.UrlPath)
+                || (!string.IsNullOrEmpty(dashboard.Id) && !storageIds.Add(dashboard.Id)))
+            {
+                throw new HomeAssistantProtocolException("The dashboard list contained a duplicate route or storage identifier.");
+            }
+        }
         return dashboards;
     }
 
@@ -241,7 +251,8 @@ public sealed class HomeAssistantDashboardClient
 
     private static void ValidateListedDashboard(HomeAssistantDashboard dashboard)
     {
-        if (string.IsNullOrWhiteSpace(dashboard.UrlPath)
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(dashboard.UrlPath, allowSingleWord: true, out var urlPath)
+            || !string.Equals(dashboard.UrlPath, urlPath, StringComparison.Ordinal)
             || string.IsNullOrWhiteSpace(dashboard.Title)
             || string.IsNullOrWhiteSpace(dashboard.Mode))
             throw new HomeAssistantProtocolException("A dashboard did not contain its required fields.");

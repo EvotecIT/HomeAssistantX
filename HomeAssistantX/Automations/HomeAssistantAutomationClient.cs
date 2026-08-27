@@ -88,7 +88,11 @@ public sealed class HomeAssistantAutomationClient
         {
             EntityId = state.EntityId,
             Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name"),
-            IsEnabled = string.Equals(state.State, "on", StringComparison.OrdinalIgnoreCase),
+            IsEnabled = string.Equals(state.State, "on", StringComparison.OrdinalIgnoreCase)
+                ? true
+                : string.Equals(state.State, "off", StringComparison.OrdinalIgnoreCase)
+                    ? false
+                    : null,
             LastTriggered = HomeAssistantAttributeReader.GetDateTimeOffset(state.Attributes, "last_triggered"),
             Mode = HomeAssistantAttributeReader.GetString(state.Attributes, "mode"),
             CurrentRuns = HomeAssistantAttributeReader.GetInt64(state.Attributes, "current"),

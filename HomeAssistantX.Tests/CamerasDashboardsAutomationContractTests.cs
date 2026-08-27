@@ -83,6 +83,20 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Null(server.GetLastWebSocketCommand("camera/update_prefs"));
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"frontend_stream_types\":null}")]
+    [InlineData("{\"frontend_stream_types\":{}}")]
+    [InlineData("{\"frontend_stream_types\":[\"\"]}")]
+    [InlineData("{\"frontend_stream_types\":[\" hls \"]}")]
+    public async Task CameraCapabilitiesRequireTheFrontendStreamTypeArray(string response)
+    {
+        using var server = new TestHomeAssistantServer { CameraCapabilitiesResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetCapabilitiesAsync("camera.front"));
+    }
+
     [Fact]
     public async Task CameraMutationsRejectEmptySnapshotsAndMismatchedPreferences()
     {
@@ -377,6 +391,32 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetInfoAsync());
     }
 
+    [Theory]
+    [InlineData("House-main")]
+    [InlineData("house--main")]
+    [InlineData(" house-main ")]
+    public async Task DashboardResponsesRejectNonCanonicalRoutes(string urlPath)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardListResponseJson = "[{\"id\":\"house-main\",\"url_path\":\"" + urlPath + "\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+    }
+
+    [Theory]
+    [InlineData("[{\"id\":\"one\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"},{\"id\":\"two\",\"url_path\":\"house-main\",\"title\":\"House 2\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]")]
+    [InlineData("[{\"id\":\"same\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"},{\"id\":\"same\",\"url_path\":\"garden-main\",\"title\":\"Garden\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]")]
+    public async Task DashboardResponsesRejectDuplicateRoutesAndStorageIdentifiers(string response)
+    {
+        using var server = new TestHomeAssistantServer { DashboardListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+    }
+
     [Fact]
     public async Task DashboardResponsesCorrelatePanelAndMutationIdentities()
     {
@@ -484,6 +524,20 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Equal("trigger", runtime.RootElement.GetProperty("service").GetString());
         Assert.False(runtime.RootElement.GetProperty("service_data").GetProperty("skip_condition").GetBoolean());
         await client.Automations.DeleteConfigurationAsync("morning-routine");
+    }
+
+    [Theory]
+    [InlineData("on", true)]
+    [InlineData("off", false)]
+    [InlineData("unavailable", null)]
+    [InlineData("unknown", null)]
+    public async Task AutomationEnablementRepresentsOnlyNativeOnAndOffStates(string state, bool? expected)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"" + state + "\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(expected, Assert.Single(await client.Automations.GetAsync()).IsEnabled);
     }
 
     [Theory]

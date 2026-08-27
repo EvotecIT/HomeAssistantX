@@ -7,7 +7,7 @@ public sealed class HomeAssistantAutomationStatus
 {
     public string EntityId { get; set; } = string.Empty;
     public string? Name { get; set; }
-    public bool IsEnabled { get; set; }
+    public bool? IsEnabled { get; set; }
     public DateTimeOffset? LastTriggered { get; set; }
     public string? Mode { get; set; }
     public long? CurrentRuns { get; set; }

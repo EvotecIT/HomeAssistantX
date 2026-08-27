@@ -58,10 +58,21 @@ public sealed class HomeAssistantCameraClient
     {
         ValidateEntityId(entityId);
         var value = await _webSocket.RequestAsync("camera/capabilities", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim() }, cancellationToken).ConfigureAwait(false);
+        if (value.ValueKind != JsonValueKind.Object
+            || !value.TryGetProperty("frontend_stream_types", out var frontendStreamTypes)
+            || frontendStreamTypes.ValueKind != JsonValueKind.Array)
+        {
+            throw new HomeAssistantProtocolException("The camera capabilities omitted their frontend stream-type collection.");
+        }
         var result = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraCapabilities>(value, "The camera capabilities could not be decoded.");
         if (result.FrontendStreamTypes is null)
             throw new HomeAssistantProtocolException("The camera capabilities contained a null stream-type collection.");
         HomeAssistantJson.RequireNoNullCollectionEntries(result.FrontendStreamTypes, "The camera capabilities contained a null stream type.");
+        if (result.FrontendStreamTypes.Any(value => string.IsNullOrWhiteSpace(value)
+            || !string.Equals(value, value.Trim(), StringComparison.Ordinal)))
+        {
+            throw new HomeAssistantProtocolException("The camera capabilities contained an invalid stream type.");
+        }
         return result;
     }
 
