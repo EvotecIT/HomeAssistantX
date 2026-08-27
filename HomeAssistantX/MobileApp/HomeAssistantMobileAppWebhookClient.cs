@@ -82,6 +82,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     {
         if (update is null) throw new ArgumentNullException(nameof(update));
         update.Validate();
+        update.AppData = HomeAssistantJson.FreezeObject(update.AppData, nameof(update.AppData), "AppData");
         return SendAsync("update_registration", update, cancellationToken);
     }
 

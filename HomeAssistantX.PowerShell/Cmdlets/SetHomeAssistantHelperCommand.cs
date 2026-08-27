@@ -43,6 +43,7 @@ public sealed class SetHomeAssistantHelperCommand : HomeAssistantTargetCmdlet
     {
         if (!Enum.IsDefined(typeof(HomeAssistantHelperDomain), Domain)) throw new ArgumentOutOfRangeException(nameof(Domain));
         if (Number.HasValue && (double.IsNaN(Number.Value) || double.IsInfinity(Number.Value))) throw new ArgumentOutOfRangeException(nameof(Number));
+        if (Time.HasValue && (Time.Value < TimeSpan.Zero || Time.Value >= TimeSpan.FromDays(1))) throw new ArgumentOutOfRangeException(nameof(Time), "Time must be within one day.");
         if (Time.HasValue && Time.Value.Ticks % TimeSpan.TicksPerSecond != 0) throw new ArgumentException("Time must use whole-second precision.", nameof(Time));
         var textBound = MyInvocation.BoundParameters.ContainsKey(nameof(Text));
         var operationCount = (Boolean.HasValue ? 1 : 0) + (Number.HasValue ? 1 : 0) + (Increment ? 1 : 0) + (Decrement ? 1 : 0)
@@ -50,6 +51,8 @@ public sealed class SetHomeAssistantHelperCommand : HomeAssistantTargetCmdlet
             + (Date.HasValue ? 1 : 0) + (Time.HasValue ? 1 : 0) + (DateTime.HasValue ? 1 : 0);
         if (operationCount != 1) throw new ArgumentException("Specify exactly one helper value or adjustment.");
         if (MyInvocation.BoundParameters.ContainsKey(nameof(Cycle)) && !Next && !Previous) throw new ArgumentException("Cycle applies only to Next or Previous.", nameof(Cycle));
+        var normalizedOption = Option is null ? null : ControlValidation.Required(Option, nameof(Option));
+        var normalizedOptions = Options is null ? null : ControlValidation.RequiredValues(Options, nameof(Options));
         var expectedDomain = DomainName(Domain);
         ValidateOperation(expectedDomain, textBound);
         var target = await ResolveTargetAsync(expectedDomain).ConfigureAwait(false);
@@ -59,8 +62,8 @@ public sealed class SetHomeAssistantHelperCommand : HomeAssistantTargetCmdlet
         else if (Number.HasValue) result = await Client.Controls.Helpers.SetNumberAsync(Domain, target.Target, Number.Value, CancelToken).ConfigureAwait(false);
         else if (Increment || Decrement) result = await Client.Controls.Helpers.AdjustNumberAsync(target.Target, Increment, CancelToken).ConfigureAwait(false);
         else if (textBound) result = await Client.Controls.Helpers.SetTextAsync(Domain, target.Target, Text ?? string.Empty, CancelToken).ConfigureAwait(false);
-        else if (Option is not null) result = await Client.Controls.Helpers.SelectOptionAsync(Domain, target.Target, Option, CancelToken).ConfigureAwait(false);
-        else if (Options is not null) result = await Client.Controls.Helpers.SetSelectOptionsAsync(target.Target, Options, CancelToken).ConfigureAwait(false);
+        else if (normalizedOption is not null) result = await Client.Controls.Helpers.SelectOptionAsync(Domain, target.Target, normalizedOption, CancelToken).ConfigureAwait(false);
+        else if (normalizedOptions is not null) result = await Client.Controls.Helpers.SetSelectOptionsAsync(target.Target, normalizedOptions, CancelToken).ConfigureAwait(false);
         else if (Next || Previous) result = await Client.Controls.Helpers.CycleSelectAsync(Domain, target.Target, Next, Cycle, CancelToken).ConfigureAwait(false);
         else if (Date.HasValue) result = await Client.Controls.Helpers.SetDateAsync(Domain, target.Target, Date.Value, CancelToken).ConfigureAwait(false);
         else if (Time.HasValue) result = await Client.Controls.Helpers.SetTimeAsync(Domain, target.Target, Time.Value, CancelToken).ConfigureAwait(false);

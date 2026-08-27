@@ -4,6 +4,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Authentication;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Discovery;
 using HomeAssistantX.MobileApp;
@@ -646,6 +647,47 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Null(server.LastRequestBody);
     }
 
+    [Fact]
+    public async Task MobileAppRegistrationFreezesAndRejectsInvalidAppDataBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var request = RegistrationRequest(false);
+        var cyclic = new Dictionary<string, object?>();
+        cyclic["self"] = cyclic;
+        request.AppData = cyclic;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.MobileApp.RegisterAsync(request));
+        Assert.Null(server.LastRequestBody);
+
+        var tokenProvider = new BlockingTokenProvider();
+        using var delayedClient = TestClientFactory.Create(server, accessTokenProvider: tokenProvider);
+        request = RegistrationRequest(false);
+        var appData = new Dictionary<string, object?> { ["push_token"] = "original" };
+        request.AppData = appData;
+        var registration = delayedClient.MobileApp.RegisterAsync(request);
+        await tokenProvider.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        appData["push_token"] = "changed";
+        request.AppData = new Dictionary<string, object?> { ["push_token"] = "replacement" };
+        request.AppName = "Changed app";
+        tokenProvider.Release.TrySetResult(TestHomeAssistantServer.AccessToken);
+        _ = await registration;
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.Equal("original", body.RootElement.GetProperty("app_data").GetProperty("push_token").GetString());
+        Assert.Equal("Example", body.RootElement.GetProperty("app_name").GetString());
+
+        server.MobileRegistrationResponseJson = "{\"webhook_id\":\"test-webhook\",\"secret\":null}";
+        var encryptionTokenProvider = new BlockingTokenProvider();
+        using var encryptionClient = TestClientFactory.Create(server, accessTokenProvider: encryptionTokenProvider);
+        request = RegistrationRequest(true);
+        var encryptedRegistration = encryptionClient.MobileApp.RegisterAsync(request);
+        await encryptionTokenProvider.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        request.SupportsEncryption = false;
+        encryptionTokenProvider.Release.TrySetResult(TestHomeAssistantServer.AccessToken);
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(() => encryptedRegistration);
+    }
+
     [Theory]
     [InlineData("cloudhook_url", "ftp://example.invalid/webhook")]
     [InlineData("remote_ui_url", "file:///private/home-assistant")]
@@ -881,6 +923,19 @@ public sealed class StableControlAndAdapterContractTests
         OperatingSystemName = "Windows",
         SupportsEncryption = encryption
     };
+
+    private sealed class BlockingTokenProvider : IHomeAssistantAccessTokenProvider
+    {
+        internal TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal TaskCompletionSource<string> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult(true);
+            return await Release.Task.WaitAsync(cancellationToken);
+        }
+    }
 
     private static JsonDocument LastCall(TestHomeAssistantServer server) => JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
 

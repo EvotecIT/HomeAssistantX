@@ -25,13 +25,27 @@ public sealed class HomeAssistantMobileAppClient
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         request.Validate();
-        var registration = await _rest.SendAsync<HomeAssistantMobileAppRegistration>(HttpMethod.Post, "api/mobile_app/registrations", request, cancellationToken).ConfigureAwait(false);
+        var frozenRequest = new HomeAssistantMobileAppRegistrationRequest
+        {
+            AppId = request.AppId,
+            AppName = request.AppName,
+            AppVersion = request.AppVersion,
+            DeviceName = request.DeviceName,
+            Manufacturer = request.Manufacturer,
+            Model = request.Model,
+            DeviceId = request.DeviceId,
+            OperatingSystemName = request.OperatingSystemName,
+            OperatingSystemVersion = request.OperatingSystemVersion,
+            SupportsEncryption = request.SupportsEncryption,
+            AppData = HomeAssistantJson.FreezeObject(request.AppData, nameof(request.AppData), "AppData")!
+        };
+        var registration = await _rest.SendAsync<HomeAssistantMobileAppRegistration>(HttpMethod.Post, "api/mobile_app/registrations", frozenRequest, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(registration.WebhookId))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned a mobile-app registration without a webhook identifier.");
         }
 
-        if (request.SupportsEncryption && string.IsNullOrWhiteSpace(registration.Secret))
+        if (frozenRequest.SupportsEncryption && string.IsNullOrWhiteSpace(registration.Secret))
         {
             throw new HomeAssistantProtocolException("Home Assistant did not return the requested mobile-app encryption secret.");
         }
