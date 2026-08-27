@@ -38,10 +38,8 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        return states
-            .Where(state => string.Equals(state.Domain, Domain, StringComparison.OrdinalIgnoreCase))
-            .Select(state => HomeAssistantRemoteStatus.FromState(
-                HomeAssistantEntityId.RequireResponseDomain(state, Domain)))
+        return HomeAssistantEntityId.RequireResponseDomainStates(states, Domain)
+            .Select(HomeAssistantRemoteStatus.FromState)
             .ToArray();
     }
 

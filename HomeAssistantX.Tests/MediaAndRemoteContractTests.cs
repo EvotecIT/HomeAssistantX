@@ -467,6 +467,14 @@ public sealed class MediaAndRemoteContractTests
         server.SetStates("[{\"entity_id\":\"remote.living.room\",\"state\":\"on\",\"attributes\":{}}]");
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(
             () => client.Controls.Remotes.GetAllAsync());
+
+        server.SetStates("[{\"entity_id\":null,\"state\":\"idle\",\"attributes\":{}}]");
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Controls.MediaPlayers.GetAllAsync());
+
+        server.SetStates("[{\"entity_id\":\" remote.living_room\",\"state\":\"on\",\"attributes\":{}}]");
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Controls.Remotes.GetAllAsync());
     }
 
     [Fact]
