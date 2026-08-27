@@ -213,6 +213,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string CalendarSubscriptionEventJson { get; set; } =
         "[{\"summary\":\"Dinner\",\"start\":\"2026-08-26T18:00:00+02:00\",\"end\":\"2026-08-26T20:00:00+02:00\",\"uid\":\"event-1\",\"rrule\":\"FREQ=WEEKLY\"}]";
 
+    public string CalendarListResponseJson { get; set; } =
+        "[{\"entity_id\":\"calendar.home\",\"name\":\"Home\"}]";
+
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;

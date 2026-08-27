@@ -20,8 +20,17 @@ public sealed class HomeAssistantCalendarClient
         _webSocket = webSocket;
     }
 
-    public Task<IReadOnlyList<HomeAssistantCalendar>> GetAsync(CancellationToken cancellationToken = default)
-        => _rest.GetCalendarsAsync(cancellationToken);
+    public async Task<IReadOnlyList<HomeAssistantCalendar>> GetAsync(CancellationToken cancellationToken = default)
+    {
+        var calendars = await _rest.GetCalendarsAsync(cancellationToken).ConfigureAwait(false);
+        HomeAssistantJson.RequireNoNullCollectionEntries(calendars, "The Home Assistant calendar list contained a null item.");
+        if (calendars.Any(calendar => !HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out _)))
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid entity identifier.");
+        }
+
+        return calendars;
+    }
 
     public async Task<IReadOnlyList<HomeAssistantCalendarEvent>> GetEventsAsync(
         string entityId,

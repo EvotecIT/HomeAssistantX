@@ -100,6 +100,10 @@ public sealed class HomeAssistantNotificationClient
                 notificationsValue,
                 "The Home Assistant persistent-notification update could not be decoded.");
             ValidateNotifications(notifications.Values, "The Home Assistant persistent-notification update");
+            if (notifications.Any(item => !string.Equals(item.Key, item.Value.NotificationId, StringComparison.Ordinal)))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a mismatched notification identifier.");
+            }
             await handler(new HomeAssistantPersistentNotificationUpdate
             {
                 RawType = rawType,

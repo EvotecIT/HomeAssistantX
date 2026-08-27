@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Rest;
 
@@ -165,10 +166,12 @@ public sealed partial class HomeAssistantRestClient
         IReadOnlyDictionary<string, object?>? eventData = null,
         CancellationToken cancellationToken = default)
     {
+        var frozenEventData = HomeAssistantJson.FreezeObject(
+            eventData ?? new Dictionary<string, object?>(), nameof(eventData), "EventData", cancellationToken);
         return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
             "api/events/" + EscapePath(eventType, cancellationToken),
-            eventData ?? new Dictionary<string, object?>(),
+            frozenEventData,
             cancellationToken);
     }
 
@@ -183,10 +186,10 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentException("A template is required.", nameof(template));
         }
 
-        var payload = new Dictionary<string, object?> { ["template"] = template };
+        var payload = new Dictionary<string, object?> { ["template"] = template.Trim() };
         if (variables is not null)
         {
-            payload["variables"] = variables;
+            payload["variables"] = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables");
         }
 
         return SendTextAsync(HttpMethod.Post, "api/template", payload, cancellationToken);

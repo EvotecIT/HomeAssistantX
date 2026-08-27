@@ -12,6 +12,22 @@ namespace HomeAssistantX.Tests;
 public sealed class LivePlatformDataContractTests
 {
     [Fact]
+    public async Task RawEventTriggerAndTemplatePayloadsFailBeforeTransport()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var cyclic = new Dictionary<string, object?>();
+        cyclic["self"] = cyclic;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Events.FireAsync("homeassistantx_test", cyclic));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Events.SubscribeTriggerAsync(cyclic, (_, _) => Task.CompletedTask));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.FireEventAsync("homeassistantx_test", cyclic));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.RenderTemplateAsync("{{ value }}", cyclic));
+        Assert.Null(server.LastServiceCallBody);
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
     public void NewPlatformExtensionDataPreservesCaseDistinctUnknownFields()
     {
         var notification = JsonSerializer.Deserialize<HomeAssistantPersistentNotification>(
@@ -120,6 +136,19 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task PersistentNotificationSubscriptionRejectsMismatchedDictionaryIdentity()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            PersistentNotificationSubscriptionEventJson = "{\"type\":\"Current\",\"notifications\":{\"notice-a\":{\"notification_id\":\"notice-b\",\"message\":\"Door open\"}}}"
+        };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
+    [Fact]
     public async Task CalendarReadsWritesAndStreamsTimedAndAllDayEvents()
     {
         using var server = new TestHomeAssistantServer();
@@ -173,6 +202,18 @@ public sealed class LivePlatformDataContractTests
         using var delete = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("calendar/event/delete")));
         Assert.Equal("event-1", delete.RootElement.GetProperty("uid").GetString());
         Assert.Equal("calendar.home", delete.RootElement.GetProperty("entity_id").GetString());
+    }
+
+    [Theory]
+    [InlineData("[{}]")]
+    [InlineData("[{\"entity_id\":\"light.kitchen\",\"name\":\"Wrong\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.Home\",\"name\":\"Noncanonical\"}]")]
+    public async Task CalendarDiscoveryRejectsInvalidEntityIdentifiers(string response)
+    {
+        using var server = new TestHomeAssistantServer { CalendarListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Calendars.GetAsync());
     }
 
     [Theory]

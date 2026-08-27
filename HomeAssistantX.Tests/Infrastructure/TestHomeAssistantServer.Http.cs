@@ -150,7 +150,7 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, "test-image-bytes").ConfigureAwait(false);
                 break;
             case "GET /api/calendars":
-                await WriteHttpResponseAsync(stream, 200, "[{\"entity_id\":\"calendar.home\",\"name\":\"Home\"}]").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, CalendarListResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/calendars/calendar.home":
                 await WriteHttpResponseAsync(stream, 200,
