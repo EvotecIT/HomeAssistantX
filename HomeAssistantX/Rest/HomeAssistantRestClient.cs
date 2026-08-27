@@ -205,7 +205,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
     private async Task<HttpRequestMessage> CreateRequestAsync(
         HttpMethod method,
         string pathOrAbsoluteUri,
-        object? body,
+        byte[]? serializedBody,
         CancellationToken cancellationToken)
     {
         if (method is null)
@@ -237,10 +237,13 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         var request = new HttpRequestMessage(method, requestUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        if (body is not null)
+        if (serializedBody is not null)
         {
-            var json = JsonSerializer.Serialize(body, HomeAssistantJson.SerializerOptions);
-            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            request.Content = new ByteArrayContent(serializedBody);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
+            {
+                CharSet = "utf-8"
+            };
         }
 
         return request;
@@ -252,9 +255,12 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         object? body,
         CancellationToken cancellationToken)
     {
+        var serializedBody = body is null
+            ? null
+            : JsonSerializer.SerializeToUtf8Bytes(body, HomeAssistantJson.SerializerOptions);
         for (var attempt = 0; ; attempt++)
         {
-            using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, body, cancellationToken)
+            using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, serializedBody, cancellationToken)
                 .ConfigureAwait(false);
             var rejectedAccessToken = request.Headers.Authorization?.Parameter;
             try

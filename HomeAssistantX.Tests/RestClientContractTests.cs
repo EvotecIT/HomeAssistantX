@@ -181,6 +181,27 @@ public sealed class RestClientContractTests
     }
 
     [Fact]
+    public async Task AuthenticationRecoveryRetriesTheExactFrozenRequestBody()
+    {
+        var body = new Dictionary<string, object?> { ["value"] = "original" };
+        var provider = new SwitchingRecoveryProvider();
+        var handler = new BodyCapturingRecoveryHandler(body);
+        using var httpClient = new HttpClient(handler);
+        var options = new HomeAssistantX.Configuration.HomeAssistantClientOptions(
+            new Uri("https://home.example.net/"),
+            provider);
+        using var client = new HomeAssistantX.Rest.HomeAssistantRestClient(options, httpClient);
+
+        var response = await client.SendAsync<JsonElement>(HttpMethod.Post, "api/test", body);
+
+        Assert.True(response.GetProperty("ok").GetBoolean());
+        Assert.Equal(2, handler.Bodies.Count);
+        Assert.All(handler.Bodies, value => Assert.Equal("original", value));
+        Assert.Equal("mutated", body["value"]);
+        Assert.Equal(1, provider.RecoveryCount);
+    }
+
+    [Fact]
     public async Task CallerCancellationStopsRejectedTokenRecoveryWithoutRetrying()
     {
         using var server = new TestHomeAssistantServer();
@@ -283,6 +304,68 @@ public sealed class RestClientContractTests
         {
             Interlocked.Increment(ref _recoveryCount);
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+    }
+
+    private sealed class SwitchingRecoveryProvider :
+        IHomeAssistantAccessTokenProvider,
+        IHomeAssistantAccessTokenRecovery
+    {
+        private string _token = "rejected-token";
+        private int _recoveryCount;
+
+        public int RecoveryCount => Volatile.Read(ref _recoveryCount);
+
+        public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Volatile.Read(ref _token));
+        }
+
+        public Task RecoverAccessTokenAsync(string rejectedAccessToken, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal("rejected-token", rejectedAccessToken);
+            Interlocked.Increment(ref _recoveryCount);
+            Volatile.Write(ref _token, "accepted-token");
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class BodyCapturingRecoveryHandler : HttpMessageHandler
+    {
+        private readonly Dictionary<string, object?> _callerBody;
+        private int _attempt;
+
+        public BodyCapturingRecoveryHandler(Dictionary<string, object?> callerBody)
+        {
+            _callerBody = callerBody;
+        }
+
+        public List<string?> Bodies { get; } = new();
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+            Bodies.Add(document.RootElement.GetProperty("value").GetString());
+            if (Interlocked.Increment(ref _attempt) == 1)
+            {
+                _callerBody["value"] = "mutated";
+                return new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized)
+                {
+                    Content = new StringContent("{\"message\":\"Unauthorized\"}")
+                };
+            }
+
+            Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
+            Assert.Equal("accepted-token", request.Headers.Authorization?.Parameter);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"ok\":true}")
+            };
         }
     }
 
