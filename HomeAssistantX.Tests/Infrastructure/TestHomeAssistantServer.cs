@@ -280,6 +280,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         "{\"preload_stream\":true,\"orientation\":3,\"future_preference\":true}";
     public string CameraCapabilitiesResponseJson { get; set; } =
         "{\"frontend_stream_types\":[\"hls\",\"web_rtc\"],\"future_capability\":true}";
+    public string CameraStreamResponseJson { get; set; } =
+        "{\"url\":\"/api/hls/test/master_playlist.m3u8\",\"future_stream_field\":true,\"Future_Stream_Field\":\"also-kept\"}";
     public string CameraImageResponse { get; set; } = "test-image-bytes";
 
     public string LovelaceInfoResponseJson { get; set; } =
@@ -899,7 +901,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(CameraCapabilitiesResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "camera/stream":
-                await session.SendResultAsync(id, ParseJson("{\"url\":\"/api/hls/test/master_playlist.m3u8\",\"future_stream_field\":true,\"Future_Stream_Field\":\"also-kept\"}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(CameraStreamResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "camera/get_prefs":
             case "camera/update_prefs":

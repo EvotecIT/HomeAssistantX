@@ -784,6 +784,8 @@ try {
         { Remove-HomeAssistantDashboard -ResourceId ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard -Configuration -UrlPath ' ' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantAutomation morning-routine '[]' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantAutomation morning-routine '{"id":"other-routine","alias":"Morning"}' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantAutomation morning-routine '{"id":"morning-routine","alias":"First","alias":"Second"}' -WhatIf -ErrorAction Stop }
     )) {
         $rejected = $false
         try { $null = & $invalidPlatformData } catch { $rejected = $true }

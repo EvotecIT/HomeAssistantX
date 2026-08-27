@@ -84,8 +84,10 @@ public sealed class HomeAssistantCameraClient
         ValidateEntityId(entityId);
         var value = await _webSocket.RequestAsync("camera/stream", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim(), ["format"] = "hls" }, cancellationToken).ConfigureAwait(false);
         var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraStream>(value, "The camera stream response could not be decoded.");
-        if (string.IsNullOrWhiteSpace(stream.Path))
-            throw new HomeAssistantProtocolException("Home Assistant did not return a camera stream path.");
+        if (!HomeAssistantRootRelativePath.IsValid(stream.Path))
+        {
+            throw new HomeAssistantProtocolException("Home Assistant did not return a valid root-relative camera stream path.");
+        }
         stream.EntityId = entityId.Trim();
         stream.Format = "hls";
         return stream;

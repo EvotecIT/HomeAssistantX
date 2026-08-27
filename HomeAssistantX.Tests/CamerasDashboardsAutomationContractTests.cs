@@ -122,6 +122,23 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Equal("future_stream", Assert.Single((await client.Cameras.GetCapabilitiesAsync("camera.front")).FrontendStreamTypes));
     }
 
+    [Theory]
+    [InlineData("{\"url\":\" stream.m3u8 \"}")]
+    [InlineData("{\"url\":\"stream.m3u8\"}")]
+    [InlineData("{\"url\":\"//other.example/stream.m3u8\"}")]
+    [InlineData("{\"url\":\"/api\\\\hls\\\\stream.m3u8\"}")]
+    [InlineData("{\"url\":\"https://other.example/stream.m3u8\"}")]
+    [InlineData("{\"url\":\"/api/hls/stream.m3u8#fragment\"}")]
+    [InlineData("{\"url\":\"/api/one/../hls/stream.m3u8\"}")]
+    [InlineData("{\"url\":\"/api/%2e%2e/hls/stream.m3u8\"}")]
+    public async Task CameraStreamsRequireCanonicalRootRelativePaths(string response)
+    {
+        using var server = new TestHomeAssistantServer { CameraStreamResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetStreamAsync("camera.front"));
+    }
+
     [Fact]
     public async Task CameraMutationsRejectEmptySnapshotsAndMismatchedPreferences()
     {
