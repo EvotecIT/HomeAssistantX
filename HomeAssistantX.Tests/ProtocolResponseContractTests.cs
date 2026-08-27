@@ -102,6 +102,27 @@ public sealed class ProtocolResponseContractTests
         Assert.Throws<ArgumentException>(() => HomeAssistantJson.FreezeValue(cyclic, "value", "Value"));
     }
 
+    [Fact]
+    public void JsonSnapshotHelpersStopCallerGraphTraversalAfterCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var values = new CancellationProbeEnumerable(cancellation);
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantJson.FreezeValue(values, "value", "Value", cancellation.Token));
+        Assert.InRange(values.ReadCount, 1, 16);
+
+        using var objectCancellation = new CancellationTokenSource();
+        var objectValues = new CancellationProbeEnumerable(objectCancellation);
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantJson.FreezeObject(
+                new Dictionary<string, object?> { ["values"] = objectValues },
+                "value",
+                "Value",
+                objectCancellation.Token));
+        Assert.InRange(objectValues.ReadCount, 1, 16);
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]
@@ -113,5 +134,30 @@ public sealed class ProtocolResponseContractTests
 
         Assert.Throws<HomeAssistantProtocolException>(() =>
             HomeAssistantEntityId.RequireResponseDomain(state, "media_player"));
+    }
+
+    private sealed class CancellationProbeEnumerable : IEnumerable<string>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancellationProbeEnumerable(CancellationTokenSource cancellation)
+        {
+            _cancellation = cancellation;
+        }
+
+        internal int ReadCount { get; private set; }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            for (var index = 0; index < 1000; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 16) throw new InvalidOperationException("Serialization continued after cancellation.");
+                yield return new string('x', 4096);
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

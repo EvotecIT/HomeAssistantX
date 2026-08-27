@@ -43,27 +43,38 @@ internal static class HomeAssistantJson
             return null;
         }
 
+        JsonDocument? document = null;
+        var ownershipTransferred = false;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var json = JsonSerializer.Serialize(value, SerializerOptions);
-            cancellationToken.ThrowIfCancellationRequested();
-            using var document = JsonDocument.Parse(json);
+            document = SerializeSnapshot(value, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
                 throw new JsonException("The serialized value was not a JSON object.");
             }
 
-            return document.RootElement.EnumerateObject().ToDictionary(
-                property => property.Name,
-                property => (object?)property.Value.Clone(),
-                StringComparer.Ordinal);
+            var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                // JsonElement retains its parent document, transferring the immutable
+                // snapshot without an additional uninterruptible deep clone.
+                result.Add(property.Name, property.Value);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            ownershipTransferred = true;
+            return result;
         }
         catch (Exception ex) when (ex is JsonException || ex is NotSupportedException || ex is InvalidOperationException)
         {
             cancellationToken.ThrowIfCancellationRequested();
             throw new ArgumentException(displayName + " must be a serializable JSON object.", parameterName, ex);
+        }
+        finally
+        {
+            if (!ownershipTransferred) document?.Dispose();
         }
     }
 
@@ -74,20 +85,41 @@ internal static class HomeAssistantJson
         string displayName,
         CancellationToken cancellationToken = default)
     {
+        JsonDocument? document = null;
+        var ownershipTransferred = false;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var json = JsonSerializer.Serialize(value, SerializerOptions);
+            document = SerializeSnapshot(value, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            using var document = JsonDocument.Parse(json);
-            cancellationToken.ThrowIfCancellationRequested();
-            return document.RootElement.Clone();
+            // The returned element owns the document transitively until the element is collected.
+            ownershipTransferred = true;
+            return document.RootElement;
         }
         catch (Exception ex) when (ex is JsonException || ex is NotSupportedException || ex is InvalidOperationException)
         {
             cancellationToken.ThrowIfCancellationRequested();
             throw new ArgumentException(displayName + " must be a serializable JSON value.", parameterName, ex);
         }
+        finally
+        {
+            if (!ownershipTransferred) document?.Dispose();
+        }
+    }
+
+    private static JsonDocument SerializeSnapshot(object? value, CancellationToken cancellationToken)
+    {
+        using var stream = new MemoryStream();
+        JsonSerializer.SerializeAsync(stream, value, SerializerOptions, cancellationToken)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
+        stream.Position = 0;
+        return JsonDocument.ParseAsync(stream, default, cancellationToken)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
     }
 
     /// <summary>Parses a Home Assistant response while preserving the classified protocol-failure contract.</summary>
