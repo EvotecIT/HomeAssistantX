@@ -235,7 +235,10 @@ internal sealed class DnsDiscoveryAggregate
 {
     private const string ServiceName = "_home-assistant._tcp.local";
     private const int MaximumPropertiesPerOwner = 64;
+    private const int MaximumRecordsPerOwner = 8;
+    private const int MaximumTransitionalRecordsPerOwner = 16;
     private const int MaximumAddressesPerHost = 16;
+    private const int MaximumTransitionalAddressesPerHost = 32;
     private readonly DnsDiscoveryLimits _limits;
     private readonly Func<TimeSpan> _clock;
     private readonly object _gate = new();
@@ -422,14 +425,16 @@ internal sealed class DnsDiscoveryAggregate
                 existing.ExpiresAt = Earlier(existing.ExpiresAt, now + TimeSpan.FromSeconds(1));
             return;
         }
+        HashSet<string>? announced = null;
         if (update.CacheFlush)
         {
-            var announced = new HashSet<string>(packet.Where(value => value.Kind == DnsDiscoveryRecordKind.Srv && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.DataKey), StringComparer.Ordinal);
+            announced = new HashSet<string>(packet.Where(value => value.Kind == DnsDiscoveryRecordKind.Srv && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.DataKey), StringComparer.Ordinal);
             foreach (var old in records.Where(value => !announced.Contains(value.DataKey) && now - value.ReceivedAt >= TimeSpan.FromSeconds(1)))
                 old.ExpiresAt = Earlier(old.ExpiresAt, now + TimeSpan.FromSeconds(1));
         }
-        records.RemoveAll(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal));
-        if (records.Count < 8) records.Add(new CachedService(update.Host!, update.Port, update.DataKey, now, Expiry(now, update.Ttl)));
+        var replaced = records.RemoveAll(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal)) > 0;
+        if (replaced || records.Count < MaximumRecordsPerOwner || (announced is not null && records.Count < MaximumTransitionalRecordsPerOwner))
+            records.Add(new CachedService(update.Host!, update.Port, update.DataKey, now, Expiry(now, update.Ttl)));
     }
 
     private void ApplyText(DnsDiscoveryUpdate update, TimeSpan now, IReadOnlyList<DnsDiscoveryUpdate> packet)
@@ -445,14 +450,16 @@ internal sealed class DnsDiscoveryAggregate
                 existing.ExpiresAt = Earlier(existing.ExpiresAt, now + TimeSpan.FromSeconds(1));
             return;
         }
+        HashSet<string>? announced = null;
         if (update.CacheFlush)
         {
-            var announced = new HashSet<string>(packet.Where(value => value.Kind == DnsDiscoveryRecordKind.Txt && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.DataKey), StringComparer.Ordinal);
+            announced = new HashSet<string>(packet.Where(value => value.Kind == DnsDiscoveryRecordKind.Txt && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.DataKey), StringComparer.Ordinal);
             foreach (var old in records.Where(value => !announced.Contains(value.DataKey) && now - value.ReceivedAt >= TimeSpan.FromSeconds(1)))
                 old.ExpiresAt = Earlier(old.ExpiresAt, now + TimeSpan.FromSeconds(1));
         }
-        records.RemoveAll(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal));
-        if (records.Count < 8) records.Add(new CachedText(update.Properties!, update.DataKey, now, Expiry(now, update.Ttl)));
+        var replaced = records.RemoveAll(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal)) > 0;
+        if (replaced || records.Count < MaximumRecordsPerOwner || (announced is not null && records.Count < MaximumTransitionalRecordsPerOwner))
+            records.Add(new CachedText(update.Properties!, update.DataKey, now, Expiry(now, update.Ttl)));
     }
 
     private void ApplyAddress(DnsDiscoveryUpdate update, TimeSpan now, IReadOnlyList<DnsDiscoveryUpdate> packet)
@@ -469,13 +476,16 @@ internal sealed class DnsDiscoveryAggregate
                 existing.ExpiresAt = Earlier(existing.ExpiresAt, now + TimeSpan.FromSeconds(1));
             return;
         }
+        HashSet<IPAddress>? announced = null;
         if (update.CacheFlush)
         {
-            var announced = new HashSet<IPAddress>(packet.Where(value => value.Kind == update.Kind && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.Address!));
+            announced = new HashSet<IPAddress>(packet.Where(value => value.Kind == update.Kind && value.Ttl > 0 && string.Equals(value.Name, update.Name, StringComparison.OrdinalIgnoreCase)).Select(value => value.Address!));
             foreach (var pair in addresses.Where(pair => pair.Key.AddressFamily == address.AddressFamily && !announced.Contains(pair.Key) && now - pair.Value.ReceivedAt >= TimeSpan.FromSeconds(1)).ToArray())
                 pair.Value.ExpiresAt = Earlier(pair.Value.ExpiresAt, now + TimeSpan.FromSeconds(1));
         }
-        if (addresses.ContainsKey(address) || addresses.Count < MaximumAddressesPerHost)
+        if (addresses.ContainsKey(address)
+            || addresses.Count < MaximumAddressesPerHost
+            || (announced is not null && addresses.Count < MaximumTransitionalAddressesPerHost))
             addresses[address] = new CachedAddress(now, Expiry(now, update.Ttl));
     }
 

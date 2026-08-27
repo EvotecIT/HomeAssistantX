@@ -197,6 +197,58 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdCacheFlushMakesRoomForAuthoritativeRecordsAtPerOwnerLimits()
+    {
+        var now = TimeSpan.Zero;
+        var services = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(host: "service-0.local"), services);
+        for (var index = 1; index < 8; index++)
+        {
+            now += TimeSpan.FromMilliseconds(10);
+            DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, index, 0, $"service-{index}.local", 8123), services);
+        }
+        now += TimeSpan.FromSeconds(2);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 9, 0, "authoritative.local", 8123, cacheFlush: true), services);
+        now += TimeSpan.FromMilliseconds(100);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 0, 0, "service-0.local", 8123), services);
+        now += TimeSpan.FromMilliseconds(1000);
+        Assert.Equal("service-0.local", Assert.Single(services.Build()).HostName);
+
+        now = TimeSpan.Zero;
+        var text = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(textItems: new[] { "location_name=Name 0" }), text);
+        for (var index = 1; index < 8; index++)
+        {
+            now += TimeSpan.FromMilliseconds(10);
+            DnsDiscoveryPacket.ReadInto(CreateTxtOnlyPacket(120, new[] { $"location_name=Name {index}" }), text);
+        }
+        now += TimeSpan.FromSeconds(2);
+        DnsDiscoveryPacket.ReadInto(CreateTxtOnlyPacket(120, new[] { "location_name=Authoritative" }, cacheFlush: true), text);
+        now += TimeSpan.FromMilliseconds(100);
+        DnsDiscoveryPacket.ReadInto(CreateTxtOnlyPacket(120, new[] { "location_name=Name 0" }), text);
+        now += TimeSpan.FromMilliseconds(1000);
+        Assert.Equal("Name 0", Assert.Single(text.Build()).Name);
+
+        now = TimeSpan.Zero;
+        var addresses = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(addressLastOctet: 1), addresses);
+        for (byte lastOctet = 2; lastOctet <= 16; lastOctet++)
+        {
+            now += TimeSpan.FromMilliseconds(10);
+            DnsDiscoveryPacket.ReadInto(CreateAddressOnlyPacket(120, IPAddress.Parse($"192.0.2.{lastOctet}")), addresses);
+        }
+        now += TimeSpan.FromSeconds(2);
+        var authoritativeAddress = IPAddress.Parse("192.0.2.99");
+        DnsDiscoveryPacket.ReadInto(CreateAddressOnlyPacket(120, authoritativeAddress, cacheFlush: true), addresses);
+        Assert.Equal(17, Assert.Single(addresses.Build()).Addresses.Count);
+        now += TimeSpan.FromMilliseconds(100);
+        var rescuedAddress = IPAddress.Parse("192.0.2.1");
+        DnsDiscoveryPacket.ReadInto(CreateAddressOnlyPacket(120, rescuedAddress), addresses);
+        now += TimeSpan.FromMilliseconds(1000);
+        Assert.Equal(new[] { rescuedAddress, authoritativeAddress }, Assert.Single(addresses.Build()).Addresses);
+    }
+
+    [Fact]
     public void DnsSdCacheExpiresRefreshesAndMatchesGoodbyesByRdata()
     {
         var now = TimeSpan.Zero;
@@ -1169,6 +1221,14 @@ public sealed class StableControlAndAdapterContractTests
         using var data = new MemoryStream();
         foreach (var item in textItems) { var bytes = Encoding.UTF8.GetBytes(item); data.WriteByte((byte)bytes.Length); data.Write(bytes); }
         WriteData(stream, data.ToArray());
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateAddressOnlyPacket(uint ttl, IPAddress address, bool cacheFlush = false)
+    {
+        using var stream = new MemoryStream();
+        U16(stream, 0); U16(stream, 0x8400); U16(stream, 0); U16(stream, 1); U16(stream, 0); U16(stream, 0);
+        Name(stream, "ha.local"); U16(stream, 1); U16(stream, cacheFlush ? 0x8001 : 1); U32(stream, ttl); U16(stream, 4); stream.Write(address.GetAddressBytes());
         return stream.ToArray();
     }
 
