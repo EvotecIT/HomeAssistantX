@@ -83,12 +83,12 @@ public sealed class LiveHomeAssistantTests
         {
             var energyInfo = await client.Energy.GetInfoAsync();
             energySolarForecastProviders = energyInfo.SolarForecastDomains.Count;
-            _ = await client.Energy.ValidateAsync();
-            _ = await client.Energy.GetSolarForecastAsync();
             try
             {
                 _ = await client.Energy.GetPreferencesAsync();
                 energyConfigured = true;
+                _ = await client.Energy.ValidateAsync();
+                _ = await client.Energy.GetSolarForecastAsync();
             }
             catch (HomeAssistantCommandException exception) when (exception.Code == "not_found")
             {

@@ -234,7 +234,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         "{\"type\":\"hourly\",\"forecast\":[{\"datetime\":\"2026-08-26T12:00:00+00:00\",\"condition\":\"rainy\",\"temperature\":18.0,\"precipitation\":1.2}]}";
 
     public string RecorderStatisticsResponseJson { get; set; } =
-        "{\"sensor.grid_energy\":[{\"start\":1787731200,\"end\":1787734800,\"last_reset\":1787727600,\"change\":1.5,\"state\":42.0,\"sum\":10.5,\"future_row\":true}]}";
+        "{\"sensor.grid_energy\":[{\"start\":1787731200000,\"end\":1787734800000,\"last_reset\":1787727600000,\"change\":1.5,\"state\":42.0,\"sum\":10.5,\"future_row\":true}]}";
 
     public string RecorderMetadataResponseJson { get; set; } =
         "[{\"statistic_id\":\"sensor.grid_energy\",\"source\":\"recorder\",\"name\":\"Grid energy\",\"unit_of_measurement\":\"kWh\",\"statistics_unit_of_measurement\":\"kWh\",\"unit_class\":\"energy\",\"has_mean\":false,\"has_sum\":true,\"future_metadata\":\"kept\",\"Future_Metadata\":\"also-kept\"}]";

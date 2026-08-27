@@ -74,8 +74,12 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             case UnitSet:
                 RequireExclusive(OldUnit, ClearOldUnit, nameof(OldUnit), nameof(ClearOldUnit), required: true);
                 RequireExclusive(NewUnit, ClearNewUnit, nameof(NewUnit), nameof(ClearNewUnit), required: true);
+                var oldUnit = ClearOldUnit ? null : OldUnit!.Trim();
+                var newUnit = ClearNewUnit ? null : NewUnit!.Trim();
+                if (string.Equals(oldUnit, newUnit, StringComparison.Ordinal))
+                    throw new ArgumentException("OldUnit and NewUnit must resolve to different values.");
                 if (!ShouldProcess(ConnectionDisplayName, "Convert stored Recorder statistics for 1 identifier to a new unit")) return;
-                await Client.Recorder.ChangeStatisticsUnitAsync(statisticId, ClearOldUnit ? null : OldUnit, ClearNewUnit ? null : NewUnit, CancelToken).ConfigureAwait(false);
+                await Client.Recorder.ChangeStatisticsUnitAsync(statisticId, oldUnit, newUnit, CancelToken).ConfigureAwait(false);
                 return;
             case AdjustSet:
                 if (double.IsNaN(AdjustSum) || double.IsInfinity(AdjustSum)) throw new ArgumentOutOfRangeException(nameof(AdjustSum));
@@ -121,5 +125,6 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
     {
         if (value is not null && clear) throw new ArgumentException($"{valueName} and {clearName} cannot be combined.");
         if (required && value is null && !clear) throw new ArgumentException($"Specify {valueName} or {clearName}.");
+        if (value is not null && string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{valueName} must not be blank.", valueName);
     }
 }

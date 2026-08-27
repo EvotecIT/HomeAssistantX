@@ -415,6 +415,63 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("[{}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"has_mean\":false}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"has_mean\":0,\"has_sum\":true}]")]
+    [InlineData("[{\"statistic_id\":\" \",\"has_mean\":false,\"has_sum\":true}]")]
+    public async Task RecorderMetadataRequiresIdentityAndCapabilityFields(string response)
+    {
+        using var server = new TestHomeAssistantServer { RecorderMetadataResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.ListStatisticsAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
+    }
+
+    [Theory]
+    [InlineData("{\"sensor.energy\":[{\"end\":1}]}" )]
+    [InlineData("{\"sensor.energy\":[{\"start\":1}]}" )]
+    [InlineData("{\"sensor.energy\":[{\"start\":\"1\",\"end\":2}]}" )]
+    [InlineData("{\"sensor.energy\":[{\"start\":1e300,\"end\":2}]}" )]
+    [InlineData("{\"sensor.energy\":[{\"start\":1.9,\"end\":2}]}" )]
+    [InlineData("{\"sensor.energy\":[{\"start\":1,\"end\":2,\"last_reset\":1e300}]}" )]
+    public async Task RecorderStatisticsRequireRepresentableTimestamps(string response)
+    {
+        using var server = new TestHomeAssistantServer { RecorderStatisticsResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, "sensor.energy")));
+    }
+
+    [Theory]
+    [InlineData("2026-08-27T12:00:00")]
+    [InlineData("2026-08-27 12:00:00Z")]
+    public async Task WeatherForecastRequiresAnExplicitStrictOffset(string timestamp)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            WeatherForecastResponseJson = "{\"weather.home\":{\"forecast\":[{\"datetime\":\"" + timestamp + "\"}]}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Weather.GetForecastAsync("weather.home", HomeAssistantWeatherForecastType.Daily));
+    }
+
+    [Fact]
+    public async Task RecorderUnitChangesRejectIdenticalEndpointsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ChangeStatisticsUnitAsync("sensor.energy", "kWh", " kWh "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ChangeStatisticsUnitAsync("sensor.energy", null, null));
+
+        Assert.Null(server.GetLastWebSocketCommand("recorder/change_statistics_unit"));
+    }
+
+    [Theory]
     [InlineData("12:00")]
     [InlineData("2026/08/27T10:00:00Z")]
     [InlineData("2026-08-27T10:00:00 +00:00")]

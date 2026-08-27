@@ -136,6 +136,16 @@ public sealed class HomeAssistantWeatherClient
             return new HomeAssistantWeatherForecastUpdate { EntityId = entityId, Type = type, IsAvailable = false, Raw = raw.Clone() };
         if (forecast.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The weather forecast was not an array.");
+        foreach (var value in forecast.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.Object
+                || !value.TryGetProperty("datetime", out var timestamp)
+                || timestamp.ValueKind != JsonValueKind.String
+                || !HomeAssistantTimestamp.TryParse(timestamp.GetString(), out _))
+            {
+                throw new HomeAssistantProtocolException("The weather forecast omitted a valid offset-aware timestamp.");
+            }
+        }
         var items = HomeAssistantJson.DeserializeResponse<HomeAssistantWeatherForecast[]>(forecast, "The weather forecast could not be decoded.");
         foreach (var item in items)
         {

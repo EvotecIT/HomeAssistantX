@@ -76,13 +76,13 @@ public sealed class HomeAssistantStatisticMetadata
 public sealed class HomeAssistantStatisticRow
 {
     [JsonPropertyName("start")]
-    public double StartSeconds { get; set; }
+    public long StartMilliseconds { get; set; }
 
     [JsonPropertyName("end")]
-    public double EndSeconds { get; set; }
+    public long EndMilliseconds { get; set; }
 
     [JsonPropertyName("last_reset")]
-    public double? LastResetSeconds { get; set; }
+    public long? LastResetMilliseconds { get; set; }
 
     [JsonPropertyName("change")]
     public double? Change { get; set; }
@@ -106,22 +106,17 @@ public sealed class HomeAssistantStatisticRow
     public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 
     [JsonIgnore]
-    public DateTimeOffset Start => FromUnixSeconds(StartSeconds);
+    public DateTimeOffset Start => FromUnixMilliseconds(StartMilliseconds);
 
     [JsonIgnore]
-    public DateTimeOffset End => FromUnixSeconds(EndSeconds);
+    public DateTimeOffset End => FromUnixMilliseconds(EndMilliseconds);
 
     [JsonIgnore]
-    public DateTimeOffset? LastReset => LastResetSeconds.HasValue
-        ? FromUnixSeconds(LastResetSeconds.Value)
+    public DateTimeOffset? LastReset => LastResetMilliseconds.HasValue
+        ? FromUnixMilliseconds(LastResetMilliseconds.Value)
         : null;
 
-    private static DateTimeOffset FromUnixSeconds(double value)
-    {
-        if (double.IsNaN(value) || double.IsInfinity(value))
-            throw new InvalidOperationException("Recorder returned a non-finite Unix timestamp.");
-        return DateTimeOffset.FromUnixTimeMilliseconds(checked((long)(value * 1000d)));
-    }
+    private static DateTimeOffset FromUnixMilliseconds(long value) => DateTimeOffset.FromUnixTimeMilliseconds(value);
 }
 
 /// <summary>A statistics series and its Recorder identifier.</summary>

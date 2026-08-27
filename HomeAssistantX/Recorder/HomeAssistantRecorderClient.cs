@@ -26,7 +26,7 @@ public sealed class HomeAssistantRecorderClient
     {
         var payload = statisticIds is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = RequireIds(statisticIds, nameof(statisticIds)) };
         var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(value, "Recorder statistics metadata could not be decoded.");
+        return DecodeMetadata(value, "Recorder statistics metadata could not be decoded.");
     }
 
     public async Task<IReadOnlyList<HomeAssistantStatisticMetadata>> ListStatisticsAsync(
@@ -38,7 +38,7 @@ public sealed class HomeAssistantRecorderClient
             ["statistic_type"] = kind == HomeAssistantStatisticKind.Mean ? "mean" : kind == HomeAssistantStatisticKind.Sum ? "sum" : throw new ArgumentOutOfRangeException(nameof(kind))
         };
         var value = await _webSocket.RequestAsync("recorder/list_statistic_ids", payload, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(value, "Recorder statistic identifiers could not be decoded.");
+        return DecodeMetadata(value, "Recorder statistic identifiers could not be decoded.");
     }
 
     public async Task<IReadOnlyList<HomeAssistantStatisticSeries>> GetStatisticsAsync(
@@ -72,6 +72,7 @@ public sealed class HomeAssistantRecorderClient
         var series = new List<HomeAssistantStatisticSeries>();
         foreach (var property in value.EnumerateObject())
         {
+            ValidateStatisticRows(property.Value);
             var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(property.Value, "A Recorder statistics series could not be decoded.");
             series.Add(new HomeAssistantStatisticSeries { StatisticId = property.Name, Rows = rows });
         }
@@ -96,12 +97,18 @@ public sealed class HomeAssistantRecorderClient
         }, cancellationToken).ConfigureAwait(false);
 
     public async Task ChangeStatisticsUnitAsync(string statisticId, string? oldUnit, string? newUnit, CancellationToken cancellationToken = default)
-        => _ = await _webSocket.RequestAsync("recorder/change_statistics_unit", new Dictionary<string, object?>
+    {
+        oldUnit = NormalizeOptionalUnit(oldUnit, nameof(oldUnit));
+        newUnit = NormalizeOptionalUnit(newUnit, nameof(newUnit));
+        if (string.Equals(oldUnit, newUnit, StringComparison.Ordinal))
+            throw new ArgumentException("The old and new statistics units must be different.", nameof(newUnit));
+        _ = await _webSocket.RequestAsync("recorder/change_statistics_unit", new Dictionary<string, object?>
         {
             ["statistic_id"] = Require(statisticId, nameof(statisticId)),
             ["old_unit_of_measurement"] = oldUnit,
             ["new_unit_of_measurement"] = newUnit
         }, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task AdjustSumStatisticsAsync(string statisticId, DateTimeOffset start, double adjustment, string? unit, CancellationToken cancellationToken = default)
     {
@@ -163,6 +170,71 @@ public sealed class HomeAssistantRecorderClient
 
     public Task<HomeAssistantServiceCallResult> SetEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
         => _services.CallControlAsync(new HomeAssistantServiceCall("recorder", enabled ? "enable" : "disable"), cancellationToken);
+
+    private static IReadOnlyList<HomeAssistantStatisticMetadata> DecodeMetadata(JsonElement value, string failureMessage)
+    {
+        if (value.ValueKind != JsonValueKind.Array)
+            throw new HomeAssistantProtocolException(failureMessage);
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object
+                || !item.TryGetProperty("statistic_id", out var statisticId)
+                || statisticId.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(statisticId.GetString())
+                || !item.TryGetProperty("has_mean", out var hasMean)
+                || hasMean.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                || !item.TryGetProperty("has_sum", out var hasSum)
+                || hasSum.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                throw new HomeAssistantProtocolException(failureMessage);
+            }
+        }
+
+        var metadata = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(value, failureMessage);
+        if (metadata.Any(item => item.MeanType.HasValue && !Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)))
+            throw new HomeAssistantProtocolException(failureMessage);
+        return metadata;
+    }
+
+    private static void ValidateStatisticRows(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Array)
+            throw new HomeAssistantProtocolException("A Recorder statistics series could not be decoded.");
+        foreach (var row in value.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object
+                || !TryGetUnixMilliseconds(row, "start", required: true, out _)
+                || !TryGetUnixMilliseconds(row, "end", required: true, out _)
+                || !TryGetUnixMilliseconds(row, "last_reset", required: false, out _))
+            {
+                throw new HomeAssistantProtocolException("A Recorder statistics series contained an invalid timestamp.");
+            }
+        }
+    }
+
+    private static bool TryGetUnixMilliseconds(JsonElement value, string propertyName, bool required, out long milliseconds)
+    {
+        milliseconds = default;
+        if (!value.TryGetProperty(propertyName, out var property)) return !required;
+        if (property.ValueKind == JsonValueKind.Null) return !required;
+        if (property.ValueKind != JsonValueKind.Number || !property.TryGetInt64(out milliseconds)) return false;
+        try
+        {
+            _ = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
+            return true;
+        }
+        catch (Exception exception) when (exception is OverflowException || exception is ArgumentOutOfRangeException)
+        {
+            return false;
+        }
+    }
+
+    private static string? NormalizeOptionalUnit(string? value, string parameterName)
+    {
+        if (value is null) return null;
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A supplied unit cannot be empty.", parameterName);
+        return value.Trim();
+    }
 
     private static Dictionary<string, object?> ToImportPayload(HomeAssistantStatisticImportRow row)
     {
