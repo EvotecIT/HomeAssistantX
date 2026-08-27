@@ -22,6 +22,7 @@ public sealed class HomeAssistantMediaBrowserClient
     /// <summary>Searches global media sources and preserves response-level provider metadata.</summary>
     public Task<HomeAssistantMediaSearchResponse> SearchSourcesResponseAsync(string searchQuery, string? mediaContentId = null, IReadOnlyCollection<string>? mediaClasses = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var payload = OptionalContentId(mediaContentId);
         payload["search_query"] = Require(searchQuery, nameof(searchQuery));
         AddMediaClasses(payload, mediaClasses);
@@ -54,6 +55,7 @@ public sealed class HomeAssistantMediaBrowserClient
     /// <summary>Searches media exposed by a player and preserves response-level provider metadata.</summary>
     public Task<HomeAssistantMediaSearchResponse> SearchPlayerResponseAsync(string entityId, string searchQuery, string? mediaContentType = null, string? mediaContentId = null, IReadOnlyCollection<string>? mediaClasses = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var payload = PlayerPayload(entityId, mediaContentType, mediaContentId);
         payload["search_query"] = Require(searchQuery, nameof(searchQuery));
         AddMediaClasses(payload, mediaClasses);

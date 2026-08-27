@@ -1583,6 +1583,23 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task MediaSearchHonorsCancellationBeforeEnumeratingClasses()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Media.SearchSourcesResponseAsync(
+                "music",
+                mediaClasses: new ThrowingStringList(),
+                cancellationToken: cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+    }
+
+    [Fact]
     public async Task MediaSelectorsPreserveProviderDefinedText()
     {
         using var server = new TestHomeAssistantServer();
