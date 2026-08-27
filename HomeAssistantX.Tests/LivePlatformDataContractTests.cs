@@ -23,6 +23,12 @@ public sealed class LivePlatformDataContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Events.SubscribeTriggerAsync(cyclic, (_, _) => Task.CompletedTask));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.FireEventAsync("homeassistantx_test", cyclic));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.RenderTemplateAsync("{{ value }}", cyclic));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Events.FireAsync("homeassistantx_test", cyclic, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Events.SubscribeTriggerAsync(cyclic, (_, _) => Task.CompletedTask, cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Rest.FireEventAsync("homeassistantx_test", cyclic, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Rest.RenderTemplateAsync("{{ value }}", cyclic, cancellation.Token));
         Assert.Null(server.LastServiceCallBody);
         Assert.Null(server.LastRequestBody);
     }
