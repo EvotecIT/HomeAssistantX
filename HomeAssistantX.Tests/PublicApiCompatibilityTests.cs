@@ -87,6 +87,16 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void ParameterFormatterPreservesMetadataOnlyOptionalParameters()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(MetadataOnlyOptionalFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal("System.Int32 value [optional]", FormatParameters(method.GetParameters()));
+    }
+
+    [Fact]
     public void TypeFormatterPreservesDynamicMetadataAcrossNestedContracts()
     {
         var method = typeof(PublicApiCompatibilityTests).GetMethod(
@@ -212,6 +222,24 @@ public sealed class PublicApiCompatibilityTests
     }
 
 #if NET10_0
+    [Fact]
+    public void MemberFormatterPreservesStaticInterfaceDispatch()
+    {
+        var abstractMethod = typeof(StaticDispatchFixture).GetMethod(nameof(StaticDispatchFixture.Abstract))!;
+        var virtualMethod = typeof(StaticDispatchFixture).GetMethod(nameof(StaticDispatchFixture.Virtual))!;
+
+        Assert.Equal("static abstract", MemberScope(abstractMethod));
+        Assert.Equal("static virtual", MemberScope(virtualMethod));
+    }
+
+    [Fact]
+    public void GenericConstraintFormatterPreservesNullableContracts()
+    {
+        Assert.Equal(
+            " where TRequired : class where TOptional : class? where TNotNull : notnull",
+            FormatGenericConstraints(typeof(NullableConstraintFixture<,,,>).GetGenericArguments()));
+    }
+
     [Fact]
     public void PropertyFormatterPreservesInitOnlyAccessors()
     {
@@ -452,6 +480,11 @@ public sealed class PublicApiCompatibilityTests
         IReadOnlyDictionary<string, dynamic[]> nested)
         => value;
 
+    private static void MetadataOnlyOptionalFixture(
+        [System.Runtime.InteropServices.Optional] int value)
+    {
+    }
+
     [Obsolete("This fixture must remain a compile-time error.", true)]
     private static void CompileBlockingObsoleteFixture()
     {
@@ -604,6 +637,20 @@ public sealed class PublicApiCompatibilityTests
     }
 
 #if NET10_0
+    private interface StaticDispatchFixture
+    {
+        static abstract int Abstract();
+
+        static virtual int Virtual() => 1;
+    }
+
+    private sealed class NullableConstraintFixture<TRequired, TOptional, TNotNull, TUnconstrained>
+        where TRequired : class
+        where TOptional : class?
+        where TNotNull : notnull
+    {
+    }
+
     private sealed class PropertyAccessorFixture
     {
         public string Mutable { get; set; } = string.Empty;
@@ -656,7 +703,15 @@ public sealed class PublicApiCompatibilityTests
 
     private static string MemberScope(MethodBase method)
     {
-        if (method.IsStatic) return "static";
+        if (method.IsStatic)
+        {
+            if (method is MethodInfo staticMethod)
+            {
+                if (staticMethod.IsAbstract) return "static abstract";
+                if (staticMethod.IsVirtual) return "static virtual";
+            }
+            return "static";
+        }
         if (method is MethodInfo methodInfo && methodInfo.IsVirtual)
         {
             var isOverride = methodInfo.GetBaseDefinition().DeclaringType != methodInfo.DeclaringType;
@@ -809,7 +864,9 @@ public sealed class PublicApiCompatibilityTests
 
     private static string FormatParameters(IEnumerable<ParameterInfo> parameters) => string.Join(", ", parameters.Select(parameter =>
     {
-        var suffix = parameter.HasDefaultValue ? " = " + FormatDefault(parameter.DefaultValue) : string.Empty;
+        var suffix = parameter.HasDefaultValue
+            ? " = " + FormatDefault(parameter.DefaultValue)
+            : parameter.IsOptional ? " [optional]" : string.Empty;
         return FormatParameterType(parameter) + " " + parameter.Name + suffix;
     }));
 
@@ -927,7 +984,11 @@ public sealed class PublicApiCompatibilityTests
             }
             else if ((attributes & GenericParameterAttributes.ReferenceTypeConstraint) != 0)
             {
-                constraints.Add("class");
+                constraints.Add(GenericParameterNullability(argument) == 2 ? "class?" : "class");
+            }
+            else if (GenericParameterNullability(argument) == 1)
+            {
+                constraints.Add("notnull");
             }
 
             constraints.AddRange(argument.GetGenericParameterConstraints()
@@ -953,6 +1014,12 @@ public sealed class PublicApiCompatibilityTests
             }
         }
         return string.Concat(clauses);
+    }
+
+    private static byte GenericParameterNullability(Type argument)
+    {
+        var flags = ReadNullableFlags(argument);
+        return flags.Length == 0 ? ReadNullableContext(argument) : flags[0];
     }
 
     private static string FormatEnumValue(object value, Type underlyingType)
@@ -1111,6 +1178,7 @@ public sealed class PublicApiCompatibilityTests
             current = current switch
             {
                 ParameterInfo parameter => parameter.Member,
+                Type type when type.IsGenericParameter && type.DeclaringMethod is not null => type.DeclaringMethod,
                 MemberInfo member => member.DeclaringType,
                 _ => null
             };
