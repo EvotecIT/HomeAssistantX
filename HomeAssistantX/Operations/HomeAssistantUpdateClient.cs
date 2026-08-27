@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
@@ -45,7 +46,17 @@ public sealed class HomeAssistantUpdateClient
             "update/release_notes",
             new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId },
             cancellationToken).ConfigureAwait(false);
-        return result.ValueKind == JsonValueKind.Null ? null : result.GetString();
+        if (result.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (result.ValueKind != JsonValueKind.String)
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant update release-notes response was not a string.");
+        }
+
+        return result.GetString();
     }
 
     public Task<HomeAssistantServiceCallResult> InstallAsync(

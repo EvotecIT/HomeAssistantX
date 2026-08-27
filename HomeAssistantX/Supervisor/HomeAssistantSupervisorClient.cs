@@ -253,8 +253,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
 
     private static T Decode<T>(JsonElement value, string name)
     {
-        return value.Deserialize<T>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The " + name + " response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<T>(value, "The " + name + " response could not be decoded.");
     }
 
     private static IReadOnlyList<T> DecodeList<T>(JsonElement value, string propertyName, string name)
@@ -265,8 +264,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             list = nested;
         }
 
-        return list.Deserialize<T[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The " + name + " response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<T[]>(list, "The " + name + " response could not be decoded.");
     }
 
     private static string Escape(string? value, string parameterName)

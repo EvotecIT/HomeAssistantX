@@ -75,8 +75,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         {
             return new HomeAssistantServiceCallResult
             {
-                ChangedStates = result.Deserialize<HomeAssistantState[]>(HomeAssistantJson.SerializerOptions)
-                    ?? Array.Empty<HomeAssistantState>()
+                ChangedStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(result, "The Home Assistant changed-state response could not be decoded.")
             };
         }
 
@@ -85,8 +84,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             var response = new HomeAssistantServiceCallResult();
             if (result.TryGetProperty("changed_states", out var changedStates))
             {
-                response.ChangedStates = changedStates.Deserialize<HomeAssistantState[]>(HomeAssistantJson.SerializerOptions)
-                    ?? Array.Empty<HomeAssistantState>();
+                response.ChangedStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(changedStates, "The Home Assistant changed-state response could not be decoded.");
             }
 
             if (result.TryGetProperty("service_response", out var serviceResponse))

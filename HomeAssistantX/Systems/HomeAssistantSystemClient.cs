@@ -21,8 +21,7 @@ public sealed class HomeAssistantSystemClient
     public async Task<HomeAssistantConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
     {
         var result = await _webSocket.RequestAsync("get_config", null, cancellationToken).ConfigureAwait(false);
-        return result.Deserialize<HomeAssistantConfiguration>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant configuration could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantConfiguration>(result, "The Home Assistant configuration could not be decoded.");
     }
 
     /// <summary>Gets registered frontend panels.</summary>

@@ -83,7 +83,7 @@ public sealed class HomeAssistantServiceClient
 
         if (result.TryGetProperty("context", out var context))
         {
-            response.Context = context.Deserialize<HomeAssistantContext>(HomeAssistantJson.SerializerOptions);
+            response.Context = HomeAssistantJson.DeserializeResponse<HomeAssistantContext>(context, "The Home Assistant service-call context could not be decoded.");
         }
 
         if (result.TryGetProperty("response", out var serviceResponse))

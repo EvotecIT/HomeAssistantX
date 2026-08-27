@@ -130,6 +130,16 @@ public sealed class OperationsContractTests
     }
 
     [Fact]
+    public async Task UpdateReleaseNotesClassifyUnexpectedServerShapes()
+    {
+        using var server = new TestHomeAssistantServer { ReturnInvalidUpdateReleaseNotes = true };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
+            () => client.Operations.Updates.GetReleaseNotesAsync("update.home_assistant_core_update"));
+    }
+
+    [Fact]
     public async Task CoreSupervisorProxySupportsInventoryLogsAndBoundedMutations()
     {
         using var server = new TestHomeAssistantServer();

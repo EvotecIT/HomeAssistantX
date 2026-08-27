@@ -75,8 +75,9 @@ public sealed class HomeAssistantRegistryClient
             throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response had an unexpected shape.");
         }
 
-        var extendedEntries = value.Deserialize<Dictionary<string, HomeAssistantEntityRegistryEntry?>>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response could not be decoded.");
+        var extendedEntries = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantEntityRegistryEntry?>>(
+            value,
+            "The Home Assistant extended entity registry response could not be decoded.");
 
         return partialEntries.Select(partial =>
         {
@@ -99,8 +100,7 @@ public sealed class HomeAssistantRegistryClient
 
     private static IReadOnlyList<T> DeserializeArray<T>(JsonElement value, string name)
     {
-        return value.Deserialize<T[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant " + name + " response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<T[]>(value, "The Home Assistant " + name + " response could not be decoded.");
     }
 
     private static IReadOnlyList<HomeAssistantConfigEntry> DeserializeConfigEntries(JsonElement value)

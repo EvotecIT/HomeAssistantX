@@ -33,5 +33,6 @@
 
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="README.md" />
+    <InternalsVisibleTo Include="HomeAssistantX.Tests" />
   </ItemGroup>
 </Project>

@@ -34,8 +34,7 @@ public sealed class HomeAssistantEventClient
             payload,
             async (message, token) =>
             {
-                var value = message.Deserialize<HomeAssistantEvent>(HomeAssistantJson.SerializerOptions)
-                    ?? throw new Exceptions.HomeAssistantProtocolException("A Home Assistant event could not be decoded.");
+                var value = HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(message, "A Home Assistant event could not be decoded.");
                 await handler(value, token).ConfigureAwait(false);
             },
             cancellationToken);

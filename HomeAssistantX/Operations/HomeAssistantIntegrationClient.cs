@@ -42,8 +42,7 @@ public sealed class HomeAssistantIntegrationClient
         if (result.ValueKind == JsonValueKind.Object
             && result.TryGetProperty("config_entry", out var entry))
         {
-            return entry.Deserialize<HomeAssistantConfigEntry>(HomeAssistantJson.SerializerOptions)
-                ?? throw new HomeAssistantProtocolException("The Home Assistant configuration entry could not be decoded.");
+            return HomeAssistantJson.DeserializeResponse<HomeAssistantConfigEntry>(entry, "The Home Assistant configuration entry could not be decoded.");
         }
 
         throw new HomeAssistantProtocolException("The Home Assistant configuration-entry response had an unexpected shape.");
@@ -73,8 +72,7 @@ public sealed class HomeAssistantIntegrationClient
                 ["disabled_by"] = enabled ? null : "user"
             },
             cancellationToken).ConfigureAwait(false);
-        return result.Deserialize<HomeAssistantIntegrationOperationResult>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant configuration-entry operation could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantIntegrationOperationResult>(result, "The Home Assistant configuration-entry operation could not be decoded.");
     }
 
     /// <summary>Starts Home Assistant's user-initiated reconfiguration flow for an existing entry.</summary>
@@ -119,8 +117,7 @@ public sealed class HomeAssistantIntegrationClient
             entries = nested;
         }
 
-        return entries.Deserialize<HomeAssistantConfigEntry[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant configuration entries could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantConfigEntry[]>(entries, "The Home Assistant configuration entries could not be decoded.");
     }
 
     private static string Required(string value, string parameterName)

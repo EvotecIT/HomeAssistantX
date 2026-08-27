@@ -22,7 +22,8 @@ public sealed class HomeAssistantStateClient : IDisposable
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private readonly object _stateGate = new();
     private IHomeAssistantSubscription? _serverSubscription;
-    private bool _initialized;
+    private Exception? _serverSubscriptionFailure;
+    private volatile bool _initialized;
     private bool _snapshotReady;
     private bool _wasConnected;
     private readonly List<HomeAssistantStateChange> _bufferedChanges = new();
@@ -64,8 +65,7 @@ public sealed class HomeAssistantStateClient : IDisposable
     public async Task<IReadOnlyList<HomeAssistantState>> GetAllWebSocketAsync(CancellationToken cancellationToken = default)
     {
         var result = await _webSocket.RequestAsync("get_states", null, cancellationToken).ConfigureAwait(false);
-        return result.Deserialize<HomeAssistantState[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant state list could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(result, "The Home Assistant state list could not be decoded.");
     }
 
     /// <summary>Creates or updates a state representation through REST without controlling the underlying device.</summary>
@@ -97,11 +97,15 @@ public sealed class HomeAssistantStateClient : IDisposable
             _snapshotReady = false;
             try
             {
+                _serverSubscription?.Dispose();
+                _serverSubscription = null;
+                Volatile.Write(ref _serverSubscriptionFailure, null);
                 _serverSubscription = await _webSocket.SubscribeAsync(
                     "subscribe_events",
                     new Dictionary<string, object?> { ["event_type"] = "state_changed" },
                     HandleStateEventAsync,
                     cancellationToken).ConfigureAwait(false);
+                _ = ObserveServerSubscriptionAsync(_serverSubscription);
                 await ResynchronizeAsync(isReconnect: false, cancellationToken).ConfigureAwait(false);
                 _initialized = true;
                 _wasConnected = true;
@@ -153,13 +157,19 @@ public sealed class HomeAssistantStateClient : IDisposable
             throw new HomeAssistantProtocolException("A duplicate local state subscription identifier was generated.");
         }
 
+        var serverFailure = Volatile.Read(ref _serverSubscriptionFailure);
+        if (serverFailure is not null)
+        {
+            subscription.Fail(serverFailure);
+        }
+
         return subscription;
     }
 
     private Task HandleStateEventAsync(JsonElement eventMessage, CancellationToken cancellationToken)
     {
-        var eventValue = eventMessage.Deserialize<HomeAssistantEvent>(HomeAssistantJson.SerializerOptions);
-        if (eventValue is null || !string.Equals(eventValue.EventType, "state_changed", StringComparison.Ordinal))
+        var eventValue = HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(eventMessage, "A Home Assistant state event could not be decoded.");
+        if (!string.Equals(eventValue.EventType, "state_changed", StringComparison.Ordinal))
         {
             return Task.CompletedTask;
         }
@@ -170,9 +180,9 @@ public sealed class HomeAssistantStateClient : IDisposable
             throw new HomeAssistantProtocolException("A state_changed event omitted entity_id.");
         }
 
-        var entityId = entityProperty.GetString() ?? string.Empty;
-        var previous = DeserializeOptionalState(eventValue.Data, "old_state");
-        var current = DeserializeOptionalState(eventValue.Data, "new_state");
+        var entityId = HomeAssistantEntityId.RequireResponseEntityId(entityProperty.GetString());
+        var previous = DeserializeOptionalState(eventValue.Data, "old_state", entityId);
+        var current = DeserializeOptionalState(eventValue.Data, "new_state", entityId);
         var change = new HomeAssistantStateChange(entityId, previous, current);
 
         lock (_stateGate)
@@ -201,8 +211,7 @@ public sealed class HomeAssistantStateClient : IDisposable
                 .ConfigureAwait(false);
         }
 
-        var currentStates = snapshot.Deserialize<HomeAssistantState[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The get_states response could not be decoded.");
+        var currentStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(snapshot, "The get_states response could not be decoded.");
         var changes = new List<HomeAssistantStateChange>();
 
         lock (_stateGate)
@@ -318,6 +327,53 @@ public sealed class HomeAssistantStateClient : IDisposable
         }
     }
 
+    private async Task ObserveServerSubscriptionAsync(IHomeAssistantSubscription subscription)
+    {
+        Exception? failure = null;
+        try
+        {
+            await subscription.Completion.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+
+        if (failure is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _initializationGate.WaitAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!ReferenceEquals(_serverSubscription, subscription))
+            {
+                return;
+            }
+
+            _initialized = false;
+            Volatile.Write(ref _serverSubscriptionFailure, failure);
+        }
+        finally
+        {
+            _initializationGate.Release();
+        }
+
+        foreach (var subscriber in _subscribers.Values)
+        {
+            subscriber.Fail(failure);
+        }
+    }
+
     private void RemoveLocalSubscription(LocalStateSubscription subscription)
     {
         _subscribers.TryRemove(subscription.Id, out _);
@@ -325,14 +381,22 @@ public sealed class HomeAssistantStateClient : IDisposable
 
     private static HomeAssistantState? DeserializeOptionalState(
         IReadOnlyDictionary<string, JsonElement> data,
-        string name)
+        string name,
+        string expectedEntityId)
     {
         if (!data.TryGetValue(name, out var value) || value.ValueKind == JsonValueKind.Null)
         {
             return null;
         }
 
-        return value.Deserialize<HomeAssistantState>(HomeAssistantJson.SerializerOptions);
+        var state = HomeAssistantJson.DeserializeResponse<HomeAssistantState>(value, "A Home Assistant state change could not be decoded.");
+        var stateEntityId = HomeAssistantEntityId.RequireResponseEntityId(state.EntityId);
+        if (!string.Equals(stateEntityId, expectedEntityId, StringComparison.Ordinal))
+        {
+            throw new HomeAssistantProtocolException("A Home Assistant state change contained a mismatched entity identifier.");
+        }
+
+        return state;
     }
 
     private static bool StatesEquivalent(HomeAssistantState left, HomeAssistantState right)

@@ -124,6 +124,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public bool RejectSupportedFeatures { get; set; }
 
+    public bool ReturnInvalidUpdateReleaseNotes { get; set; }
+
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;
@@ -654,7 +656,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("{\"domain\":\"automation\",\"item_id\":\"night\",\"run_id\":\"run-1\",\"state\":\"stopped\",\"trace\":{\"action/0\":[{\"path\":\"action/0\",\"error\":\"Test failure\"}]}}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "update/release_notes":
-                await session.SendResultAsync(id, "Test release notes", false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(
+                    id,
+                    ReturnInvalidUpdateReleaseNotes ? 42 : "Test release notes",
+                    false,
+                    _source.Token).ConfigureAwait(false);
                 return;
             case "system_health/info":
                 session.SubscriptionIds.Add(id);
