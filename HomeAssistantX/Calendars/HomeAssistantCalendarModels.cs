@@ -122,8 +122,8 @@ public sealed class HomeAssistantCalendarEventInput
 
         var frequency = value.Split(';')
             .Select(part => part.Split(new[] { '=' }, 2))
-            .FirstOrDefault(part => part.Length == 2 && string.Equals(part[0], "FREQ", StringComparison.Ordinal));
-        if (frequency is null || !(new[] { "DAILY", "WEEKLY", "MONTHLY", "YEARLY" }).Contains(frequency[1], StringComparer.Ordinal))
+            .FirstOrDefault(part => part.Length == 2 && string.Equals(part[0], "FREQ", StringComparison.OrdinalIgnoreCase));
+        if (frequency is null || !(new[] { "DAILY", "WEEKLY", "MONTHLY", "YEARLY" }).Contains(frequency[1], StringComparer.OrdinalIgnoreCase))
         {
             throw new ArgumentException("The recurrence rule must contain a supported FREQ value: DAILY, WEEKLY, MONTHLY, or YEARLY.", nameof(value));
         }

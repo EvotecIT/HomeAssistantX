@@ -41,6 +41,8 @@ public sealed class LivePlatformDataContractTests
         var update = await updateReceived.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(HomeAssistantPersistentNotificationUpdateType.Current, update.Type);
         Assert.Equal("Door open", update.Notifications["notice-1"].Message);
+        Assert.Equal("Upper", update.Notifications["Alert"].Message);
+        Assert.Equal("Lower", update.Notifications["alert"].Message);
 
         await client.Notifications.CreatePersistentAsync("Window open", "Security", "window-open");
         AssertServiceCall(server, "persistent_notification", "create", data =>
@@ -130,6 +132,8 @@ public sealed class LivePlatformDataContractTests
         Assert.Throws<ArgumentOutOfRangeException>(() => HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-27", "Invalid"));
         var input = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Invalid recurrence");
         Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=SECONDLY");
+        input.RecurrenceRule = "freq=weekly";
+        Assert.Equal("freq=weekly", input.RecurrenceRule);
         Assert.Throws<ArgumentException>(() => new HomeAssistantCalendarEventReference("event-1") { RecurrenceRange = "THISANDFUTURE" }.Validate());
         Assert.Throws<ArgumentException>(() => new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "THIS" }.Validate());
         var recurrence = new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "thisandfuture" };

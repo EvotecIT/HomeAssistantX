@@ -392,11 +392,15 @@ try {
     if ($updatedLabel.LabelId -ne 'security' -or $null -ne $updatedLabel.Color) { throw 'The label update contract was not returned.' }
     $updatedCategory = Set-HomeAssistantCategory -Scope automation -CategoryId comfort -ClearIcon -Confirm:$false
     if ($updatedCategory.CategoryId -ne 'comfort' -or $null -ne $updatedCategory.Icon) { throw 'The category update contract was not returned.' }
+    $null = Set-HomeAssistantCategory -Scope automation -Name Comfort -ClearIcon:$false -WhatIf
+    $null = Set-HomeAssistantLabel -Name Security -ClearColor:$false -ClearDescription:$false -ClearIcon:$false -WhatIf
     $null = Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Holiday -StartDate 2026-08-27 -EndDate 2026-08-28 -Confirm:$false
 
     foreach ($invalidPlatformData in @(
         { Set-HomeAssistantLabel -LabelId security -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCategory -Scope automation -CategoryId comfort -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLabel -Name Security -ClearColor -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCategory -Scope automation -Name Comfort -ClearIcon -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-27 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceRange THISANDFUTURE -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-28 -WhatIf -ErrorAction Stop },
         { Remove-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceId 20260827 -RecurrenceRange THIS -WhatIf -ErrorAction Stop }

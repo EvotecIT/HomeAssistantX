@@ -31,6 +31,7 @@ public sealed class SetHomeAssistantCategoryCommand : HomeAssistantCmdlet
     public string? Icon { get; set; }
 
     /// <summary>Clears the current icon. Mutually exclusive with Icon.</summary>
+    [Parameter(ParameterSetName = "Create")]
     [Parameter(ParameterSetName = "Update")]
     public SwitchParameter ClearIcon { get; set; }
 
@@ -39,6 +40,11 @@ public sealed class SetHomeAssistantCategoryCommand : HomeAssistantCmdlet
         if (Icon is not null && ClearIcon)
         {
             throw new ArgumentException("-Icon cannot be combined with -ClearIcon.");
+        }
+
+        if (ParameterSetName == "Create" && ClearIcon)
+        {
+            throw new ArgumentException("-ClearIcon can only be used when updating a category.");
         }
 
         if (ParameterSetName == "Create")

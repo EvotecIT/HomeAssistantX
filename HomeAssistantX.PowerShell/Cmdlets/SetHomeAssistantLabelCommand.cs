@@ -34,14 +34,17 @@ public sealed class SetHomeAssistantLabelCommand : HomeAssistantCmdlet
     public string? Icon { get; set; }
 
     /// <summary>Clears the current color. Mutually exclusive with Color.</summary>
+    [Parameter(ParameterSetName = "Create")]
     [Parameter(ParameterSetName = "Update")]
     public SwitchParameter ClearColor { get; set; }
 
     /// <summary>Clears the current description. Mutually exclusive with Description.</summary>
+    [Parameter(ParameterSetName = "Create")]
     [Parameter(ParameterSetName = "Update")]
     public SwitchParameter ClearDescription { get; set; }
 
     /// <summary>Clears the current icon. Mutually exclusive with Icon.</summary>
+    [Parameter(ParameterSetName = "Create")]
     [Parameter(ParameterSetName = "Update")]
     public SwitchParameter ClearIcon { get; set; }
 
@@ -50,6 +53,10 @@ public sealed class SetHomeAssistantLabelCommand : HomeAssistantCmdlet
         RejectConflict(Color, ClearColor, nameof(Color));
         RejectConflict(Description, ClearDescription, nameof(Description));
         RejectConflict(Icon, ClearIcon, nameof(Icon));
+        if (ParameterSetName == "Create" && (ClearColor || ClearDescription || ClearIcon))
+        {
+            throw new ArgumentException("Clear switches can only be used when updating a label.");
+        }
         if (ParameterSetName == "Create")
         {
             var create = new HomeAssistantLabelCreate(Name!) { Color = Color, Description = Description, Icon = Icon };

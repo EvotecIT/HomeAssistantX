@@ -39,7 +39,7 @@ public sealed class HomeAssistantPersistentNotificationUpdate
     public string RawType { get; set; } = string.Empty;
 
     public IReadOnlyDictionary<string, HomeAssistantPersistentNotification> Notifications { get; set; }
-        = new Dictionary<string, HomeAssistantPersistentNotification>(StringComparer.OrdinalIgnoreCase);
+        = new Dictionary<string, HomeAssistantPersistentNotification>(StringComparer.Ordinal);
 
     public JsonElement Raw { get; set; }
 }

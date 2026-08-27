@@ -100,7 +100,7 @@ public sealed class HomeAssistantNotificationClient
             {
                 RawType = rawType,
                 Type = ParseType(rawType),
-                Notifications = new Dictionary<string, HomeAssistantPersistentNotification>(notifications, StringComparer.OrdinalIgnoreCase),
+                Notifications = new Dictionary<string, HomeAssistantPersistentNotification>(notifications, StringComparer.Ordinal),
                 Raw = value.Clone()
             }, token).ConfigureAwait(false);
         }, cancellationToken);
