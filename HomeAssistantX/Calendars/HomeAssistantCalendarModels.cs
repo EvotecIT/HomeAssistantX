@@ -32,7 +32,7 @@ public sealed class HomeAssistantCalendarEventInput
         {
             if (value is not null)
             {
-                ValidateRecurrenceRule(value);
+                ValidateRecurrenceRule(value, IsAllDay);
             }
 
             _recurrenceRule = value;
@@ -113,9 +113,9 @@ public sealed class HomeAssistantCalendarEventInput
         }
     }
 
-    private static void ValidateRecurrenceRule(string value)
+    private static void ValidateRecurrenceRule(string value, bool isAllDay)
     {
-        HomeAssistantRecurrenceRuleValidator.Validate(value, nameof(value));
+        HomeAssistantRecurrenceRuleValidator.Validate(value, isAllDay, nameof(value));
     }
 }
 

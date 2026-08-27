@@ -14,7 +14,7 @@ internal static class HomeAssistantRecurrenceRuleValidator
         "MO", "TU", "WE", "TH", "FR", "SA", "SU"
     };
 
-    public static void Validate(string value, string parameterName)
+    public static void Validate(string value, bool isAllDay, string parameterName)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -50,7 +50,7 @@ internal static class HomeAssistantRecurrenceRuleValidator
 
         foreach (var clause in clauses)
         {
-            ValidateClause(clause.Key, clause.Value, parameterName);
+            ValidateClause(clause.Key, clause.Value, isAllDay, parameterName);
         }
 
         if (clauses.ContainsKey("COUNT") && clauses.ContainsKey("UNTIL"))
@@ -59,14 +59,18 @@ internal static class HomeAssistantRecurrenceRuleValidator
         }
     }
 
-    private static void ValidateClause(string name, string value, string parameterName)
+    private static void ValidateClause(
+        string name,
+        string value,
+        bool isAllDay,
+        string parameterName)
     {
         switch (name)
         {
             case "FREQ":
                 return;
             case "UNTIL":
-                ValidateUntil(value, parameterName);
+                ValidateUntil(value, isAllDay, parameterName);
                 return;
             case "COUNT":
             case "INTERVAL":
@@ -113,17 +117,21 @@ internal static class HomeAssistantRecurrenceRuleValidator
         }
     }
 
-    private static void ValidateUntil(string value, string parameterName)
+    private static void ValidateUntil(string value, bool isAllDay, string parameterName)
     {
-        var formats = new[] { "yyyyMMdd", "yyyyMMdd'T'HHmmss", "yyyyMMdd'T'HHmmss'Z'" };
+        var format = isAllDay ? "yyyyMMdd" : "yyyyMMdd'T'HHmmss'Z'";
         if (!DateTime.TryParseExact(
                 value,
-                formats,
+                format,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
                 out _))
         {
-            throw Invalid(parameterName, "UNTIL must be an iCalendar date or date-time value.");
+            throw Invalid(
+                parameterName,
+                isAllDay
+                    ? "UNTIL for an all-day event must be an iCalendar date."
+                    : "UNTIL for a timed event must be an iCalendar UTC date-time ending in Z.");
         }
     }
 
