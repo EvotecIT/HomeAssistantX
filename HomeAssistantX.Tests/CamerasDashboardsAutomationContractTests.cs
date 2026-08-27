@@ -113,14 +113,30 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Theory]
-    [InlineData("{\"title\":\"Music\",\"media_content_type\":\"library\",\"children\":[]}")]
-    [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"children\":[]}]}")]
+    [InlineData("{\"title\":\"Music\",\"media_content_type\":\"library\",\"can_play\":true,\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"can_expand\":true,\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"can_play\":true,\"children\":[]}]}")]
     public async Task MediaBrowseRejectsItemsWithoutContentIdentity(string response)
     {
         using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task MediaBrowseAllowsNonActionableProviderMessagesWithoutSelectors()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Provider unavailable\",\"can_play\":false,\"can_expand\":false,\"children\":[]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var item = await client.Media.BrowseSourcesAsync();
+
+        Assert.Equal("Provider unavailable", item.Title);
+        Assert.Empty(item.MediaContentId);
+        Assert.Empty(item.MediaContentType);
     }
 
     [Fact]
@@ -228,6 +244,7 @@ public sealed class CamerasDashboardsAutomationContractTests
         await client.Dashboards.CreateResourceAsync("/local/card.js", HomeAssistantDashboardResourceType.Module);
         using (var resource = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/resources/create"))))
             Assert.Equal("module", resource.RootElement.GetProperty("res_type").GetString());
+        await client.Dashboards.UpdateResourceAsync("resource-1", url: "/local/card-v2.js");
 
         server.ClearLastWebSocketCommand("lovelace/dashboards/create");
         await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house", Title = "House" }));
@@ -281,6 +298,32 @@ public sealed class CamerasDashboardsAutomationContractTests
 
         server.LovelaceInfoResponseJson = "{}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetInfoAsync());
+    }
+
+    [Fact]
+    public async Task DashboardResponsesCorrelatePanelAndMutationIdentities()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"lovelace\":{\"url_path\":\"other\",\"component_name\":\"lovelace\"}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.DashboardMutationResponseJson = "{\"id\":\"other\",\"url_path\":\"house-main\",\"title\":\"House\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { Title = "Updated" }));
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"other\",\"title\":\"House\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House" }));
+
+        server.DashboardResourceMutationResponseJson = "{\"id\":\"resource-other\",\"url\":\"/local/card.js\",\"type\":\"module\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateResourceAsync(
+            "resource-1",
+            url: "/local/card-v2.js"));
     }
 
     [Fact]

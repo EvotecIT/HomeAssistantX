@@ -17,6 +17,7 @@ public sealed class GetHomeAssistantMediaCommand : HomeAssistantCmdlet
     private const string PlayerSet = "Player";
     private const string PlayerSearchSet = "PlayerSearch";
 
+    /// <summary>Optional media selector for browsing and searching; required and positional only with <c>-Resolve</c>.</summary>
     [Parameter(ParameterSetName = SourcesSet)]
     [Parameter(ParameterSetName = SourceSearchSet)]
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = ResolveSet)]
