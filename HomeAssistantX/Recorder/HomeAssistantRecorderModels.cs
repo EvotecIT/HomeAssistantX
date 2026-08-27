@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HomeAssistantX.Models;
 
 namespace HomeAssistantX.Recorder;
 
@@ -166,12 +167,9 @@ public sealed class HomeAssistantStatisticImportMetadata
         if (string.IsNullOrWhiteSpace(Source)) throw new ArgumentException("Import metadata requires Source.", nameof(Source));
         var statisticId = StatisticId.Trim();
         var source = Source.Trim();
-        var separator = statisticId.IndexOf(':');
-        if (separator <= 0 || separator == statisticId.Length - 1 || statisticId.IndexOf(':', separator + 1) >= 0)
+        if (!HomeAssistantStatisticIdentifier.TryNormalizeExternal(statisticId, out statisticId, out var statisticSource))
             throw new ArgumentException("External StatisticId must use the '<source>:<name>' format.", nameof(StatisticId));
-        var statisticSource = statisticId.Substring(0, separator);
-        var statisticName = statisticId.Substring(separator + 1);
-        if (!IsSlug(statisticSource) || !IsSlug(statisticName) || !IsSlug(source))
+        if (!HomeAssistantStatisticIdentifier.IsSlug(source))
             throw new ArgumentException("External StatisticId and Source must use lowercase Home Assistant slug segments.", nameof(StatisticId));
         if (!string.Equals(statisticSource, source, StringComparison.Ordinal))
             throw new ArgumentException("Source must exactly match the prefix before ':' in StatisticId.", nameof(Source));
@@ -217,7 +215,31 @@ public sealed class HomeAssistantStatisticImportMetadata
             throw new ArgumentOutOfRangeException(name, "Imported statistics require finite numeric values.");
     }
 
-    private static bool IsSlug(string value)
+}
+
+internal static class HomeAssistantStatisticIdentifier
+{
+    internal static bool TryNormalize(string value, out string normalized)
+    {
+        if (HomeAssistantEntityId.TryNormalize(value, out normalized)) return true;
+        return TryNormalizeExternal(value, out normalized, out _);
+    }
+
+    internal static bool TryNormalizeExternal(string value, out string normalized, out string source)
+    {
+        normalized = string.Empty;
+        source = string.Empty;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var candidate = value.Trim();
+        var separator = candidate.IndexOf(':');
+        if (separator <= 0 || separator == candidate.Length - 1 || candidate.IndexOf(':', separator + 1) >= 0) return false;
+        source = candidate.Substring(0, separator);
+        if (!IsSlug(source) || !IsSlug(candidate.Substring(separator + 1))) return false;
+        normalized = candidate;
+        return true;
+    }
+
+    internal static bool IsSlug(string value)
     {
         if (value.Length == 0
             || value[0] == '_'

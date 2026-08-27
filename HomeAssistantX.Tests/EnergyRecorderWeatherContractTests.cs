@@ -168,6 +168,7 @@ public sealed class EnergyRecorderWeatherContractTests
         }
         await client.Recorder.AdjustSumStatisticsAsync("sensor.grid_energy", DateTimeOffset.UtcNow, 1.25, "kWh");
         await client.Recorder.ClearStatisticsAsync(new[] { "sensor.grid_energy" });
+        await client.Recorder.ClearStatisticsAsync(new[] { " external:daily_energy " });
         await client.Recorder.UpdateStatisticsIssuesAsync();
         await client.Recorder.ImportStatisticsAsync(
             new HomeAssistantStatisticImportMetadata
@@ -299,6 +300,15 @@ public sealed class EnergyRecorderWeatherContractTests
             }
         });
 
+        new HomeAssistantStatisticImportMetadata
+        {
+            StatisticId = "external:sparse", Source = "external",
+            HasMean = false, HasSum = true, MeanType = HomeAssistantStatisticMeanType.None
+        }.ValidateRows(new[]
+        {
+            new HomeAssistantStatisticImportRow { Start = new DateTimeOffset(2026, 8, 26, 11, 0, 0, TimeSpan.Zero) }
+        });
+
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ImportStatisticsAsync(
             new HomeAssistantStatisticImportMetadata
             {
@@ -325,6 +335,8 @@ public sealed class EnergyRecorderWeatherContractTests
 
         server.ClearLastWebSocketCommand("recorder/clear_statistics");
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ClearStatisticsAsync(Array.Empty<string>()));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ClearStatisticsAsync(new[] { "sensor.Grid_Energy" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ClearStatisticsAsync(new[] { "external:Daily_Energy" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(new[] { "sensor.Kitchen" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(domains: new[] { "SENSOR" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(domains: new[] { "sensor__bad" }));

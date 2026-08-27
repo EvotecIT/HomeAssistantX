@@ -108,7 +108,7 @@ public sealed class HomeAssistantRecorderClient
         => _ = await _webSocket.RequestAsync("recorder/update_statistics_issues", null, cancellationToken).ConfigureAwait(false);
 
     public async Task ClearStatisticsAsync(IReadOnlyCollection<string> statisticIds, CancellationToken cancellationToken = default)
-        => _ = await _webSocket.RequestAsync("recorder/clear_statistics", new Dictionary<string, object?> { ["statistic_ids"] = RequireIds(statisticIds, nameof(statisticIds)) }, cancellationToken).ConfigureAwait(false);
+        => _ = await _webSocket.RequestAsync("recorder/clear_statistics", new Dictionary<string, object?> { ["statistic_ids"] = RequireStatisticIds(statisticIds, nameof(statisticIds)) }, cancellationToken).ConfigureAwait(false);
 
     public async Task UpdateStatisticsMetadataAsync(string statisticId, string? unitClass, string? unitOfMeasurement, CancellationToken cancellationToken = default)
     {
@@ -324,6 +324,19 @@ public sealed class HomeAssistantRecorderClient
             }
         }
 
+        return normalized.ToArray();
+    }
+
+    private static string[] RequireStatisticIds(IReadOnlyCollection<string> values, string name)
+    {
+        if (values is null || values.Count == 0) throw new ArgumentException("At least one statistic identifier is required.", name);
+        var normalized = new List<string>(values.Count);
+        foreach (var value in values)
+        {
+            if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var statisticId))
+                throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", name);
+            if (!normalized.Contains(statisticId, StringComparer.Ordinal)) normalized.Add(statisticId);
+        }
         return normalized.ToArray();
     }
 
