@@ -376,17 +376,17 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentNullException(parameterName);
         }
 
-        var values = entityIds.ToArray();
+        var values = entityIds.Select(value => value?.Trim()).ToArray();
         if (values.Length == 0
             || values.Any(value => string.IsNullOrWhiteSpace(value)
-                || !value.StartsWith("media_player.", StringComparison.OrdinalIgnoreCase)))
+                || !value!.StartsWith("media_player.", StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException(
                 "At least one media_player entity identifier is required.",
                 parameterName);
         }
 
-        return values;
+        return values!;
     }
 
     private static HomeAssistantMediaPlayerStatus? ToStatus(HomeAssistantState? state)

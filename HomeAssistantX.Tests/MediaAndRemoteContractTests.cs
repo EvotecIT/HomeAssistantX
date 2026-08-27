@@ -226,7 +226,7 @@ public sealed class MediaAndRemoteContractTests
         await client.Controls.MediaPlayers.ClearPlaylistAsync(target);
         await client.Controls.MediaPlayers.JoinAsync(
             target,
-            new[] { "media_player.dining", "media_player.office" });
+            new[] { " media_player.dining ", "media_player.office" });
         await client.Controls.MediaPlayers.UnjoinAsync(target);
         await client.Controls.MediaPlayers.PlayMediaAsync(
             target,
