@@ -5,7 +5,8 @@ namespace HomeAssistantX.Models;
 /// <summary>Validates and normalizes native Home Assistant entity identifiers.</summary>
 public static class HomeAssistantEntityId
 {
-    internal static bool TryNormalizeForDomain(
+    /// <summary>Trims and validates a lowercase Home Assistant entity identifier in the requested domain.</summary>
+    public static bool TryNormalizeForDomain(
         string? value,
         string domain,
         out string normalized)

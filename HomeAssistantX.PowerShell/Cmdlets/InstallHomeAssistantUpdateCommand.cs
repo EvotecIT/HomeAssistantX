@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using HomeAssistantX.Models;
 using HomeAssistantX.Supervisor;
 
 namespace HomeAssistantX.PowerShell;
@@ -93,21 +94,7 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
 
     private static string NormalizeUpdateEntityId(string value)
     {
-        var normalized = value?.Trim();
-        if (normalized is null || normalized.Length == 0)
-        {
-            throw new ArgumentException("An update entity identifier is required.", nameof(EntityId));
-        }
-
-        var separator = normalized.IndexOf('.');
-        if (separator <= 0
-            || separator != normalized.LastIndexOf('.')
-            || separator == normalized.Length - 1
-            || !string.Equals(normalized.Substring(0, separator), "update", StringComparison.OrdinalIgnoreCase)
-            || normalized.Substring(separator + 1).Any(character =>
-                !((character >= 'a' && character <= 'z')
-                    || (character >= '0' && character <= '9')
-                    || character == '_')))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(value, "update", out var normalized))
         {
             throw new ArgumentException("An update entity identifier is required.", nameof(EntityId));
         }

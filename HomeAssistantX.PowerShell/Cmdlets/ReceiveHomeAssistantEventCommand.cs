@@ -46,7 +46,7 @@ public sealed class ReceiveHomeAssistantEventCommand : HomeAssistantCmdlet
     {
         var streams = CapturePipelineStreams();
         var filter = ParameterSetName == EntityParameterSet
-            ? new HashSet<string>(EntityId, StringComparer.OrdinalIgnoreCase)
+            ? new HashSet<string>(NormalizeEntityIds(EntityId), StringComparer.Ordinal)
             : null;
         var eventType = ParameterSetName switch
         {
@@ -81,19 +81,11 @@ public sealed class ReceiveHomeAssistantEventCommand : HomeAssistantCmdlet
                     return Task.CompletedTask;
                 },
                 CancelToken).ConfigureAwait(false);
-            var canceled = Task.Delay(Timeout.Infinite, CancelToken);
-            var timeout = TimeoutSeconds.HasValue
-                ? Task.Delay(TimeSpan.FromSeconds(TimeoutSeconds.Value), CancelToken)
-                : Task.Delay(Timeout.Infinite, CancelToken);
-            var completed = await Task.WhenAny(
-                subscription.Completion,
-                canceled,
+            await HomeAssistantReceiveWaiter.WaitAsync(
+                subscription,
                 countReached.Task,
-                timeout).ConfigureAwait(false);
-            if (completed != countReached.Task && completed != timeout)
-            {
-                await completed.ConfigureAwait(false);
-            }
+                TimeoutSeconds,
+                CancelToken).ConfigureAwait(false);
         }
         finally
         {
@@ -120,5 +112,20 @@ public sealed class ReceiveHomeAssistantEventCommand : HomeAssistantCmdlet
         return value.Data.TryGetValue("entity_id", out var entityId)
             && entityId.ValueKind == System.Text.Json.JsonValueKind.String
             && filter.Contains(entityId.GetString() ?? string.Empty);
+    }
+
+    private static IEnumerable<string> NormalizeEntityIds(IEnumerable<string> values)
+    {
+        foreach (var value in values)
+        {
+            if (!HomeAssistantEntityId.TryNormalize(value, out var normalized))
+            {
+                throw new ArgumentException(
+                    "EntityId must contain lowercase native Home Assistant entity identifiers.",
+                    nameof(EntityId));
+            }
+
+            yield return normalized;
+        }
     }
 }
