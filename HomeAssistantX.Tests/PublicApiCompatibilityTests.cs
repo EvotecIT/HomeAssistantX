@@ -73,6 +73,7 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("F const System.Decimal DecimalConstant = 1.25", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.DecimalConstant))!));
         Assert.Equal("F static readonly System.String ReadOnly", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.ReadOnly))!));
         Assert.Equal("F instance System.String[,,]? Mutable", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.Mutable))!));
+        Assert.Equal("F instance volatile System.Int32 Volatile", FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.Volatile))!));
     }
 
     [Fact]
@@ -97,6 +98,31 @@ public sealed class PublicApiCompatibilityTests
             BindingFlags.NonPublic | BindingFlags.Static)!;
 
         Assert.Equal("System.Int32 value [optional]", FormatParameters(method.GetParameters()));
+    }
+
+#if NET10_0
+    [Fact]
+    public void ParameterFormatterPreservesCallerInformationContracts()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(CallerInformationFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal(
+            "System.Boolean condition, caller-member-name System.String? member = null, caller-file-path System.String? file = null, caller-line-number System.Int32 line = 0, caller-argument-expression(\"condition\") System.String? expression = null",
+            FormatParameters(method.GetParameters()));
+    }
+#endif
+
+    [Fact]
+    public void MethodFormatterPreservesConditionalCallSymbols()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(ConditionalCallFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.StartsWith("conditional(\"DEBUG\",\"TRACE\") ConditionalCallFixture", FormatMethod(method), StringComparison.Ordinal);
+        Assert.Equal("conditional(\"DEBUG\",\"TRACE\") ", ConditionalContract(typeof(ConditionalAttributeFixture)));
     }
 
     [Fact]
@@ -396,7 +422,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ConditionalContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -478,7 +504,7 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return ObsoleteContract(method) + OverloadResolutionPriorityContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return ObsoleteContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static string FormatConstructor(ConstructorInfo constructor)
@@ -522,6 +548,29 @@ public sealed class PublicApiCompatibilityTests
 
     private static void MetadataOnlyOptionalFixture(
         [System.Runtime.InteropServices.Optional] int value)
+    {
+    }
+
+#if NET10_0
+    private static void CallerInformationFixture(
+        bool condition,
+        [CallerMemberName] string? member = null,
+        [CallerFilePath] string? file = null,
+        [CallerLineNumber] int line = 0,
+        [CallerArgumentExpression(nameof(condition))] string? expression = null)
+    {
+    }
+#endif
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    [System.Diagnostics.Conditional("TRACE")]
+    private static void ConditionalCallFixture()
+    {
+    }
+
+    [System.Diagnostics.Conditional("TRACE")]
+    [System.Diagnostics.Conditional("DEBUG")]
+    private sealed class ConditionalAttributeFixture : Attribute
     {
     }
 
@@ -606,6 +655,7 @@ public sealed class PublicApiCompatibilityTests
         public const decimal DecimalConstant = 1.25m;
         public static readonly string ReadOnly = string.Empty;
         public string[,,]? Mutable = new string[1, 1, 1];
+        public volatile int Volatile = 1;
     }
 
     private sealed class IndexerFixture
@@ -854,9 +904,13 @@ public sealed class PublicApiCompatibilityTests
     {
         var decimalConstant = field.GetCustomAttribute<DecimalConstantAttribute>();
         var isConstant = field.IsLiteral || decimalConstant is not null;
+        var volatileContract = field.GetRequiredCustomModifiers().Any(modifier => string.Equals(
+            modifier.FullName,
+            "System.Runtime.CompilerServices.IsVolatile",
+            StringComparison.Ordinal)) ? " volatile" : string.Empty;
         var scope = isConstant
             ? "const"
-            : (field.IsStatic ? "static" : "instance") + (field.IsInitOnly ? " readonly" : string.Empty);
+            : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
         return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + RequiredMember(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
@@ -887,6 +941,21 @@ public sealed class PublicApiCompatibilityTests
             && attribute.ConstructorArguments[0].Value is int priority
                 ? "overload-priority(" + priority.ToString(CultureInfo.InvariantCulture) + ") "
                 : string.Empty;
+    }
+
+    private static string ConditionalContract(ICustomAttributeProvider provider)
+    {
+        var symbols = GetCustomAttributes(provider)
+            .Where(value => string.Equals(
+                value.AttributeType.FullName,
+                typeof(System.Diagnostics.ConditionalAttribute).FullName,
+                StringComparison.Ordinal))
+            .Select(value => value.ConstructorArguments.Count == 1 ? value.ConstructorArguments[0].Value as string : null)
+            .Where(value => !string.IsNullOrEmpty(value))
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .Select(FormatDefault)
+            .ToArray();
+        return symbols.Length == 0 ? string.Empty : "conditional(" + string.Join(",", symbols) + ") ";
     }
 
     private static string FormatPropertyAccessors(PropertyInfo property)
@@ -985,11 +1054,12 @@ public sealed class PublicApiCompatibilityTests
             || HasAttribute(parameter, "System.Runtime.CompilerServices.ParamCollectionAttribute")
                 ? "params "
                 : string.Empty;
+        var callerPrefix = CallerInformationContract(parameter);
         var handlerPrefix = InterpolatedStringHandlerArguments(parameter);
         var safetyPrefix = RefSafetyPrefix(parameter);
         if (!parameter.ParameterType.IsByRef)
         {
-            return paramsPrefix + handlerPrefix + safetyPrefix + FormatAnnotatedType(parameter.ParameterType, parameter);
+            return paramsPrefix + callerPrefix + handlerPrefix + safetyPrefix + FormatAnnotatedType(parameter.ParameterType, parameter);
         }
 
         var direction = HasAttribute(parameter, "System.Runtime.CompilerServices.RequiresLocationAttribute")
@@ -999,7 +1069,26 @@ public sealed class PublicApiCompatibilityTests
             : parameter.IsIn
                 ? "in "
                 : "ref ";
-        return paramsPrefix + handlerPrefix + safetyPrefix + direction + FormatAnnotatedType(parameter.ParameterType.GetElementType()!, parameter);
+        return paramsPrefix + callerPrefix + handlerPrefix + safetyPrefix + direction + FormatAnnotatedType(parameter.ParameterType.GetElementType()!, parameter);
+    }
+
+    private static string CallerInformationContract(ParameterInfo parameter)
+    {
+        var contracts = new List<string>();
+        foreach (var attribute in GetCustomAttributes(parameter))
+        {
+            var name = attribute.AttributeType.FullName;
+            if (string.Equals(name, "System.Runtime.CompilerServices.CallerMemberNameAttribute", StringComparison.Ordinal)) contracts.Add("caller-member-name");
+            else if (string.Equals(name, "System.Runtime.CompilerServices.CallerFilePathAttribute", StringComparison.Ordinal)) contracts.Add("caller-file-path");
+            else if (string.Equals(name, "System.Runtime.CompilerServices.CallerLineNumberAttribute", StringComparison.Ordinal)) contracts.Add("caller-line-number");
+            if (string.Equals(name, "System.Runtime.CompilerServices.CallerArgumentExpressionAttribute", StringComparison.Ordinal)
+                && attribute.ConstructorArguments.Count == 1
+                && attribute.ConstructorArguments[0].Value is string referencedParameter)
+                contracts.Add("caller-argument-expression(" + FormatDefault(referencedParameter) + ")");
+        }
+        return contracts.Count == 0
+            ? string.Empty
+            : string.Join(" ", contracts.OrderBy(value => value, StringComparer.Ordinal)) + " ";
     }
 
     private static string InterpolatedStringHandlerArguments(ParameterInfo parameter)
