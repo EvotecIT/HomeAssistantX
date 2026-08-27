@@ -553,6 +553,14 @@ try {
         throw 'The statistics metadata update did not preserve the existing unit class.'
     }
 
+    $null = Set-HomeAssistantStatistic -StatisticId ' sensor.grid_energy ' -UnitClass power -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_UPDATE')
+    $server.StandardInput.Flush()
+    $metadataUpdate = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($metadataUpdate.unit_class -ne 'power' -or $metadataUpdate.unit_of_measurement -ne 'kWh') {
+        throw 'The statistics metadata update did not preserve the existing unit of measurement.'
+    }
+
     $importMetadata = [HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata]::new()
     $importMetadata.StatisticId = ' external:daily_energy '
     $importMetadata.Source = ' external '

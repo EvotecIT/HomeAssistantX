@@ -58,7 +58,17 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
         {
             case MetadataSet:
                 RequireExclusive(UnitClass, ClearUnitClass, nameof(UnitClass), nameof(ClearUnitClass));
-                RequireExclusive(UnitOfMeasurement, ClearUnitOfMeasurement, nameof(UnitOfMeasurement), nameof(ClearUnitOfMeasurement), required: true);
+                RequireExclusive(UnitOfMeasurement, ClearUnitOfMeasurement, nameof(UnitOfMeasurement), nameof(ClearUnitOfMeasurement));
+                var hasUnitClassValue = MyInvocation.BoundParameters.ContainsKey(nameof(UnitClass));
+                var hasUnitValue = MyInvocation.BoundParameters.ContainsKey(nameof(UnitOfMeasurement));
+                if (hasUnitClassValue && UnitClass is null) throw new ArgumentNullException(nameof(UnitClass), "Use ClearUnitClass to remove the unit class.");
+                if (hasUnitValue && UnitOfMeasurement is null) throw new ArgumentNullException(nameof(UnitOfMeasurement), "Use ClearUnitOfMeasurement to remove the unit.");
+                var hasUnitClass = hasUnitClassValue || ClearUnitClass;
+                var hasUnitOfMeasurement = hasUnitValue || ClearUnitOfMeasurement;
+                if (!hasUnitClass && !hasUnitOfMeasurement)
+                {
+                    throw new ArgumentException("Specify a unit class or unit-of-measurement change.");
+                }
                 var availableMetadata = await Client.Recorder.GetStatisticsMetadataAsync(new[] { statisticId }, CancelToken).ConfigureAwait(false);
                 var matchingMetadata = availableMetadata.FirstOrDefault(item => string.Equals(item.StatisticId, statisticId, StringComparison.OrdinalIgnoreCase));
                 if (matchingMetadata is null)
@@ -71,7 +81,11 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                     unitClass = matchingMetadata.UnitClass;
                 }
                 unitClass = NormalizeOptionalUnit(unitClass, nameof(UnitClass));
-                var unitOfMeasurement = ClearUnitOfMeasurement ? null : NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement));
+                var unitOfMeasurement = ClearUnitOfMeasurement
+                    ? null
+                    : hasUnitOfMeasurement
+                        ? NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement))
+                        : matchingMetadata.UnitOfMeasurement;
                 if (string.Equals(unitClass, matchingMetadata.UnitClass, StringComparison.Ordinal)
                     && string.Equals(unitOfMeasurement, matchingMetadata.UnitOfMeasurement, StringComparison.Ordinal))
                 {
