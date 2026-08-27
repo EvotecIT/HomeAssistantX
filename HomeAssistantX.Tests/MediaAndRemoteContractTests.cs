@@ -746,6 +746,26 @@ public sealed class MediaAndRemoteContractTests
                 HomeAssistantTarget.ForEntity("media_player.kitchen"),
                 values,
                 cancellation.Token));
+        var cyclicExtra = new Dictionary<string, object?>();
+        cyclicExtra["self"] = cyclicExtra;
+        var mediaTarget = HomeAssistantTarget.ForEntity("media_player.kitchen");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.SetAsync(
+                mediaTarget,
+                new HomeAssistantMediaPlayerOptions
+                {
+                    MediaContentId = "media-source://local/song.mp3",
+                    MediaContentType = "music",
+                    MediaExtra = cyclicExtra
+                },
+                cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.PlayMediaAsync(
+                mediaTarget,
+                "media-source://local/song.mp3",
+                "music",
+                new HomeAssistantPlayMediaOptions { Extra = cyclicExtra },
+                cancellation.Token));
         Assert.Empty(server.ServiceCallBodies);
     }
 

@@ -107,7 +107,7 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         ValidateFinitePercent(VolumePercent, nameof(VolumePercent));
         var seekPosition = ToTimeSpan(SeekSeconds, nameof(SeekSeconds));
         ValidateJoinMembers(JoinMember);
-        var mediaExtra = ConvertExtra(MediaExtra);
+        var mediaExtra = ConvertExtra(MediaExtra, CancelToken);
 
         if (MediaContentId is not null && string.IsNullOrWhiteSpace(MediaContentId))
         {
@@ -294,8 +294,9 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             || Repeat.HasValue;
     }
 
-    private static IReadOnlyDictionary<string, object?>? ConvertExtra(Hashtable? values)
+    private static IReadOnlyDictionary<string, object?>? ConvertExtra(Hashtable? values, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (values is null)
         {
             return null;
@@ -304,6 +305,7 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         var result = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach (DictionaryEntry entry in values)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (entry.Key is not string key || string.IsNullOrWhiteSpace(key))
             {
                 throw new ArgumentException("MediaExtra keys must be non-empty strings.", nameof(MediaExtra));
@@ -312,7 +314,8 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             result.Add(key, entry.Value);
         }
 
-        return HomeAssistantMediaPlayerClient.FreezeMediaExtra(result, nameof(MediaExtra));
+        cancellationToken.ThrowIfCancellationRequested();
+        return HomeAssistantMediaPlayerClient.FreezeMediaExtra(result, nameof(MediaExtra), cancellationToken);
     }
 
     private static TimeSpan? ToTimeSpan(double? value, string name)

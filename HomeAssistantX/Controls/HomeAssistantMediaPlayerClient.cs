@@ -122,7 +122,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var playbackAction = playback.HasValue ? PlaybackAction(playback.Value) : null;
         var repeatMode = repeat.HasValue ? RepeatMode(repeat.Value) : null;
         var enqueueMode = enqueue.HasValue ? EnqueueMode(enqueue.Value) : null;
-        var frozenMediaExtra = FreezeMediaExtra(mediaExtra, nameof(options.MediaExtra));
+        var frozenMediaExtra = FreezeMediaExtra(mediaExtra, nameof(options.MediaExtra), cancellationToken);
         if (powerAction is null && playbackAction is null && !hasNonPowerOperation)
         {
             throw new ArgumentException("At least one media-player value or action is required.", nameof(options));
@@ -319,7 +319,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var enqueue = enqueueOption.HasValue
             ? EnqueueMode(enqueueOption.Value)
             : null;
-        var frozenExtra = FreezeMediaExtra(extra, nameof(options));
+        var frozenExtra = FreezeMediaExtra(extra, nameof(options), cancellationToken);
         return CallAsync(
             "play_media",
             target,
@@ -347,14 +347,15 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
     internal static IReadOnlyDictionary<string, object?>? FreezeMediaExtra(
         IReadOnlyDictionary<string, object?>? extra,
-        string parameterName)
+        string parameterName,
+        CancellationToken cancellationToken = default)
     {
         if (extra is null)
         {
             return null;
         }
 
-        return HomeAssistantJson.FreezeObject(extra, parameterName, "MediaExtra");
+        return HomeAssistantJson.FreezeObject(extra, parameterName, "MediaExtra", cancellationToken);
     }
 
     private static string? NormalizeOptional(string? value, string name)
