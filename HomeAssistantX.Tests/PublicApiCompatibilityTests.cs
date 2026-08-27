@@ -1,5 +1,8 @@
 using System.Globalization;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 #if NET10_0
 using System.Runtime.Loader;
@@ -238,6 +241,9 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal(
             " where TRequired : class where TOptional : class? where TNotNull : notnull",
             FormatGenericConstraints(typeof(NullableConstraintFixture<,,,>).GetGenericArguments()));
+        Assert.Equal(
+            " where TBase : HomeAssistantX.Tests.PublicApiCompatibilityTests+NullableConstraintBase? where TContract : HomeAssistantX.Tests.PublicApiCompatibilityTests+NullableConstraintContract? where TMixed : HomeAssistantX.Tests.PublicApiCompatibilityTests+NullableConstraintBase?, HomeAssistantX.Tests.PublicApiCompatibilityTests+NullableConstraintContract?",
+            FormatGenericConstraints(typeof(NullableTypeConstraintFixture<,,>).GetGenericArguments()));
     }
 
     [Fact]
@@ -651,6 +657,21 @@ public sealed class PublicApiCompatibilityTests
     {
     }
 
+    private class NullableConstraintBase
+    {
+    }
+
+    private interface NullableConstraintContract
+    {
+    }
+
+    private sealed class NullableTypeConstraintFixture<TBase, TContract, TMixed>
+        where TBase : NullableConstraintBase?
+        where TContract : NullableConstraintContract?
+        where TMixed : NullableConstraintBase?, NullableConstraintContract?
+    {
+    }
+
     private sealed class PropertyAccessorFixture
     {
         public string Mutable { get; set; } = string.Empty;
@@ -991,9 +1012,14 @@ public sealed class PublicApiCompatibilityTests
                 constraints.Add("notnull");
             }
 
-            constraints.AddRange(argument.GetGenericParameterConstraints()
-                .Where(constraint => constraint != typeof(ValueType))
-                .Select(FormatType)
+            var constraintTypes = argument.GetGenericParameterConstraints();
+            var constraintNullability = ReadGenericConstraintNullability(argument);
+            constraints.AddRange(constraintTypes
+                .Select((constraint, index) => new { Constraint = constraint, Index = index })
+                .Where(value => value.Constraint != typeof(ValueType))
+                .Select(value => FormatGenericConstraint(
+                    value.Constraint,
+                    value.Index < constraintNullability.Count ? constraintNullability[value.Index] : Array.Empty<byte>()))
                 .OrderBy(value => value, StringComparer.Ordinal));
             if (!unmanaged
                 && (attributes & GenericParameterAttributes.NotNullableValueTypeConstraint) == 0
@@ -1021,6 +1047,90 @@ public sealed class PublicApiCompatibilityTests
         var flags = ReadNullableFlags(argument);
         return flags.Length == 0 ? ReadNullableContext(argument) : flags[0];
     }
+
+    private static string FormatGenericConstraint(Type constraint, byte[] nullableFlags)
+        => nullableFlags.Length == 0
+            ? FormatType(constraint)
+            : FormatAnnotatedType(
+                constraint,
+                new NullabilityCursor(nullableFlags, 0),
+                new TupleNameCursor(Array.Empty<string?>()),
+                new DynamicCursor(Array.Empty<bool>()));
+
+    private static IReadOnlyList<byte[]> ReadGenericConstraintNullability(Type argument)
+    {
+        if (!argument.IsGenericParameter || string.IsNullOrEmpty(argument.Assembly.Location)) return Array.Empty<byte[]>();
+        try
+        {
+            using var stream = File.OpenRead(argument.Assembly.Location);
+            using var peReader = new PEReader(stream);
+            var reader = peReader.GetMetadataReader();
+            var row = argument.MetadataToken & 0x00FFFFFF;
+            if (row == 0) return Array.Empty<byte[]>();
+            var parameter = reader.GetGenericParameter(MetadataTokens.GenericParameterHandle(row));
+            return parameter.GetConstraints()
+                .Select(handle => ReadNullableConstraintFlags(reader, reader.GetGenericParameterConstraint(handle)))
+                .ToArray();
+        }
+        catch (BadImageFormatException)
+        {
+            return Array.Empty<byte[]>();
+        }
+        catch (IOException)
+        {
+            return Array.Empty<byte[]>();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Array.Empty<byte[]>();
+        }
+    }
+
+    private static byte[] ReadNullableConstraintFlags(MetadataReader reader, GenericParameterConstraint constraint)
+    {
+        foreach (var attributeHandle in constraint.GetCustomAttributes())
+        {
+            var attribute = reader.GetCustomAttribute(attributeHandle);
+            if (!IsNullableAttribute(reader, attribute.Constructor)) continue;
+            var blob = reader.GetBlobBytes(attribute.Value);
+            if (blob.Length == 5 && blob[0] == 1 && blob[1] == 0) return new[] { blob[2] };
+            if (blob.Length >= 8 && blob[0] == 1 && blob[1] == 0)
+            {
+                var count = BitConverter.ToInt32(blob, 2);
+                if (count >= 0 && count <= blob.Length - 8)
+                {
+                    var flags = new byte[count];
+                    Buffer.BlockCopy(blob, 6, flags, 0, count);
+                    return flags;
+                }
+            }
+        }
+        return Array.Empty<byte>();
+    }
+
+    private static bool IsNullableAttribute(MetadataReader reader, EntityHandle constructor)
+    {
+        EntityHandle owner = constructor.Kind switch
+        {
+            HandleKind.MemberReference => reader.GetMemberReference((MemberReferenceHandle)constructor).Parent,
+            HandleKind.MethodDefinition => reader.GetMethodDefinition((MethodDefinitionHandle)constructor).GetDeclaringType(),
+            _ => default
+        };
+        return owner.Kind switch
+        {
+            HandleKind.TypeReference => IsNullableAttribute(reader, reader.GetTypeReference((TypeReferenceHandle)owner)),
+            HandleKind.TypeDefinition => IsNullableAttribute(reader, reader.GetTypeDefinition((TypeDefinitionHandle)owner)),
+            _ => false
+        };
+    }
+
+    private static bool IsNullableAttribute(MetadataReader reader, TypeReference type)
+        => reader.GetString(type.Namespace) == "System.Runtime.CompilerServices"
+            && reader.GetString(type.Name) == "NullableAttribute";
+
+    private static bool IsNullableAttribute(MetadataReader reader, TypeDefinition type)
+        => reader.GetString(type.Namespace) == "System.Runtime.CompilerServices"
+            && reader.GetString(type.Name) == "NullableAttribute";
 
     private static string FormatEnumValue(object value, Type underlyingType)
     {
