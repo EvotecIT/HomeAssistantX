@@ -815,8 +815,15 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(FossilEnergyResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "recorder/list_statistic_ids":
-            case "recorder/get_statistics_metadata":
                 await session.SendResultAsync(id, ParseJson(RecorderMetadataResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "recorder/get_statistics_metadata":
+                var recorderMetadata = command.TryGetProperty("statistic_ids", out var requestedStatisticIds)
+                    && requestedStatisticIds.ValueKind == JsonValueKind.Array
+                    && requestedStatisticIds.EnumerateArray().Any(value => string.Equals(value.GetString(), "sensor.missing", StringComparison.Ordinal))
+                    ? "[]"
+                    : RecorderMetadataResponseJson;
+                await session.SendResultAsync(id, ParseJson(recorderMetadata), false, _source.Token).ConfigureAwait(false);
                 return;
             case "recorder/statistics_during_period":
                 await session.SendResultAsync(id, ParseJson(RecorderStatisticsResponseJson), false, _source.Token).ConfigureAwait(false);

@@ -32,8 +32,7 @@ public sealed class HomeAssistantRecorderClient
         {
             var requestedIds = new HashSet<string>(requestedIdSnapshot, StringComparer.OrdinalIgnoreCase);
             var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (metadata.Any(item => !requestedIds.Contains(item.StatisticId) || !responseIds.Add(item.StatisticId))
-                || !responseIds.SetEquals(requestedIds))
+            if (metadata.Any(item => !requestedIds.Contains(item.StatisticId) || !responseIds.Add(item.StatisticId)))
                 throw new HomeAssistantProtocolException("Recorder statistics metadata contained an unexpected or duplicate statistic identifier.");
         }
         return metadata;
@@ -221,6 +220,9 @@ public sealed class HomeAssistantRecorderClient
                 || string.IsNullOrWhiteSpace(statisticIdValue)
                 || !HomeAssistantStatisticIdentifier.TryNormalize(statisticIdValue, out var normalizedStatisticId)
                 || !string.Equals(statisticIdValue, normalizedStatisticId, StringComparison.Ordinal)
+                || !item.TryGetProperty("source", out var source)
+                || source.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(source.GetString())
                 || !item.TryGetProperty("has_mean", out var hasMean)
                 || hasMean.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
                 || !item.TryGetProperty("has_sum", out var hasSum)

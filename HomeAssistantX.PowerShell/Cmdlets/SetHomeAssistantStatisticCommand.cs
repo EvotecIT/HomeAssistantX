@@ -63,7 +63,10 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 if (!ClearUnitClass && !MyInvocation.BoundParameters.ContainsKey(nameof(UnitClass)))
                 {
                     var metadata = await Client.Recorder.GetStatisticsMetadataAsync(new[] { statisticId }, CancelToken).ConfigureAwait(false);
-                    unitClass = metadata.FirstOrDefault(item => string.Equals(item.StatisticId, statisticId, StringComparison.OrdinalIgnoreCase))?.UnitClass;
+                    var matchingMetadata = metadata.FirstOrDefault(item => string.Equals(item.StatisticId, statisticId, StringComparison.OrdinalIgnoreCase));
+                    if (matchingMetadata is null)
+                        throw new InvalidOperationException("Home Assistant did not return metadata for the requested Recorder statistic.");
+                    unitClass = matchingMetadata.UnitClass;
                 }
                 unitClass = NormalizeOptionalUnit(unitClass, nameof(UnitClass));
                 var unitOfMeasurement = ClearUnitOfMeasurement ? null : NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement));
