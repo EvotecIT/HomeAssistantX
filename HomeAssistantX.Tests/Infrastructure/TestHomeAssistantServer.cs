@@ -279,6 +279,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string CameraPreferencesResponseJson { get; set; } =
         "{\"preload_stream\":true,\"orientation\":3,\"future_preference\":true}";
 
+    public string CameraImageResponse { get; set; } = "test-image-bytes";
+
     public string LovelaceInfoResponseJson { get; set; } =
         "{\"resource_mode\":\"storage\",\"future_info\":true}";
 

@@ -83,6 +83,30 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Null(server.GetLastWebSocketCommand("camera/update_prefs"));
     }
 
+    [Fact]
+    public async Task CameraMutationsRejectEmptySnapshotsAndMismatchedPreferences()
+    {
+        using var server = new TestHomeAssistantServer { CameraImageResponse = string.Empty };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetSnapshotAsync("camera.front"));
+
+        server.CameraPreferencesResponseJson = "{\"preload_stream\":false,\"orientation\":3}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
+
+        server.CameraPreferencesResponseJson = "{\"preload_stream\":true,\"orientation\":1}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { Orientation = HomeAssistantCameraOrientation.Rotate180 }));
+
+        server.CameraPreferencesResponseJson = "{\"orientation\":3}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { PreloadStream = false }));
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(9)]
@@ -329,6 +353,64 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateResourceAsync(
             "/local/card.js",
             HomeAssistantDashboardResourceType.Module));
+    }
+
+    [Fact]
+    public async Task DashboardMutationsCorrelateEverySuppliedField()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Old\",\"icon\":\"mdi:old\",\"show_in_sidebar\":false,\"require_admin\":false,\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate
+            {
+                Title = "Updated",
+                Icon = "mdi:home",
+                ShowInSidebar = true,
+                RequireAdmin = true
+            }));
+
+        foreach (var response in new[]
+        {
+            "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"icon\":\"mdi:old\",\"show_in_sidebar\":true,\"require_admin\":true,\"mode\":\"storage\"}",
+            "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"icon\":\"mdi:home\",\"show_in_sidebar\":false,\"require_admin\":true,\"mode\":\"storage\"}",
+            "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"icon\":\"mdi:home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}"
+        })
+        {
+            server.DashboardMutationResponseJson = response;
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+                "house-main",
+                new HomeAssistantDashboardUpdate
+                {
+                    Title = "Updated",
+                    Icon = "mdi:home",
+                    ShowInSidebar = true,
+                    RequireAdmin = true
+                }));
+        }
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"icon\":\"mdi:home\",\"show_in_sidebar\":false,\"require_admin\":false,\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { RemoveIcon = true }));
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Wrong\",\"icon\":\"mdi:home\",\"show_in_sidebar\":false,\"require_admin\":true,\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate
+            {
+                UrlPath = "house-main",
+                Title = "House",
+                Icon = "mdi:home",
+                ShowInSidebar = true,
+                RequireAdmin = false
+            }));
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { ShowInSidebar = false }));
     }
 
     [Fact]

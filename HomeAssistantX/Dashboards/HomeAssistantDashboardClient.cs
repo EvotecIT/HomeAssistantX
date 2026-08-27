@@ -67,9 +67,19 @@ public sealed class HomeAssistantDashboardClient
             ["show_in_sidebar"] = create.ShowInSidebar,
             ["require_admin"] = create.RequireAdmin
         };
-        if (create.Icon is not null) payload["icon"] = RequireIcon(create.Icon, nameof(create.Icon));
+        var icon = create.Icon is null ? null : RequireIcon(create.Icon, nameof(create.Icon));
+        if (icon is not null) payload["icon"] = icon;
         if (create.AllowSingleWord) payload["allow_single_word"] = true;
-        return await RequestDashboardAsync("lovelace/dashboards/create", payload, cancellationToken, expectedUrlPath: urlPath).ConfigureAwait(false);
+        return await RequestDashboardAsync(
+            "lovelace/dashboards/create",
+            payload,
+            cancellationToken,
+            expectedUrlPath: urlPath,
+            expectedTitle: title,
+            validateIcon: icon is not null,
+            expectedIcon: icon,
+            expectedShowInSidebar: create.ShowInSidebar,
+            expectedRequireAdmin: create.RequireAdmin).ConfigureAwait(false);
     }
 
     public Task<HomeAssistantDashboard> UpdateDashboardAsync(string dashboardId, HomeAssistantDashboardUpdate update, CancellationToken cancellationToken = default)
@@ -78,13 +88,24 @@ public sealed class HomeAssistantDashboardClient
         if (update.RemoveIcon && update.Icon is not null) throw new ArgumentException("Icon and RemoveIcon cannot be combined.", nameof(update));
         var normalizedDashboardId = Require(dashboardId, nameof(dashboardId));
         var payload = new Dictionary<string, object?> { ["dashboard_id"] = normalizedDashboardId };
-        if (update.Title is not null) payload["title"] = Require(update.Title, nameof(update.Title));
-        if (update.Icon is not null) payload["icon"] = RequireIcon(update.Icon, nameof(update.Icon));
+        var title = update.Title is null ? null : Require(update.Title, nameof(update.Title));
+        var icon = update.Icon is null ? null : RequireIcon(update.Icon, nameof(update.Icon));
+        if (title is not null) payload["title"] = title;
+        if (icon is not null) payload["icon"] = icon;
         if (update.RemoveIcon) payload["icon"] = null;
         if (update.ShowInSidebar.HasValue) payload["show_in_sidebar"] = update.ShowInSidebar.Value;
         if (update.RequireAdmin.HasValue) payload["require_admin"] = update.RequireAdmin.Value;
         if (payload.Count == 1) throw new ArgumentException("At least one dashboard update is required.", nameof(update));
-        return RequestDashboardAsync("lovelace/dashboards/update", payload, cancellationToken, expectedDashboardId: normalizedDashboardId);
+        return RequestDashboardAsync(
+            "lovelace/dashboards/update",
+            payload,
+            cancellationToken,
+            expectedDashboardId: normalizedDashboardId,
+            expectedTitle: title,
+            validateIcon: update.RemoveIcon || icon is not null,
+            expectedIcon: update.RemoveIcon ? null : icon,
+            expectedShowInSidebar: update.ShowInSidebar,
+            expectedRequireAdmin: update.RequireAdmin);
     }
 
     public Task<JsonElement> DeleteDashboardAsync(string dashboardId, CancellationToken cancellationToken = default)
@@ -161,16 +182,34 @@ public sealed class HomeAssistantDashboardClient
         IReadOnlyDictionary<string, object?> payload,
         CancellationToken cancellationToken,
         string? expectedDashboardId = null,
-        string? expectedUrlPath = null)
+        string? expectedUrlPath = null,
+        string? expectedTitle = null,
+        bool validateIcon = false,
+        string? expectedIcon = null,
+        bool? expectedShowInSidebar = null,
+        bool? expectedRequireAdmin = null)
     {
+        var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
         var dashboard = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard>(
-            await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false),
+            value,
             "The dashboard response could not be decoded.");
         ValidateStorageDashboard(dashboard);
         if (expectedDashboardId is not null && !string.Equals(dashboard.Id, expectedDashboardId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested identifier.");
         if (expectedUrlPath is not null && !string.Equals(dashboard.UrlPath, expectedUrlPath, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested URL path.");
+        if (expectedTitle is not null && !string.Equals(dashboard.Title, expectedTitle, StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested title.");
+        if (validateIcon && !string.Equals(dashboard.Icon, expectedIcon, StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested icon.");
+        if (expectedShowInSidebar.HasValue
+            && (!value.TryGetProperty("show_in_sidebar", out _)
+                || dashboard.ShowInSidebar != expectedShowInSidebar.Value))
+            throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested sidebar visibility.");
+        if (expectedRequireAdmin.HasValue
+            && (!value.TryGetProperty("require_admin", out _)
+                || dashboard.RequireAdmin != expectedRequireAdmin.Value))
+            throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested administrator requirement.");
         return dashboard;
     }
 

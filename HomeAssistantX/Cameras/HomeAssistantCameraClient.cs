@@ -42,13 +42,16 @@ public sealed class HomeAssistantCameraClient
         return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId));
     }
 
-    public Task<byte[]> GetSnapshotAsync(string entityId, int? width = null, int? height = null, CancellationToken cancellationToken = default)
+    public async Task<byte[]> GetSnapshotAsync(string entityId, int? width = null, int? height = null, CancellationToken cancellationToken = default)
     {
         ValidateEntityId(entityId);
         ValidateDimensions(width, height);
-        return width.HasValue
-            ? _rest.GetCameraImageAsync(entityId.Trim(), width.Value, height!.Value, cancellationToken)
-            : _rest.GetCameraImageAsync(entityId.Trim(), cancellationToken);
+        var snapshot = width.HasValue
+            ? await _rest.GetCameraImageAsync(entityId.Trim(), width.Value, height!.Value, cancellationToken).ConfigureAwait(false)
+            : await _rest.GetCameraImageAsync(entityId.Trim(), cancellationToken).ConfigureAwait(false);
+        if (snapshot.Length == 0)
+            throw new HomeAssistantProtocolException("Home Assistant returned an empty camera snapshot.");
+        return snapshot;
     }
 
     public async Task<HomeAssistantCameraCapabilities> GetCapabilitiesAsync(string entityId, CancellationToken cancellationToken = default)
@@ -85,8 +88,20 @@ public sealed class HomeAssistantCameraClient
     {
         ValidateEntityId(entityId);
         if (update is null) throw new ArgumentNullException(nameof(update));
-        var value = await _webSocket.RequestAsync("camera/update_prefs", update.ToPayload(entityId.Trim()), cancellationToken).ConfigureAwait(false);
-        return DecodePreferences(value, "The updated camera preferences could not be decoded.");
+        var expectedPreloadStream = update.PreloadStream;
+        var expectedOrientation = update.Orientation;
+        var payload = update.ToPayload(entityId.Trim());
+        var value = await _webSocket.RequestAsync("camera/update_prefs", payload, cancellationToken).ConfigureAwait(false);
+        var preferences = DecodePreferences(value, "The updated camera preferences could not be decoded.");
+        if (expectedPreloadStream.HasValue
+            && (!value.TryGetProperty("preload_stream", out _)
+                || preferences.PreloadStream != expectedPreloadStream.Value))
+            throw new HomeAssistantProtocolException("The updated camera preferences did not match the requested preload-stream value.");
+        if (expectedOrientation.HasValue
+            && (!value.TryGetProperty("orientation", out _)
+                || preferences.Orientation != expectedOrientation.Value))
+            throw new HomeAssistantProtocolException("The updated camera preferences did not match the requested orientation.");
+        return preferences;
     }
 
     private static HomeAssistantCameraPreferences DecodePreferences(JsonElement value, string failureMessage)
