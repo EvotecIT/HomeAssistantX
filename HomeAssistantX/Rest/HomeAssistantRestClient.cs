@@ -255,6 +255,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         object? body,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var serializedBody = body is null
             ? null
             : JsonSerializer.SerializeToUtf8Bytes(body, HomeAssistantJson.SerializerOptions);

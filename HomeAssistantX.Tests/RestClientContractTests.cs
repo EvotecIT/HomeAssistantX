@@ -202,6 +202,24 @@ public sealed class RestClientContractTests
     }
 
     [Fact]
+    public async Task PreCancelledRequestsDoNotTraverseTheCallerBody()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Rest.SendAsync<JsonElement>(
+            HttpMethod.Post,
+            "api/test",
+            new ThrowingSerializationBody(),
+            cancellation.Token));
+
+        Assert.Equal(0, server.AuthenticatedRequestCount);
+        Assert.Equal(0, server.UnauthorizedRequestCount);
+    }
+
+    [Fact]
     public async Task CallerCancellationStopsRejectedTokenRecoveryWithoutRetrying()
     {
         using var server = new TestHomeAssistantServer();
@@ -372,6 +390,11 @@ public sealed class RestClientContractTests
     private sealed class ConsumerResponse
     {
         public int Value { get; set; }
+    }
+
+    private sealed class ThrowingSerializationBody
+    {
+        public string Value => throw new InvalidOperationException("The cancelled request body was serialized.");
     }
 
     private sealed class ConsumerAttribute
