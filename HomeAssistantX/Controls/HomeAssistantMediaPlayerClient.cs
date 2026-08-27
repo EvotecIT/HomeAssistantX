@@ -34,7 +34,8 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
         return states
             .Where(state => string.Equals(state.Domain, Domain, StringComparison.OrdinalIgnoreCase))
-            .Select(HomeAssistantMediaPlayerStatus.FromState)
+            .Select(state => HomeAssistantMediaPlayerStatus.FromState(
+                HomeAssistantEntityId.RequireResponseDomain(state, Domain)))
             .ToArray();
     }
 

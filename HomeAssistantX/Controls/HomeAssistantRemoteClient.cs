@@ -40,7 +40,8 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
         return states
             .Where(state => string.Equals(state.Domain, Domain, StringComparison.OrdinalIgnoreCase))
-            .Select(HomeAssistantRemoteStatus.FromState)
+            .Select(state => HomeAssistantRemoteStatus.FromState(
+                HomeAssistantEntityId.RequireResponseDomain(state, Domain)))
             .ToArray();
     }
 

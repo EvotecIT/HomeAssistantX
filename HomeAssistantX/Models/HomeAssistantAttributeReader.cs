@@ -51,27 +51,19 @@ internal static class HomeAssistantAttributeReader
             return null;
         }
 
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var integer))
+        if (value.ValueKind == JsonValueKind.Number
+            && TryParseIntegralInt64(value.GetRawText(), out var integer))
         {
             return integer;
         }
 
         if (value.ValueKind == JsonValueKind.String
-            && long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out integer))
+            && TryParseIntegralInt64(value.GetString(), out integer))
         {
             return integer;
         }
 
-        var number = GetDouble(attributes, name);
-        if (!number.HasValue
-            || number.Value < long.MinValue
-            || number.Value >= 9223372036854775808d
-            || Math.Truncate(number.Value) != number.Value)
-        {
-            return null;
-        }
-
-        return (long)number.Value;
+        return null;
     }
 
     public static long? GetNonNegativeInt64(
@@ -144,6 +136,26 @@ internal static class HomeAssistantAttributeReader
     private static bool IsFinite(double value)
     {
         return !double.IsNaN(value) && !double.IsInfinity(value);
+    }
+
+    private static bool TryParseIntegralInt64(string? value, out long result)
+    {
+        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result))
+        {
+            return true;
+        }
+
+        if (decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact)
+            && exact >= long.MinValue
+            && exact <= long.MaxValue
+            && decimal.Truncate(exact) == exact)
+        {
+            result = decimal.ToInt64(exact);
+            return true;
+        }
+
+        result = default;
+        return false;
     }
 
     internal static bool TryGetValue(IReadOnlyDictionary<string, JsonElement> attributes, string name, out JsonElement value)

@@ -226,7 +226,8 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
         if (double.IsNaN(value.Value)
             || double.IsInfinity(value.Value)
             || value.Value < minimum
-            || value.Value > int.MaxValue)
+            || value.Value > int.MaxValue
+            || (!allowZero && TimeSpan.FromSeconds(value.Value) <= TimeSpan.Zero))
         {
             throw new ArgumentOutOfRangeException(name, $"The value must be a finite number of seconds between {(allowZero ? "zero" : "greater than zero")} and {int.MaxValue}.");
         }

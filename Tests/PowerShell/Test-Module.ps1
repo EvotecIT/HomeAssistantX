@@ -389,6 +389,7 @@ try {
     foreach ($invalidRemote in @(
         { Invoke-HomeAssistantRemote -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRemote -Area Kitchen -Action SendCommand -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -TimeoutSeconds 1e-10 -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRemote -Area Kitchen -Action DeleteCommand -Command Power -TimeoutSeconds 10 -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -TimeoutSeconds 30 -WhatIf -ErrorAction Stop }
     )) {

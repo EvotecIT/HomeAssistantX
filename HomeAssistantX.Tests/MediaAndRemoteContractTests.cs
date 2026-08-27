@@ -226,6 +226,20 @@ public sealed class MediaAndRemoteContractTests
         Assert.Throws<ArgumentException>(() => HomeAssistantRemoteStatus.FromState(state));
     }
 
+    [Theory]
+    [InlineData("9007199254740993.0")]
+    [InlineData("\"9007199254740993.0\"")]
+    public void IntegralAttributesPreserveValuesBeyondDoublePrecision(string value)
+    {
+        using var document = JsonDocument.Parse("{\"value\":" + value + "}");
+        var attributes = new Dictionary<string, JsonElement>
+        {
+            ["value"] = document.RootElement.GetProperty("value").Clone()
+        };
+
+        Assert.Equal(9007199254740993L, HomeAssistantAttributeReader.GetInt64(attributes, "value"));
+    }
+
 #if NET10_0
     [Fact]
     public async Task MediaActionsMapCompleteStandardServicePayloadsInDeterministicOrder()
@@ -438,6 +452,21 @@ public sealed class MediaAndRemoteContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.GetAsync("remote."));
 
         Assert.Null(server.LastRequestPath);
+    }
+
+    [Fact]
+    public async Task TypedBulkReadsRejectMalformedServerEntityIds()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        server.SetStates("[{\"entity_id\":\"media_player.kitchen.extra\",\"state\":\"idle\",\"attributes\":{}}]");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Controls.MediaPlayers.GetAllAsync());
+
+        server.SetStates("[{\"entity_id\":\"remote.living.room\",\"state\":\"on\",\"attributes\":{}}]");
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Controls.Remotes.GetAllAsync());
     }
 
     [Fact]
