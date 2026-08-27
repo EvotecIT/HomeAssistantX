@@ -372,6 +372,7 @@ try {
         { Set-HomeAssistantMediaPlayer -Area Kitchen -JoinMember 'media_player.' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -JoinMember 'media_player.kitchen.extra' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -JoinMember 'media_player.Kitchen' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -JoinMember 'MEDIA_PLAYER.kitchen' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent 30 -SeekSeconds ([TimeSpan]::MaxValue.TotalSeconds) -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaContentId test -MediaContentType music -MediaExtra @{ 1 = 'value' } -WhatIf -ErrorAction Stop }
     )) {

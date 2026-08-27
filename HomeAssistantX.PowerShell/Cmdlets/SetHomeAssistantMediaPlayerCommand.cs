@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Management.Automation;
 using HomeAssistantX.Controls;
+using HomeAssistantX.Models;
 using HomeAssistantX.Services;
 
 namespace HomeAssistantX.PowerShell;
@@ -348,21 +349,7 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
 
     private static bool IsMediaPlayerEntityId(string? value)
     {
-        var normalized = value?.Trim();
-        if (normalized is null || normalized.Length == 0) return false;
-        var separator = normalized.IndexOf('.');
-        if (separator <= 0
-            || separator != normalized.LastIndexOf('.')
-            || separator == normalized.Length - 1
-            || !string.Equals(normalized.Substring(0, separator), "media_player", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return normalized.Substring(separator + 1).All(character =>
-            (character >= 'a' && character <= 'z')
-            || (character >= '0' && character <= '9')
-            || character == '_');
+        return HomeAssistantEntityId.TryNormalizeForDomain(value, "media_player", out _);
     }
 
     private static void ValidateOptionalEnum<T>(T? value, string name)
