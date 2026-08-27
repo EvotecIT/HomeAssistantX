@@ -153,12 +153,27 @@ public sealed class HomeAssistantDiscoveryClient
         try
         {
             transport = _transportFactory.Create(localAddress);
-            await transport.SendAsync(DnsDiscoveryPacket.CreateQuery(), cancellationToken).ConfigureAwait(false);
+            var query = DnsDiscoveryPacket.CreateQuery();
+            await transport.SendAsync(query, cancellationToken).ConfigureAwait(false);
+            var retryDelays = new[] { TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(750) };
+            var retryIndex = 0;
+            Task? retryTask = Task.Delay(retryDelays[retryIndex], cancellationToken);
+            var receiveTask = transport.ReceiveAsync(cancellationToken);
             while (!cancellationToken.IsCancellationRequested)
             {
-                var packet = await transport.ReceiveAsync(cancellationToken).ConfigureAwait(false);
+                if (retryTask is not null && await Task.WhenAny(receiveTask, retryTask).ConfigureAwait(false) == retryTask)
+                {
+                    await retryTask.ConfigureAwait(false);
+                    await transport.SendAsync(query, cancellationToken).ConfigureAwait(false);
+                    retryIndex++;
+                    retryTask = retryIndex < retryDelays.Length ? Task.Delay(retryDelays[retryIndex], cancellationToken) : null;
+                    continue;
+                }
+
+                var packet = await receiveTask.ConfigureAwait(false);
                 if (!aggregate.TryConsumeDatagram()) break;
                 DnsDiscoveryPacket.ReadInto(packet, aggregate);
+                receiveTask = transport.ReceiveAsync(cancellationToken);
             }
             return null;
         }
@@ -467,13 +482,14 @@ internal sealed class DnsDiscoveryAggregate
     private void Prune(TimeSpan now)
     {
         foreach (var key in _instances.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) _instances.Remove(key);
-        foreach (var owner in _services.Keys.ToArray()) { _services[owner].RemoveAll(value => value.ExpiresAt <= now); if (_services[owner].Count == 0) _services.Remove(owner); }
-        foreach (var owner in _text.Keys.ToArray()) { _text[owner].RemoveAll(value => value.ExpiresAt <= now); if (_text[owner].Count == 0) _text.Remove(owner); }
+        foreach (var owner in _services.Keys.ToArray()) { _services[owner].RemoveAll(value => value.ExpiresAt <= now); if (_services[owner].Count == 0 || !_instances.ContainsKey(owner)) _services.Remove(owner); }
+        foreach (var owner in _text.Keys.ToArray()) { _text[owner].RemoveAll(value => value.ExpiresAt <= now); if (_text[owner].Count == 0 || !_instances.ContainsKey(owner)) _text.Remove(owner); }
+        var retainedHosts = new HashSet<string>(_services.Values.SelectMany(value => value).Select(value => value.Host), StringComparer.OrdinalIgnoreCase);
         foreach (var owner in _addresses.Keys.ToArray())
         {
             var values = _addresses[owner];
             foreach (var address in values.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) values.Remove(address);
-            if (values.Count == 0) _addresses.Remove(owner);
+            if (values.Count == 0 || !retainedHosts.Contains(owner)) _addresses.Remove(owner);
         }
     }
 

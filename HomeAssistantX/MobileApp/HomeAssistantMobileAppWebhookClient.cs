@@ -90,6 +90,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     public async Task<JsonElement> SendAsync(string commandType, object? data, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(commandType)) throw new ArgumentException("A webhook command type is required.", nameof(commandType));
+        var command = commandType.Trim();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_requestTimeout);
         var operationToken = timeout.Token;
@@ -98,20 +99,20 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             object envelope;
             if (_secret is null)
             {
-                envelope = new Dictionary<string, object?> { ["type"] = commandType.Trim(), ["data"] = data ?? new Dictionary<string, object?>() };
+                envelope = new Dictionary<string, object?> { ["type"] = command, ["data"] = data ?? new Dictionary<string, object?>() };
             }
             else
             {
                 var requestPlaintext = JsonSerializer.SerializeToUtf8Bytes(
                     new Dictionary<string, object?>
                     {
-                        ["type"] = commandType.Trim(),
+                        ["type"] = command,
                         ["data"] = data ?? new Dictionary<string, object?>()
                     },
                     HomeAssistantJson.SerializerOptions);
                 var encrypted = await _protector!.ProtectAsync(requestPlaintext, _secret!, operationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(encrypted)) throw new HomeAssistantProtocolException("The mobile-app payload protector returned an empty request payload.");
-                envelope = new Dictionary<string, object?> { ["encrypted"] = true, ["encrypted_data"] = encrypted };
+                envelope = new Dictionary<string, object?> { ["type"] = command, ["encrypted"] = true, ["encrypted_data"] = encrypted };
             }
 
             using var request = new HttpRequestMessage(HttpMethod.Post, _webhookUri)

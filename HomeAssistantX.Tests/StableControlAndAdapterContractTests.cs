@@ -354,9 +354,9 @@ public sealed class StableControlAndAdapterContractTests
         }
 
         Assert.Equal(64, aggregate.InstanceCount);
-        Assert.Equal(128, aggregate.ServiceCount);
-        Assert.Equal(128, aggregate.TextOwnerCount);
-        Assert.Equal(128, aggregate.AddressHostCount);
+        Assert.Equal(64, aggregate.ServiceCount);
+        Assert.Equal(64, aggregate.TextOwnerCount);
+        Assert.Equal(64, aggregate.AddressHostCount);
         Assert.Equal(64, aggregate.Build().Count);
 
         var perOwner = new DnsDiscoveryAggregate();
@@ -406,6 +406,36 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Equal(2, instances.Count);
         Assert.Equal(addresses.OrderBy(value => value.ToString()), factory.CreatedAddresses.OrderBy(value => value.ToString()));
         Assert.Equal(addresses.OrderBy(value => value.ToString()), factory.SentAddresses.OrderBy(value => value.ToString()));
+    }
+
+    [Fact]
+    public async Task DnsSdDiscoveryRetransmitsAHomeAssistantQueryOnEachEligibleAddress()
+    {
+        var address = IPAddress.Parse("192.0.2.10");
+        var factory = new TestDiscoveryTransportFactory(new[] { address }, CreateDiscoveryPacket());
+        var client = new HomeAssistantDiscoveryClient(factory);
+
+        Assert.Single(await client.DiscoverAsync(TimeSpan.FromMilliseconds(1100)));
+
+        Assert.Equal(3, factory.SentAddresses.Count(value => value.Equals(address)));
+    }
+
+    [Fact]
+    public void DnsSdExpiredPtrReleasesLongLivedChildRecordBudgets()
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(ttl: 1, additionalTtl: 120), aggregate);
+        Assert.Equal(1, aggregate.ServiceCount);
+        Assert.Equal(1, aggregate.TextOwnerCount);
+        Assert.Equal(1, aggregate.AddressHostCount);
+
+        now += TimeSpan.FromMilliseconds(1100);
+
+        Assert.Empty(aggregate.Build());
+        Assert.Equal(0, aggregate.ServiceCount);
+        Assert.Equal(0, aggregate.TextOwnerCount);
+        Assert.Equal(0, aggregate.AddressHostCount);
     }
 
     [Fact]
@@ -624,7 +654,7 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Equal("2026.8.3", protectedConfig.GetProperty("version").GetString());
         using var encryptedBody = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
         Assert.True(encryptedBody.RootElement.GetProperty("encrypted").GetBoolean());
-        Assert.False(encryptedBody.RootElement.TryGetProperty("type", out _));
+        Assert.Equal("get_config", encryptedBody.RootElement.GetProperty("type").GetString());
         Assert.False(encryptedBody.RootElement.TryGetProperty("data", out _));
         var plaintext = Convert.FromBase64String(encryptedBody.RootElement.GetProperty("encrypted_data").GetString()!);
         using var plaintextBody = JsonDocument.Parse(plaintext);

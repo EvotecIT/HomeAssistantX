@@ -65,6 +65,13 @@ internal sealed partial class TestHomeAssistantServer
             var root = webhookDocument.RootElement;
             if (root.TryGetProperty("encrypted", out var encrypted) && encrypted.ValueKind == System.Text.Json.JsonValueKind.True)
             {
+                if (!root.TryGetProperty("type", out var encryptedType)
+                    || encryptedType.ValueKind != System.Text.Json.JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(encryptedType.GetString()))
+                {
+                    await WriteHttpResponseAsync(stream, 400, "{\"error\":\"missing_type\"}").ConfigureAwait(false);
+                    return;
+                }
                 var encryptedResponse = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"version\":\"2026.8.3\"}"));
                 await WriteHttpResponseAsync(stream, 200, "{\"encrypted\":true,\"encrypted_data\":\"" + encryptedResponse + "\"}").ConfigureAwait(false);
             }
