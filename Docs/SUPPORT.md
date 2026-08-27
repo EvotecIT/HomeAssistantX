@@ -20,6 +20,7 @@ This matrix was checked against the official Home Assistant developer documentat
 | Rejected-token recovery | First class | Refresh-capable providers retry REST once after HTTP 401; WebSocket recovery opens a fresh session after `auth_invalid` |
 | Temporary signed paths | First class | `HomeAssistantSystemClient.SignPathAsync` |
 | Create a long-lived token | First class | `CreateLongLivedAccessTokenAsync`; sensitive and never used by live tests |
+| Companion-app registration | First class / extensible | Authenticated `mobile_app` registration with stable fields and open app data; registration is an explicit mutation |
 | Secure credential storage | Host-owned | Keychain, Credential Manager, or another platform store implements the provider/persistence callback |
 | Custom recovery policy | Extensible | A custom token provider implements `IHomeAssistantAccessTokenRecovery`; static long-lived tokens remain fail-closed |
 
@@ -73,6 +74,7 @@ All endpoints currently listed in the official REST API reference have named met
 | Cameras | First class / extensible | Typed state/features, bounded snapshots, capabilities, HLS request, preferences, signed image/MJPEG paths, and reconnect-safe state updates |
 | Media browsing | First class / extensible | Global media-source and per-player browse/search plus signed media resolution; recursive stable fields are typed and provider additions retained |
 | Lovelace dashboards | First class / extensible | Panels, dashboard/resource collections, mode information, configuration read/write/delete; collection mutations require an administrator and storage mode |
+| Companion-app webhooks | First class / extensible | Typed registration update, configuration, zones, and camera-stream calls plus a bounded raw command; encrypted registrations require a host-supplied NaCl SecretBox protector and fail closed without one |
 | Other/custom commands | Raw | `RequestAsync` and `SubscribeAsync` |
 | Coalesced message batches | First class | Object and array frames are decoded; byte and message-count limits reject oversized batches |
 
@@ -136,7 +138,8 @@ fallback, resolves friendly names/aliases or native IDs, rejects ambiguous
 matches, and retains raw objects for forward compatibility.
 
 `Controls` provides typed standard calls for lights, switches, climate, covers,
-media players, remotes, and locks. Media-player coverage includes state and
+media players, remotes, locks, routines, fans, valves, vacuums, lawn mowers,
+alarms, sirens, humidifiers, water heaters, and common helpers. Media-player coverage includes state and
 feature decoding, playback position, artwork, source and sound-mode lists,
 queue/announcement playback, grouping, seek, repeat, shuffle, and playlist
 operations. Remote coverage includes state/activity decoding plus typed power,
@@ -154,8 +157,8 @@ The following boundaries are intentional:
 
 | Area | Status | Reason |
 | --- | --- | --- |
-| Instance discovery over mDNS | Not supported yet | Cross-platform discovery deserves an optional adapter or a dependency-free implementation; manual URL entry works today |
-| Native companion-app registration and webhook lifecycle | Raw / future adapter | Different lifecycle from the Core client; should not distort the base transport |
+| Instance discovery over mDNS | First class for IPv4 | Dependency-free bounded `_home-assistant._tcp.local` discovery returns untrusted hints and never auto-connects; IPv6-only discovery is not claimed |
+| Native companion-app registration and webhook lifecycle | First class / extensible | Registration and stable webhook commands are typed; host owns secret storage, app lifecycle, and the NaCl SecretBox implementation used for encryption |
 | HACS/custom repository package installation | Not modeled | Not a stable Core package-management contract; Supervisor apps are supported separately |
 | Full streaming transport and transcoding | Consumer-owned | HomeAssistantX returns HA stream/media paths and metadata; playback, codecs, buffering, and rendering belong to Tactra/CasaRay hosts |
 | Product device-domain normalization | Consumer-owned | CasaRay/Tactra map joined HA inventory into their own product models and safety/UI policy |
@@ -165,4 +168,4 @@ The following boundaries are intentional:
 
 The normal contract suite runs against a real loopback HTTP/WebSocket peer, including rejected-token recovery, exactly-once retry, fragmented and coalesced frames, malformed and oversized batch rejection, out-of-order responses, bounded bodies, OAuth refresh concurrency, cancellation, subscription failure, reconnect, and missed-state reconciliation. It runs on .NET Framework 4.7.2 and .NET 10.
 
-The optional live suite is read-only. It validates the configured real instance's API status, configuration, components, event and service catalogs, state REST/WebSocket parity, panels, registries, signed paths, subscription setup, recent history and Recorder statistics when available, Energy preferences/validation/forecasts when configured, current weather and forecast subscriptions when available, operational capability discovery, system logs, Repairs, diagnostics handlers, configuration entries, update discovery, and accessible Supervisor inventory. It does not call services, fire events, create tokens, alter Energy or Recorder data, install updates, restart components, create backups, expose entities, or otherwise mutate the home.
+The optional live suite is read-only. It validates the configured real instance's API status, configuration, components, event and service catalogs, state REST/WebSocket parity, panels, registries, signed paths, subscription setup, recent history and Recorder statistics when available, Energy preferences/validation/forecasts when configured, current weather and forecast subscriptions when available, operational capability discovery, system logs, Repairs, diagnostics handlers, configuration entries, update discovery, and accessible Supervisor inventory. Local mDNS discovery is also read-only. It does not register a companion app, call services, fire events, create tokens, alter Energy or Recorder data, install updates, restart components, create backups, expose entities, or otherwise mutate the home.

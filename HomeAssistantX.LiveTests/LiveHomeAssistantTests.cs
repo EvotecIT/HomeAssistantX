@@ -4,6 +4,7 @@ using HomeAssistantX.Operations;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Recorder;
 using HomeAssistantX.Weather;
+using HomeAssistantX.Discovery;
 using Xunit.Abstractions;
 
 namespace HomeAssistantX.LiveTests;
@@ -23,6 +24,7 @@ public sealed class LiveHomeAssistantTests
         var baseUri = new Uri(Environment.GetEnvironmentVariable("HOME_ASSISTANT_URL")!, UriKind.Absolute);
         var token = Environment.GetEnvironmentVariable("HOME_ASSISTANT_TOKEN")!;
         using var client = HomeAssistantClient.Create(baseUri, token);
+        var discoveredInstances = await new HomeAssistantDiscoveryClient().DiscoverAsync(TimeSpan.FromSeconds(3));
 
         var api = await client.Rest.CheckApiAsync();
         var configuration = await client.Rest.GetConfigurationAsync();
@@ -234,6 +236,11 @@ public sealed class LiveHomeAssistantTests
         Assert.Equal(restStates.Count(state => state.Domain == "automation"), automations.Count);
         Assert.All(mediaPlayers, status => Assert.Equal("media_player", status.RawState.Domain));
         Assert.All(remotes, status => Assert.Equal("remote", status.RawState.Domain));
+        Assert.All(discoveredInstances, instance =>
+        {
+            Assert.All(new[] { instance.InternalUri, instance.ExternalUri, instance.BaseUri }.Where(uri => uri is not null), uri => Assert.Contains(uri!.Scheme, new[] { Uri.UriSchemeHttp, Uri.UriSchemeHttps }));
+            Assert.False(string.IsNullOrWhiteSpace(instance.ServiceInstanceName));
+        });
         Assert.Equal(configuration.Version, capabilities.CoreVersion);
         Assert.NotEmpty(integrations);
         Assert.Equal(System.Text.Json.JsonValueKind.Null, pong.ValueKind);
@@ -244,7 +251,7 @@ public sealed class LiveHomeAssistantTests
         Assert.Equal(panels.EnumerateObject().Count(), typedPanelCount);
         Assert.Equal(System.Text.Json.JsonValueKind.Object, displayRegistry.ValueKind);
         Assert.True(signedPath.StartsWith("/api/", StringComparison.Ordinal), "The signed API path omitted the requested path prefix.");
-        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}, media players={12}, remotes={13}, labels={14}, automation categories={15}, calendars={16}, sampled calendar events={17}, persistent notifications={18}, statistics={19}, Energy configured={20}, solar forecast providers={21}, weather entities={22}, cameras={23}, automations={24}, panels={25}, dashboard info validated={26}, media root validated={27}",
+        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}, media players={12}, remotes={13}, labels={14}, automation categories={15}, calendars={16}, sampled calendar events={17}, persistent notifications={18}, statistics={19}, Energy configured={20}, solar forecast providers={21}, weather entities={22}, cameras={23}, automations={24}, panels={25}, dashboard info validated={26}, media root validated={27}, mDNS instances={28}",
             configuration.Version,
             restStates.Count,
             webSocketStates.Count,
@@ -272,7 +279,8 @@ public sealed class LiveHomeAssistantTests
             automations.Count,
             typedPanelCount,
             dashboardInfoValidated,
-            mediaRootValidated);
+            mediaRootValidated,
+            discoveredInstances.Count);
     }
 }
 

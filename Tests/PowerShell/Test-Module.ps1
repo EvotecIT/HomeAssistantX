@@ -26,6 +26,7 @@ $expectedCommands = @(
     'Disconnect-HomeAssistant',
     'Export-HomeAssistantCameraSnapshot',
     'Export-HomeAssistantDiagnostic',
+    'Find-HomeAssistant',
     'Get-HomeAssistantAction',
     'Get-HomeAssistantApp',
     'Get-HomeAssistantArea',
@@ -61,6 +62,7 @@ $expectedCommands = @(
     'Invoke-HomeAssistantAutomation',
     'Invoke-HomeAssistantRecorderMaintenance',
     'Invoke-HomeAssistantRemote',
+    'Invoke-HomeAssistantRoutine',
     'New-HomeAssistantBackup',
     'Receive-HomeAssistantCalendarEvent',
     'Receive-HomeAssistantEvent',
@@ -75,6 +77,7 @@ $expectedCommands = @(
     'Remove-HomeAssistantStatistic',
     'Restart-HomeAssistant',
     'Send-HomeAssistantNotification',
+    'Set-HomeAssistantAlarm',
     'Set-HomeAssistantAutomation',
     'Set-HomeAssistantCalendarEvent',
     'Set-HomeAssistantCamera',
@@ -83,12 +86,20 @@ $expectedCommands = @(
     'Set-HomeAssistantCover',
     'Set-HomeAssistantDashboard',
     'Set-HomeAssistantEnergy',
+    'Set-HomeAssistantFan',
+    'Set-HomeAssistantHelper',
+    'Set-HomeAssistantHumidifier',
     'Set-HomeAssistantLabel',
+    'Set-HomeAssistantLawnMower',
     'Set-HomeAssistantLight',
     'Set-HomeAssistantLock',
     'Set-HomeAssistantMediaPlayer',
+    'Set-HomeAssistantSiren',
     'Set-HomeAssistantStatistic',
     'Set-HomeAssistantSwitch',
+    'Set-HomeAssistantVacuum',
+    'Set-HomeAssistantValve',
+    'Set-HomeAssistantWaterHeater',
     'Test-HomeAssistantConfiguration',
     'Test-HomeAssistantStatistic'
 )
@@ -127,6 +138,16 @@ $parameterSetContracts = @{
     'Set-HomeAssistantLock'       = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
     'Set-HomeAssistantMediaPlayer' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
     'Set-HomeAssistantSwitch'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Invoke-HomeAssistantRoutine' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantAlarm'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantFan'        = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantHelper'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantHumidifier' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantLawnMower'  = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantSiren'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantVacuum'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantValve'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantWaterHeater' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
 }
 foreach ($entry in $parameterSetContracts.GetEnumerator()) {
     $sets = @((Get-Command -Name $entry.Key).ParameterSets.Name | Sort-Object)
@@ -194,7 +215,7 @@ foreach ($name in 'Action', 'Activity', 'Command', 'RemoteDevice', 'RepeatCount'
     }
 }
 
-foreach ($name in 'Export-HomeAssistantCameraSnapshot', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantAutomation', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Remove-HomeAssistantAutomation', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantDashboard', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantAutomation', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCamera', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantDashboard', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch') {
+foreach ($name in 'Export-HomeAssistantCameraSnapshot', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantAutomation', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'Invoke-HomeAssistantRoutine', 'New-HomeAssistantBackup', 'Remove-HomeAssistantAutomation', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantDashboard', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantAlarm', 'Set-HomeAssistantAutomation', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCamera', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantDashboard', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantFan', 'Set-HomeAssistantHelper', 'Set-HomeAssistantHumidifier', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLawnMower', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSiren', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch', 'Set-HomeAssistantVacuum', 'Set-HomeAssistantValve', 'Set-HomeAssistantWaterHeater') {
     if (-not (Get-Command -Name $name).Parameters.ContainsKey('WhatIf')) {
         throw "$name must support ShouldProcess/WhatIf."
     }
@@ -856,8 +877,23 @@ try {
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
         throw 'Could not reset the typed-control action baseline.'
     }
+    $server.StandardInput.WriteLine('SET_STABLE_CONTROL_STATES')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'STABLE_CONTROL_STATES_SET') {
+        throw 'Could not load the extended typed-control state fixture.'
+    }
     $null = Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -WhatIf
     $null = Set-HomeAssistantLight -Label Security -Power On -WhatIf
+    $null = Invoke-HomeAssistantRoutine -Entity scene.evening -Action ActivateScene -WhatIf
+    $null = Set-HomeAssistantFan -Entity fan.office -Percentage 35 -WhatIf
+    $null = Set-HomeAssistantValve -Entity valve.water -PositionPercent 25 -WhatIf
+    $null = Set-HomeAssistantVacuum -Entity vacuum.downstairs -Action ReturnToBase -WhatIf
+    $null = Set-HomeAssistantLawnMower -Entity lawn_mower.garden -Action Dock -WhatIf -Confirm:$false
+    $null = Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action Disarm -WhatIf -Confirm:$false
+    $null = Set-HomeAssistantSiren -Entity siren.house -Action TurnOff -WhatIf -Confirm:$false
+    $null = Set-HomeAssistantHumidifier -Entity humidifier.bedroom -HumidityPercent 50 -WhatIf
+    $null = Set-HomeAssistantWaterHeater -Entity water_heater.tank -Temperature 52 -WhatIf
+    $null = Set-HomeAssistantHelper -Entity input_number.volume -Domain InputNumber -Number 15 -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
@@ -1030,6 +1066,22 @@ try {
     $pipelineLightCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
     if (@($pipelineLightCall.target.entity_id)[0] -ne 'light.kitchen' -or $pipelineLightCall.service -ne 'turn_off') {
         throw 'The typed light cmdlet did not accept joined entity pipeline input.'
+    }
+
+    $null = Set-HomeAssistantFan -Entity fan.office -Percentage 35 -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedFanCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedFanCall.domain -ne 'fan' -or $typedFanCall.service -ne 'set_percentage' -or $typedFanCall.service_data.percentage -ne 35) {
+        throw 'The typed fan cmdlet produced the wrong action payload.'
+    }
+
+    $null = Set-HomeAssistantHelper -Entity input_number.volume -Domain InputNumber -Number 15 -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedHelperCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedHelperCall.domain -ne 'input_number' -or $typedHelperCall.service -ne 'set_value' -or $typedHelperCall.service_data.value -ne 15) {
+        throw 'The typed helper cmdlet produced the wrong action payload.'
     }
 
     $server.StandardInput.WriteLine('CLEAR_LAST_SUPERVISOR_COMMAND')

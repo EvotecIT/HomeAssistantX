@@ -206,7 +206,14 @@ public sealed class HomeAssistantClimateOptions
         {
             throw new ArgumentException("TargetTemperatureLow cannot be greater than TargetTemperatureHigh.");
         }
+
+        HvacMode = NormalizeOptional(HvacMode, nameof(HvacMode));
+        FanMode = NormalizeOptional(FanMode, nameof(FanMode));
+        PresetMode = NormalizeOptional(PresetMode, nameof(PresetMode));
     }
+
+    private static string? NormalizeOptional(string? value, string name)
+        => value is null ? null : ControlValidation.Required(value, name);
 }
 
 internal static class ControlValidation
@@ -238,6 +245,16 @@ internal static class ControlValidation
         return value!;
     }
 
+    public static IReadOnlyList<string> RequiredValues(IReadOnlyList<string>? values, string name)
+    {
+        if (values is null || values.Count == 0 || values.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException("At least one non-empty value is required.", name);
+        }
+
+        return values!.Select(value => value.Trim()).ToArray();
+    }
+
     public static double? Percent(double? value, string name)
     {
         if (value.HasValue && (!IsFinite(value.Value) || value.Value < 0 || value.Value > 100))
@@ -265,6 +282,12 @@ internal static class ControlValidation
             throw new ArgumentOutOfRangeException(name, "The value must be greater than zero.");
         }
 
+        return value;
+    }
+
+    public static int PercentInt(int value, string name)
+    {
+        if (value < 0 || value > 100) throw new ArgumentOutOfRangeException(name, "The value must be between 0 and 100.");
         return value;
     }
 

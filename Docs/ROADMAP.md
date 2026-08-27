@@ -1,17 +1,16 @@
 # Roadmap
 
-HomeAssistantX should remain one dependency-light package. New packages are justified only by a real platform dependency, such as an mDNS implementation that cannot stay portable and dependency-free.
+HomeAssistantX remains one dependency-light package. New packages are justified only by a real platform dependency.
 
 ## Before the first stable release
 
-- [ ] Add API compatibility baselines once version 0.1.0 becomes the published contract.
 - [ ] Run the read-only live suite against representative current and older supported Home Assistant releases before defining a minimum server version.
 
 ## Next adapters, driven by consumers
 
-- [ ] Add instance discovery only after choosing a cross-platform mDNS boundary that does not burden every package consumer.
-- [ ] Add a native-app registration/webhook adapter when CasaRay or another real host needs companion-app lifecycle behavior.
 - [ ] Promote integration-specific raw commands into typed APIs only when two consumers need the same stable contract.
+- [ ] Add IPv6 mDNS discovery when a real IPv6-only consumer can validate the platform behavior.
+- [ ] Publish an optional NaCl SecretBox adapter only when a dependency can be justified, maintained, and validated across all target frameworks; the core protector interface remains dependency-free.
 - [ ] Add an MCP/agent adapter over the same explicit connection and typed operations after the library and PowerShell contracts have field experience. Keep mutations policy-gated and expose read-only troubleshooting first.
 - [ ] Add narrowly scoped restore/recovery helpers only after defining interactive confirmation, backup verification, and failure-recovery contracts.
 

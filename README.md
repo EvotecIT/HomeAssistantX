@@ -39,7 +39,9 @@ raw access for custom integrations.
   inventory
 - exact friendly-name or native-ID resolution with ambiguity errors instead of
   silent guesses
-- typed light, switch, climate, cover, media-player, remote, and lock controls
+- typed controls for lights, switches, climate, covers, media players, remotes,
+  locks, scenes, scripts, buttons, fans, valves, vacuums, lawn mowers, alarms,
+  sirens, humidifiers, water heaters, and common helpers
 - runtime action discovery, including descriptions, fields, examples, defaults,
   and selectors supplied by Home Assistant and installed integrations
 - the documented Home Assistant REST API: state, history, logbook, actions,
@@ -57,6 +59,8 @@ raw access for custom integrations.
 - automation runtime state and execution kept separate from administrator-managed definitions
 - OAuth authorization, proactive and rejection-triggered refresh, revocation,
   and host-owned token persistence
+- dependency-free local IPv4 mDNS discovery plus typed companion-app
+  registration and webhook contracts
 - logs, Repairs, system health, diagnostics, traces, integrations, and updates
 - Home Assistant OS and Supervisor information, logs, jobs, backups, apps,
   updates, and restarts
@@ -78,7 +82,8 @@ set.
 | Discover floors and rooms | `Get-HomeAssistantFloor`, `Get-HomeAssistantArea` | `client.Inventory` |
 | Discover devices and joined entities | `Get-HomeAssistantDevice`, `Get-HomeAssistantEntity` | `client.Inventory` |
 | Inspect available actions and fields | `Get-HomeAssistantAction` | `client.Services.GetActionsAsync` |
-| Control common domains | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Invoke-HomeAssistantRemote`, `Set-HomeAssistantLock` | `client.Controls` |
+| Find a local instance | `Find-HomeAssistant` | `HomeAssistantDiscoveryClient` |
+| Control common domains | Task commands such as `Set-HomeAssistantLight`, `Set-HomeAssistantFan`, `Invoke-HomeAssistantRoutine`, and `Set-HomeAssistantHelper` | `client.Controls` |
 | Invoke integration-specific actions | `Invoke-HomeAssistantAction` | `client.Services` |
 | Send and receive notifications | `Get-HomeAssistantNotification`, `Send-HomeAssistantNotification`, `Receive-HomeAssistantNotification` | `client.Notifications` |
 | Work with calendars | `Get-HomeAssistantCalendar`, `Get-HomeAssistantCalendarEvent`, `Set-HomeAssistantCalendarEvent`, `Receive-HomeAssistantCalendarEvent` | `client.Calendars` |
@@ -200,12 +205,25 @@ Invoke-HomeAssistantRemote -Entity remote.harmony -Action TurnOn -Activity 'Watc
 Invoke-HomeAssistantRemote -Entity remote.living_room `
     -Action SendCommand -Command Power -RepeatCount 2 -WhatIf
 Set-HomeAssistantLock -Entity lock.front_door -Action Unlock -WhatIf
+
+Invoke-HomeAssistantRoutine -Entity scene.evening -Action ActivateScene
+Set-HomeAssistantFan -Entity fan.office -Percentage 35
+Set-HomeAssistantValve -Entity valve.garden -PositionPercent 50 -WhatIf
+Set-HomeAssistantVacuum -Entity vacuum.downstairs -Action ReturnToBase
+Set-HomeAssistantLawnMower -Entity lawn_mower.garden -Action Dock -WhatIf
+Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action ArmNight -WhatIf
+Set-HomeAssistantSiren -Entity siren.house -Action TurnOn `
+    -Tone alarm -VolumePercent 40 -Duration '00:00:10' -WhatIf
+Set-HomeAssistantHumidifier -Entity humidifier.bedroom -HumidityPercent 50
+Set-HomeAssistantWaterHeater -Entity water_heater.tank -Temperature 52
+Set-HomeAssistantHelper -Entity input_number.volume -Domain InputNumber -Number 15
 ```
 
 Typed commands validate common values, expose PowerShell completion for enums,
 resolve friendly targets, and support `-WhatIf` / `-Confirm`. Lock operations
-use high confirmation impact. The calling application or script still owns its
-authorization policy for consequential actions.
+use high confirmation impact, as do alarms, sirens, and lawn mowers. The calling
+application or script still owns its authorization policy for consequential
+actions.
 
 Range-based climate calls require both low and high temperatures and cannot be
 combined with a scalar temperature. Media-player `Off` and `Toggle` are
@@ -444,7 +462,9 @@ var result = await client.Controls.Lights.TurnOnAsync(
 ```
 
 `client.Controls` exposes focused clients for lights, switches, climate,
-covers, media players, remotes, and locks. `client.Notifications`,
+covers, media players, remotes, locks, routines, fans, valves, cleaning
+devices, alarms, sirens, humidifiers, water heaters, and common helpers.
+`client.Notifications`,
 `client.Calendars`, `client.Registries`, `client.Cameras`, `client.Media`,
 `client.Dashboards`, and `client.Automations` own their corresponding platform
 contracts. `client.Services` retains the generic fluent
@@ -475,6 +495,39 @@ await subscription.Completion;
 
 The state client subscribes before loading its initial snapshot, buffers changes
 that race the snapshot, reconnects, and reports changes missed while disconnected.
+
+### Discover an instance and register a companion host
+
+```csharp
+using HomeAssistantX.Discovery;
+using HomeAssistantX.MobileApp;
+
+var instances = await new HomeAssistantDiscoveryClient().DiscoverAsync(
+    TimeSpan.FromSeconds(3));
+
+var registration = await client.MobileApp.RegisterAsync(
+    new HomeAssistantMobileAppRegistrationRequest
+    {
+        AppId = "com.example.controller",
+        AppName = "Example Controller",
+        AppVersion = "1.0",
+        DeviceName = Environment.MachineName,
+        Manufacturer = "Example",
+        Model = "Desktop",
+        OperatingSystemName = "Windows",
+        SupportsEncryption = true
+    });
+```
+
+Discovery returns untrusted connection hints; the host chooses and verifies an
+instance before authentication. Registration creates a Home Assistant
+`mobile_app` integration and returns a webhook identifier and, when requested,
+a secret that the host must store securely. Encrypted webhooks require an
+`IHomeAssistantMobileAppPayloadProtector` implementation compatible with Home
+Assistant's NaCl SecretBox format. HomeAssistantX fails closed when a secret is
+present without that protector; it does not implement or silently downgrade
+cryptography. Unencrypted webhooks remain available for hosts that deliberately
+use that Home Assistant mode over a trusted HTTP(S) path.
 
 ## Authentication and raw access
 
@@ -536,6 +589,22 @@ The contract suite uses a real loopback HTTP/WebSocket peer and runs on .NET
 Framework 4.7.2 and .NET 10. It proves transport framing, concurrency,
 cancellation, reconnect, joined discovery, target resolution, typed payloads,
 runspace defaults, `-WhatIf`, and PowerShell 5.1/7 behavior.
+
+When an intentional public API change requires a new compatibility baseline,
+build every target first, let only the .NET 10 test update the file, clear the
+update flag, and then verify both runtime surfaces:
+
+```powershell
+dotnet build HomeAssistantX.slnx --configuration Release
+$env:HOMEASSISTANTX_UPDATE_API_BASELINE = '1'
+dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --framework net10.0 --no-build --filter 'FullyQualifiedName~PublicApiCompatibilityTests'
+Remove-Item Env:HOMEASSISTANTX_UPDATE_API_BASELINE
+dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --framework net10.0 --no-build
+dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --framework net472 --no-build
+```
+
+Do not set the update flag on a multi-target `dotnet test`; the net472 lane
+deliberately refuses to write the shared baseline.
 
 Optional live tests use `HOME_ASSISTANT_URL` and `HOME_ASSISTANT_TOKEN`. They
 read the actual installation without calling actions or changing the home.

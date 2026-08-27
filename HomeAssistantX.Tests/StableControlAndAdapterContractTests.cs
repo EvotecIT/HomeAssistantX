@@ -1,0 +1,696 @@
+#if NET10_0
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
+using HomeAssistantX.Controls;
+using HomeAssistantX.Discovery;
+using HomeAssistantX.MobileApp;
+using HomeAssistantX.Services;
+using HomeAssistantX.Tests.Infrastructure;
+
+namespace HomeAssistantX.Tests;
+
+public sealed class StableControlAndAdapterContractTests
+{
+    [Fact]
+    public async Task CommonControlDomainsProduceTheirNativePayloads()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Controls.Fans.SetDirectionAsync(HomeAssistantTarget.ForEntity("fan.office"), HomeAssistantFanDirection.Reverse);
+        AssertCall(server, "fan", "set_direction", "direction", "reverse");
+
+        await client.Controls.Valves.SetPositionAsync(HomeAssistantTarget.ForEntity("valve.water"), 35);
+        AssertCall(server, "valve", "set_valve_position", "position", 35d);
+
+        await client.Controls.Vacuums.CleanAreaAsync(HomeAssistantTarget.ForEntity("vacuum.downstairs"), new[] { "kitchen", "hall" });
+        using (var call = LastCall(server))
+        {
+            Assert.Equal("clean_area", call.RootElement.GetProperty("service").GetString());
+            Assert.Equal("hall", call.RootElement.GetProperty("service_data").GetProperty("cleaning_area_id")[1].GetString());
+        }
+
+        await client.Controls.LawnMowers.ActAsync(HomeAssistantTarget.ForEntity("lawn_mower.garden"), HomeAssistantLawnMowerAction.Dock);
+        AssertCall(server, "lawn_mower", "dock");
+
+        await client.Controls.Alarms.ActAsync(HomeAssistantTarget.ForEntity("alarm_control_panel.home"), HomeAssistantAlarmAction.ArmNight, "1234");
+        AssertCall(server, "alarm_control_panel", "alarm_arm_night", "code", "1234");
+
+        await client.Controls.Sirens.ActAsync(HomeAssistantTarget.ForEntity("siren.house"), HomeAssistantSirenAction.TurnOn, new HomeAssistantSirenOptions { Tone = "alarm", VolumePercent = 40, Duration = TimeSpan.FromSeconds(5) });
+        using (var call = LastCall(server))
+        {
+            var data = call.RootElement.GetProperty("service_data");
+            Assert.Equal(0.4, data.GetProperty("volume_level").GetDouble(), 3);
+            Assert.Equal(5, data.GetProperty("duration").GetDouble());
+        }
+
+        await client.Controls.Humidifiers.SetHumidityAsync(HomeAssistantTarget.ForEntity("humidifier.bedroom"), 55);
+        AssertCall(server, "humidifier", "set_humidity", "humidity", 55d);
+
+        await client.Controls.WaterHeaters.SetTemperatureAsync(HomeAssistantTarget.ForEntity("water_heater.tank"), 52.5, "eco");
+        using (var call = LastCall(server))
+        {
+            var data = call.RootElement.GetProperty("service_data");
+            Assert.Equal(52.5, data.GetProperty("temperature").GetDouble());
+            Assert.Equal("eco", data.GetProperty("operation_mode").GetString());
+        }
+
+        await client.Controls.WaterHeaters.SetTemperatureAsync(HomeAssistantTarget.ForEntity("water_heater.tank"), 53, " comfort ");
+        using (var call = LastCall(server))
+        {
+            Assert.Equal("comfort", call.RootElement.GetProperty("service_data").GetProperty("operation_mode").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task RoutineAndHelperControlsKeepDomainsAndValueShapesTyped()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Controls.Routines.ActivateSceneAsync(HomeAssistantTarget.ForEntity("scene.evening"), TimeSpan.FromSeconds(2));
+        AssertCall(server, "scene", "turn_on", "transition", 2d);
+
+        await client.Controls.Routines.PressButtonAsync(HomeAssistantTarget.ForEntity("input_button.reset"), HomeAssistantButtonDomain.InputButton);
+        AssertCall(server, "input_button", "press");
+
+        await client.Controls.Helpers.SetNumberAsync(HomeAssistantHelperDomain.InputNumber, HomeAssistantTarget.ForEntity("input_number.volume"), 12.5);
+        AssertCall(server, "input_number", "set_value", "value", 12.5d);
+
+        await client.Controls.Helpers.SetDateTimeAsync(HomeAssistantHelperDomain.InputDateTime, HomeAssistantTarget.ForEntity("input_datetime.visit"), new DateTimeOffset(2026, 8, 26, 12, 30, 0, TimeSpan.FromHours(2)));
+        using var call = LastCall(server);
+        Assert.Equal("set_datetime", call.RootElement.GetProperty("service").GetString());
+        Assert.Equal("2026-08-26T12:30:00.0000000+02:00", call.RootElement.GetProperty("service_data").GetProperty("datetime").GetString());
+    }
+
+    [Fact]
+    public async Task InvalidControlShapesFailBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var fan = HomeAssistantTarget.ForEntity("fan.office");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Fans.ActAsync(fan, HomeAssistantFanAction.TurnOn, 10));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.Valves.SetPositionAsync(HomeAssistantTarget.ForEntity("valve.water"), 101));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.WaterHeaters.SetTemperatureAsync(
+            HomeAssistantTarget.ForEntity("water_heater.tank"),
+            52,
+            " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Helpers.SetTextAsync(HomeAssistantHelperDomain.Select, HomeAssistantTarget.ForEntity("select.mode"), "eco"));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.Sirens.ActAsync(HomeAssistantTarget.ForEntity("siren.house"), (HomeAssistantSirenAction)99));
+        Assert.Throws<ArgumentException>(() => new HomeAssistantSirenOptions { Tone = "alarm", ToneId = 2 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantSirenOptions { Duration = TimeSpan.FromMilliseconds(500) });
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task RoutineHelperAndMobileCameraRejectWrongDomainTargetsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Routines.ActivateSceneAsync(
+            HomeAssistantTarget.ForEntity("script.evening")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Helpers.SetNumberAsync(
+            HomeAssistantHelperDomain.InputNumber,
+            HomeAssistantTarget.ForEntity("number.volume"),
+            12.5));
+        using var webhook = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration
+        {
+            WebhookId = "test-webhook"
+        });
+        await Assert.ThrowsAsync<ArgumentException>(() => webhook.GetCameraStreamAsync("sensor.front"));
+        await Assert.ThrowsAsync<ArgumentException>(() => webhook.GetCameraStreamAsync("camera.front.extra"));
+
+        Assert.Null(server.LastServiceCallBody);
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public void DnsSdParserReadsCompressedHomeAssistantAdvertisementAndRejectsUntrustedUris()
+    {
+        var aggregate = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), aggregate);
+
+        var instance = Assert.Single(aggregate.Build());
+        Assert.Equal("My Home", instance.Name);
+        Assert.Equal("test-uuid", instance.InstanceId);
+        Assert.Equal("2026.8.3", instance.Version);
+        Assert.Equal("ha.local", instance.HostName);
+        Assert.Equal(8123, instance.Port);
+        Assert.Equal(new Uri("http://ha.local:8123/"), instance.InternalUri);
+        Assert.Null(instance.ExternalUri);
+        Assert.Equal(IPAddress.Parse("192.0.2.10"), Assert.Single(instance.Addresses));
+
+        var query = DnsDiscoveryPacket.CreateQuery();
+        Assert.Equal(0x80, query[^2]);
+        Assert.Equal(0x01, query[^1]);
+        DnsDiscoveryPacket.ReadInto(new byte[] { 0, 1, 2 }, aggregate);
+    }
+
+    [Fact]
+    public void DnsSdAggregationRequiresTargetPtrAndBoundsUntrustedRecords()
+    {
+        var unrelated = new DnsDiscoveryAggregate();
+        unrelated.AddService("Printer._ipp._tcp.local", "printer.local", 631);
+        unrelated.AddText("Printer._ipp._tcp.local", "note", "not Home Assistant");
+        Assert.Empty(unrelated.Build());
+
+        var aggregate = new DnsDiscoveryAggregate();
+        for (var index = 0; index < 500; index++)
+        {
+            var instance = $"Instance-{index}._home-assistant._tcp.local";
+            aggregate.AddInstance(instance);
+            aggregate.AddService(instance, $"host-{index}.local", 8123);
+            aggregate.AddText(instance, $"key-{index}", new string('x', 200));
+            aggregate.AddAddress($"host-{index}.local", IPAddress.Parse($"192.0.2.{index % 254 + 1}"));
+        }
+
+        Assert.Equal(64, aggregate.InstanceCount);
+        Assert.Equal(128, aggregate.ServiceCount);
+        Assert.Equal(128, aggregate.TextOwnerCount);
+        Assert.Equal(128, aggregate.AddressHostCount);
+        Assert.Equal(64, aggregate.Build().Count);
+
+        var perOwner = new DnsDiscoveryAggregate();
+        const string target = "Bounded._home-assistant._tcp.local";
+        perOwner.AddInstance(target);
+        perOwner.AddService(target, "bounded.local", 8123);
+        for (var index = 0; index < 100; index++)
+        {
+            perOwner.AddText(target, $"key-{index}", "value");
+            perOwner.AddAddress("bounded.local", IPAddress.Parse($"192.0.{index / 254}.{index % 254 + 1}"));
+        }
+
+        var bounded = Assert.Single(perOwner.Build());
+        Assert.Equal(64, bounded.Properties.Count);
+        Assert.Equal(16, bounded.Addresses.Count);
+        for (var index = 0; index < 256; index++) Assert.True(perOwner.TryConsumeDatagram());
+        Assert.False(perOwner.TryConsumeDatagram());
+        Assert.Equal(256, perOwner.DatagramCount);
+
+        DnsDiscoveryPacket.ReadInto(CreateOversizedDiscoveryNamePacket(), perOwner);
+        Assert.Single(perOwner.Build());
+    }
+
+    [Fact]
+    public void DnsSdAggregationUsesTheNativeInstanceAsAStableNameTieBreaker()
+    {
+        var aggregate = new DnsDiscoveryAggregate();
+        const string second = "Second._home-assistant._tcp.local";
+        const string first = "First._home-assistant._tcp.local";
+        aggregate.AddInstance(second);
+        aggregate.AddText(second, "location_name", "Home");
+        aggregate.AddInstance(first);
+        aggregate.AddText(first, "location_name", "Home");
+
+        Assert.Equal(new[] { first, second }, aggregate.Build().Select(value => value.ServiceInstanceName));
+    }
+
+    [Fact]
+    public async Task DnsSdDiscoveryQueriesEveryEligibleInterfaceAndAggregatesResponses()
+    {
+        var addresses = new[] { IPAddress.Parse("192.0.2.10"), IPAddress.Parse("198.51.100.20") };
+        var factory = new TestDiscoveryTransportFactory(addresses, CreateDiscoveryPacket());
+        var client = new HomeAssistantDiscoveryClient(factory);
+
+        var instances = await client.DiscoverAsync(TimeSpan.FromMilliseconds(100));
+
+        Assert.Equal(2, instances.Count);
+        Assert.Equal(addresses.OrderBy(value => value.ToString()), factory.CreatedAddresses.OrderBy(value => value.ToString()));
+        Assert.Equal(addresses.OrderBy(value => value.ToString()), factory.SentAddresses.OrderBy(value => value.ToString()));
+    }
+
+    [Fact]
+    public void DnsSdInterfaceQuotasRemainGloballyBoundedAndDeterministic()
+    {
+        var limits = Enumerable.Range(0, 32).Select(index => DnsDiscoveryLimits.ForInterface(index, 32)).ToArray();
+
+        Assert.Equal(64, limits.Sum(limit => limit.Instances));
+        Assert.Equal(128, limits.Sum(limit => limit.Services));
+        Assert.Equal(128, limits.Sum(limit => limit.TextOwners));
+        Assert.Equal(128, limits.Sum(limit => limit.AddressHosts));
+        Assert.Equal(256, limits.Sum(limit => limit.Datagrams));
+        Assert.All(limits, limit => Assert.Equal(8, limit.Datagrams));
+    }
+
+    [Fact]
+    public void DnsSdTransportConfiguresItsOutboundIpv4Interface()
+    {
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        var address = IPAddress.Parse("127.0.0.1");
+
+        UdpHomeAssistantDiscoveryTransport.ConfigureOutboundInterface(socket, address);
+
+        Assert.Equal(
+            address.GetAddressBytes(),
+            Assert.IsType<byte[]>(socket.GetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, 4)));
+    }
+
+    [Fact]
+    public async Task DnsSdDiscoveryNormalizesSendTimeoutAndPreservesCallerCancellation()
+    {
+        var address = IPAddress.Parse("192.0.2.10");
+        var timeoutClient = new HomeAssistantDiscoveryClient(
+            new TestDiscoveryTransportFactory(new[] { address }, CreateDiscoveryPacket(), blockSend: true));
+        Assert.Empty(await timeoutClient.DiscoverAsync(TimeSpan.FromMilliseconds(50)));
+
+        var canceledClient = new HomeAssistantDiscoveryClient(
+            new TestDiscoveryTransportFactory(new[] { address }, CreateDiscoveryPacket(), blockSend: true));
+        using var source = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            canceledClient.DiscoverAsync(TimeSpan.FromSeconds(5), source.Token));
+    }
+
+    [Fact]
+    public void DnsSdInterfaceEnumerationRetainsHealthyAdaptersWhenOneDisappears()
+    {
+        var healthy = IPAddress.Parse("192.0.2.10");
+
+        var addresses = UdpHomeAssistantDiscoveryTransportFactory.CollectLocalAddresses(
+            new Func<IReadOnlyList<IPAddress>>[]
+            {
+                () => throw new NetworkInformationException(5),
+                () => new[] { healthy }
+            });
+
+        Assert.Equal(healthy, Assert.Single(addresses));
+    }
+
+    [Fact]
+    public async Task MobileAppRegistrationAndWebhookAreTypedAndEncryptionFailsClosed()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var request = RegistrationRequest(false);
+        var registration = await client.MobileApp.RegisterAsync(request);
+
+        Assert.Equal("test-webhook", registration.WebhookId);
+        Assert.DoesNotContain(registration.WebhookId, registration.ToString(), StringComparison.Ordinal);
+        Assert.Equal("preserved", registration.AdditionalData["future_field"].GetString());
+        Assert.Null(registration.Secret);
+        using (var registrationBody = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody)))
+        {
+            Assert.Equal("com.example.app", registrationBody.RootElement.GetProperty("app_id").GetString());
+            Assert.Equal("Windows", registrationBody.RootElement.GetProperty("os_name").GetString());
+            Assert.False(registrationBody.RootElement.GetProperty("supports_encryption").GetBoolean());
+        }
+        using (var webhook = client.MobileApp.CreateWebhookClient(registration))
+        {
+            var config = await webhook.GetConfigurationAsync();
+            Assert.Equal("2026.8.3", config.GetProperty("version").GetString());
+            Assert.True(string.IsNullOrEmpty(server.LastAuthorization));
+
+            await webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate
+            {
+                OperatingSystemVersion = "11.0",
+                AppData = new Dictionary<string, object?> { ["push_token"] = "updated" }
+            });
+            using var updateBody = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+            Assert.Equal("update_registration", updateBody.RootElement.GetProperty("type").GetString());
+            var updateData = updateBody.RootElement.GetProperty("data");
+            Assert.Equal("11.0", updateData.GetProperty("os_version").GetString());
+            Assert.Equal("updated", updateData.GetProperty("app_data").GetProperty("push_token").GetString());
+            Assert.False(updateData.TryGetProperty("app_version", out _));
+            Assert.False(updateData.TryGetProperty("device_name", out _));
+            Assert.False(updateData.TryGetProperty("manufacturer", out _));
+            Assert.False(updateData.TryGetProperty("model", out _));
+        }
+
+        var encrypted = await client.MobileApp.RegisterAsync(RegistrationRequest(true));
+        Assert.NotNull(encrypted.Secret);
+        Assert.DoesNotContain(encrypted.Secret, encrypted.ToString(), StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => client.MobileApp.CreateWebhookClient(encrypted));
+        using var protectedWebhook = client.MobileApp.CreateWebhookClient(encrypted, new TestPayloadProtector());
+        var protectedConfig = await protectedWebhook.GetConfigurationAsync();
+        Assert.Equal("2026.8.3", protectedConfig.GetProperty("version").GetString());
+        using var encryptedBody = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.True(encryptedBody.RootElement.GetProperty("encrypted").GetBoolean());
+        Assert.False(encryptedBody.RootElement.TryGetProperty("type", out _));
+        Assert.False(encryptedBody.RootElement.TryGetProperty("data", out _));
+        var plaintext = Convert.FromBase64String(encryptedBody.RootElement.GetProperty("encrypted_data").GetString()!);
+        using var plaintextBody = JsonDocument.Parse(plaintext);
+        Assert.Equal("get_config", plaintextBody.RootElement.GetProperty("type").GetString());
+        Assert.Equal(JsonValueKind.Object, plaintextBody.RootElement.GetProperty("data").ValueKind);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => protectedWebhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate()));
+    }
+
+    [Fact]
+    public async Task MobileAppRegistrationRejectsNullAppDataBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var request = RegistrationRequest(false);
+        request.AppData = null!;
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => client.MobileApp.RegisterAsync(request));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookHonorsConnectionTimeoutAndResponseLimit()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromMilliseconds(100), maximumRestResponseBytes: 1024);
+        using var stalled = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration { WebhookId = "stall" });
+        using var oversized = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration { WebhookId = "oversize" });
+
+        var timeout = await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantConnectionException>(() => stalled.GetConfigurationAsync());
+        Assert.IsType<TimeoutException>(timeout.InnerException);
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(() => oversized.GetConfigurationAsync());
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookUsesOnlyAnOwnedCredentialFreeTransport()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var factoryMethod = Assert.Single(
+            typeof(HomeAssistantMobileAppClient).GetMethods(),
+            method => method.Name == nameof(HomeAssistantMobileAppClient.CreateWebhookClient));
+        Assert.DoesNotContain(factoryMethod.GetParameters(), parameter =>
+            parameter.ParameterType == typeof(HttpClient)
+            || typeof(HttpMessageHandler).IsAssignableFrom(parameter.ParameterType));
+
+        var registration = new HomeAssistantMobileAppRegistration
+        {
+            WebhookId = "test-webhook",
+            CloudhookUri = new Uri(server.BaseUri, "api/webhook/test-webhook")
+        };
+
+        using var webhook = client.MobileApp.CreateWebhookClient(registration);
+        var transportField = typeof(HomeAssistantMobileAppWebhookClient).GetField(
+            "_httpClient",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var ownedTransport = Assert.IsType<HttpClient>(transportField!.GetValue(webhook));
+        Assert.Equal(Timeout.InfiniteTimeSpan, ownedTransport.Timeout);
+        await webhook.GetConfigurationAsync();
+        Assert.True(string.IsNullOrEmpty(server.LastAuthorization));
+
+        var credentialed = new HomeAssistantMobileAppRegistration
+        {
+            WebhookId = "credentialed-webhook",
+            CloudhookUri = new Uri("https://user:password@example.invalid/webhook")
+        };
+        Assert.Throws<ArgumentException>(() => client.MobileApp.CreateWebhookClient(credentialed));
+
+        foreach (var invalidSecret in new[] { string.Empty, "   " })
+        {
+            var invalidRegistration = new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "invalid-secret",
+                Secret = invalidSecret
+            };
+            Assert.Throws<ArgumentException>(() =>
+                client.MobileApp.CreateWebhookClient(invalidRegistration, new TestPayloadProtector()));
+        }
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookDoesNotFollowCrossOriginRedirects()
+    {
+        using var destination = new TestHomeAssistantServer();
+        using var redirector = new TestHomeAssistantServer
+        {
+            WebhookRedirectUri = new Uri(destination.BaseUri, "api/webhook/test-webhook")
+        };
+        using var client = TestClientFactory.Create(redirector);
+        using var webhook = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration
+        {
+            WebhookId = "redirect",
+            CloudhookUri = new Uri(redirector.BaseUri, "api/webhook/redirect")
+        });
+
+        var error = await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantCommandException>(
+            () => webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate
+            {
+                AppData = new Dictionary<string, object?> { ["push_token"] = "sensitive" }
+            }));
+
+        Assert.Equal("http_307", error.Code);
+        Assert.Null(destination.LastRequestPath);
+    }
+
+    [Fact]
+    public async Task EncryptedMobileAppWebhookRejectsPlaintextResponses()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "plaintext-encrypted",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/plaintext-encrypted"),
+                Secret = "test-secret"
+            },
+            new TestPayloadProtector());
+
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
+            () => webhook.GetConfigurationAsync());
+
+        using var invalidEncrypted = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "invalid-encrypted",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/invalid-encrypted"),
+                Secret = "test-secret"
+            },
+            new TestPayloadProtector());
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
+            () => invalidEncrypted.GetConfigurationAsync());
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookClassifiesTruncatedResponseReads()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "truncated",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/truncated")
+            });
+
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantConnectionException>(
+            () => webhook.GetConfigurationAsync());
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookClassifiesTypedCameraDecodeFailures()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "invalid-camera-response",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/invalid-camera-response")
+            });
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
+            () => webhook.GetCameraStreamAsync("camera.front"));
+
+        Assert.IsType<JsonException>(exception.InnerException);
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookPreservesPayloadProtectorFailureProvenance()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        foreach (var failure in new Exception[]
+                 {
+                     new IOException("Protector storage failed."),
+                     new HttpRequestException("Protector network failed."),
+                     new JsonException("Protector JSON failed."),
+                     new OperationCanceledException("Protector canceled independently.")
+                 })
+        {
+            using var webhook = client.MobileApp.CreateWebhookClient(
+                new HomeAssistantMobileAppRegistration
+                {
+                    WebhookId = "test-webhook",
+                    Secret = "test-secret"
+                },
+                new ThrowingPayloadProtector(failure));
+
+            var actual = await Record.ExceptionAsync(() => webhook.GetConfigurationAsync());
+            Assert.NotNull(actual);
+            Assert.Equal(failure.GetType(), actual.GetType());
+        }
+    }
+
+    private static HomeAssistantMobileAppRegistrationRequest RegistrationRequest(bool encryption) => new()
+    {
+        AppId = "com.example.app",
+        AppName = "Example",
+        AppVersion = "1.0",
+        DeviceName = "Test device",
+        Manufacturer = "Example",
+        Model = "Test",
+        OperatingSystemName = "Windows",
+        SupportsEncryption = encryption
+    };
+
+    private static JsonDocument LastCall(TestHomeAssistantServer server) => JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
+
+    private static void AssertCall(TestHomeAssistantServer server, string domain, string service)
+    {
+        using var call = LastCall(server);
+        Assert.Equal(domain, call.RootElement.GetProperty("domain").GetString());
+        Assert.Equal(service, call.RootElement.GetProperty("service").GetString());
+    }
+
+    private static void AssertCall<T>(TestHomeAssistantServer server, string domain, string service, string field, T value)
+    {
+        using var call = LastCall(server);
+        Assert.Equal(domain, call.RootElement.GetProperty("domain").GetString());
+        Assert.Equal(service, call.RootElement.GetProperty("service").GetString());
+        var actual = call.RootElement.GetProperty("service_data").GetProperty(field);
+        if (value is double number) Assert.Equal(number, actual.GetDouble());
+        else Assert.Equal(value?.ToString(), actual.GetString());
+    }
+
+    private static byte[] CreateDiscoveryPacket()
+    {
+        using var stream = new MemoryStream();
+        U16(stream, 0); U16(stream, 0x8400); U16(stream, 1); U16(stream, 4); U16(stream, 0); U16(stream, 0);
+        Name(stream, "_home-assistant._tcp.local");
+        var serviceOffset = 12;
+        U16(stream, 12); U16(stream, 1);
+
+        Pointer(stream, serviceOffset); U16(stream, 12); U16(stream, 1); U32(stream, 120); U16(stream, 7); Label(stream, "Test"); Pointer(stream, serviceOffset);
+        Label(stream, "Test"); Pointer(stream, serviceOffset); U16(stream, 33); U16(stream, 1); U32(stream, 120);
+        using (var data = new MemoryStream()) { U16(data, 0); U16(data, 0); U16(data, 8123); Name(data, "ha.local"); WriteData(stream, data.ToArray()); }
+        Label(stream, "Test"); Pointer(stream, serviceOffset); U16(stream, 16); U16(stream, 1); U32(stream, 120);
+        var text = new[] { "location_name=My Home", "uuid=test-uuid", "version=2026.8.3", "internal_url=http://ha.local:8123/", "external_url=file:///unsafe" };
+        using (var data = new MemoryStream()) { foreach (var item in text) { var bytes = Encoding.UTF8.GetBytes(item); data.WriteByte((byte)bytes.Length); data.Write(bytes); } WriteData(stream, data.ToArray()); }
+        Name(stream, "ha.local"); U16(stream, 1); U16(stream, 1); U32(stream, 120); U16(stream, 4); stream.Write(new byte[] { 192, 0, 2, 10 });
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateOversizedDiscoveryNamePacket()
+    {
+        using var stream = new MemoryStream();
+        U16(stream, 0); U16(stream, 0x8400); U16(stream, 0); U16(stream, 1); U16(stream, 0); U16(stream, 0);
+        Name(stream, "_home-assistant._tcp.local"); U16(stream, 12); U16(stream, 1); U32(stream, 120);
+        using var data = new MemoryStream();
+        for (var index = 0; index < 5; index++) Label(data, new string((char)('a' + index), 63));
+        data.WriteByte(0);
+        WriteData(stream, data.ToArray());
+        return stream.ToArray();
+    }
+
+    private static void WriteData(Stream stream, byte[] data) { U16(stream, data.Length); stream.Write(data); }
+    private static void Name(Stream stream, string name) { foreach (var label in name.Split('.')) Label(stream, label); stream.WriteByte(0); }
+    private static void Label(Stream stream, string label) { var bytes = Encoding.UTF8.GetBytes(label); stream.WriteByte((byte)bytes.Length); stream.Write(bytes); }
+    private static void Pointer(Stream stream, int offset) { stream.WriteByte((byte)(0xC0 | (offset >> 8))); stream.WriteByte((byte)offset); }
+    private static void U16(Stream stream, int value) { stream.WriteByte((byte)(value >> 8)); stream.WriteByte((byte)value); }
+    private static void U32(Stream stream, uint value) { stream.WriteByte((byte)(value >> 24)); stream.WriteByte((byte)(value >> 16)); stream.WriteByte((byte)(value >> 8)); stream.WriteByte((byte)value); }
+
+    private sealed class TestPayloadProtector : IHomeAssistantMobileAppPayloadProtector
+    {
+        public Task<string> ProtectAsync(byte[] plaintextJson, string secret, CancellationToken cancellationToken = default)
+            => Task.FromResult(Convert.ToBase64String(plaintextJson));
+
+        public Task<byte[]> UnprotectAsync(string protectedPayload, string secret, CancellationToken cancellationToken = default)
+            => Task.FromResult(Convert.FromBase64String(protectedPayload));
+    }
+
+    private sealed class ThrowingPayloadProtector : IHomeAssistantMobileAppPayloadProtector
+    {
+        private readonly Exception _exception;
+
+        internal ThrowingPayloadProtector(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public Task<string> ProtectAsync(byte[] plaintextJson, string secret, CancellationToken cancellationToken = default)
+            => Task.FromException<string>(_exception);
+
+        public Task<byte[]> UnprotectAsync(string protectedPayload, string secret, CancellationToken cancellationToken = default)
+            => Task.FromException<byte[]>(_exception);
+    }
+
+    private sealed class TestDiscoveryTransportFactory : IHomeAssistantDiscoveryTransportFactory
+    {
+        private readonly IReadOnlyList<IPAddress> _addresses;
+        private readonly byte[] _packet;
+        private readonly bool _blockSend;
+        private readonly object _gate = new();
+        private readonly List<IPAddress> _createdAddresses = new();
+        private readonly List<IPAddress> _sentAddresses = new();
+
+        internal TestDiscoveryTransportFactory(IReadOnlyList<IPAddress> addresses, byte[] packet, bool blockSend = false)
+        {
+            _addresses = addresses;
+            _packet = packet;
+            _blockSend = blockSend;
+        }
+
+        internal IReadOnlyList<IPAddress> CreatedAddresses { get { lock (_gate) return _createdAddresses.ToArray(); } }
+        internal IReadOnlyList<IPAddress> SentAddresses { get { lock (_gate) return _sentAddresses.ToArray(); } }
+
+        public IReadOnlyList<IPAddress> GetLocalAddresses() => _addresses;
+
+        public IHomeAssistantDiscoveryTransport Create(IPAddress localAddress)
+        {
+            lock (_gate) _createdAddresses.Add(localAddress);
+            return new TestDiscoveryTransport(_packet, _blockSend, () =>
+            {
+                lock (_gate) _sentAddresses.Add(localAddress);
+            });
+        }
+    }
+
+    private sealed class TestDiscoveryTransport : IHomeAssistantDiscoveryTransport
+    {
+        private readonly byte[] _packet;
+        private readonly bool _blockSend;
+        private readonly Action _sent;
+        private int _received;
+
+        internal TestDiscoveryTransport(byte[] packet, bool blockSend, Action sent)
+        {
+            _packet = packet;
+            _blockSend = blockSend;
+            _sent = sent;
+        }
+
+        public async Task SendAsync(byte[] query, CancellationToken cancellationToken)
+        {
+            if (_blockSend)
+            {
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw new ObjectDisposedException(nameof(TestDiscoveryTransport));
+                }
+            }
+
+            _sent();
+        }
+
+        public async Task<byte[]> ReceiveAsync(CancellationToken cancellationToken)
+        {
+            if (Interlocked.Exchange(ref _received, 1) == 0) return _packet;
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Unreachable receive continuation.");
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+}
+#endif

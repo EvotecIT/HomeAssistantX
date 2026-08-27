@@ -1,0 +1,1665 @@
+T sealed class HomeAssistantX.Authentication.HomeAssistantOAuthClient : System.IDisposable
+  C HomeAssistantX.Authentication.HomeAssistantOAuthClient(System.Uri baseUri, System.Net.Http.HttpClient? httpClient = null)
+  M instance System.Uri BuildAuthorizationUri(System.Uri clientId, System.Uri redirectUri, System.String state)
+  M instance System.Void Dispose()
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Authentication.HomeAssistantOAuthTokens> ExchangeCodeAsync(System.Uri clientId, System.Uri redirectUri, System.String code, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Authentication.HomeAssistantOAuthTokens> RefreshAsync(System.Uri clientId, System.String refreshToken, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task RevokeRefreshTokenAsync(System.String refreshToken, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Authentication.HomeAssistantOAuthTokens
+  C HomeAssistantX.Authentication.HomeAssistantOAuthTokens()
+  P instance System.String AccessToken {get;set;}
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.DateTimeOffset ExpiresAt {get;set;}
+  P instance System.Int32 ExpiresInSeconds {get;set;}
+  P instance System.String? RefreshToken {get;set;}
+  P instance System.String TokenType {get;set;}
+T interface HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider
+  M instance System.Threading.Tasks.Task<System.String> GetAccessTokenAsync(System.Threading.CancellationToken cancellationToken = null)
+T interface HomeAssistantX.Authentication.IHomeAssistantAccessTokenRecovery
+  M instance System.Threading.Tasks.Task RecoverAccessTokenAsync(System.String rejectedAccessToken, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Authentication.RefreshingAccessTokenProvider : HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider, HomeAssistantX.Authentication.IHomeAssistantAccessTokenRecovery, System.IDisposable
+  C HomeAssistantX.Authentication.RefreshingAccessTokenProvider(HomeAssistantX.Authentication.HomeAssistantOAuthClient oauth, System.Uri clientId, HomeAssistantX.Authentication.HomeAssistantOAuthTokens tokens, System.Func<HomeAssistantX.Authentication.HomeAssistantOAuthTokens,System.Threading.CancellationToken,System.Threading.Tasks.Task>? persistTokens = null)
+  M instance System.Void Dispose()
+  M instance System.Threading.Tasks.Task<System.String> GetAccessTokenAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task RecoverAccessTokenAsync(System.String rejectedAccessToken, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Authentication.StaticAccessTokenProvider : HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider
+  C HomeAssistantX.Authentication.StaticAccessTokenProvider(System.String accessToken)
+  M instance System.Threading.Tasks.Task<System.String> GetAccessTokenAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Automations.HomeAssistantAutomationClient
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> DeleteConfigurationAsync(System.String automationId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Automations.HomeAssistantAutomationStatus> GetAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Automations.HomeAssistantAutomationStatus>> GetAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Automations.HomeAssistantAutomationConfiguration> GetConfigurationAsync(System.String automationId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SaveConfigurationAsync(System.String automationId, System.Text.Json.JsonElement definition, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> TriggerAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean skipConditions = true, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Automations.HomeAssistantAutomationConfiguration
+  C HomeAssistantX.Automations.HomeAssistantAutomationConfiguration()
+  P instance System.String AutomationId {get;set;}
+  P instance System.Text.Json.JsonElement Definition {get;set;}
+T static class HomeAssistantX.Automations.HomeAssistantAutomationIdentifier
+  M static System.String NormalizeConfigurationId(System.String automationId)
+T sealed class HomeAssistantX.Automations.HomeAssistantAutomationStatus
+  C HomeAssistantX.Automations.HomeAssistantAutomationStatus()
+  P instance System.Nullable<System.Int64> CurrentRuns {get;set;}
+  P instance System.String EntityId {get;set;}
+  P instance System.Boolean IsEnabled {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> LastTriggered {get;set;}
+  P instance System.String? Mode {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance HomeAssistantX.Models.HomeAssistantState RawState {get;set;}
+T sealed class HomeAssistantX.Calendars.HomeAssistantCalendarClient
+  M instance System.Threading.Tasks.Task CreateEventAsync(System.String entityId, HomeAssistantX.Calendars.HomeAssistantCalendarEventInput eventInput, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task DeleteEventAsync(System.String entityId, HomeAssistantX.Calendars.HomeAssistantCalendarEventReference eventReference, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Rest.HomeAssistantCalendar>> GetAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Rest.HomeAssistantCalendarEvent>> GetEventsAsync(System.String entityId, System.DateTimeOffset start, System.DateTimeOffset end, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeAsync(System.String entityId, System.DateTimeOffset start, System.DateTimeOffset end, System.Func<HomeAssistantX.Calendars.HomeAssistantCalendarEventUpdate,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task UpdateEventAsync(System.String entityId, HomeAssistantX.Calendars.HomeAssistantCalendarEventReference eventReference, HomeAssistantX.Calendars.HomeAssistantCalendarEventInput eventInput, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Calendars.HomeAssistantCalendarEventInput
+  P instance System.String? Description {get;set;}
+  P instance System.String End {get;}
+  P instance System.Boolean IsAllDay {get;}
+  P instance System.String? Location {get;set;}
+  P instance System.String? RecurrenceRule {get;set;}
+  P instance System.String Start {get;}
+  P instance System.String Summary {get;}
+  M static HomeAssistantX.Calendars.HomeAssistantCalendarEventInput AllDay(System.String startDate, System.String endDate, System.String summary)
+  M static HomeAssistantX.Calendars.HomeAssistantCalendarEventInput Timed(System.DateTimeOffset start, System.DateTimeOffset end, System.String summary)
+T sealed class HomeAssistantX.Calendars.HomeAssistantCalendarEventReference
+  C HomeAssistantX.Calendars.HomeAssistantCalendarEventReference(System.String uid)
+  P instance System.String? RecurrenceId {get;set;}
+  P instance System.String? RecurrenceRange {get;set;}
+  P instance System.String Uid {get;}
+  M instance System.Void Validate()
+T sealed class HomeAssistantX.Calendars.HomeAssistantCalendarEventUpdate
+  C HomeAssistantX.Calendars.HomeAssistantCalendarEventUpdate()
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Rest.HomeAssistantCalendarEvent> Events {get;set;}
+  P instance System.Boolean IsAvailable {get;set;}
+  P instance System.Text.Json.JsonElement Raw {get;set;}
+T sealed class HomeAssistantX.Cameras.HomeAssistantCameraCapabilities
+  C HomeAssistantX.Cameras.HomeAssistantCameraCapabilities()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> FrontendStreamTypes {get;set;}
+T sealed class HomeAssistantX.Cameras.HomeAssistantCameraClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Cameras.HomeAssistantCameraStatus> GetAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Cameras.HomeAssistantCameraStatus>> GetAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Cameras.HomeAssistantCameraCapabilities> GetCapabilitiesAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Cameras.HomeAssistantCameraPreferences> GetPreferencesAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.String> GetSignedImagePathAsync(System.String entityId, System.Nullable<System.TimeSpan> expiration = null, System.Nullable<System.Int32> width = null, System.Nullable<System.Int32> height = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.String> GetSignedMjpegStreamPathAsync(System.String entityId, System.Nullable<System.TimeSpan> expiration = null, System.Nullable<System.Double> intervalSeconds = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Byte[]> GetSnapshotAsync(System.String entityId, System.Nullable<System.Int32> width = null, System.Nullable<System.Int32> height = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Cameras.HomeAssistantCameraStream> GetStreamAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Cameras.HomeAssistantCameraPreferences> SavePreferencesAsync(System.String entityId, HomeAssistantX.Cameras.HomeAssistantCameraPreferencesUpdate update, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeAsync(System.Func<HomeAssistantX.Cameras.HomeAssistantCameraStateChange,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+T flags enum HomeAssistantX.Cameras.HomeAssistantCameraFeature : System.Int32
+  F None = 0
+  F OnOff = 1
+  F Stream = 2
+T enum HomeAssistantX.Cameras.HomeAssistantCameraOrientation : System.Int32
+  F NoTransform = 1
+  F Mirror = 2
+  F Rotate180 = 3
+  F Flip = 4
+  F RotateLeftAndFlip = 5
+  F RotateLeft = 6
+  F RotateRightAndFlip = 7
+  F RotateRight = 8
+T sealed class HomeAssistantX.Cameras.HomeAssistantCameraPreferences
+  C HomeAssistantX.Cameras.HomeAssistantCameraPreferences()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance HomeAssistantX.Cameras.HomeAssistantCameraOrientation Orientation {get;set;}
+  P instance System.Boolean PreloadStream {get;set;}
+T sealed class HomeAssistantX.Cameras.HomeAssistantCameraPreferencesUpdate
+  C HomeAssistantX.Cameras.HomeAssistantCameraPreferencesUpdate()
+  P instance System.Nullable<HomeAssistantX.Cameras.HomeAssistantCameraOrientation> Orientation {get;set;}
+  P instance System.Nullable<System.Boolean> PreloadStream {get;set;}
+T sealed class HomeAssistantX.Cameras.HomeAssistantCameraStateChange
+  C HomeAssistantX.Cameras.HomeAssistantCameraStateChange(System.String entityId, HomeAssistantX.Cameras.HomeAssistantCameraStatus? previous, HomeAssistantX.Cameras.HomeAssistantCameraStatus? current)
+  P instance HomeAssistantX.Cameras.HomeAssistantCameraStatus? Current {get;}
+  P instance System.String EntityId {get;}
+  P instance HomeAssistantX.Cameras.HomeAssistantCameraStatus? Previous {get;}
+T sealed class HomeAssistantX.Cameras.HomeAssistantCameraStatus
+  C HomeAssistantX.Cameras.HomeAssistantCameraStatus()
+  P instance System.String? Brand {get;set;}
+  P instance System.String EntityId {get;set;}
+  P instance System.String? EntityPicture {get;set;}
+  P instance System.String? Model {get;set;}
+  P instance System.Nullable<System.Boolean> MotionDetectionEnabled {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance HomeAssistantX.Models.HomeAssistantState RawState {get;set;}
+  P instance System.String State {get;set;}
+  P instance HomeAssistantX.Cameras.HomeAssistantCameraFeature SupportedFeatures {get;set;}
+T sealed class HomeAssistantX.Cameras.HomeAssistantCameraStream
+  C HomeAssistantX.Cameras.HomeAssistantCameraStream()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String EntityId {get;set;}
+  P instance System.String Format {get;set;}
+  P instance System.String Path {get;set;}
+T sealed class HomeAssistantX.Configuration.HomeAssistantClientOptions
+  C HomeAssistantX.Configuration.HomeAssistantClientOptions(System.Uri baseUri, HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider accessTokenProvider)
+  P instance HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider AccessTokenProvider {get;}
+  P instance System.Uri BaseUri {get;}
+  P instance System.TimeSpan ConnectTimeout {get;set;}
+  P instance HomeAssistantX.Services.HomeAssistantServiceCallTransport ControlServiceCallTransport {get;set;}
+  P instance HomeAssistantX.Diagnostics.IHomeAssistantDiagnosticsSink Diagnostics {get;set;}
+  P instance System.Boolean EnableWebSocketMessageCoalescing {get;set;}
+  P instance System.TimeSpan KeepAliveInterval {get;set;}
+  P instance System.Int32 MaximumCoalescedWebSocketMessages {get;set;}
+  P instance System.Int32 MaximumRestResponseBytes {get;set;}
+  P instance System.Int32 MaximumWebSocketMessageBytes {get;set;}
+  P instance System.TimeSpan ReconnectMaximumDelay {get;set;}
+  P instance System.TimeSpan ReconnectMinimumDelay {get;set;}
+  P instance System.TimeSpan RequestTimeout {get;set;}
+  P instance System.Int32 SubscriptionBufferCapacity {get;set;}
+T enum HomeAssistantX.Controls.HomeAssistantAlarmAction : System.Int32
+  F Disarm = 0
+  F ArmHome = 1
+  F ArmAway = 2
+  F ArmNight = 3
+  F ArmVacation = 4
+  F ArmCustomBypass = 5
+  F Trigger = 6
+T sealed class HomeAssistantX.Controls.HomeAssistantAlarmClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantAlarmAction action, System.String? code = null, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantButtonDomain : System.Int32
+  F Button = 0
+  F InputButton = 1
+T sealed class HomeAssistantX.Controls.HomeAssistantClimateClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Services.HomeAssistantServiceCallResult>> SetAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantClimateOptions options, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Controls.HomeAssistantClimateOptions
+  C HomeAssistantX.Controls.HomeAssistantClimateOptions()
+  P instance System.String? FanMode {get;set;}
+  P instance System.Nullable<System.Double> Humidity {get;set;}
+  P instance System.String? HvacMode {get;set;}
+  P instance System.String? PresetMode {get;set;}
+  P instance System.Nullable<System.Double> TargetTemperatureHigh {get;set;}
+  P instance System.Nullable<System.Double> TargetTemperatureLow {get;set;}
+  P instance System.Nullable<System.Double> Temperature {get;set;}
+T abstract class HomeAssistantX.Controls.HomeAssistantControlClientBase
+T sealed class HomeAssistantX.Controls.HomeAssistantControlsClient
+  P instance HomeAssistantX.Controls.HomeAssistantAlarmClient Alarms {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantClimateClient Climate {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantCoverClient Covers {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantFanClient Fans {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantHelperClient Helpers {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantHumidifierClient Humidifiers {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantLawnMowerClient LawnMowers {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantLightClient Lights {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantLockClient Locks {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantMediaPlayerClient MediaPlayers {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantRemoteClient Remotes {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantRoutineClient Routines {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantSirenClient Sirens {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantSwitchClient Switches {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantVacuumClient Vacuums {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantValveClient Valves {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantWaterHeaterClient WaterHeaters {get;}
+T enum HomeAssistantX.Controls.HomeAssistantCoverAction : System.Int32
+  F Open = 0
+  F Close = 1
+  F Stop = 2
+  F Toggle = 3
+T sealed class HomeAssistantX.Controls.HomeAssistantCoverClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantCoverAction action, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetPositionAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Double positionPercent, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetTiltPositionAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Double positionPercent, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantFanAction : System.Int32
+  F TurnOn = 0
+  F TurnOff = 1
+  F Toggle = 2
+  F IncreaseSpeed = 3
+  F DecreaseSpeed = 4
+T sealed class HomeAssistantX.Controls.HomeAssistantFanClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantFanAction action, System.Nullable<System.Int32> percentageStep = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetDirectionAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantFanDirection direction, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetOscillationAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean oscillating, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetPercentageAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Int32 percentage, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetPresetModeAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.String presetMode, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantFanDirection : System.Int32
+  F Forward = 0
+  F Reverse = 1
+T sealed class HomeAssistantX.Controls.HomeAssistantHelperClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> AdjustNumberAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean increment, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> CycleSelectAsync(HomeAssistantX.Controls.HomeAssistantHelperDomain domain, HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean forward, System.Boolean cycle = true, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SelectOptionAsync(HomeAssistantX.Controls.HomeAssistantHelperDomain domain, HomeAssistantX.Services.HomeAssistantTarget target, System.String option, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetBooleanAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean value, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetDateAsync(HomeAssistantX.Controls.HomeAssistantHelperDomain domain, HomeAssistantX.Services.HomeAssistantTarget target, System.DateTime value, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetDateTimeAsync(HomeAssistantX.Controls.HomeAssistantHelperDomain domain, HomeAssistantX.Services.HomeAssistantTarget target, System.DateTimeOffset value, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetNumberAsync(HomeAssistantX.Controls.HomeAssistantHelperDomain domain, HomeAssistantX.Services.HomeAssistantTarget target, System.Double value, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetSelectOptionsAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Collections.Generic.IReadOnlyList<System.String> options, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetTextAsync(HomeAssistantX.Controls.HomeAssistantHelperDomain domain, HomeAssistantX.Services.HomeAssistantTarget target, System.String value, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetTimeAsync(HomeAssistantX.Controls.HomeAssistantHelperDomain domain, HomeAssistantX.Services.HomeAssistantTarget target, System.TimeSpan value, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantHelperDomain : System.Int32
+  F InputBoolean = 0
+  F Number = 1
+  F InputNumber = 2
+  F Select = 3
+  F InputSelect = 4
+  F Text = 5
+  F InputText = 6
+  F Date = 7
+  F Time = 8
+  F DateTime = 9
+  F InputDateTime = 10
+T enum HomeAssistantX.Controls.HomeAssistantHumidifierAction : System.Int32
+  F TurnOn = 0
+  F TurnOff = 1
+  F Toggle = 2
+T sealed class HomeAssistantX.Controls.HomeAssistantHumidifierClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantHumidifierAction action, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetHumidityAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Double humidityPercent, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetModeAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.String mode, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantLawnMowerAction : System.Int32
+  F StartMowing = 0
+  F Pause = 1
+  F Dock = 2
+T sealed class HomeAssistantX.Controls.HomeAssistantLawnMowerClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantLawnMowerAction action, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Controls.HomeAssistantLightClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ToggleAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantLightOptions? options = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> TurnOffAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Nullable<System.TimeSpan> transition = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> TurnOnAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantLightOptions? options = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Controls.HomeAssistantLightOptions
+  C HomeAssistantX.Controls.HomeAssistantLightOptions()
+  P instance System.Nullable<System.Double> BrightnessPercent {get;set;}
+  P instance System.Nullable<System.Int32> ColorTemperatureKelvin {get;set;}
+  P instance System.String? Effect {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.Int32>? RgbColor {get;set;}
+  P instance System.Nullable<System.TimeSpan> Transition {get;set;}
+T enum HomeAssistantX.Controls.HomeAssistantLockAction : System.Int32
+  F Lock = 0
+  F Unlock = 1
+  F Open = 2
+T sealed class HomeAssistantX.Controls.HomeAssistantLockClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantLockAction action, System.String? code = null, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantMediaEnqueueMode : System.Int32
+  F Add = 0
+  F Next = 1
+  F Play = 2
+  F Replace = 3
+T enum HomeAssistantX.Controls.HomeAssistantMediaPlaybackAction : System.Int32
+  F Play = 0
+  F Pause = 1
+  F PlayPause = 2
+  F Stop = 3
+  F Next = 4
+  F Previous = 5
+T sealed class HomeAssistantX.Controls.HomeAssistantMediaPlayerClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ClearPlaylistAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Controls.HomeAssistantMediaPlayerStatus>> GetAllAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Controls.HomeAssistantMediaPlayerStatus> GetAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> JoinAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Collections.Generic.IEnumerable<System.String> groupMembers, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> PlayMediaAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.String mediaContentId, System.String mediaContentType, HomeAssistantX.Controls.HomeAssistantPlayMediaOptions? options = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SeekAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.TimeSpan position, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SelectSoundModeAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.String soundMode, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Services.HomeAssistantServiceCallResult>> SetAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantMediaPlayerOptions options, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetRepeatAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantMediaRepeatMode repeat, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetShuffleAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean shuffle, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetVolumeAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Double volumePercent, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> StepVolumeAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantMediaVolumeStepAction action, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeAsync(System.Func<HomeAssistantX.Controls.HomeAssistantMediaPlayerStateChange,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> UnjoinAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Threading.CancellationToken cancellationToken = null)
+T flags enum HomeAssistantX.Controls.HomeAssistantMediaPlayerFeature : System.Int64
+  F None = 0
+  F Pause = 1
+  F Seek = 2
+  F VolumeSet = 4
+  F VolumeMute = 8
+  F PreviousTrack = 16
+  F NextTrack = 32
+  F TurnOn = 128
+  F TurnOff = 256
+  F PlayMedia = 512
+  F VolumeStep = 1024
+  F SelectSource = 2048
+  F Stop = 4096
+  F ClearPlaylist = 8192
+  F Play = 16384
+  F ShuffleSet = 32768
+  F SelectSoundMode = 65536
+  F BrowseMedia = 131072
+  F RepeatSet = 262144
+  F Grouping = 524288
+  F MediaAnnounce = 1048576
+  F MediaEnqueue = 2097152
+  F SearchMedia = 4194304
+T sealed class HomeAssistantX.Controls.HomeAssistantMediaPlayerOptions
+  C HomeAssistantX.Controls.HomeAssistantMediaPlayerOptions()
+  P instance System.Nullable<System.Boolean> Announce {get;set;}
+  P instance System.Nullable<HomeAssistantX.Controls.HomeAssistantMediaEnqueueMode> Enqueue {get;set;}
+  P instance System.String? MediaContentId {get;set;}
+  P instance System.String? MediaContentType {get;set;}
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? MediaExtra {get;set;}
+  P instance System.Nullable<System.Boolean> Muted {get;set;}
+  P instance System.Nullable<HomeAssistantX.Controls.HomeAssistantMediaPlaybackAction> Playback {get;set;}
+  P instance System.Nullable<HomeAssistantX.Controls.HomeAssistantPowerAction> Power {get;set;}
+  P instance System.Nullable<HomeAssistantX.Controls.HomeAssistantMediaRepeatMode> Repeat {get;set;}
+  P instance System.Nullable<System.Boolean> Shuffle {get;set;}
+  P instance System.String? SoundMode {get;set;}
+  P instance System.String? Source {get;set;}
+  P instance System.Nullable<System.Double> VolumePercent {get;set;}
+T enum HomeAssistantX.Controls.HomeAssistantMediaPlayerState : System.Int32
+  F Other = 0
+  F Unknown = 1
+  F Unavailable = 2
+  F Off = 3
+  F On = 4
+  F Idle = 5
+  F Playing = 6
+  F Paused = 7
+  F Buffering = 8
+  F Standby = 9
+T sealed class HomeAssistantX.Controls.HomeAssistantMediaPlayerStateChange
+  P instance HomeAssistantX.Controls.HomeAssistantMediaPlayerStatus? Current {get;}
+  P instance System.String EntityId {get;}
+  P instance System.Boolean IsRemoval {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantMediaPlayerStatus? Previous {get;}
+T sealed class HomeAssistantX.Controls.HomeAssistantMediaPlayerStatus
+  P instance System.String? AppId {get;}
+  P instance System.String? AppName {get;}
+  P instance System.String? DeviceClass {get;}
+  P instance System.String EntityId {get;}
+  P instance System.String? EntityPicture {get;}
+  P instance System.String? EntityPictureLocal {get;}
+  P instance System.String? FriendlyName {get;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> GroupMembers {get;}
+  P instance System.Boolean IsAvailable {get;}
+  P instance System.Nullable<System.Boolean> IsVolumeMuted {get;}
+  P instance System.String? Manufacturer {get;}
+  P instance System.String? MediaAlbumArtist {get;}
+  P instance System.String? MediaAlbumName {get;}
+  P instance System.String? MediaArtist {get;}
+  P instance System.String? MediaChannel {get;}
+  P instance System.String? MediaContentId {get;}
+  P instance System.String? MediaContentType {get;}
+  P instance System.Nullable<System.TimeSpan> MediaDuration {get;}
+  P instance System.String? MediaEpisode {get;}
+  P instance System.String? MediaImageUrl {get;}
+  P instance System.String? MediaPlaylist {get;}
+  P instance System.Nullable<System.TimeSpan> MediaPosition {get;}
+  P instance System.Nullable<System.DateTimeOffset> MediaPositionUpdatedAt {get;}
+  P instance System.String? MediaSeason {get;}
+  P instance System.String? MediaSeriesTitle {get;}
+  P instance System.String? MediaTitle {get;}
+  P instance System.Nullable<System.Int64> MediaTrack {get;}
+  P instance System.String? ModelName {get;}
+  P instance HomeAssistantX.Models.HomeAssistantState RawState {get;}
+  P instance System.String RawStateValue {get;}
+  P instance System.String? Repeat {get;}
+  P instance System.Nullable<System.Boolean> Shuffle {get;}
+  P instance System.String? SoundMode {get;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> SoundModes {get;}
+  P instance System.String? Source {get;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> Sources {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantMediaPlayerState State {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantMediaPlayerFeature SupportedFeatures {get;}
+  P instance System.Nullable<System.Double> VolumeLevel {get;}
+  P instance System.Nullable<System.Double> VolumePercent {get;}
+  P instance System.Nullable<System.Double> VolumeStep {get;}
+  M static HomeAssistantX.Controls.HomeAssistantMediaPlayerStatus FromState(HomeAssistantX.Models.HomeAssistantState state)
+  M instance System.Nullable<System.TimeSpan> GetEstimatedPosition(System.DateTimeOffset now)
+  M instance System.Uri? ResolveArtworkUri(System.Uri homeAssistantBaseUri)
+  M instance System.Boolean Supports(HomeAssistantX.Controls.HomeAssistantMediaPlayerFeature feature)
+T enum HomeAssistantX.Controls.HomeAssistantMediaRepeatMode : System.Int32
+  F Off = 0
+  F One = 1
+  F All = 2
+T enum HomeAssistantX.Controls.HomeAssistantMediaVolumeStepAction : System.Int32
+  F Up = 0
+  F Down = 1
+T sealed class HomeAssistantX.Controls.HomeAssistantPlayMediaOptions
+  C HomeAssistantX.Controls.HomeAssistantPlayMediaOptions()
+  P instance System.Nullable<System.Boolean> Announce {get;set;}
+  P instance System.Nullable<HomeAssistantX.Controls.HomeAssistantMediaEnqueueMode> Enqueue {get;set;}
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? Extra {get;set;}
+T enum HomeAssistantX.Controls.HomeAssistantPowerAction : System.Int32
+  F On = 0
+  F Off = 1
+  F Toggle = 2
+T sealed class HomeAssistantX.Controls.HomeAssistantRemoteClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> DeleteCommandsAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Collections.Generic.IEnumerable<System.String> commands, System.String? device = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Controls.HomeAssistantRemoteStatus>> GetAllAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Controls.HomeAssistantRemoteStatus> GetAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> LearnCommandsAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantRemoteLearnOptions? options = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SendCommandsAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Collections.Generic.IEnumerable<System.String> commands, HomeAssistantX.Controls.HomeAssistantRemoteSendOptions? options = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetPowerAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantPowerAction action, System.String? activity = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeAsync(System.Func<HomeAssistantX.Controls.HomeAssistantRemoteStateChange,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantRemoteCommandType : System.Int32
+  F Ir = 0
+  F Rf = 1
+T flags enum HomeAssistantX.Controls.HomeAssistantRemoteFeature : System.Int32
+  F None = 0
+  F LearnCommand = 1
+  F DeleteCommand = 2
+  F Activity = 4
+T sealed class HomeAssistantX.Controls.HomeAssistantRemoteLearnOptions
+  C HomeAssistantX.Controls.HomeAssistantRemoteLearnOptions()
+  P instance System.Nullable<System.Boolean> Alternative {get;set;}
+  P instance System.Nullable<HomeAssistantX.Controls.HomeAssistantRemoteCommandType> CommandType {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String>? Commands {get;set;}
+  P instance System.String? Device {get;set;}
+  P instance System.Nullable<System.TimeSpan> Timeout {get;set;}
+T sealed class HomeAssistantX.Controls.HomeAssistantRemoteSendOptions
+  C HomeAssistantX.Controls.HomeAssistantRemoteSendOptions()
+  P instance System.Nullable<System.TimeSpan> Delay {get;set;}
+  P instance System.String? Device {get;set;}
+  P instance System.Nullable<System.TimeSpan> Hold {get;set;}
+  P instance System.Nullable<System.Int32> RepeatCount {get;set;}
+T sealed class HomeAssistantX.Controls.HomeAssistantRemoteStateChange
+  P instance HomeAssistantX.Controls.HomeAssistantRemoteStatus? Current {get;}
+  P instance System.String EntityId {get;}
+  P instance System.Boolean IsRemoval {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantRemoteStatus? Previous {get;}
+T sealed class HomeAssistantX.Controls.HomeAssistantRemoteStatus
+  P instance System.Collections.Generic.IReadOnlyList<System.String> Activities {get;}
+  P instance System.String? CurrentActivity {get;}
+  P instance System.String EntityId {get;}
+  P instance System.String? FriendlyName {get;}
+  P instance System.Boolean IsAvailable {get;}
+  P instance System.Nullable<System.Boolean> IsOn {get;}
+  P instance HomeAssistantX.Models.HomeAssistantState RawState {get;}
+  P instance System.String RawStateValue {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantRemoteFeature SupportedFeatures {get;}
+  M static HomeAssistantX.Controls.HomeAssistantRemoteStatus FromState(HomeAssistantX.Models.HomeAssistantState state)
+  M instance System.Boolean Supports(HomeAssistantX.Controls.HomeAssistantRemoteFeature feature)
+T sealed class HomeAssistantX.Controls.HomeAssistantRoutineClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActivateSceneAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Nullable<System.TimeSpan> transition = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> PressButtonAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantButtonDomain domain, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> RunScriptAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? variables = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> StopScriptAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ToggleScriptAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantSirenAction : System.Int32
+  F TurnOn = 0
+  F TurnOff = 1
+  F Toggle = 2
+T sealed class HomeAssistantX.Controls.HomeAssistantSirenClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantSirenAction action, HomeAssistantX.Controls.HomeAssistantSirenOptions? options = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Controls.HomeAssistantSirenOptions
+  C HomeAssistantX.Controls.HomeAssistantSirenOptions()
+  P instance System.Nullable<System.TimeSpan> Duration {get;set;}
+  P instance System.String? Tone {get;set;}
+  P instance System.Nullable<System.Int32> ToneId {get;set;}
+  P instance System.Nullable<System.Double> VolumePercent {get;set;}
+T sealed class HomeAssistantX.Controls.HomeAssistantSwitchClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ToggleAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> TurnOffAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> TurnOnAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantVacuumAction : System.Int32
+  F Start = 0
+  F Pause = 1
+  F Stop = 2
+  F ReturnToBase = 3
+  F Locate = 4
+  F CleanSpot = 5
+T sealed class HomeAssistantX.Controls.HomeAssistantVacuumClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantVacuumAction action, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> CleanAreaAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Collections.Generic.IReadOnlyList<System.String> areaIds, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SendCommandAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.String command, System.Object? parameters = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetFanSpeedAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.String fanSpeed, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantValveAction : System.Int32
+  F Open = 0
+  F Close = 1
+  F Stop = 2
+  F Toggle = 3
+T sealed class HomeAssistantX.Controls.HomeAssistantValveClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantValveAction action, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetPositionAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Double positionPercent, System.Threading.CancellationToken cancellationToken = null)
+T enum HomeAssistantX.Controls.HomeAssistantWaterHeaterAction : System.Int32
+  F TurnOn = 0
+  F TurnOff = 1
+T sealed class HomeAssistantX.Controls.HomeAssistantWaterHeaterClient : HomeAssistantX.Controls.HomeAssistantControlClientBase
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> ActAsync(HomeAssistantX.Services.HomeAssistantTarget target, HomeAssistantX.Controls.HomeAssistantWaterHeaterAction action, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetAwayModeAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean enabled, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetOperationModeAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.String operationMode, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetTemperatureAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Double temperature, System.String? operationMode = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Dashboards.HomeAssistantDashboard
+  C HomeAssistantX.Dashboards.HomeAssistantDashboard()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? FileName {get;set;}
+  P instance System.String? Icon {get;set;}
+  P instance System.String Id {get;set;}
+  P instance System.String? Mode {get;set;}
+  P instance System.Boolean RequireAdmin {get;set;}
+  P instance System.Boolean ShowInSidebar {get;set;}
+  P instance System.String Title {get;set;}
+  P instance System.String UrlPath {get;set;}
+T sealed class HomeAssistantX.Dashboards.HomeAssistantDashboardClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Dashboards.HomeAssistantDashboard> CreateDashboardAsync(HomeAssistantX.Dashboards.HomeAssistantDashboardCreate create, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Dashboards.HomeAssistantDashboardResource> CreateResourceAsync(System.String url, HomeAssistantX.Dashboards.HomeAssistantDashboardResourceType type, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> DeleteConfigurationAsync(System.String? urlPath = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> DeleteDashboardAsync(System.String dashboardId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> DeleteResourceAsync(System.String resourceId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetConfigurationAsync(System.String? urlPath = null, System.Boolean force = false, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Dashboards.HomeAssistantDashboard>> GetDashboardsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Dashboards.HomeAssistantLovelaceInfo> GetInfoAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Dashboards.HomeAssistantPanel>> GetPanelsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Dashboards.HomeAssistantDashboardResource>> GetResourcesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SaveConfigurationAsync(System.Text.Json.JsonElement configuration, System.String? urlPath = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Dashboards.HomeAssistantDashboard> UpdateDashboardAsync(System.String dashboardId, HomeAssistantX.Dashboards.HomeAssistantDashboardUpdate update, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Dashboards.HomeAssistantDashboardResource> UpdateResourceAsync(System.String resourceId, System.String? url = null, System.Nullable<HomeAssistantX.Dashboards.HomeAssistantDashboardResourceType> type = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Dashboards.HomeAssistantDashboardCreate
+  C HomeAssistantX.Dashboards.HomeAssistantDashboardCreate()
+  P instance System.Boolean AllowSingleWord {get;set;}
+  P instance System.String? Icon {get;set;}
+  P instance System.Boolean RequireAdmin {get;set;}
+  P instance System.Boolean ShowInSidebar {get;set;}
+  P instance System.String Title {get;set;}
+  P instance System.String UrlPath {get;set;}
+T static class HomeAssistantX.Dashboards.HomeAssistantDashboardIdentifier
+  M static System.Boolean TryNormalizeIcon(System.String? value, out System.String normalized)
+T sealed class HomeAssistantX.Dashboards.HomeAssistantDashboardResource
+  C HomeAssistantX.Dashboards.HomeAssistantDashboardResource()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String Id {get;set;}
+  P instance System.String Type {get;set;}
+  P instance System.String Url {get;set;}
+T enum HomeAssistantX.Dashboards.HomeAssistantDashboardResourceType : System.Int32
+  F JavaScript = 0
+  F Css = 1
+  F Module = 2
+  F Html = 3
+T sealed class HomeAssistantX.Dashboards.HomeAssistantDashboardUpdate
+  C HomeAssistantX.Dashboards.HomeAssistantDashboardUpdate()
+  P instance System.String? Icon {get;set;}
+  P instance System.Boolean RemoveIcon {get;set;}
+  P instance System.Nullable<System.Boolean> RequireAdmin {get;set;}
+  P instance System.Nullable<System.Boolean> ShowInSidebar {get;set;}
+  P instance System.String? Title {get;set;}
+T sealed class HomeAssistantX.Dashboards.HomeAssistantLovelaceInfo
+  C HomeAssistantX.Dashboards.HomeAssistantLovelaceInfo()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String ResourceMode {get;set;}
+T sealed class HomeAssistantX.Dashboards.HomeAssistantPanel
+  C HomeAssistantX.Dashboards.HomeAssistantPanel()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? ComponentName {get;set;}
+  P instance System.Nullable<System.Text.Json.JsonElement> Configuration {get;set;}
+  P instance System.String? Icon {get;set;}
+  P instance System.Boolean RequireAdmin {get;set;}
+  P instance System.Boolean ShowInSidebar {get;set;}
+  P instance System.String? Title {get;set;}
+  P instance System.String UrlPath {get;set;}
+T sealed class HomeAssistantX.Diagnostics.HomeAssistantDiagnosticEvent
+  C HomeAssistantX.Diagnostics.HomeAssistantDiagnosticEvent(HomeAssistantX.Diagnostics.HomeAssistantDiagnosticLevel level, System.String name, System.String message, System.Exception? exception = null)
+  P instance System.Exception? Exception {get;}
+  P instance HomeAssistantX.Diagnostics.HomeAssistantDiagnosticLevel Level {get;}
+  P instance System.String Message {get;}
+  P instance System.String Name {get;}
+  P instance System.DateTimeOffset Timestamp {get;}
+T enum HomeAssistantX.Diagnostics.HomeAssistantDiagnosticLevel : System.Int32
+  F Trace = 0
+  F Information = 1
+  F Warning = 2
+  F Error = 3
+T interface HomeAssistantX.Diagnostics.IHomeAssistantDiagnosticsSink
+  M instance System.Void Write(HomeAssistantX.Diagnostics.HomeAssistantDiagnosticEvent diagnosticEvent)
+T sealed class HomeAssistantX.Discovery.HomeAssistantDiscoveredInstance
+  C HomeAssistantX.Discovery.HomeAssistantDiscoveredInstance()
+  P instance System.Collections.Generic.IReadOnlyList<System.Net.IPAddress> Addresses {get;}
+  P instance System.Uri? BaseUri {get;}
+  P instance System.Uri? ExternalUri {get;}
+  P instance System.String? HostName {get;}
+  P instance System.String? InstanceId {get;}
+  P instance System.Uri? InternalUri {get;}
+  P instance System.String Name {get;}
+  P instance System.Nullable<System.Int32> Port {get;}
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.String?> Properties {get;}
+  P instance System.Boolean RequiresApiPassword {get;}
+  P instance System.String ServiceInstanceName {get;}
+  P instance System.String? Version {get;}
+T sealed class HomeAssistantX.Discovery.HomeAssistantDiscoveryClient
+  C HomeAssistantX.Discovery.HomeAssistantDiscoveryClient()
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Discovery.HomeAssistantDiscoveredInstance>> DiscoverAsync(System.Nullable<System.TimeSpan> timeout = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Energy.HomeAssistantEnergyClient
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Energy.HomeAssistantFossilEnergyPeriod>> GetFossilEnergyConsumptionAsync(System.DateTimeOffset start, System.DateTimeOffset end, System.Collections.Generic.IReadOnlyCollection<System.String> energyStatisticIds, System.String co2StatisticId, HomeAssistantX.Energy.HomeAssistantEnergyPeriod period, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Energy.HomeAssistantEnergyInfo> GetInfoAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Energy.HomeAssistantEnergyPreferences> GetPreferencesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<System.String,System.Text.Json.JsonElement>> GetSolarForecastAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Energy.HomeAssistantEnergyPreferences> SavePreferencesAsync(HomeAssistantX.Energy.HomeAssistantEnergyPreferencesUpdate update, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> ValidateAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Energy.HomeAssistantEnergyInfo
+  C HomeAssistantX.Energy.HomeAssistantEnergyInfo()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Text.Json.JsonElement CostSensors {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> SolarForecastDomains {get;set;}
+T enum HomeAssistantX.Energy.HomeAssistantEnergyPeriod : System.Int32
+  F FiveMinute = 0
+  F Hour = 1
+  F Day = 2
+  F Month = 3
+T sealed class HomeAssistantX.Energy.HomeAssistantEnergyPreferences
+  C HomeAssistantX.Energy.HomeAssistantEnergyPreferences()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Text.Json.JsonElement DeviceConsumption {get;set;}
+  P instance System.Text.Json.JsonElement DeviceConsumptionWater {get;set;}
+  P instance System.Text.Json.JsonElement EnergySources {get;set;}
+T sealed class HomeAssistantX.Energy.HomeAssistantEnergyPreferencesUpdate
+  C HomeAssistantX.Energy.HomeAssistantEnergyPreferencesUpdate()
+  P instance System.Nullable<System.Text.Json.JsonElement> DeviceConsumption {get;set;}
+  P instance System.Nullable<System.Text.Json.JsonElement> DeviceConsumptionWater {get;set;}
+  P instance System.Nullable<System.Text.Json.JsonElement> EnergySources {get;set;}
+T sealed class HomeAssistantX.Energy.HomeAssistantFossilEnergyPeriod
+  C HomeAssistantX.Energy.HomeAssistantFossilEnergyPeriod()
+  P instance System.Double EnergyKiloWattHours {get;set;}
+  P instance System.DateTimeOffset Start {get;set;}
+T sealed class HomeAssistantX.Events.HomeAssistantEventClient
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> FireAsync(System.String eventType, System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? eventData = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeAsync(System.String? eventType, System.Func<HomeAssistantX.Models.HomeAssistantEvent,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeTriggerAsync(System.Object trigger, System.Func<System.Text.Json.JsonElement,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? variables = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Exceptions.HomeAssistantAuthenticationException : HomeAssistantX.Exceptions.HomeAssistantException
+  C HomeAssistantX.Exceptions.HomeAssistantAuthenticationException(System.String message)
+T sealed class HomeAssistantX.Exceptions.HomeAssistantCommandException : HomeAssistantX.Exceptions.HomeAssistantException
+  C HomeAssistantX.Exceptions.HomeAssistantCommandException(System.String code, System.String message, System.String? translationKey = null)
+  P instance System.String Code {get;}
+  P instance System.String? TranslationKey {get;}
+T sealed class HomeAssistantX.Exceptions.HomeAssistantConnectionException : HomeAssistantX.Exceptions.HomeAssistantException
+  C HomeAssistantX.Exceptions.HomeAssistantConnectionException(System.String message, System.Exception innerException)
+T class HomeAssistantX.Exceptions.HomeAssistantException : System.Exception
+  C HomeAssistantX.Exceptions.HomeAssistantException(System.String message)
+  C HomeAssistantX.Exceptions.HomeAssistantException(System.String message, System.Exception innerException)
+T sealed class HomeAssistantX.Exceptions.HomeAssistantLookupException : HomeAssistantX.Exceptions.HomeAssistantException
+  C HomeAssistantX.Exceptions.HomeAssistantLookupException(System.String message)
+T sealed class HomeAssistantX.Exceptions.HomeAssistantProtocolException : HomeAssistantX.Exceptions.HomeAssistantException
+  C HomeAssistantX.Exceptions.HomeAssistantProtocolException(System.String message)
+  C HomeAssistantX.Exceptions.HomeAssistantProtocolException(System.String message, System.Exception innerException)
+T sealed class HomeAssistantX.HomeAssistantClient : System.IDisposable
+  C HomeAssistantX.HomeAssistantClient(HomeAssistantX.Configuration.HomeAssistantClientOptions options, System.Net.Http.HttpClient? httpClient = null)
+  P instance HomeAssistantX.Automations.HomeAssistantAutomationClient Automations {get;}
+  P instance HomeAssistantX.Calendars.HomeAssistantCalendarClient Calendars {get;}
+  P instance HomeAssistantX.Cameras.HomeAssistantCameraClient Cameras {get;}
+  P instance HomeAssistantX.Controls.HomeAssistantControlsClient Controls {get;}
+  P instance HomeAssistantX.Dashboards.HomeAssistantDashboardClient Dashboards {get;}
+  P instance HomeAssistantX.Energy.HomeAssistantEnergyClient Energy {get;}
+  P instance HomeAssistantX.Events.HomeAssistantEventClient Events {get;}
+  P instance HomeAssistantX.Inventory.HomeAssistantInventoryClient Inventory {get;}
+  P instance HomeAssistantX.Media.HomeAssistantMediaBrowserClient Media {get;}
+  P instance HomeAssistantX.MobileApp.HomeAssistantMobileAppClient MobileApp {get;}
+  P instance HomeAssistantX.Notifications.HomeAssistantNotificationClient Notifications {get;}
+  P instance HomeAssistantX.Operations.HomeAssistantOperationsClient Operations {get;}
+  P instance HomeAssistantX.Configuration.HomeAssistantClientOptions Options {get;}
+  P instance HomeAssistantX.Recorder.HomeAssistantRecorderClient Recorder {get;}
+  P instance HomeAssistantX.Registries.HomeAssistantRegistryClient Registries {get;}
+  P instance HomeAssistantX.Rest.HomeAssistantRestClient Rest {get;}
+  P instance HomeAssistantX.Services.HomeAssistantServiceClient Services {get;}
+  P instance HomeAssistantX.States.HomeAssistantStateClient States {get;}
+  P instance HomeAssistantX.Supervisor.HomeAssistantSupervisorClient Supervisor {get;}
+  P instance HomeAssistantX.Systems.HomeAssistantSystemClient System {get;}
+  P instance HomeAssistantX.Weather.HomeAssistantWeatherClient Weather {get;}
+  P instance HomeAssistantX.WebSockets.HomeAssistantWebSocketClient WebSocket {get;}
+  M static HomeAssistantX.HomeAssistantClient Create(System.Uri baseUri, System.String accessToken)
+  M instance System.Void Dispose()
+T sealed class HomeAssistantX.Inventory.HomeAssistantAreaInfo
+  C HomeAssistantX.Inventory.HomeAssistantAreaInfo()
+  P instance System.Collections.Generic.IReadOnlyList<System.String> Aliases {get;}
+  P instance System.String AreaId {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantDeviceInfo> Devices {get;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> Domains {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantEntityInfo> Entities {get;}
+  P instance System.String? FloorId {get;}
+  P instance System.String? FloorName {get;}
+  P instance System.String Name {get;}
+  P instance HomeAssistantX.Registries.HomeAssistantArea Raw {get;}
+T sealed class HomeAssistantX.Inventory.HomeAssistantDeviceInfo
+  C HomeAssistantX.Inventory.HomeAssistantDeviceInfo()
+  P instance System.String? AreaId {get;}
+  P instance System.String? AreaName {get;}
+  P instance System.String DeviceId {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantEntityInfo> Entities {get;}
+  P instance System.String? FloorId {get;}
+  P instance System.String? FloorName {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantConfigEntry> Integrations {get;}
+  P instance System.String? Manufacturer {get;}
+  P instance System.String? Model {get;}
+  P instance System.String Name {get;}
+  P instance HomeAssistantX.Registries.HomeAssistantDeviceRegistryEntry Raw {get;}
+T sealed class HomeAssistantX.Inventory.HomeAssistantEntityInfo
+  C HomeAssistantX.Inventory.HomeAssistantEntityInfo()
+  P instance System.Collections.Generic.IReadOnlyList<System.String> Aliases {get;}
+  P instance System.String? AreaId {get;}
+  P instance System.String? AreaName {get;}
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Text.Json.JsonElement> Attributes {get;}
+  P instance System.String? ConfigEntryId {get;}
+  P instance HomeAssistantX.Models.HomeAssistantState? CurrentState {get;}
+  P instance System.String? DeviceClass {get;}
+  P instance System.String? DeviceId {get;}
+  P instance System.String? DeviceName {get;}
+  P instance System.String? DisabledBy {get;}
+  P instance System.String Domain {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Services.HomeAssistantActionDefinition> DomainActions {get;}
+  P instance System.String? EntityCategory {get;}
+  P instance System.String EntityId {get;}
+  P instance System.String? FloorId {get;}
+  P instance System.String? FloorName {get;}
+  P instance System.String? HiddenBy {get;}
+  P instance System.String? Icon {get;}
+  P instance System.String? IntegrationDomain {get;}
+  P instance System.String? IntegrationTitle {get;}
+  P instance System.Boolean IsAvailable {get;}
+  P instance System.String Name {get;}
+  P instance System.String? Platform {get;}
+  P instance HomeAssistantX.Registries.HomeAssistantEntityRegistryEntry? RegistryEntry {get;}
+  P instance System.String? State {get;}
+  P instance System.Nullable<System.Int64> SupportedFeatures {get;}
+  P instance System.String? UnitOfMeasurement {get;}
+T sealed class HomeAssistantX.Inventory.HomeAssistantEntityQuery
+  C HomeAssistantX.Inventory.HomeAssistantEntityQuery()
+  P instance System.String? Area {get;set;}
+  P instance System.Boolean AvailableOnly {get;set;}
+  P instance System.String? Device {get;set;}
+  P instance System.String? Domain {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String>? Entity {get;set;}
+  P instance System.String? Floor {get;set;}
+  P instance System.Boolean IncludeDisabled {get;set;}
+  P instance System.Boolean IncludeHidden {get;set;}
+  P instance System.String? Name {get;set;}
+T sealed class HomeAssistantX.Inventory.HomeAssistantFloorInfo
+  C HomeAssistantX.Inventory.HomeAssistantFloorInfo()
+  P instance System.Collections.Generic.IReadOnlyList<System.String> Aliases {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantAreaInfo> Areas {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantDeviceInfo> Devices {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantEntityInfo> Entities {get;}
+  P instance System.String FloorId {get;}
+  P instance System.Nullable<System.Int32> Level {get;}
+  P instance System.String Name {get;}
+  P instance HomeAssistantX.Registries.HomeAssistantFloor Raw {get;}
+T sealed class HomeAssistantX.Inventory.HomeAssistantInventoryClient
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantEntityInfo>> GetEntitiesAsync(HomeAssistantX.Inventory.HomeAssistantEntityQuery? query = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Inventory.HomeAssistantInventorySnapshot> GetSnapshotAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance HomeAssistantX.Inventory.HomeAssistantAreaInfo ResolveArea(HomeAssistantX.Inventory.HomeAssistantInventorySnapshot snapshot, System.String idOrName)
+  M instance HomeAssistantX.Inventory.HomeAssistantDeviceInfo ResolveDevice(HomeAssistantX.Inventory.HomeAssistantInventorySnapshot snapshot, System.String idOrName)
+  M instance HomeAssistantX.Inventory.HomeAssistantEntityInfo ResolveEntity(HomeAssistantX.Inventory.HomeAssistantInventorySnapshot snapshot, System.String idOrName)
+  M instance HomeAssistantX.Inventory.HomeAssistantFloorInfo ResolveFloor(HomeAssistantX.Inventory.HomeAssistantInventorySnapshot snapshot, System.String idOrName)
+T sealed class HomeAssistantX.Inventory.HomeAssistantInventorySnapshot
+  C HomeAssistantX.Inventory.HomeAssistantInventorySnapshot()
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Services.HomeAssistantActionDefinition> Actions {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantAreaInfo> Areas {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantDeviceInfo> Devices {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantEntityInfo> Entities {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Inventory.HomeAssistantFloorInfo> Floors {get;}
+  P instance HomeAssistantX.Registries.HomeAssistantRegistrySnapshot Registries {get;}
+T sealed class HomeAssistantX.Media.HomeAssistantMediaBrowserClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Media.HomeAssistantMediaItem> BrowsePlayerAsync(System.String entityId, System.String? mediaContentType = null, System.String? mediaContentId = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Media.HomeAssistantMediaItem> BrowseSourcesAsync(System.String? mediaContentId = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Media.HomeAssistantResolvedMedia> ResolveAsync(System.String mediaContentId, System.Nullable<System.TimeSpan> expiration = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Media.HomeAssistantMediaItem>> SearchPlayerAsync(System.String entityId, System.String searchQuery, System.String? mediaContentType = null, System.String? mediaContentId = null, System.Collections.Generic.IReadOnlyCollection<System.String>? mediaClasses = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Media.HomeAssistantMediaSearchResponse> SearchPlayerResponseAsync(System.String entityId, System.String searchQuery, System.String? mediaContentType = null, System.String? mediaContentId = null, System.Collections.Generic.IReadOnlyCollection<System.String>? mediaClasses = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Media.HomeAssistantMediaItem>> SearchSourcesAsync(System.String searchQuery, System.String? mediaContentId = null, System.Collections.Generic.IReadOnlyCollection<System.String>? mediaClasses = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Media.HomeAssistantMediaSearchResponse> SearchSourcesResponseAsync(System.String searchQuery, System.String? mediaContentId = null, System.Collections.Generic.IReadOnlyCollection<System.String>? mediaClasses = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Media.HomeAssistantMediaItem
+  C HomeAssistantX.Media.HomeAssistantMediaItem()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Boolean CanExpand {get;set;}
+  P instance System.Boolean CanPlay {get;set;}
+  P instance System.Boolean CanSearch {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Media.HomeAssistantMediaItem> Children {get;set;}
+  P instance System.String? ChildrenMediaClass {get;set;}
+  P instance System.String? MediaClass {get;set;}
+  P instance System.String MediaContentId {get;set;}
+  P instance System.String MediaContentType {get;set;}
+  P instance System.Int32 NotShown {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String>? SearchMediaClasses {get;set;}
+  P instance System.String? Thumbnail {get;set;}
+  P instance System.String Title {get;set;}
+T sealed class HomeAssistantX.Media.HomeAssistantMediaSearchResponse
+  C HomeAssistantX.Media.HomeAssistantMediaSearchResponse()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Media.HomeAssistantMediaItem> Items {get;set;}
+T sealed class HomeAssistantX.Media.HomeAssistantResolvedMedia
+  C HomeAssistantX.Media.HomeAssistantResolvedMedia()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? MimeType {get;set;}
+  P instance System.String Url {get;set;}
+T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppCameraStream
+  C HomeAssistantX.MobileApp.HomeAssistantMobileAppCameraStream()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? HlsPath {get;set;}
+  P instance System.String? MjpegPath {get;set;}
+  P instance System.Nullable<System.Boolean> Success {get;set;}
+T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppClient
+  M instance HomeAssistantX.MobileApp.HomeAssistantMobileAppWebhookClient CreateWebhookClient(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration registration, HomeAssistantX.MobileApp.IHomeAssistantMobileAppPayloadProtector? protector = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration> RegisterAsync(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationRequest request, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration
+  C HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Uri? CloudhookUri {get;set;}
+  P instance System.Uri? RemoteUiUri {get;set;}
+  P instance System.String? Secret {get;set;}
+  P instance System.String WebhookId {get;set;}
+  M override System.String ToString()
+T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationRequest
+  C HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationRequest()
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?> AppData {get;set;}
+  P instance System.String AppId {get;set;}
+  P instance System.String AppName {get;set;}
+  P instance System.String AppVersion {get;set;}
+  P instance System.String? DeviceId {get;set;}
+  P instance System.String DeviceName {get;set;}
+  P instance System.String Manufacturer {get;set;}
+  P instance System.String Model {get;set;}
+  P instance System.String OperatingSystemName {get;set;}
+  P instance System.String? OperatingSystemVersion {get;set;}
+  P instance System.Boolean SupportsEncryption {get;set;}
+T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate
+  C HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate()
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? AppData {get;set;}
+  P instance System.String? AppVersion {get;set;}
+  P instance System.String? DeviceName {get;set;}
+  P instance System.String? Manufacturer {get;set;}
+  P instance System.String? Model {get;set;}
+  P instance System.String? OperatingSystemVersion {get;set;}
+T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppWebhookClient : System.IDisposable
+  M instance System.Void Dispose()
+  M instance System.Threading.Tasks.Task<HomeAssistantX.MobileApp.HomeAssistantMobileAppCameraStream> GetCameraStreamAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetConfigurationAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetZonesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SendAsync(System.String commandType, System.Object? data, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> UpdateRegistrationAsync(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate update, System.Threading.CancellationToken cancellationToken = null)
+T interface HomeAssistantX.MobileApp.IHomeAssistantMobileAppPayloadProtector
+  M instance System.Threading.Tasks.Task<System.String> ProtectAsync(System.Byte[] plaintextJson, System.String secret, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Byte[]> UnprotectAsync(System.String protectedPayload, System.String secret, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Models.HomeAssistantApiStatus
+  C HomeAssistantX.Models.HomeAssistantApiStatus()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String Message {get;set;}
+T sealed class HomeAssistantX.Models.HomeAssistantConfiguration
+  C HomeAssistantX.Models.HomeAssistantConfiguration()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String[] Components {get;set;}
+  P instance System.String? LocationName {get;set;}
+  P instance System.String? State {get;set;}
+  P instance System.String? TimeZone {get;set;}
+  P instance System.String? Version {get;set;}
+T sealed class HomeAssistantX.Models.HomeAssistantContext
+  C HomeAssistantX.Models.HomeAssistantContext()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? Id {get;set;}
+  P instance System.String? ParentId {get;set;}
+  P instance System.String? UserId {get;set;}
+T static class HomeAssistantX.Models.HomeAssistantEntityId
+  M static System.Boolean TryNormalize(System.String? value, out System.String normalized)
+  M static System.Boolean TryNormalizeDomain(System.String? value, out System.String normalized)
+  M static System.Boolean TryNormalizeForDomain(System.String? value, System.String domain, out System.String normalized)
+T sealed class HomeAssistantX.Models.HomeAssistantEvent
+  C HomeAssistantX.Models.HomeAssistantEvent()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance HomeAssistantX.Models.HomeAssistantContext? Context {get;set;}
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> Data {get;set;}
+  P instance System.String EventType {get;set;}
+  P instance System.String? Origin {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> TimeFired {get;set;}
+T sealed class HomeAssistantX.Models.HomeAssistantState
+  C HomeAssistantX.Models.HomeAssistantState()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> Attributes {get;set;}
+  P instance HomeAssistantX.Models.HomeAssistantContext? Context {get;set;}
+  P instance System.String Domain {get;}
+  P instance System.String EntityId {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> LastChanged {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> LastReported {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> LastUpdated {get;set;}
+  P instance System.String State {get;set;}
+  M instance System.Boolean TryGetAttribute<T>(System.String name, out T? value)
+T sealed class HomeAssistantX.Models.HomeAssistantStateChange
+  C HomeAssistantX.Models.HomeAssistantStateChange(System.String entityId, HomeAssistantX.Models.HomeAssistantState? previousState, HomeAssistantX.Models.HomeAssistantState? currentState, System.Boolean isReconciliation = false)
+  P instance HomeAssistantX.Models.HomeAssistantState? CurrentState {get;}
+  P instance System.String EntityId {get;}
+  P instance System.Boolean IsReconciliation {get;}
+  P instance System.Boolean IsRemoval {get;}
+  P instance HomeAssistantX.Models.HomeAssistantState? PreviousState {get;}
+T sealed class HomeAssistantX.Notifications.HomeAssistantNotificationClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> CreatePersistentAsync(System.String message, System.String? title = null, System.String? notificationId = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> DismissAllPersistentAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> DismissPersistentAsync(System.String notificationId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Notifications.HomeAssistantPersistentNotification>> GetPersistentAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SendAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.String message, System.String? title = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribePersistentAsync(System.Func<HomeAssistantX.Notifications.HomeAssistantPersistentNotificationUpdate,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Notifications.HomeAssistantPersistentNotification
+  C HomeAssistantX.Notifications.HomeAssistantPersistentNotification()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> CreatedAt {get;set;}
+  P instance System.String Message {get;set;}
+  P instance System.String NotificationId {get;set;}
+  P instance System.String? Title {get;set;}
+T sealed class HomeAssistantX.Notifications.HomeAssistantPersistentNotificationUpdate
+  C HomeAssistantX.Notifications.HomeAssistantPersistentNotificationUpdate()
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,HomeAssistantX.Notifications.HomeAssistantPersistentNotification> Notifications {get;set;}
+  P instance System.Text.Json.JsonElement Raw {get;set;}
+  P instance System.String RawType {get;set;}
+  P instance HomeAssistantX.Notifications.HomeAssistantPersistentNotificationUpdateType Type {get;set;}
+T enum HomeAssistantX.Notifications.HomeAssistantPersistentNotificationUpdateType : System.Int32
+  F Current = 0
+  F Added = 1
+  F Updated = 2
+  F Removed = 3
+  F Unknown = 4
+T sealed class HomeAssistantX.Operations.HomeAssistantCapability
+  C HomeAssistantX.Operations.HomeAssistantCapability()
+  P instance HomeAssistantX.Operations.HomeAssistantCapabilityAvailability Availability {get;set;}
+  P instance System.String? Detail {get;set;}
+  P instance System.String Name {get;set;}
+T enum HomeAssistantX.Operations.HomeAssistantCapabilityAvailability : System.Int32
+  F Unknown = 0
+  F Available = 1
+  F NotInstalled = 2
+  F NotAuthorized = 3
+  F Unavailable = 4
+T sealed class HomeAssistantX.Operations.HomeAssistantCapabilityReport
+  C HomeAssistantX.Operations.HomeAssistantCapabilityReport()
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantCapability> Capabilities {get;set;}
+  P instance System.String? CoreVersion {get;set;}
+  P instance System.String? InstallationType {get;set;}
+  P instance System.Nullable<System.Boolean> IsSupervisorManaged {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> LoadedComponents {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantDiagnosticHandler
+  C HomeAssistantX.Operations.HomeAssistantDiagnosticHandler()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String Domain {get;set;}
+  P instance HomeAssistantX.Operations.HomeAssistantDiagnosticHandlerSupport Handlers {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantDiagnosticHandlerSupport
+  C HomeAssistantX.Operations.HomeAssistantDiagnosticHandlerSupport()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Boolean ConfigEntry {get;set;}
+  P instance System.Boolean Device {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantDiagnosticsClient
+  M instance System.Threading.Tasks.Task<System.Byte[]> GetConfigEntryAsync(System.String entryId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Byte[]> GetDeviceAsync(System.String entryId, System.String deviceId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantDiagnosticHandler>> GetHandlersAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Operations.HomeAssistantIntegrationClient
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> ContinueFlowAsync(System.String flowId, System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?> input, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantConfigEntry>> GetAllAsync(System.String? domain = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Registries.HomeAssistantConfigEntry> GetAsync(System.String entryId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Operations.HomeAssistantIntegrationOperationResult> ReloadAsync(System.String entryId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Operations.HomeAssistantIntegrationOperationResult> SetEnabledAsync(System.String entryId, System.Boolean enabled, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> StartReconfigurationAsync(System.String domain, System.String entryId, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Operations.HomeAssistantIntegrationOperationResult
+  C HomeAssistantX.Operations.HomeAssistantIntegrationOperationResult()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Boolean RequiresRestart {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantLogClient
+  M instance System.Threading.Tasks.Task<System.String> GetLegacyErrorLogAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantSystemLogEntry>> GetSystemLogAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Operations.HomeAssistantOperationsClient
+  P instance HomeAssistantX.Operations.HomeAssistantDiagnosticsClient Diagnostics {get;}
+  P instance HomeAssistantX.Operations.HomeAssistantSystemHealthClient Health {get;}
+  P instance HomeAssistantX.Operations.HomeAssistantIntegrationClient Integrations {get;}
+  P instance HomeAssistantX.Operations.HomeAssistantLogClient Logs {get;}
+  P instance HomeAssistantX.Operations.HomeAssistantRepairClient Repairs {get;}
+  P instance HomeAssistantX.Operations.HomeAssistantTraceClient Traces {get;}
+  P instance HomeAssistantX.Operations.HomeAssistantUpdateClient Updates {get;}
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Operations.HomeAssistantCapabilityReport> GetCapabilitiesAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Operations.HomeAssistantRepairClient
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetIssueDataAsync(System.String domain, System.String issueId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantRepairIssue>> GetIssuesAsync(System.Boolean includeIgnored = false, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SetIgnoredAsync(System.String domain, System.String issueId, System.Boolean ignored, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Operations.HomeAssistantRepairIssue
+  C HomeAssistantX.Operations.HomeAssistantRepairIssue()
+  P instance System.Boolean Active {get;set;}
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? BreaksInHomeAssistantVersion {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> Created {get;set;}
+  P instance System.String Domain {get;set;}
+  P instance System.Boolean Ignored {get;set;}
+  P instance System.Boolean IsFixable {get;set;}
+  P instance System.String? IssueDomain {get;set;}
+  P instance System.String IssueId {get;set;}
+  P instance System.String? LearnMoreUrl {get;set;}
+  P instance System.String Severity {get;set;}
+  P instance System.String? TranslationKey {get;set;}
+  P instance System.Collections.Generic.Dictionary<System.String,System.String>? TranslationPlaceholders {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantSystemHealthClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Operations.HomeAssistantSystemHealthSnapshot> GetAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Operations.HomeAssistantSystemHealthSnapshot
+  C HomeAssistantX.Operations.HomeAssistantSystemHealthSnapshot()
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Text.Json.JsonElement> Domains {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantSystemLogEntry
+  C HomeAssistantX.Operations.HomeAssistantSystemLogEntry()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Int32 Count {get;set;}
+  P instance System.String? Exception {get;set;}
+  P instance System.Double FirstOccurred {get;set;}
+  P instance System.String Level {get;set;}
+  P instance System.String[] Message {get;set;}
+  P instance System.String Name {get;set;}
+  P instance System.Text.Json.JsonElement Source {get;set;}
+  P instance System.Double Timestamp {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantTraceClient
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantTraceSummary>> GetAllAsync(System.String domain, System.String itemId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetAsync(System.String domain, System.String itemId, System.String runId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetContextsAsync(System.String? domain = null, System.String? itemId = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Operations.HomeAssistantTraceSummary
+  C HomeAssistantX.Operations.HomeAssistantTraceSummary()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String Domain {get;set;}
+  P instance System.String? Error {get;set;}
+  P instance System.String ItemId {get;set;}
+  P instance System.String? LastStep {get;set;}
+  P instance System.String RunId {get;set;}
+  P instance System.String? ScriptExecution {get;set;}
+  P instance System.String State {get;set;}
+  P instance System.Text.Json.JsonElement Timestamp {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantUpdate
+  C HomeAssistantX.Operations.HomeAssistantUpdate()
+  P instance System.String EntityId {get;}
+  P instance System.String? InstalledVersion {get;set;}
+  P instance System.Boolean IsAvailable {get;set;}
+  P instance System.Boolean IsInProgress {get;set;}
+  P instance System.String? LatestVersion {get;set;}
+  P instance System.Nullable<System.Double> ProgressPercentage {get;set;}
+  P instance HomeAssistantX.Models.HomeAssistantState State {get;set;}
+  P instance System.String? Title {get;set;}
+T sealed class HomeAssistantX.Operations.HomeAssistantUpdateClient
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantUpdate>> GetAllAsync(System.Boolean availableOnly = false, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.String?> GetReleaseNotesAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> InstallAsync(System.String entityId, System.String? version = null, System.Nullable<System.Boolean> backup = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Recorder.HomeAssistantRecorderClient
+  M instance System.Threading.Tasks.Task AdjustSumStatisticsAsync(System.String statisticId, System.DateTimeOffset start, System.Double adjustment, System.String? unit, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task ChangeStatisticsUnitAsync(System.String statisticId, System.String? oldUnit, System.String? newUnit, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task ClearStatisticsAsync(System.Collections.Generic.IReadOnlyCollection<System.String> statisticIds, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Recorder.HomeAssistantStatisticSeries>> GetStatisticsAsync(HomeAssistantX.Recorder.HomeAssistantStatisticsQuery query, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Recorder.HomeAssistantStatisticMetadata>> GetStatisticsMetadataAsync(System.Collections.Generic.IReadOnlyCollection<System.String>? statisticIds = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task ImportStatisticsAsync(HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata metadata, System.Collections.Generic.IReadOnlyCollection<HomeAssistantX.Recorder.HomeAssistantStatisticImportRow> rows, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Recorder.HomeAssistantStatisticMetadata>> ListStatisticsAsync(HomeAssistantX.Recorder.HomeAssistantStatisticKind kind = HomeAssistantX.Recorder.HomeAssistantStatisticKind.Any, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> PurgeAsync(System.Nullable<System.Int32> keepDays = null, System.Boolean repack = false, System.Boolean applyFilter = false, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> PurgeEntitiesAsync(System.Collections.Generic.IReadOnlyCollection<System.String>? entityIds = null, System.Collections.Generic.IReadOnlyCollection<System.String>? domains = null, System.Collections.Generic.IReadOnlyCollection<System.String>? entityGlobs = null, System.Nullable<System.Int32> keepDays = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> SetEnabledAsync(System.Boolean enabled, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task UpdateStatisticsIssuesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task UpdateStatisticsMetadataAsync(System.String statisticId, System.String? unitClass, System.String? unitOfMeasurement, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> ValidateStatisticsAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata
+  C HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata()
+  P instance System.Boolean HasMean {get;set;}
+  P instance System.Boolean HasSum {get;set;}
+  P instance HomeAssistantX.Recorder.HomeAssistantStatisticMeanType MeanType {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.String Source {get;set;}
+  P instance System.String StatisticId {get;set;}
+  P instance System.String? UnitClass {get;set;}
+  P instance System.String? UnitOfMeasurement {get;set;}
+  M instance System.Void ValidateRows(System.Collections.Generic.IReadOnlyCollection<HomeAssistantX.Recorder.HomeAssistantStatisticImportRow> rows)
+T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticImportRow
+  C HomeAssistantX.Recorder.HomeAssistantStatisticImportRow()
+  P instance System.Nullable<System.DateTimeOffset> LastReset {get;set;}
+  P instance System.Nullable<System.Double> Maximum {get;set;}
+  P instance System.Nullable<System.Double> Mean {get;set;}
+  P instance System.Nullable<System.Double> Minimum {get;set;}
+  P instance System.DateTimeOffset Start {get;set;}
+  P instance System.Nullable<System.Double> State {get;set;}
+  P instance System.Nullable<System.Double> Sum {get;set;}
+T enum HomeAssistantX.Recorder.HomeAssistantStatisticKind : System.Int32
+  F Any = 0
+  F Mean = 1
+  F Sum = 2
+T enum HomeAssistantX.Recorder.HomeAssistantStatisticMeanType : System.Int32
+  F None = 0
+  F Arithmetic = 1
+  F Circular = 2
+T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticMetadata
+  C HomeAssistantX.Recorder.HomeAssistantStatisticMetadata()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Boolean HasMean {get;set;}
+  P instance System.Boolean HasSum {get;set;}
+  P instance System.Nullable<HomeAssistantX.Recorder.HomeAssistantStatisticMeanType> MeanType {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.String? Source {get;set;}
+  P instance System.String StatisticId {get;set;}
+  P instance System.String? StatisticsUnitOfMeasurement {get;set;}
+  P instance System.String? UnitClass {get;set;}
+  P instance System.String? UnitOfMeasurement {get;set;}
+T enum HomeAssistantX.Recorder.HomeAssistantStatisticPeriod : System.Int32
+  F FiveMinute = 0
+  F Hour = 1
+  F Day = 2
+  F Week = 3
+  F Month = 4
+T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticRow
+  C HomeAssistantX.Recorder.HomeAssistantStatisticRow()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Nullable<System.Double> Change {get;set;}
+  P instance System.DateTimeOffset End {get;}
+  P instance System.Double EndSeconds {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> LastReset {get;}
+  P instance System.Nullable<System.Double> LastResetSeconds {get;set;}
+  P instance System.Nullable<System.Double> Maximum {get;set;}
+  P instance System.Nullable<System.Double> Mean {get;set;}
+  P instance System.Nullable<System.Double> Minimum {get;set;}
+  P instance System.DateTimeOffset Start {get;}
+  P instance System.Double StartSeconds {get;set;}
+  P instance System.Nullable<System.Double> State {get;set;}
+  P instance System.Nullable<System.Double> Sum {get;set;}
+T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticSeries
+  C HomeAssistantX.Recorder.HomeAssistantStatisticSeries()
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Recorder.HomeAssistantStatisticRow> Rows {get;set;}
+  P instance System.String StatisticId {get;set;}
+T enum HomeAssistantX.Recorder.HomeAssistantStatisticType : System.Int32
+  F Change = 0
+  F LastReset = 1
+  F Maximum = 2
+  F Mean = 3
+  F Minimum = 4
+  F State = 5
+  F Sum = 6
+T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticsQuery
+  C HomeAssistantX.Recorder.HomeAssistantStatisticsQuery(System.DateTimeOffset startTime, HomeAssistantX.Recorder.HomeAssistantStatisticPeriod period, params System.String[] statisticIds)
+  P instance System.Nullable<System.DateTimeOffset> EndTime {get;set;}
+  P instance HomeAssistantX.Recorder.HomeAssistantStatisticPeriod Period {get;}
+  P instance System.DateTimeOffset StartTime {get;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> StatisticIds {get;}
+  P instance System.Collections.Generic.IReadOnlyCollection<HomeAssistantX.Recorder.HomeAssistantStatisticType>? Types {get;set;}
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.String>? Units {get;set;}
+T sealed class HomeAssistantX.Registries.HomeAssistantArea
+  C HomeAssistantX.Registries.HomeAssistantArea()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String[] Aliases {get;set;}
+  P instance System.String AreaId {get;set;}
+  P instance System.String? FloorId {get;set;}
+  P instance System.String[] Labels {get;set;}
+  P instance System.String Name {get;set;}
+T sealed class HomeAssistantX.Registries.HomeAssistantCategory
+  C HomeAssistantX.Registries.HomeAssistantCategory()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String CategoryId {get;set;}
+  P instance System.Nullable<System.Double> CreatedAtEpochSeconds {get;set;}
+  P instance System.String? Icon {get;set;}
+  P instance System.Nullable<System.Double> ModifiedAtEpochSeconds {get;set;}
+  P instance System.String Name {get;set;}
+T sealed class HomeAssistantX.Registries.HomeAssistantCategoryCreate
+  C HomeAssistantX.Registries.HomeAssistantCategoryCreate(System.String name)
+  P instance System.String? Icon {get;set;}
+  P instance System.String Name {get;}
+T sealed class HomeAssistantX.Registries.HomeAssistantCategoryUpdate
+  C HomeAssistantX.Registries.HomeAssistantCategoryUpdate()
+  M instance HomeAssistantX.Registries.HomeAssistantCategoryUpdate WithIcon(System.String? icon)
+  M instance HomeAssistantX.Registries.HomeAssistantCategoryUpdate WithName(System.String name)
+T sealed class HomeAssistantX.Registries.HomeAssistantConfigEntry
+  C HomeAssistantX.Registries.HomeAssistantConfigEntry()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? DisabledBy {get;set;}
+  P instance System.String Domain {get;set;}
+  P instance System.String EntryId {get;set;}
+  P instance System.String? ErrorReasonTranslationKey {get;set;}
+  P instance System.Collections.Generic.Dictionary<System.String,System.String>? ErrorReasonTranslationPlaceholders {get;set;}
+  P instance System.Boolean PreferDisableNewEntities {get;set;}
+  P instance System.Boolean PreferDisablePolling {get;set;}
+  P instance System.String? Reason {get;set;}
+  P instance System.String? Source {get;set;}
+  P instance System.String? State {get;set;}
+  P instance System.Boolean SupportsOptions {get;set;}
+  P instance System.Boolean SupportsReconfigure {get;set;}
+  P instance System.Boolean SupportsRemoveDevice {get;set;}
+  P instance System.Boolean SupportsUnload {get;set;}
+  P instance System.String? Title {get;set;}
+T sealed class HomeAssistantX.Registries.HomeAssistantDeviceRegistryEntry
+  C HomeAssistantX.Registries.HomeAssistantDeviceRegistryEntry()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? AreaId {get;set;}
+  P instance System.String[] ConfigEntries {get;set;}
+  P instance System.String Id {get;set;}
+  P instance System.Text.Json.JsonElement Identifiers {get;set;}
+  P instance System.String[] Labels {get;set;}
+  P instance System.String? Manufacturer {get;set;}
+  P instance System.String? Model {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.String? NameByUser {get;set;}
+  P instance System.String? ViaDeviceId {get;set;}
+T sealed class HomeAssistantX.Registries.HomeAssistantEntityRegistryEntry
+  C HomeAssistantX.Registries.HomeAssistantEntityRegistryEntry()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String?[] Aliases {get;set;}
+  P instance System.String? AreaId {get;set;}
+  P instance System.Text.Json.JsonElement Capabilities {get;set;}
+  P instance System.String? ConfigEntryId {get;set;}
+  P instance System.String? DeviceClass {get;set;}
+  P instance System.String? DeviceId {get;set;}
+  P instance System.String? DisabledBy {get;set;}
+  P instance System.String? EntityCategory {get;set;}
+  P instance System.String EntityId {get;set;}
+  P instance System.Boolean HasEntityName {get;set;}
+  P instance System.String? HiddenBy {get;set;}
+  P instance System.String[] Labels {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.String? OriginalName {get;set;}
+  P instance System.String? Platform {get;set;}
+  P instance System.String? UniqueId {get;set;}
+T sealed class HomeAssistantX.Registries.HomeAssistantFloor
+  C HomeAssistantX.Registries.HomeAssistantFloor()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String[] Aliases {get;set;}
+  P instance System.String FloorId {get;set;}
+  P instance System.Nullable<System.Int32> Level {get;set;}
+  P instance System.String Name {get;set;}
+T sealed class HomeAssistantX.Registries.HomeAssistantLabel
+  C HomeAssistantX.Registries.HomeAssistantLabel()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? Color {get;set;}
+  P instance System.Nullable<System.Double> CreatedAtEpochSeconds {get;set;}
+  P instance System.String? Description {get;set;}
+  P instance System.String? Icon {get;set;}
+  P instance System.String LabelId {get;set;}
+  P instance System.Nullable<System.Double> ModifiedAtEpochSeconds {get;set;}
+  P instance System.String Name {get;set;}
+T sealed class HomeAssistantX.Registries.HomeAssistantLabelCreate
+  C HomeAssistantX.Registries.HomeAssistantLabelCreate(System.String name)
+  P instance System.String? Color {get;set;}
+  P instance System.String? Description {get;set;}
+  P instance System.String? Icon {get;set;}
+  P instance System.String Name {get;}
+T sealed class HomeAssistantX.Registries.HomeAssistantLabelUpdate
+  C HomeAssistantX.Registries.HomeAssistantLabelUpdate()
+  M instance HomeAssistantX.Registries.HomeAssistantLabelUpdate WithColor(System.String? color)
+  M instance HomeAssistantX.Registries.HomeAssistantLabelUpdate WithDescription(System.String? description)
+  M instance HomeAssistantX.Registries.HomeAssistantLabelUpdate WithIcon(System.String? icon)
+  M instance HomeAssistantX.Registries.HomeAssistantLabelUpdate WithName(System.String name)
+T sealed class HomeAssistantX.Registries.HomeAssistantRegistryClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Registries.HomeAssistantCategory> CreateCategoryAsync(System.String scope, HomeAssistantX.Registries.HomeAssistantCategoryCreate category, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Registries.HomeAssistantLabel> CreateLabelAsync(HomeAssistantX.Registries.HomeAssistantLabelCreate label, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task DeleteCategoryAsync(System.String scope, System.String categoryId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task DeleteLabelAsync(System.String labelId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantCategory>> GetCategoriesAsync(System.String scope, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantLabel>> GetLabelsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Registries.HomeAssistantRegistrySnapshot> GetSnapshotAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Registries.HomeAssistantCategory> UpdateCategoryAsync(System.String scope, System.String categoryId, HomeAssistantX.Registries.HomeAssistantCategoryUpdate update, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Registries.HomeAssistantLabel> UpdateLabelAsync(System.String labelId, HomeAssistantX.Registries.HomeAssistantLabelUpdate update, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Registries.HomeAssistantRegistrySnapshot
+  C HomeAssistantX.Registries.HomeAssistantRegistrySnapshot()
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantArea> Areas {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantConfigEntry> ConfigEntries {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantDeviceRegistryEntry> Devices {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantEntityRegistryEntry> Entities {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantFloor> Floors {get;set;}
+  P instance System.Boolean IsConfigEntryEnrichmentAvailable {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Registries.HomeAssistantLabel> Labels {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantCalendar
+  C HomeAssistantX.Rest.HomeAssistantCalendar()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String EntityId {get;set;}
+  P instance System.String Name {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantCalendarBoundary
+  C HomeAssistantX.Rest.HomeAssistantCalendarBoundary()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? Date {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> DateTime {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantCalendarEvent
+  C HomeAssistantX.Rest.HomeAssistantCalendarEvent()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? Description {get;set;}
+  P instance HomeAssistantX.Rest.HomeAssistantCalendarBoundary? End {get;set;}
+  P instance System.String? Location {get;set;}
+  P instance System.String? RecurrenceId {get;set;}
+  P instance System.String? RecurrenceRule {get;set;}
+  P instance HomeAssistantX.Rest.HomeAssistantCalendarBoundary? Start {get;set;}
+  P instance System.String Summary {get;set;}
+  P instance System.String? Uid {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantConfigurationCheck
+  C HomeAssistantX.Rest.HomeAssistantConfigurationCheck()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? Errors {get;set;}
+  P instance System.Boolean IsValid {get;}
+  P instance System.String Result {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantEventType
+  C HomeAssistantX.Rest.HomeAssistantEventType()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String Event {get;set;}
+  P instance System.Int32 ListenerCount {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantHistoryQuery
+  C HomeAssistantX.Rest.HomeAssistantHistoryQuery(params System.String[] entityIds)
+  P instance System.Nullable<System.DateTimeOffset> EndTime {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> EntityIds {get;}
+  P instance System.Boolean MinimalResponse {get;set;}
+  P instance System.Boolean NoAttributes {get;set;}
+  P instance System.Boolean SignificantChangesOnly {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> StartTime {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantLogbookEntry
+  C HomeAssistantX.Rest.HomeAssistantLogbookEntry()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? ContextUserId {get;set;}
+  P instance System.String? Domain {get;set;}
+  P instance System.String? EntityId {get;set;}
+  P instance System.String? Message {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> When {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantLogbookQuery
+  C HomeAssistantX.Rest.HomeAssistantLogbookQuery()
+  P instance System.Nullable<System.DateTimeOffset> EndTime {get;set;}
+  P instance System.String? EntityId {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> StartTime {get;set;}
+T sealed class HomeAssistantX.Rest.HomeAssistantRestClient : System.IDisposable
+  C HomeAssistantX.Rest.HomeAssistantRestClient(HomeAssistantX.Configuration.HomeAssistantClientOptions options, System.Net.Http.HttpClient? httpClient = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> CallServiceAsync(HomeAssistantX.Services.HomeAssistantServiceCall call, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Models.HomeAssistantApiStatus> CheckApiAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Rest.HomeAssistantConfigurationCheck> CheckConfigurationAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> DeleteStateAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Void Dispose()
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> FireEventAsync(System.String eventType, System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? eventData = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Byte[]> GetBytesAsync(System.String pathOrAbsoluteUri, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Rest.HomeAssistantCalendarEvent>> GetCalendarEventsAsync(System.String entityId, System.DateTimeOffset start, System.DateTimeOffset end, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Rest.HomeAssistantCalendar>> GetCalendarsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Byte[]> GetCameraImageAsync(System.String entityId, System.Int32 width, System.Int32 height, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Byte[]> GetCameraImageAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<System.String>> GetComponentsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Models.HomeAssistantConfiguration> GetConfigurationAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.String> GetErrorLogAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Rest.HomeAssistantEventType>> GetEventTypesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Models.HomeAssistantState>>> GetHistoryAsync(HomeAssistantX.Rest.HomeAssistantHistoryQuery query, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Rest.HomeAssistantLogbookEntry>> GetLogbookAsync(HomeAssistantX.Rest.HomeAssistantLogbookQuery? query = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetServicesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Models.HomeAssistantState> GetStateAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Models.HomeAssistantState>> GetStatesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> HandleIntentAsync(System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?> request, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> ProcessConversationAsync(System.String text, System.String? language = null, System.String? agentId = null, System.String? conversationId = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.String> RenderTemplateAsync(System.String template, System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? variables = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<T> SendAsync<T>(System.Net.Http.HttpMethod method, System.String pathOrAbsoluteUri, System.Object? body = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.String> SendTextAsync(System.Net.Http.HttpMethod method, System.String pathOrAbsoluteUri, System.Object? body = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Models.HomeAssistantState> SetStateAsync(System.String entityId, HomeAssistantX.Rest.HomeAssistantStateUpdate update, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Rest.HomeAssistantStateUpdate
+  C HomeAssistantX.Rest.HomeAssistantStateUpdate(System.String state)
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? Attributes {get;set;}
+  P instance System.String State {get;}
+T sealed class HomeAssistantX.Services.HomeAssistantActionDefinition
+  C HomeAssistantX.Services.HomeAssistantActionDefinition()
+  P instance System.String Action {get;}
+  P instance System.String? Description {get;}
+  P instance System.String Domain {get;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Services.HomeAssistantActionFieldDefinition> Fields {get;}
+  P instance System.String Name {get;}
+  P instance System.Text.Json.JsonElement Raw {get;}
+  P instance System.Nullable<System.Text.Json.JsonElement> Response {get;}
+  P instance System.Nullable<System.Text.Json.JsonElement> Target {get;}
+  M override System.String ToString()
+T sealed class HomeAssistantX.Services.HomeAssistantActionFieldDefinition
+  C HomeAssistantX.Services.HomeAssistantActionFieldDefinition()
+  P instance System.Boolean Advanced {get;}
+  P instance System.Nullable<System.Text.Json.JsonElement> Default {get;}
+  P instance System.String? Description {get;}
+  P instance System.Nullable<System.Text.Json.JsonElement> Example {get;}
+  P instance System.String Field {get;}
+  P instance System.String Name {get;}
+  P instance System.Text.Json.JsonElement Raw {get;}
+  P instance System.Boolean Required {get;}
+  P instance System.Nullable<System.Text.Json.JsonElement> Selector {get;}
+T sealed class HomeAssistantX.Services.HomeAssistantServiceCall
+  C HomeAssistantX.Services.HomeAssistantServiceCall(System.String domain, System.String service)
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?> Data {get;}
+  P instance System.String Domain {get;}
+  P instance System.Boolean ReturnResponse {get;}
+  P instance System.String Service {get;}
+  P instance HomeAssistantX.Services.HomeAssistantTarget? Target {get;}
+  M static HomeAssistantX.Services.HomeAssistantServiceCall Create(System.String domain, System.String service)
+  M instance HomeAssistantX.Services.HomeAssistantServiceCall ForArea(params System.String[] areaIds)
+  M instance HomeAssistantX.Services.HomeAssistantServiceCall ForDevice(params System.String[] deviceIds)
+  M instance HomeAssistantX.Services.HomeAssistantServiceCall ForEntity(params System.String[] entityIds)
+  M instance HomeAssistantX.Services.HomeAssistantServiceCall ForFloor(params System.String[] floorIds)
+  M instance HomeAssistantX.Services.HomeAssistantServiceCall ForLabel(params System.String[] labelIds)
+  M instance HomeAssistantX.Services.HomeAssistantServiceCall ForTarget(HomeAssistantX.Services.HomeAssistantTarget target)
+  M instance HomeAssistantX.Services.HomeAssistantServiceCall WithData(System.String name, System.Object? value)
+  M instance HomeAssistantX.Services.HomeAssistantServiceCall WithResponse(System.Boolean enabled = true)
+T sealed class HomeAssistantX.Services.HomeAssistantServiceCallResult
+  C HomeAssistantX.Services.HomeAssistantServiceCallResult()
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Models.HomeAssistantState> ChangedStates {get;set;}
+  P instance HomeAssistantX.Models.HomeAssistantContext? Context {get;set;}
+  P instance System.Nullable<System.Text.Json.JsonElement> Response {get;set;}
+T enum HomeAssistantX.Services.HomeAssistantServiceCallTransport : System.Int32
+  F WebSocket = 0
+  F Rest = 1
+T sealed class HomeAssistantX.Services.HomeAssistantServiceClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> CallAsync(HomeAssistantX.Services.HomeAssistantServiceCall call, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> CallRestAsync(HomeAssistantX.Services.HomeAssistantServiceCall call, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Services.HomeAssistantActionDefinition>> GetActionsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetCatalogAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetCatalogWebSocketAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Services.HomeAssistantTarget
+  C HomeAssistantX.Services.HomeAssistantTarget()
+  P instance System.Collections.Generic.IReadOnlyList<System.String>? AreaIds {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String>? DeviceIds {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String>? EntityIds {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String>? FloorIds {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String>? LabelIds {get;set;}
+  M static HomeAssistantX.Services.HomeAssistantTarget Create()
+  M static HomeAssistantX.Services.HomeAssistantTarget ForArea(params System.String[] areaIds)
+  M static HomeAssistantX.Services.HomeAssistantTarget ForDevice(params System.String[] deviceIds)
+  M static HomeAssistantX.Services.HomeAssistantTarget ForEntity(params System.String[] entityIds)
+  M instance HomeAssistantX.Services.HomeAssistantTarget WithAreas(params System.String[] areaIds)
+  M instance HomeAssistantX.Services.HomeAssistantTarget WithDevices(params System.String[] deviceIds)
+  M instance HomeAssistantX.Services.HomeAssistantTarget WithEntities(params System.String[] entityIds)
+  M instance HomeAssistantX.Services.HomeAssistantTarget WithFloors(params System.String[] floorIds)
+  M instance HomeAssistantX.Services.HomeAssistantTarget WithLabels(params System.String[] labelIds)
+T sealed class HomeAssistantX.States.HomeAssistantStateClient : System.IDisposable
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,HomeAssistantX.Models.HomeAssistantState> Snapshot {get;}
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> DeleteAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Void Dispose()
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Models.HomeAssistantState>> GetAllAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Models.HomeAssistantState>> GetAllWebSocketAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Models.HomeAssistantState> GetAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Models.HomeAssistantState> SetAsync(System.String entityId, HomeAssistantX.Rest.HomeAssistantStateUpdate update, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeAsync(HomeAssistantX.States.HomeAssistantStateFilter filter, System.Func<HomeAssistantX.Models.HomeAssistantStateChange,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.States.HomeAssistantStateFilter
+  P static HomeAssistantX.States.HomeAssistantStateFilter All {get;}
+  M static HomeAssistantX.States.HomeAssistantStateFilter ForDomains(params System.String[] domains)
+  M static HomeAssistantX.States.HomeAssistantStateFilter ForEntities(params System.String[] entityIds)
+T interface HomeAssistantX.Subscriptions.IHomeAssistantSubscription : System.IDisposable
+  P instance System.Threading.Tasks.Task Completion {get;}
+  P instance System.Guid Id {get;}
+  M instance System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Supervisor.HomeAssistantApp
+  C HomeAssistantX.Supervisor.HomeAssistantApp()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Boolean Available {get;set;}
+  P instance System.String? Description {get;set;}
+  P instance System.Boolean Installed {get;set;}
+  P instance System.String? LatestVersion {get;set;}
+  P instance System.String Name {get;set;}
+  P instance System.String? Repository {get;set;}
+  P instance System.String Slug {get;set;}
+  P instance System.String? State {get;set;}
+  P instance System.Boolean UpdateAvailable {get;set;}
+  P instance System.String? Version {get;set;}
+T enum HomeAssistantX.Supervisor.HomeAssistantAppOperation : System.Int32
+  F Install = 0
+  F Update = 1
+  F Start = 2
+  F Stop = 3
+  F Restart = 4
+  F Uninstall = 5
+T sealed class HomeAssistantX.Supervisor.HomeAssistantBackup
+  C HomeAssistantX.Supervisor.HomeAssistantBackup()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Boolean Compressed {get;set;}
+  P instance System.Text.Json.JsonElement Content {get;set;}
+  P instance System.Nullable<System.DateTimeOffset> Date {get;set;}
+  P instance System.String? Location {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.Boolean Protected {get;set;}
+  P instance System.Nullable<System.Double> Size {get;set;}
+  P instance System.String Slug {get;set;}
+  P instance System.String? Type {get;set;}
+T sealed class HomeAssistantX.Supervisor.HomeAssistantBackupRequest
+  C HomeAssistantX.Supervisor.HomeAssistantBackupRequest()
+  P instance System.Nullable<System.Boolean> Background {get;set;}
+  P instance System.Nullable<System.Boolean> Compressed {get;set;}
+  P instance System.Nullable<System.Boolean> ExcludeDatabase {get;set;}
+  P instance System.String? Location {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.String? Password {get;set;}
+T sealed class HomeAssistantX.Supervisor.HomeAssistantSupervisorClient : System.IDisposable
+  C HomeAssistantX.Supervisor.HomeAssistantSupervisorClient(HomeAssistantX.Supervisor.HomeAssistantSupervisorClientOptions options, System.Net.Http.HttpClient? httpClient = null)
+  M static HomeAssistantX.Supervisor.HomeAssistantSupervisorClient Create(System.Uri baseUri, System.String supervisorToken, System.Net.Http.HttpClient? httpClient = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> CreateFullBackupAsync(HomeAssistantX.Supervisor.HomeAssistantBackupRequest? request = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Void Dispose()
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Supervisor.HomeAssistantApp>> GetAppsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Supervisor.HomeAssistantSupervisorUpdate>> GetAvailableUpdatesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Supervisor.HomeAssistantBackup>> GetBackupsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetCoreInfoAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Supervisor.HomeAssistantSupervisorInfo> GetInfoAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Supervisor.HomeAssistantSupervisorJob> GetJobAsync(System.String jobId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Supervisor.HomeAssistantSupervisorJob>> GetJobsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.String> GetLogAsync(HomeAssistantX.Supervisor.HomeAssistantSupervisorLogTarget target, System.Int32 lines = 100, System.String? app = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Supervisor.HomeAssistantSupervisorOverview> GetOverviewAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetResolutionAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> InstallUpdateAsync(HomeAssistantX.Supervisor.HomeAssistantSupervisorUpdateTarget target, System.String? app = null, System.String? version = null, System.Nullable<System.Boolean> backup = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> InvokeAppAsync(System.String app, HomeAssistantX.Supervisor.HomeAssistantAppOperation operation, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> RestartAsync(HomeAssistantX.Supervisor.HomeAssistantSupervisorRestartTarget target, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SendAsync(System.Net.Http.HttpMethod method, System.String endpoint, System.Object? data = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Supervisor.HomeAssistantSupervisorClientOptions
+  C HomeAssistantX.Supervisor.HomeAssistantSupervisorClientOptions(System.Uri baseUri, HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider accessTokenProvider)
+  P instance HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider AccessTokenProvider {get;}
+  P instance System.Uri BaseUri {get;}
+  P instance System.Int32 MaximumResponseBytes {get;set;}
+  P instance System.TimeSpan RequestTimeout {get;set;}
+T static class HomeAssistantX.Supervisor.HomeAssistantSupervisorIdentifier
+  M static System.Boolean TryNormalizeAppSlug(System.String? value, out System.String normalized)
+T sealed class HomeAssistantX.Supervisor.HomeAssistantSupervisorInfo
+  C HomeAssistantX.Supervisor.HomeAssistantSupervisorInfo()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? Architecture {get;set;}
+  P instance System.String? Channel {get;set;}
+  P instance System.Boolean Healthy {get;set;}
+  P instance System.String? LatestVersion {get;set;}
+  P instance System.Boolean Supported {get;set;}
+  P instance System.String? TimeZone {get;set;}
+  P instance System.Boolean UpdateAvailable {get;set;}
+  P instance System.String? Version {get;set;}
+T sealed class HomeAssistantX.Supervisor.HomeAssistantSupervisorJob
+  C HomeAssistantX.Supervisor.HomeAssistantSupervisorJob()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Boolean Done {get;set;}
+  P instance System.Text.Json.JsonElement Extra {get;set;}
+  P instance System.String Id {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.Nullable<System.Double> Progress {get;set;}
+  P instance System.String? Reference {get;set;}
+  P instance System.String? Stage {get;set;}
+T enum HomeAssistantX.Supervisor.HomeAssistantSupervisorLogTarget : System.Int32
+  F Core = 0
+  F Supervisor = 1
+  F Host = 2
+  F App = 3
+T sealed class HomeAssistantX.Supervisor.HomeAssistantSupervisorOverview
+  C HomeAssistantX.Supervisor.HomeAssistantSupervisorOverview()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? Architecture {get;set;}
+  P instance System.String? Channel {get;set;}
+  P instance System.String? CoreVersion {get;set;}
+  P instance System.String[] Features {get;set;}
+  P instance System.String? Hostname {get;set;}
+  P instance System.String? Machine {get;set;}
+  P instance System.String? OperatingSystem {get;set;}
+  P instance System.String? OperatingSystemVersion {get;set;}
+  P instance System.String? State {get;set;}
+  P instance System.String? SupervisorVersion {get;set;}
+  P instance System.Boolean Supported {get;set;}
+T enum HomeAssistantX.Supervisor.HomeAssistantSupervisorRestartTarget : System.Int32
+  F Core = 0
+  F Supervisor = 1
+  F Host = 2
+T sealed class HomeAssistantX.Supervisor.HomeAssistantSupervisorUpdate
+  C HomeAssistantX.Supervisor.HomeAssistantSupervisorUpdate()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.String? LatestVersion {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.String? PanelPath {get;set;}
+  P instance System.String UpdateType {get;set;}
+T enum HomeAssistantX.Supervisor.HomeAssistantSupervisorUpdateTarget : System.Int32
+  F Core = 0
+  F Supervisor = 1
+  F OperatingSystem = 2
+  F App = 3
+T sealed class HomeAssistantX.Systems.HomeAssistantSystemClient
+  M instance System.Threading.Tasks.Task<System.String> CreateLongLivedAccessTokenAsync(System.String clientName, System.Int32 lifespanDays, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> ExtractFromTargetAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean expandGroup = false, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetConditionsForTargetAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean expandGroup = true, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Models.HomeAssistantConfiguration> GetConfigurationAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetEntityRegistryForDisplayAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetExposedEntitiesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetPanelsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetServicesForTargetAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean expandGroup = true, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetTriggersForTargetAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean expandGroup = true, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> ProcessConversationAsync(System.String text, System.String? language = null, System.String? agentId = null, System.String? conversationId = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SetEntityExposureAsync(System.Collections.Generic.IReadOnlyList<System.String> entityIds, System.Collections.Generic.IReadOnlyList<System.String> assistants, System.Boolean shouldExpose, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SetEntityExposureAsync(System.String entityId, System.String assistant, System.Boolean shouldExpose, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.String> SignPathAsync(System.String path, System.Nullable<System.TimeSpan> expiration = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> ValidateConfigAsync(System.Object? trigger = null, System.Object? condition = null, System.Object? action = null, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Weather.HomeAssistantWeatherClient
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Weather.HomeAssistantWeatherObservation> GetAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Weather.HomeAssistantWeatherObservation>> GetAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<System.String,System.Collections.Generic.IReadOnlyList<System.String>>> GetConvertibleUnitsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Weather.HomeAssistantWeatherForecastUpdate> GetForecastAsync(System.String entityId, HomeAssistantX.Weather.HomeAssistantWeatherForecastType type, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeForecastAsync(System.String entityId, HomeAssistantX.Weather.HomeAssistantWeatherForecastType type, System.Func<HomeAssistantX.Weather.HomeAssistantWeatherForecastUpdate,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+T flags enum HomeAssistantX.Weather.HomeAssistantWeatherFeature : System.Int32
+  F None = 0
+  F DailyForecast = 1
+  F HourlyForecast = 2
+  F TwiceDailyForecast = 4
+T sealed class HomeAssistantX.Weather.HomeAssistantWeatherForecast
+  C HomeAssistantX.Weather.HomeAssistantWeatherForecast()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Nullable<System.Double> ApparentTemperature {get;set;}
+  P instance System.Nullable<System.Double> CloudCoverage {get;set;}
+  P instance System.String? Condition {get;set;}
+  P instance System.DateTimeOffset DateTime {get;set;}
+  P instance System.Nullable<System.Double> DewPoint {get;set;}
+  P instance System.Nullable<System.Double> Humidity {get;set;}
+  P instance System.Nullable<System.Boolean> IsDaytime {get;set;}
+  P instance System.Nullable<System.Double> LowTemperature {get;set;}
+  P instance System.Nullable<System.Double> Precipitation {get;set;}
+  P instance System.Nullable<System.Double> PrecipitationProbability {get;set;}
+  P instance System.Nullable<System.Double> Pressure {get;set;}
+  P instance System.Nullable<System.Double> Temperature {get;set;}
+  P instance System.Nullable<System.Double> UvIndex {get;set;}
+  P instance System.Nullable<System.Text.Json.JsonElement> WindBearing {get;set;}
+  P instance System.Nullable<System.Double> WindGustSpeed {get;set;}
+  P instance System.Nullable<System.Double> WindSpeed {get;set;}
+T enum HomeAssistantX.Weather.HomeAssistantWeatherForecastType : System.Int32
+  F Daily = 0
+  F Hourly = 1
+  F TwiceDaily = 2
+T sealed class HomeAssistantX.Weather.HomeAssistantWeatherForecastUpdate
+  C HomeAssistantX.Weather.HomeAssistantWeatherForecastUpdate()
+  P instance System.String EntityId {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<HomeAssistantX.Weather.HomeAssistantWeatherForecast> Forecast {get;set;}
+  P instance System.Boolean IsAvailable {get;set;}
+  P instance System.Text.Json.JsonElement Raw {get;set;}
+  P instance HomeAssistantX.Weather.HomeAssistantWeatherForecastType Type {get;set;}
+T sealed class HomeAssistantX.Weather.HomeAssistantWeatherObservation
+  C HomeAssistantX.Weather.HomeAssistantWeatherObservation()
+  P instance System.Nullable<System.Double> ApparentTemperature {get;set;}
+  P instance System.Nullable<System.Double> CloudCoverage {get;set;}
+  P instance System.String? Condition {get;set;}
+  P instance System.Nullable<System.Double> DewPoint {get;set;}
+  P instance System.String EntityId {get;set;}
+  P instance System.Nullable<System.Double> Humidity {get;set;}
+  P instance System.String? Name {get;set;}
+  P instance System.String? PrecipitationUnit {get;set;}
+  P instance System.Nullable<System.Double> Pressure {get;set;}
+  P instance System.String? PressureUnit {get;set;}
+  P instance HomeAssistantX.Models.HomeAssistantState RawState {get;set;}
+  P instance HomeAssistantX.Weather.HomeAssistantWeatherFeature SupportedFeatures {get;set;}
+  P instance System.Nullable<System.Double> Temperature {get;set;}
+  P instance System.String? TemperatureUnit {get;set;}
+  P instance System.Nullable<System.Double> UvIndex {get;set;}
+  P instance System.Nullable<System.Double> Visibility {get;set;}
+  P instance System.String? VisibilityUnit {get;set;}
+  P instance System.String? WindBearing {get;set;}
+  P instance System.Nullable<System.Double> WindGustSpeed {get;set;}
+  P instance System.Nullable<System.Double> WindSpeed {get;set;}
+  P instance System.String? WindSpeedUnit {get;set;}
+  M instance System.Boolean Supports(HomeAssistantX.Weather.HomeAssistantWeatherForecastType type)
+T enum HomeAssistantX.WebSockets.HomeAssistantConnectionState : System.Int32
+  F Disconnected = 0
+  F Connecting = 1
+  F Connected = 2
+  F Reconnecting = 3
+  F Faulted = 4
+T sealed class HomeAssistantX.WebSockets.HomeAssistantConnectionStateChangedEventArgs : System.EventArgs
+  C HomeAssistantX.WebSockets.HomeAssistantConnectionStateChangedEventArgs(HomeAssistantX.WebSockets.HomeAssistantConnectionState previousState, HomeAssistantX.WebSockets.HomeAssistantConnectionState currentState, System.Exception? exception = null)
+  P instance HomeAssistantX.WebSockets.HomeAssistantConnectionState CurrentState {get;}
+  P instance System.Exception? Exception {get;}
+  P instance HomeAssistantX.WebSockets.HomeAssistantConnectionState PreviousState {get;}
+T sealed class HomeAssistantX.WebSockets.HomeAssistantWebSocketClient : System.IDisposable
+  C HomeAssistantX.WebSockets.HomeAssistantWebSocketClient(HomeAssistantX.Configuration.HomeAssistantClientOptions options)
+  P instance HomeAssistantX.WebSockets.HomeAssistantConnectionState State {get;}
+  E instance System.EventHandler<HomeAssistantX.WebSockets.HomeAssistantConnectionStateChangedEventArgs>? ConnectionStateChanged
+  M instance System.Threading.Tasks.Task ConnectAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task DisconnectAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Void Dispose()
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> PingAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> RequestAsync(System.String commandType, System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? payload = null, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeAsync(System.String commandType, System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? payload, System.Func<System.Text.Json.JsonElement,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)

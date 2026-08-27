@@ -41,6 +41,15 @@ For an application-owned OAuth lifecycle, pass an
 
 ## Discovery workflow
 
+To find local IPv4 advertisements before connecting:
+
+```powershell
+Find-HomeAssistant -TimeoutSeconds 5
+```
+
+The result is an untrusted discovery hint. Choose and verify the instance before
+providing credentials; the command never connects automatically.
+
 Start with the house, then narrow to a room, device, or entity:
 
 ```powershell
@@ -83,11 +92,22 @@ Set-HomeAssistantMediaPlayer -Entity media_player.kitchen -SoundMode Movie -Shuf
 Invoke-HomeAssistantRemote -Entity remote.harmony -Action TurnOn -Activity 'Watch TV'
 Invoke-HomeAssistantRemote -Entity remote.living_room -Action SendCommand -Command Power -RepeatCount 2 -WhatIf
 Set-HomeAssistantLock -Entity lock.front_door -Action Unlock -WhatIf
+Invoke-HomeAssistantRoutine -Entity scene.evening -Action ActivateScene
+Set-HomeAssistantFan -Entity fan.office -Percentage 35
+Set-HomeAssistantValve -Entity valve.garden -PositionPercent 50 -WhatIf
+Set-HomeAssistantVacuum -Entity vacuum.downstairs -Action ReturnToBase
+Set-HomeAssistantLawnMower -Entity lawn_mower.garden -Action Dock -WhatIf
+Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action ArmNight -WhatIf
+Set-HomeAssistantSiren -Entity siren.house -Action TurnOff -WhatIf
+Set-HomeAssistantHumidifier -Entity humidifier.bedroom -HumidityPercent 50
+Set-HomeAssistantWaterHeater -Entity water_heater.tank -Temperature 52
+Set-HomeAssistantHelper -Entity input_number.volume -Domain InputNumber -Number 15
 ```
 
 Each typed command has target parameter sets for entity, device, area, floor,
 label, and joined entity pipeline input. It validates common values and uses
-`ShouldProcess`. Lock operations use high confirmation impact.
+`ShouldProcess`. Lock, alarm, siren, and lawn-mower operations use high
+confirmation impact.
 
 Climate target ranges require both low and high values and are mutually
 exclusive with `-Temperature`. Media-player `-Power Off` and `-Power Toggle`
@@ -117,9 +137,9 @@ Invoke-HomeAssistantAction vacuum send_command `
 | Task | Commands |
 | --- | --- |
 | Connect | `Connect-HomeAssistant`, `Get-HomeAssistantConnection`, `Disconnect-HomeAssistant` |
-| Discover the house | `Get-HomeAssistantFloor`, `Get-HomeAssistantArea`, `Get-HomeAssistantDevice`, `Get-HomeAssistantEntity` |
+| Find and discover the house | `Find-HomeAssistant`, `Get-HomeAssistantFloor`, `Get-HomeAssistantArea`, `Get-HomeAssistantDevice`, `Get-HomeAssistantEntity` |
 | Discover and invoke actions | `Get-HomeAssistantAction`, `Invoke-HomeAssistantAction` |
-| Typed everyday controls | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Invoke-HomeAssistantRemote`, `Set-HomeAssistantLock` |
+| Typed everyday controls | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Invoke-HomeAssistantRemote`, `Set-HomeAssistantLock`, `Invoke-HomeAssistantRoutine`, `Set-HomeAssistantFan`, `Set-HomeAssistantValve`, `Set-HomeAssistantVacuum`, `Set-HomeAssistantLawnMower`, `Set-HomeAssistantAlarm`, `Set-HomeAssistantSiren`, `Set-HomeAssistantHumidifier`, `Set-HomeAssistantWaterHeater`, `Set-HomeAssistantHelper` |
 | Read current/history/logbook | `Get-HomeAssistantEntity`, `Get-HomeAssistantHistory`, `Get-HomeAssistantLogbook` |
 | Energy and Recorder statistics | `Get/Set-HomeAssistantEnergy`, `Get/Set/Remove/Test-HomeAssistantStatistic`, `Invoke-HomeAssistantRecorderMaintenance` |
 | Weather | `Get-HomeAssistantWeather`, `Receive-HomeAssistantWeatherForecast` |

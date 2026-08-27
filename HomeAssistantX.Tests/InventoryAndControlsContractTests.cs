@@ -246,7 +246,7 @@ public sealed class InventoryAndControlsContractTests
 
         await client.Controls.Climate.SetAsync(
             HomeAssistantTarget.ForEntity("climate.kitchen"),
-            new HomeAssistantClimateOptions { Temperature = 21.5, HvacMode = "heat" });
+            new HomeAssistantClimateOptions { Temperature = 21.5, HvacMode = " heat " });
         using (var climate = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody)))
         {
             Assert.Equal("set_temperature", climate.RootElement.GetProperty("service").GetString());
@@ -373,6 +373,12 @@ public sealed class InventoryAndControlsContractTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.Climate.SetAsync(
             target,
             new HomeAssistantClimateOptions { Temperature = double.NaN }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { Temperature = 21, HvacMode = " " }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { FanMode = "\t" }));
 
         Assert.Null(server.LastServiceCallBody);
     }

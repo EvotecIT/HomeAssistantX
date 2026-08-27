@@ -50,6 +50,9 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
         ValidateFinite(Temperature, nameof(Temperature));
         ValidateFinite(TargetTemperatureLow, nameof(TargetTemperatureLow));
         ValidateFinite(TargetTemperatureHigh, nameof(TargetTemperatureHigh));
+        HvacMode = NormalizeOptionalMode(HvacMode, nameof(HvacMode));
+        FanMode = NormalizeOptionalMode(FanMode, nameof(FanMode));
+        PresetMode = NormalizeOptionalMode(PresetMode, nameof(PresetMode));
 
         if (!Temperature.HasValue
             && !TargetTemperatureLow.HasValue
@@ -100,5 +103,12 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
         {
             throw new ArgumentOutOfRangeException(name, "The value must be a finite number.");
         }
+    }
+
+    private static string? NormalizeOptionalMode(string? value, string name)
+    {
+        if (value is null) return null;
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty mode is required.", name);
+        return value.Trim();
     }
 }
