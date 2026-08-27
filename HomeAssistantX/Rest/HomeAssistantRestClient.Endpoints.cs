@@ -186,7 +186,7 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentException("A template is required.", nameof(template));
         }
 
-        var payload = new Dictionary<string, object?> { ["template"] = template.Trim() };
+        var payload = new Dictionary<string, object?> { ["template"] = template };
         if (variables is not null)
         {
             payload["variables"] = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables");

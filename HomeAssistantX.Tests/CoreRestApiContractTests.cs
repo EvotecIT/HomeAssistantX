@@ -78,9 +78,11 @@ public sealed class CoreRestApiContractTests
         var fired = await client.Rest.FireEventAsync(
             "homeassistantx_test",
             new Dictionary<string, object?> { ["source"] = "contract" });
+        const string template = " \n{{ value }}\n ";
         var rendered = await client.Rest.RenderTemplateAsync(
-            "{{ value }}",
+            template,
             new Dictionary<string, object?> { ["value"] = "rendered value" });
+        var templateRequestBody = server.LastRequestBody;
         var config = await client.Rest.CheckConfigurationAsync();
         var intent = await client.Rest.HandleIntentAsync(
             new Dictionary<string, object?> { ["name"] = "HassTurnOn" });
@@ -90,6 +92,10 @@ public sealed class CoreRestApiContractTests
         Assert.Equal("Entity removed.", removed.GetProperty("message").GetString());
         Assert.Contains("fired", fired.GetProperty("message").GetString());
         Assert.Equal("rendered value", rendered);
+        using (var templateRequest = JsonDocument.Parse(Assert.IsType<string>(templateRequestBody)))
+        {
+            Assert.Equal(template, templateRequest.RootElement.GetProperty("template").GetString());
+        }
         Assert.True(config.IsValid);
         Assert.Equal("Done", intent.GetProperty("response").GetProperty("speech").GetProperty("plain").GetProperty("speech").GetString());
         Assert.Equal("conversation-1", conversation.GetProperty("conversation_id").GetString());
