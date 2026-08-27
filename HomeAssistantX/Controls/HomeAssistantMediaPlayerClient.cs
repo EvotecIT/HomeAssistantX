@@ -68,6 +68,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentNullException(nameof(options));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target))).NormalizeForDomain(Domain);
         var power = options.Power;
         var playback = options.Playback;
@@ -306,6 +307,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         HomeAssistantPlayMediaOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         mediaContentId = ControlValidation.Required(mediaContentId, nameof(mediaContentId));
         mediaContentType = ControlValidation.Required(mediaContentType, nameof(mediaContentType));
         var enqueueOption = options?.Enqueue;

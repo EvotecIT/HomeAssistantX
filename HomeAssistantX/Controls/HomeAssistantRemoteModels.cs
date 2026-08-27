@@ -126,9 +126,10 @@ public sealed class HomeAssistantRemoteStatus
             throw new ArgumentNullException(nameof(state));
         }
 
-        if (!string.Equals(state.Domain, "remote", StringComparison.OrdinalIgnoreCase))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(state.EntityId, "remote", out var normalizedEntityId)
+            || !string.Equals(state.EntityId, normalizedEntityId, StringComparison.Ordinal))
         {
-            throw new ArgumentException("A remote entity state is required.", nameof(state));
+            throw new ArgumentException("A canonical remote entity state is required.", nameof(state));
         }
 
         if (string.IsNullOrWhiteSpace(state.State))

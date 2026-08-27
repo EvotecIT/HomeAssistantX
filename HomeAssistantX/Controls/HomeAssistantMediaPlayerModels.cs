@@ -296,9 +296,10 @@ public sealed class HomeAssistantMediaPlayerStatus
             throw new ArgumentNullException(nameof(state));
         }
 
-        if (!string.Equals(state.Domain, "media_player", StringComparison.OrdinalIgnoreCase))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(state.EntityId, "media_player", out var normalizedEntityId)
+            || !string.Equals(state.EntityId, normalizedEntityId, StringComparison.Ordinal))
         {
-            throw new ArgumentException("A media_player entity state is required.", nameof(state));
+            throw new ArgumentException("A canonical media_player entity state is required.", nameof(state));
         }
 
         if (string.IsNullOrWhiteSpace(state.State))

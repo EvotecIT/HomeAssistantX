@@ -276,6 +276,23 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Theory]
+    [InlineData("media_player.kitchen.extra", true)]
+    [InlineData("media_player.Kitchen", true)]
+    [InlineData(" media_player.kitchen ", true)]
+    [InlineData("remote.living_room.extra", false)]
+    [InlineData("remote.Living_room", false)]
+    [InlineData(" remote.living_room ", false)]
+    public void TypedMediaAndRemoteViewsRejectNonCanonicalEntityIdentifiers(string entityId, bool mediaPlayer)
+    {
+        var state = DeserializeState("{\"entity_id\":\"" + entityId + "\",\"state\":\"on\",\"attributes\":{}}");
+
+        if (mediaPlayer)
+            Assert.Throws<ArgumentException>(() => HomeAssistantMediaPlayerStatus.FromState(state));
+        else
+            Assert.Throws<ArgumentException>(() => HomeAssistantRemoteStatus.FromState(state));
+    }
+
+    [Theory]
     [InlineData("media_player.kitchen")]
     [InlineData("remote.living_room")]
     public void TypedMediaAndRemoteViewsRejectMissingStateValues(string entityId)
@@ -541,6 +558,36 @@ public sealed class MediaAndRemoteContractTests
                 MediaContentType = "music",
                 MediaExtra = cyclicExtra
             }));
+
+        Assert.Empty(server.ServiceCallBodies);
+    }
+
+    [Fact]
+    public async Task CancelledMediaOperationsDoNotFreezeCallerOwnedExtraPayloads()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var cyclicExtra = new Dictionary<string, object?>();
+        cyclicExtra["self"] = cyclicExtra;
+        var target = HomeAssistantTarget.ForEntity("media_player.kitchen");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.MediaPlayers.SetAsync(
+            target,
+            new HomeAssistantMediaPlayerOptions
+            {
+                MediaContentId = "media-source://radio/station",
+                MediaContentType = "music",
+                MediaExtra = cyclicExtra
+            },
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.MediaPlayers.PlayMediaAsync(
+            target,
+            "media-source://radio/station",
+            "music",
+            new HomeAssistantPlayMediaOptions { Extra = cyclicExtra },
+            cancellation.Token));
 
         Assert.Empty(server.ServiceCallBodies);
     }
