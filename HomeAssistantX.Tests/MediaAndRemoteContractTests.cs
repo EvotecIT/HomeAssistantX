@@ -414,6 +414,38 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task CompoundMediaOperationSnapshotsEveryOptionBeforeItsFirstDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var pause = server.PauseNextServiceCall();
+        var target = HomeAssistantTarget.ForEntity("media_player.kitchen");
+        var options = new HomeAssistantMediaPlayerOptions
+        {
+            Power = HomeAssistantPowerAction.On,
+            MediaContentId = "media-source://radio/station",
+            MediaContentType = "music",
+            Enqueue = HomeAssistantMediaEnqueueMode.Add,
+            Announce = false
+        };
+
+        var operation = client.Controls.MediaPlayers.SetAsync(target, options);
+        await pause.Received.WaitAsync(TimeSpan.FromSeconds(2));
+        target.EntityIds = new[] { "media_player.mutated" };
+        options.Announce = true;
+        options.MediaContentId = "media-source://radio/mutated";
+        pause.Release();
+        await operation;
+
+        using var play = FindCall(server, "play_media");
+        var data = play.RootElement.GetProperty("service_data");
+        Assert.Equal("media_player.kitchen", play.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+        Assert.Equal("media-source://radio/station", data.GetProperty("media_content_id").GetString());
+        Assert.Equal("add", data.GetProperty("enqueue").GetString());
+        Assert.False(data.GetProperty("announce").GetBoolean());
+    }
+
+    [Fact]
     public async Task ContradictoryOrInvalidAdvancedMediaOperationsFailBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

@@ -3,7 +3,6 @@ using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.Subscriptions;
-using System.Text.Json;
 
 namespace HomeAssistantX.Controls;
 
@@ -69,45 +68,60 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentNullException(nameof(options));
         }
 
-        if (string.IsNullOrWhiteSpace(options.MediaContentId) != string.IsNullOrWhiteSpace(options.MediaContentType))
+        var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target))).NormalizeForDomain(Domain);
+        var power = options.Power;
+        var playback = options.Playback;
+        var volumePercent = options.VolumePercent;
+        var muted = options.Muted;
+        var source = NormalizeOptional(options.Source, nameof(options.Source));
+        var soundMode = NormalizeOptional(options.SoundMode, nameof(options.SoundMode));
+        var shuffle = options.Shuffle;
+        var repeat = options.Repeat;
+        var mediaContentId = NormalizeOptional(options.MediaContentId, nameof(options.MediaContentId));
+        var mediaContentType = NormalizeOptional(options.MediaContentType, nameof(options.MediaContentType));
+        var enqueue = options.Enqueue;
+        var announce = options.Announce;
+        var mediaExtra = options.MediaExtra;
+
+        if (string.IsNullOrWhiteSpace(mediaContentId) != string.IsNullOrWhiteSpace(mediaContentType))
         {
             throw new ArgumentException("MediaContentId and MediaContentType must be supplied together.", nameof(options));
         }
 
-        if ((options.Enqueue.HasValue || options.Announce == true || options.MediaExtra is not null)
-            && string.IsNullOrWhiteSpace(options.MediaContentId))
+        if ((enqueue.HasValue || announce == true || mediaExtra is not null)
+            && string.IsNullOrWhiteSpace(mediaContentId))
         {
             throw new ArgumentException("Play-media options require media content.", nameof(options));
         }
 
-        if (options.Enqueue.HasValue && options.Announce == true)
+        if (enqueue.HasValue && announce == true)
         {
             throw new ArgumentException("Enqueue and Announce cannot be combined by Home Assistant.", nameof(options));
         }
 
-        var hasNonPowerOperation = options.Playback.HasValue
-            || options.VolumePercent.HasValue
-            || options.Muted.HasValue
-            || !string.IsNullOrWhiteSpace(options.Source)
-            || !string.IsNullOrWhiteSpace(options.SoundMode)
-            || options.Shuffle.HasValue
-            || options.Repeat.HasValue
-            || !string.IsNullOrWhiteSpace(options.MediaContentId);
-        if ((options.Power is HomeAssistantPowerAction.Off or HomeAssistantPowerAction.Toggle) && hasNonPowerOperation)
+        var hasNonPowerOperation = playback.HasValue
+            || volumePercent.HasValue
+            || muted.HasValue
+            || !string.IsNullOrWhiteSpace(source)
+            || !string.IsNullOrWhiteSpace(soundMode)
+            || shuffle.HasValue
+            || repeat.HasValue
+            || !string.IsNullOrWhiteSpace(mediaContentId);
+        if ((power is HomeAssistantPowerAction.Off or HomeAssistantPowerAction.Toggle) && hasNonPowerOperation)
         {
             throw new ArgumentException("Power Off and Toggle cannot be combined with other media-player operations.", nameof(options));
         }
 
-        if (!string.IsNullOrWhiteSpace(options.MediaContentId) && options.Playback.HasValue)
+        if (!string.IsNullOrWhiteSpace(mediaContentId) && playback.HasValue)
         {
             throw new ArgumentException("Media content cannot be combined with a separate playback action.", nameof(options));
         }
 
-        var powerAction = options.Power.HasValue ? PowerAction(options.Power.Value) : null;
-        var playbackAction = options.Playback.HasValue ? PlaybackAction(options.Playback.Value) : null;
-        var repeatMode = options.Repeat.HasValue ? RepeatMode(options.Repeat.Value) : null;
-        var enqueueMode = options.Enqueue.HasValue ? EnqueueMode(options.Enqueue.Value) : null;
-        var frozenMediaExtra = FreezeMediaExtra(options.MediaExtra, nameof(options.MediaExtra));
+        var powerAction = power.HasValue ? PowerAction(power.Value) : null;
+        var playbackAction = playback.HasValue ? PlaybackAction(playback.Value) : null;
+        var repeatMode = repeat.HasValue ? RepeatMode(repeat.Value) : null;
+        var enqueueMode = enqueue.HasValue ? EnqueueMode(enqueue.Value) : null;
+        var frozenMediaExtra = FreezeMediaExtra(mediaExtra, nameof(options.MediaExtra));
         if (powerAction is null && playbackAction is null && !hasNonPowerOperation)
         {
             throw new ArgumentException("At least one media-player value or action is required.", nameof(options));
@@ -116,53 +130,53 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var results = new List<HomeAssistantServiceCallResult>();
         if (powerAction is not null)
         {
-            results.Add(await CallAsync(powerAction, target, null, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(powerAction, frozenTarget, null, cancellationToken).ConfigureAwait(false));
         }
 
-        if (options.VolumePercent.HasValue)
+        if (volumePercent.HasValue)
         {
-            results.Add(await CallAsync("volume_set", target, call => call.WithData("volume_level", options.VolumePercent.Value / 100d), cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("volume_set", frozenTarget, call => call.WithData("volume_level", volumePercent.Value / 100d), cancellationToken).ConfigureAwait(false));
         }
 
-        if (options.Muted.HasValue)
+        if (muted.HasValue)
         {
-            results.Add(await CallAsync("volume_mute", target, call => call.WithData("is_volume_muted", options.Muted.Value), cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("volume_mute", frozenTarget, call => call.WithData("is_volume_muted", muted.Value), cancellationToken).ConfigureAwait(false));
         }
 
-        if (!string.IsNullOrWhiteSpace(options.Source))
+        if (!string.IsNullOrWhiteSpace(source))
         {
-            results.Add(await CallAsync("select_source", target, call => call.WithData("source", options.Source), cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("select_source", frozenTarget, call => call.WithData("source", source), cancellationToken).ConfigureAwait(false));
         }
 
-        if (!string.IsNullOrWhiteSpace(options.SoundMode))
+        if (!string.IsNullOrWhiteSpace(soundMode))
         {
-            results.Add(await SelectSoundModeAsync(target, options.SoundMode!, cancellationToken).ConfigureAwait(false));
+            results.Add(await SelectSoundModeAsync(frozenTarget, soundMode!, cancellationToken).ConfigureAwait(false));
         }
 
-        if (options.Shuffle.HasValue)
+        if (shuffle.HasValue)
         {
-            results.Add(await SetShuffleAsync(target, options.Shuffle.Value, cancellationToken).ConfigureAwait(false));
+            results.Add(await SetShuffleAsync(frozenTarget, shuffle.Value, cancellationToken).ConfigureAwait(false));
         }
 
         if (repeatMode is not null)
         {
             results.Add(await CallAsync(
                 "repeat_set",
-                target,
+                frozenTarget,
                 call => call.WithData("repeat", repeatMode),
                 cancellationToken).ConfigureAwait(false));
         }
 
-        if (!string.IsNullOrWhiteSpace(options.MediaContentId))
+        if (!string.IsNullOrWhiteSpace(mediaContentId))
         {
             results.Add(await PlayMediaAsync(
-                target,
-                options.MediaContentId!,
-                options.MediaContentType!,
+                frozenTarget,
+                mediaContentId!,
+                mediaContentType!,
                 new HomeAssistantPlayMediaOptions
                 {
-                    Enqueue = options.Enqueue,
-                    Announce = options.Announce,
+                    Enqueue = enqueue,
+                    Announce = announce,
                     Extra = frozenMediaExtra
                 },
                 cancellationToken).ConfigureAwait(false));
@@ -170,7 +184,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
         if (playbackAction is not null)
         {
-            results.Add(await CallAsync(playbackAction, target, null, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(playbackAction, frozenTarget, null, cancellationToken).ConfigureAwait(false));
         }
 
         return results;
@@ -292,25 +306,20 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         HomeAssistantPlayMediaOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(mediaContentId))
-        {
-            throw new ArgumentException("A media content identifier is required.", nameof(mediaContentId));
-        }
-
-        if (string.IsNullOrWhiteSpace(mediaContentType))
-        {
-            throw new ArgumentException("A media content type is required.", nameof(mediaContentType));
-        }
-
-        if (options?.Enqueue.HasValue == true && options.Announce == true)
+        mediaContentId = ControlValidation.Required(mediaContentId, nameof(mediaContentId));
+        mediaContentType = ControlValidation.Required(mediaContentType, nameof(mediaContentType));
+        var enqueueOption = options?.Enqueue;
+        var announce = options?.Announce;
+        var extra = options?.Extra;
+        if (enqueueOption.HasValue && announce == true)
         {
             throw new ArgumentException("Enqueue and Announce cannot be combined by Home Assistant.", nameof(options));
         }
 
-        var enqueue = options?.Enqueue.HasValue == true
-            ? EnqueueMode(options.Enqueue.Value)
+        var enqueue = enqueueOption.HasValue
+            ? EnqueueMode(enqueueOption.Value)
             : null;
-        var frozenExtra = FreezeMediaExtra(options?.Extra, nameof(options));
+        var frozenExtra = FreezeMediaExtra(extra, nameof(options));
         return CallAsync(
             "play_media",
             target,
@@ -323,9 +332,9 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                     call.WithData("enqueue", enqueue);
                 }
 
-                if (options?.Announce.HasValue == true)
+                if (announce.HasValue)
                 {
-                    call.WithData("announce", options.Announce.Value);
+                    call.WithData("announce", announce.Value);
                 }
 
                 if (frozenExtra is not null)
@@ -345,20 +354,11 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             return null;
         }
 
-        try
-        {
-            var json = JsonSerializer.Serialize(extra, HomeAssistantJson.SerializerOptions);
-            using var document = JsonDocument.Parse(json);
-            return document.RootElement.EnumerateObject().ToDictionary(
-                property => property.Name,
-                property => (object?)property.Value.Clone(),
-                StringComparer.Ordinal);
-        }
-        catch (Exception ex) when (ex is JsonException || ex is NotSupportedException)
-        {
-            throw new ArgumentException("MediaExtra must be a serializable JSON object.", parameterName, ex);
-        }
+        return HomeAssistantJson.FreezeObject(extra, parameterName, "MediaExtra");
     }
+
+    private static string? NormalizeOptional(string? value, string name)
+        => value is null ? null : ControlValidation.Required(value, name);
 
     private static string PowerAction(HomeAssistantPowerAction value) => value switch
     {
