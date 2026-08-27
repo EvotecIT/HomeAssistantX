@@ -702,6 +702,20 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderStatisticsRevalidateExposedSelectorsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(
+            DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, "sensor.grid_energy");
+        Assert.IsType<string[]>(query.StatisticIds)[0] = "sensor.Bad";
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.GetStatisticsAsync(query));
+
+        Assert.Null(server.GetLastWebSocketCommand("recorder/statistics_during_period"));
+    }
+
+    [Fact]
     public async Task RecorderSelectorsAreFrozenBeforeTokenResolutionAndDispatch()
     {
         using var server = new TestHomeAssistantServer();

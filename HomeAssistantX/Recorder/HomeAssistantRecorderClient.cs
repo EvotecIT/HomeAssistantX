@@ -64,7 +64,7 @@ public sealed class HomeAssistantRecorderClient
         if (query is null) throw new ArgumentNullException(nameof(query));
         if (query.EndTime.HasValue && query.EndTime <= query.StartTime)
             throw new ArgumentOutOfRangeException(nameof(query), "The statistics end must be after the start.");
-        var requestedIdSnapshot = query.StatisticIds.ToArray();
+        var requestedIdSnapshot = RequireStatisticIds(query.StatisticIds, nameof(query));
         var payload = new Dictionary<string, object?>
         {
             ["start_time"] = query.StartTime.ToString("O", CultureInfo.InvariantCulture),
