@@ -24,6 +24,19 @@ internal static class HomeAssistantJson
         return value.Clone();
     }
 
+    /// <summary>Parses a Home Assistant response while preserving the classified protocol-failure contract.</summary>
+    public static JsonDocument ParseResponse(string value, string failureMessage)
+    {
+        try
+        {
+            return JsonDocument.Parse(value);
+        }
+        catch (JsonException ex)
+        {
+            throw new HomeAssistantProtocolException(failureMessage, ex);
+        }
+    }
+
     /// <summary>Decodes a built-in Home Assistant response while preserving the classified protocol-failure contract.</summary>
     public static T DeserializeResponse<T>(JsonElement value, string failureMessage)
     {

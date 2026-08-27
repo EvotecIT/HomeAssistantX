@@ -124,6 +124,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public bool RejectSupportedFeatures { get; set; }
 
+    public bool ReturnMalformedSupportedFeatures { get; set; }
+
     public bool ReturnInvalidUpdateReleaseNotes { get; set; }
 
     public Task WaitForSystemHealthEventsAsync()
@@ -411,6 +413,12 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         switch (type)
         {
             case "supported_features":
+                if (ReturnMalformedSupportedFeatures)
+                {
+                    await session.SendTextAsync("{not-json", _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
                 if (RejectSupportedFeatures)
                 {
                     await session.SendErrorAsync(id, "unknown_command", "Unknown command.", "unknown_command", _source.Token).ConfigureAwait(false);
@@ -925,6 +933,24 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         public Task SendCoalescedAsync(object[] payloads, CancellationToken cancellationToken)
         {
             return SendAsync(payloads, cancellationToken, false);
+        }
+
+        public async Task SendTextAsync(string payload, CancellationToken cancellationToken)
+        {
+            var bytes = Encoding.UTF8.GetBytes(payload);
+            await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _socket.SendAsync(
+                    new ArraySegment<byte>(bytes),
+                    WebSocketMessageType.Text,
+                    true,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _sendGate.Release();
+            }
         }
 
         private async Task SendAsync(object payload, CancellationToken cancellationToken, bool fragmented)

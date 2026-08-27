@@ -330,6 +330,7 @@ public sealed class HomeAssistantStateClient : IDisposable
     private async Task ObserveServerSubscriptionAsync(IHomeAssistantSubscription subscription)
     {
         Exception? failure = null;
+        LocalStateSubscription[] affectedSubscribers;
         try
         {
             await subscription.Completion.ConfigureAwait(false);
@@ -362,13 +363,17 @@ public sealed class HomeAssistantStateClient : IDisposable
 
             _initialized = false;
             Volatile.Write(ref _serverSubscriptionFailure, failure);
+            // Capture the subscribers owned by this failed server subscription while
+            // initialization is still blocked. A caller can install a healthy replacement
+            // as soon as the gate opens; that replacement must not inherit this stale failure.
+            affectedSubscribers = _subscribers.Values.ToArray();
         }
         finally
         {
             _initializationGate.Release();
         }
 
-        foreach (var subscriber in _subscribers.Values)
+        foreach (var subscriber in affectedSubscribers)
         {
             subscriber.Fail(failure);
         }

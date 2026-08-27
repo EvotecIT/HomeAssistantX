@@ -66,6 +66,19 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task MalformedFeatureNegotiationIsAProtocolFailure()
+    {
+        using var server = new TestHomeAssistantServer { ReturnMalformedSupportedFeatures = true };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.WebSocket.ConnectAsync());
+
+        Assert.IsAssignableFrom<JsonException>(exception.InnerException);
+        Assert.Contains("supported-features", exception.Message);
+    }
+
+    [Fact]
     public async Task CommandIdentifiersRemainMonotonicAcrossConnections()
     {
         using var server = new TestHomeAssistantServer();

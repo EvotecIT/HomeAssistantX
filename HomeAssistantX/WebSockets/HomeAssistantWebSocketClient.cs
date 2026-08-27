@@ -326,7 +326,9 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         CancellationToken cancellationToken)
     {
         var greeting = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
-        using var greetingDocument = JsonDocument.Parse(greeting);
+        using var greetingDocument = HomeAssistantJson.ParseResponse(
+            greeting,
+            "The Home Assistant WebSocket greeting could not be decoded.");
         var greetingType = GetRequiredString(greetingDocument.RootElement, "type");
         if (!string.Equals(greetingType, "auth_required", StringComparison.Ordinal))
         {
@@ -346,7 +348,9 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         }, cancellationToken).ConfigureAwait(false);
 
         var response = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
-        using var responseDocument = JsonDocument.Parse(response);
+        using var responseDocument = HomeAssistantJson.ParseResponse(
+            response,
+            "The Home Assistant WebSocket authentication response could not be decoded.");
         var responseType = GetRequiredString(responseDocument.RootElement, "type");
         if (string.Equals(responseType, "auth_ok", StringComparison.Ordinal))
         {
@@ -393,7 +397,9 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         }, cancellationToken).ConfigureAwait(false);
 
         var response = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
-        using var responseDocument = JsonDocument.Parse(response);
+        using var responseDocument = HomeAssistantJson.ParseResponse(
+            response,
+            "The Home Assistant supported-features response could not be decoded.");
         var root = responseDocument.RootElement;
         if (root.ValueKind != JsonValueKind.Object
             || !root.TryGetProperty("id", out var idProperty)

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.WebSockets;
 
@@ -68,7 +69,9 @@ public sealed partial class HomeAssistantWebSocketClient
 
     private void RouteMessage(string message)
     {
-        using var document = JsonDocument.Parse(message);
+        using var document = HomeAssistantJson.ParseResponse(
+            message,
+            "A Home Assistant WebSocket message could not be decoded.");
         var root = document.RootElement;
         if (root.ValueKind == JsonValueKind.Object)
         {
