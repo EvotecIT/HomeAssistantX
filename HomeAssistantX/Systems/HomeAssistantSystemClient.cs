@@ -234,7 +234,7 @@ public sealed class HomeAssistantSystemClient
             throw new ArgumentException("Conversation text is required.", nameof(text));
         }
 
-        var payload = new Dictionary<string, object?> { ["text"] = text.Trim() };
+        var payload = new Dictionary<string, object?> { ["text"] = text };
         if (language is not null)
         {
             payload["language"] = RequireConversationSelector(language, nameof(language));

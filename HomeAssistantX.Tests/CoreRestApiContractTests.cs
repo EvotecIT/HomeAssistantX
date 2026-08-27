@@ -115,6 +115,19 @@ public sealed class CoreRestApiContractTests
     }
 
     [Fact]
+    public async Task RestConversationPreservesNonblankTextExactly()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        const string text = "  keep exact spacing\n";
+
+        await client.Rest.ProcessConversationAsync(text);
+
+        using var payload = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.Equal(text, payload.RootElement.GetProperty("text").GetString());
+    }
+
+    [Fact]
     public async Task RestEntityIdentifiersAreTrimmedAtSharedPathAndHistoryBoundaries()
     {
         using var server = new TestHomeAssistantServer();

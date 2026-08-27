@@ -332,6 +332,8 @@ try {
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop },
         { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -EntityId update.home_assistant_core_update -Version ' ' -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -Core -Version ' ' -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -EntityId update.Kitchen -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -EntityId UPDATE.kitchen -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -App '..' -WhatIf -ErrorAction Stop }

@@ -710,6 +710,19 @@ public sealed class WebSocketContractTests
         Assert.Null(server.GetLastWebSocketCommand("conversation/process"));
     }
 
+    [Fact]
+    public async Task WebSocketConversationPreservesNonblankTextExactly()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        const string text = "  keep exact spacing\n";
+
+        await client.System.ProcessConversationAsync(text);
+
+        using var payload = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("conversation/process")));
+        Assert.Equal(text, payload.RootElement.GetProperty("text").GetString());
+    }
+
     private static async Task<T> WithTimeoutAsync<T>(Task<T> task)
     {
         var winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(3)));

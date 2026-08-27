@@ -56,6 +56,7 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        var version = NormalizeOptionalVersion(Version);
         object? result;
         if (ParameterSetName == EntityParameterSet)
         {
@@ -65,7 +66,7 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
                 return;
             }
 
-            result = await Client.Operations.Updates.InstallAsync(entityId, Version, Backup, CancelToken).ConfigureAwait(false);
+            result = await Client.Operations.Updates.InstallAsync(entityId, version, Backup, CancelToken).ConfigureAwait(false);
         }
         else
         {
@@ -84,7 +85,7 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
                 return;
             }
 
-            result = await Client.Supervisor.InstallUpdateAsync(target, app, Version, Backup, CancelToken).ConfigureAwait(false);
+            result = await Client.Supervisor.InstallUpdateAsync(target, app, version, Backup, CancelToken).ConfigureAwait(false);
         }
 
         if (PassThru)
@@ -101,6 +102,21 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
         }
 
         return normalized;
+    }
+
+    private static string? NormalizeOptionalVersion(string? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("A supplied update version cannot be empty.", nameof(Version));
+        }
+
+        return value.Trim();
     }
 
     private static string NormalizeSupervisorApp(string value)
