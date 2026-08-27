@@ -143,6 +143,16 @@ public sealed class PublicApiCompatibilityTests
             FormatAnnotatedType(property.PropertyType, property));
     }
 
+    [Fact]
+    public void TypeFormatterPreservesTupleElementNamesInBaseContracts()
+    {
+        var contracts = FormatInheritanceContracts(typeof(NamedTupleInheritanceFixture));
+
+        Assert.True(
+            contracts.Contains("HomeAssistantX.Tests.PublicApiCompatibilityTests+NamedTupleBase<(System.String Host, System.Int32 Port)>", StringComparer.Ordinal),
+            string.Join(" | ", contracts));
+    }
+
 #if NET10_0
     [Fact]
     public void PropertyFormatterPreservesInitOnlyAccessors()
@@ -214,13 +224,9 @@ public sealed class PublicApiCompatibilityTests
             {
                 contracts.Add(FormatEnumUnderlyingType(type));
             }
-            else if (type.BaseType is not null && type.BaseType != typeof(object) && type.BaseType != typeof(ValueType))
+            else
             {
-                contracts.Add(FormatType(type.BaseType));
-            }
-            if (!type.IsEnum)
-            {
-                contracts.AddRange(GetDirectInterfaces(type).Select(FormatType).OrderBy(value => value, StringComparer.Ordinal));
+                contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
             lines.Add("T " + TypeAccess(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
@@ -277,6 +283,24 @@ public sealed class PublicApiCompatibilityTests
         }
 
         return type.GetInterfaces().Where(contract => !inherited.Contains(contract));
+    }
+
+    private static IReadOnlyList<string> FormatInheritanceContracts(Type type)
+    {
+        var contracts = new List<string>();
+        var nullability = new NullabilityCursor(ReadNullableFlags(type), ReadNullableContext(type));
+        var tupleNames = new TupleNameCursor(ReadTupleNames(type));
+        if (type.BaseType is not null && type.BaseType != typeof(object) && type.BaseType != typeof(ValueType))
+        {
+            contracts.Add(FormatAnnotatedType(type.BaseType, nullability, tupleNames));
+        }
+
+        foreach (var contract in GetDirectInterfaces(type))
+        {
+            contracts.Add(FormatAnnotatedType(contract, nullability, tupleNames));
+        }
+
+        return contracts.OrderBy(value => value, StringComparer.Ordinal).ToArray();
     }
 
     private static string FormatMethod(MethodBase method)
@@ -423,6 +447,15 @@ public sealed class PublicApiCompatibilityTests
     private sealed class NamedTuplePropertyFixture
     {
         public (string Host, int Port) Endpoint { get; set; }
+    }
+
+    private class NamedTupleBase<T>
+    {
+    }
+
+    private sealed class NamedTupleInheritanceFixture :
+        NamedTupleBase<(string Host, int Port)>
+    {
     }
 
     private static string TypeAccess(Type type)
