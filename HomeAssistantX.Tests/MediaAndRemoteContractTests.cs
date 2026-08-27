@@ -572,6 +572,50 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal(HomeAssistantMediaPlayerState.Playing, change.Current!.State);
         Assert.Equal("Track one", change.Current.MediaTitle);
     }
+
+    [Fact]
+    public async Task TypedMediaSubscriptionClassifiesNestedWrongDomainStates()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[" + MediaPausedStateJson + "]");
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Controls.MediaPlayers.SubscribeAsync((_, _) => Task.CompletedTask);
+
+        await server.PublishStateChangeAsync(
+            "media_player.kitchen",
+            MediaPausedStateJson,
+            "{\"entity_id\":\"sensor.kitchen\",\"state\":\"on\",\"attributes\":{}}");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () =>
+        {
+            var completion = subscription.Completion;
+            var winner = await Task.WhenAny(completion, Task.Delay(TimeSpan.FromSeconds(5)));
+            Assert.Same(completion, winner);
+            await completion;
+        });
+    }
+
+    [Theory]
+    [InlineData(" media_player.kitchen")]
+    [InlineData("media_player.kitchen ")]
+    public async Task TypedMediaSubscriptionClassifiesNoncanonicalOuterEntityIds(string entityId)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[" + MediaPausedStateJson + "]");
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Controls.MediaPlayers.SubscribeAsync((_, _) => Task.CompletedTask);
+        var state = "{\"entity_id\":\"" + entityId + "\",\"state\":\"playing\",\"attributes\":{}}";
+
+        await server.PublishStateChangeAsync(entityId, MediaPausedStateJson, state);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () =>
+        {
+            var completion = subscription.Completion;
+            var winner = await Task.WhenAny(completion, Task.Delay(TimeSpan.FromSeconds(5)));
+            Assert.Same(completion, winner);
+            await completion;
+        });
+    }
 #endif
 
     private static HomeAssistantState DeserializeState(string json)

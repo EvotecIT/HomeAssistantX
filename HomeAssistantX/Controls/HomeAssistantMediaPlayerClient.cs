@@ -24,8 +24,8 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
     {
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, Domain, out var normalizedEntityId))
             throw new ArgumentException("A media-player entity identifier is required.", nameof(entityId));
-        return HomeAssistantMediaPlayerStatus.FromState(
-            await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false));
+        var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
+        return HomeAssistantMediaPlayerStatus.FromState(HomeAssistantEntityId.RequireResponseDomain(state, Domain));
     }
 
     public async Task<IReadOnlyList<HomeAssistantMediaPlayerStatus>> GetAllAsync(
@@ -397,6 +397,8 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
     private static HomeAssistantMediaPlayerStatus? ToStatus(HomeAssistantState? state)
     {
-        return state is null ? null : HomeAssistantMediaPlayerStatus.FromState(state);
+        return state is null
+            ? null
+            : HomeAssistantMediaPlayerStatus.FromState(HomeAssistantEntityId.RequireResponseDomain(state, "media_player"));
     }
 }
