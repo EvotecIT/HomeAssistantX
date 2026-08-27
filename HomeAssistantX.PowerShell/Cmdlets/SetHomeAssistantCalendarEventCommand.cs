@@ -1,5 +1,6 @@
 using System.Management.Automation;
 using HomeAssistantX.Calendars;
+using HomeAssistantX.Models;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -76,6 +77,12 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        if (!HomeAssistantEntityId.TryNormalize(EntityId, out var entityId)
+            || !entityId.StartsWith("calendar.", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("A calendar entity identifier is required.", nameof(EntityId));
+        }
+
         var allDay = ParameterSetName == CreateAllDay || ParameterSetName == UpdateAllDay;
         var update = ParameterSetName == UpdateTimed || ParameterSetName == UpdateAllDay;
         var input = allDay
@@ -97,17 +104,17 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
         }
 
         var action = update ? "Update Home Assistant calendar event" : "Create Home Assistant calendar event";
-        if (!ShouldProcess(EntityId + (update ? "/" + Uid : string.Empty), action))
+        if (!ShouldProcess(entityId + (update ? "/" + Uid : string.Empty), action))
         {
             return;
         }
 
         if (!update)
         {
-            await Client.Calendars.CreateEventAsync(EntityId, input, CancelToken).ConfigureAwait(false);
+            await Client.Calendars.CreateEventAsync(entityId, input, CancelToken).ConfigureAwait(false);
             return;
         }
 
-        await Client.Calendars.UpdateEventAsync(EntityId, reference!, input, CancelToken).ConfigureAwait(false);
+        await Client.Calendars.UpdateEventAsync(entityId, reference!, input, CancelToken).ConfigureAwait(false);
     }
 }

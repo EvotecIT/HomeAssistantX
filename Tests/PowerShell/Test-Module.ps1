@@ -403,7 +403,9 @@ try {
         { Set-HomeAssistantCategory -Scope automation -Name Comfort -ClearIcon -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-27 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceRange THISANDFUTURE -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-28 -WhatIf -ErrorAction Stop },
-        { Remove-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceId 20260827 -RecurrenceRange THIS -WhatIf -ErrorAction Stop }
+        { Remove-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceId 20260827 -RecurrenceRange THIS -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCalendarEvent -EntityId calendar.Home -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-28 -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantCalendarEvent -EntityId calendar.Home -Uid event-1 -WhatIf -ErrorAction Stop }
     )) {
         $rejected = $false
         try { $null = & $invalidPlatformData } catch { $rejected = $true }

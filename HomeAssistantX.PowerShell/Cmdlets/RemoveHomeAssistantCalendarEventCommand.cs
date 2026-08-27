@@ -1,5 +1,6 @@
 using System.Management.Automation;
 using HomeAssistantX.Calendars;
+using HomeAssistantX.Models;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -28,15 +29,21 @@ public sealed class RemoveHomeAssistantCalendarEventCommand : HomeAssistantCmdle
 
     protected override async Task ProcessRecordAsync()
     {
+        if (!HomeAssistantEntityId.TryNormalize(EntityId, out var entityId)
+            || !entityId.StartsWith("calendar.", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("A calendar entity identifier is required.", nameof(EntityId));
+        }
+
         var reference = new HomeAssistantCalendarEventReference(Uid)
         {
             RecurrenceId = RecurrenceId,
             RecurrenceRange = RecurrenceRange
         };
         reference.Validate();
-        if (ShouldProcess(EntityId + "/" + Uid, "Delete Home Assistant calendar event"))
+        if (ShouldProcess(entityId + "/" + Uid, "Delete Home Assistant calendar event"))
         {
-            await Client.Calendars.DeleteEventAsync(EntityId, reference, CancelToken).ConfigureAwait(false);
+            await Client.Calendars.DeleteEventAsync(entityId, reference, CancelToken).ConfigureAwait(false);
         }
     }
 }
