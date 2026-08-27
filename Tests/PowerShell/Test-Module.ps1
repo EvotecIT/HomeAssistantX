@@ -135,6 +135,16 @@ foreach ($entry in $parameterSetContracts.GetEnumerator()) {
     }
 }
 
+$cameraEntityParameter = (Get-Command -Name Get-HomeAssistantCamera -ErrorAction Stop).Parameters['EntityId']
+if ($cameraEntityParameter.ParameterSets['Status'].IsMandatory) {
+    throw 'Get-HomeAssistantCamera -EntityId must remain optional in the Status parameter set.'
+}
+foreach ($parameterSetName in 'Capabilities', 'Preferences', 'SignedImage', 'SignedMjpeg', 'Stream') {
+    if (-not $cameraEntityParameter.ParameterSets[$parameterSetName].IsMandatory) {
+        throw "Get-HomeAssistantCamera -EntityId must be mandatory in the $parameterSetName parameter set."
+    }
+}
+
 foreach ($command in Get-Command -Module $importedModuleName) {
     foreach ($parameter in $command.Parameters.Values) {
         $isMandatorySelector = $parameter.ParameterType -eq [System.Management.Automation.SwitchParameter] -and

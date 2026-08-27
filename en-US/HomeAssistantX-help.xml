@@ -1577,7 +1577,7 @@
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>EntityId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for entity id.</maml:para>
+            <maml:para>Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -1616,7 +1616,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>EntityId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for entity id.</maml:para>
+            <maml:para>Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -1643,7 +1643,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>EntityId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for entity id.</maml:para>
+            <maml:para>Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -1682,7 +1682,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>EntityId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for entity id.</maml:para>
+            <maml:para>Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -1721,7 +1721,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>EntityId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for entity id.</maml:para>
+            <maml:para>Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -1796,7 +1796,7 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
           <maml:name>EntityId</maml:name>
           <maml:description>
-            <maml:para>Specifies a value for entity id.</maml:para>
+            <maml:para>Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -1871,7 +1871,7 @@
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
         <maml:name>EntityId</maml:name>
         <maml:description>
-          <maml:para>Specifies a value for entity id.</maml:para>
+          <maml:para>Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>

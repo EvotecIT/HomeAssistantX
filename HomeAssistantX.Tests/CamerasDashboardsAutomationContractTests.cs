@@ -323,6 +323,10 @@ public sealed class CamerasDashboardsAutomationContractTests
             "house-main",
             new HomeAssistantDashboardUpdate { Title = "Updated" }));
 
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"yaml\",\"filename\":\"ui-lovelace.yaml\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House", ShowInSidebar = true }));
+
         server.DashboardResourceListResponseJson = "[{\"url\":\"/local/storage-card.js\",\"type\":\"module\"}]";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
 

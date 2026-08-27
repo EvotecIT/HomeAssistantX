@@ -258,8 +258,8 @@ public sealed class HomeAssistantDashboardClient
     private static void ValidateStorageDashboard(HomeAssistantDashboard dashboard)
     {
         ValidateListedDashboard(dashboard);
-        if (string.IsNullOrWhiteSpace(dashboard.Id))
-            throw new HomeAssistantProtocolException("A dashboard mutation response did not contain its identifier.");
+        if (!string.Equals(dashboard.Mode, "storage", StringComparison.Ordinal))
+            throw new HomeAssistantProtocolException("A dashboard mutation response was not a storage dashboard.");
     }
 
     private static void ValidateListedResource(HomeAssistantDashboardResource resource, string? resourceMode = null)

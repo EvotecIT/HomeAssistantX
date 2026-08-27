@@ -91,7 +91,7 @@ Accept wildcard characters: False
 ```
 
 ### -EntityId
-Specifies a value for entity id.
+Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.
 
 ```yaml
 Type: String

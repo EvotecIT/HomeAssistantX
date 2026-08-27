@@ -21,6 +21,7 @@ public sealed class GetHomeAssistantCameraCommand : HomeAssistantCmdlet
     private const string SignedImageSet = "SignedImage";
     private const string SignedMjpegSet = "SignedMjpeg";
 
+    /// <summary>Identifies one camera. Optional when listing camera status; required for capabilities, streams, preferences, and signed paths.</summary>
     [Parameter(Position = 0, ParameterSetName = StatusSet)]
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = CapabilitiesSet)]
     [Parameter(Mandatory = true, Position = 0, ParameterSetName = StreamSet)]
