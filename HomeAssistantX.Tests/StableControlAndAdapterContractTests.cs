@@ -631,6 +631,50 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdTransportListensOnTheMulticastServicePort()
+    {
+        var endpoint = UdpHomeAssistantDiscoveryTransport.CreateMulticastListenerEndpoint(
+            IPAddress.Parse("192.0.2.10"),
+            5353);
+
+        Assert.Equal(IPAddress.Any, endpoint.Address);
+        Assert.Equal(5353, endpoint.Port);
+        Assert.Throws<ArgumentException>(() =>
+            UdpHomeAssistantDiscoveryTransport.CreateMulticastListenerEndpoint(IPAddress.IPv6Any, 5353));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            UdpHomeAssistantDiscoveryTransport.CreateMulticastListenerEndpoint(IPAddress.Loopback, 0));
+        Assert.True(UdpHomeAssistantDiscoveryTransport.IsExpectedInterface(7, 7));
+        Assert.False(UdpHomeAssistantDiscoveryTransport.IsExpectedInterface(7, 8));
+        Assert.False(UdpHomeAssistantDiscoveryTransport.IsExpectedInterface(0, 0));
+    }
+
+    [Fact]
+    public void DnsSdTransportDisposesQuerySocketsWhenListenerAllocationFails()
+    {
+        UdpClient? queryClient = null;
+        Socket? querySocket = null;
+        var allocations = 0;
+
+        Assert.Throws<InvalidOperationException>(() => new UdpHomeAssistantDiscoveryTransport(
+            new[] { IPAddress.Loopback },
+            1,
+            IPAddress.Parse("224.0.0.251"),
+            5353,
+            () =>
+            {
+                allocations++;
+                if (allocations == 2) throw new InvalidOperationException("Listener allocation failed.");
+                queryClient = new UdpClient(AddressFamily.InterNetwork);
+                querySocket = queryClient.Client;
+                return queryClient;
+            }));
+
+        Assert.NotNull(queryClient);
+        Assert.NotNull(querySocket);
+        Assert.True(querySocket.SafeHandle.IsClosed);
+    }
+
+    [Fact]
     public async Task DnsSdDiscoveryNormalizesSendTimeoutAndPreservesCallerCancellation()
     {
         var address = IPAddress.Parse("192.0.2.10");
@@ -668,12 +712,29 @@ public sealed class StableControlAndAdapterContractTests
         var interfaces = UdpHomeAssistantDiscoveryTransportFactory.CollectLocalInterfaces(
             new Func<HomeAssistantDiscoveryInterface?>[]
             {
-                () => new HomeAssistantDiscoveryInterface("ethernet", aliases),
-                () => new HomeAssistantDiscoveryInterface("tunnel", new[] { tunnel })
+                () => new HomeAssistantDiscoveryInterface("ethernet", aliases, 7),
+                () => new HomeAssistantDiscoveryInterface("tunnel", new[] { tunnel }, 8)
             });
 
         Assert.Equal(32, interfaces.Sum(value => value.Addresses.Count));
-        Assert.Contains(interfaces, value => value.Id == "tunnel" && value.Addresses.Contains(tunnel));
+        Assert.Contains(interfaces, value => value.Id == "tunnel" && value.InterfaceIndex == 8 && value.Addresses.Contains(tunnel));
+    }
+
+    [Fact]
+    public async Task DnsSdAliasesShareOneInterfaceTransportAndDatagramBudget()
+    {
+        var aliases = new[] { IPAddress.Parse("192.0.2.10"), IPAddress.Parse("192.0.2.11") };
+        var factory = new TestDiscoveryTransportFactory(
+            aliases,
+            CreateDiscoveryPacket(),
+            singleInterface: true);
+        var client = new HomeAssistantDiscoveryClient(factory);
+
+        var results = await client.DiscoverAsync(TimeSpan.FromMilliseconds(100));
+
+        Assert.Single(results);
+        Assert.Equal(1, factory.CreateCount);
+        Assert.Equal(aliases.OrderBy(value => value.ToString()), factory.SentAddresses.OrderBy(value => value.ToString()));
     }
 
     [Fact]
@@ -917,6 +978,23 @@ public sealed class StableControlAndAdapterContractTests
                 cyclic,
                 cancellation.Token));
 
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task MobileRegistrationStopsCallerPayloadTraversalAfterCancellation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var values = new CancellationProbeEnumerable(cancellation);
+        var registration = RegistrationRequest(false);
+        registration.AppData = new Dictionary<string, object?> { ["values"] = values };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.MobileApp.RegisterAsync(registration, cancellation.Token));
+
+        Assert.InRange(values.ReadCount, 1, 16);
         Assert.Null(server.LastRequestBody);
     }
 
@@ -1350,41 +1428,74 @@ public sealed class StableControlAndAdapterContractTests
             => Task.FromException<byte[]>(_exception);
     }
 
+    private sealed class CancellationProbeEnumerable : IEnumerable<string>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancellationProbeEnumerable(CancellationTokenSource cancellation)
+        {
+            _cancellation = cancellation;
+        }
+
+        internal int ReadCount { get; private set; }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            for (var index = 0; index < 1000; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 16) throw new InvalidOperationException("Serialization continued after cancellation.");
+                yield return new string('x', 4096);
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private sealed class TestDiscoveryTransportFactory : IHomeAssistantDiscoveryTransportFactory
     {
         private readonly IReadOnlyList<IPAddress> _addresses;
         private readonly byte[] _packet;
         private readonly bool _blockSend;
         private readonly bool _failAfterPacket;
+        private readonly bool _singleInterface;
         private readonly IPAddress? _failCreateAddress;
         private readonly object _gate = new();
         private readonly List<IPAddress> _createdAddresses = new();
         private readonly List<IPAddress> _sentAddresses = new();
+        private int _createCount;
 
-        internal TestDiscoveryTransportFactory(IReadOnlyList<IPAddress> addresses, byte[] packet, bool blockSend = false, bool failAfterPacket = false, IPAddress? failCreateAddress = null)
+        internal TestDiscoveryTransportFactory(IReadOnlyList<IPAddress> addresses, byte[] packet, bool blockSend = false, bool failAfterPacket = false, IPAddress? failCreateAddress = null, bool singleInterface = false)
         {
             _addresses = addresses;
             _packet = packet;
             _blockSend = blockSend;
             _failAfterPacket = failAfterPacket;
             _failCreateAddress = failCreateAddress;
+            _singleInterface = singleInterface;
         }
 
         internal IReadOnlyList<IPAddress> CreatedAddresses { get { lock (_gate) return _createdAddresses.ToArray(); } }
         internal IReadOnlyList<IPAddress> SentAddresses { get { lock (_gate) return _sentAddresses.ToArray(); } }
+        internal int CreateCount => Volatile.Read(ref _createCount);
 
         public IReadOnlyList<HomeAssistantDiscoveryInterface> GetLocalInterfaces()
-            => _addresses.Select((address, index) => new HomeAssistantDiscoveryInterface(
+            => _singleInterface
+                ? new[] { new HomeAssistantDiscoveryInterface("test", _addresses, 1) }
+                : _addresses.Select((address, index) => new HomeAssistantDiscoveryInterface(
                 "test-" + index.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                new[] { address })).ToArray();
+                new[] { address },
+                index + 1)).ToArray();
 
-        public IHomeAssistantDiscoveryTransport Create(IPAddress localAddress)
+        public IHomeAssistantDiscoveryTransport Create(HomeAssistantDiscoveryInterface network)
         {
-            if (localAddress.Equals(_failCreateAddress)) throw new SocketException((int)SocketError.AddressNotAvailable);
-            lock (_gate) _createdAddresses.Add(localAddress);
+            Interlocked.Increment(ref _createCount);
+            if (network.Addresses.Any(address => address.Equals(_failCreateAddress))) throw new SocketException((int)SocketError.AddressNotAvailable);
+            lock (_gate) _createdAddresses.AddRange(network.Addresses);
             return new TestDiscoveryTransport(_packet, _blockSend, _failAfterPacket, () =>
             {
-                lock (_gate) _sentAddresses.Add(localAddress);
+                lock (_gate) _sentAddresses.AddRange(network.Addresses);
             });
         }
     }

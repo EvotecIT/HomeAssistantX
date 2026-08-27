@@ -136,23 +136,10 @@ public sealed class HomeAssistantDiscoveryClient
         CancellationToken cancellationToken)
     {
         var aggregate = new DnsDiscoveryAggregate(limits);
-        var errors = await Task.WhenAll(network.Addresses.Select(address =>
-            DiscoverOnAddressAsync(address, aggregate, cancellationToken))).ConfigureAwait(false);
-        var failures = errors.Where(error => error is not null).Cast<Exception>().ToArray();
-        return new DiscoveryInterfaceResult(
-            aggregate.Build(),
-            failures.Length == network.Addresses.Count ? new AggregateException(failures) : null);
-    }
-
-    private async Task<Exception?> DiscoverOnAddressAsync(
-        IPAddress localAddress,
-        DnsDiscoveryAggregate aggregate,
-        CancellationToken cancellationToken)
-    {
         IHomeAssistantDiscoveryTransport? transport = null;
         try
         {
-            transport = _transportFactory.Create(localAddress);
+            transport = _transportFactory.Create(network);
             var query = DnsDiscoveryPacket.CreateQuery();
             await transport.SendAsync(query, cancellationToken).ConfigureAwait(false);
             var retryDelays = new[] { TimeSpan.FromSeconds(1) };
@@ -175,11 +162,20 @@ public sealed class HomeAssistantDiscoveryClient
                 DnsDiscoveryPacket.ReadInto(packet, aggregate);
                 receiveTask = transport.ReceiveAsync(cancellationToken);
             }
-            return null;
+            return new DiscoveryInterfaceResult(aggregate.Build(), null);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return null; }
-        catch (Exception ex) when ((ex is ObjectDisposedException || ex is SocketException) && cancellationToken.IsCancellationRequested) { return null; }
-        catch (Exception ex) when (ex is ObjectDisposedException || ex is SocketException) { return ex; }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new DiscoveryInterfaceResult(aggregate.Build(), null);
+        }
+        catch (Exception ex) when ((ex is ObjectDisposedException || ex is SocketException) && cancellationToken.IsCancellationRequested)
+        {
+            return new DiscoveryInterfaceResult(aggregate.Build(), null);
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException || ex is SocketException)
+        {
+            return new DiscoveryInterfaceResult(aggregate.Build(), ex);
+        }
         finally { transport?.Dispose(); }
     }
 

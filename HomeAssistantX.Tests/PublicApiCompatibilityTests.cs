@@ -90,6 +90,50 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("System.String?", FormatAnnotatedType(property.PropertyType, property));
     }
 
+#if NET10_0
+    [Fact]
+    public void MemberFormatterPreservesNullableFlowContracts()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(NullableFlowFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal("not-null-if-not-null(\"value\") System.String?", FormatReturnType(method));
+        Assert.Equal(
+            "System.Boolean result, not-null-when(true) System.String? value, does-not-return-if(false) System.Boolean assertion",
+            FormatParameters(method.GetParameters()));
+
+        var variants = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(NullableFlowVariantsFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Equal(
+            "allow-null System.String allowNull, disallow-null System.String? disallowNull, maybe-null System.String maybeNull, not-null System.String? notNull, maybe-null-when(false) System.String? maybeNullWhen",
+            FormatParameters(variants.GetParameters()));
+        Assert.StartsWith("does-not-return ", FormatMethod(typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(DoesNotReturnFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!), StringComparison.Ordinal);
+
+        var memberState = typeof(NullableFlowMemberFixture).GetMethod(nameof(NullableFlowMemberFixture.Ensure))!;
+        var memberStateWhen = typeof(NullableFlowMemberFixture).GetMethod(nameof(NullableFlowMemberFixture.TryEnsure))!;
+        var property = typeof(NullableFlowMemberFixture).GetProperty(nameof(NullableFlowMemberFixture.Value))!;
+        Assert.StartsWith(
+            "member-not-null(\"_first\") member-not-null(\"_first\",\"_second\") ",
+            FormatMethod(memberState),
+            StringComparison.Ordinal);
+        Assert.StartsWith(
+            "member-not-null-when(false,\"_first\",\"_second\") ",
+            FormatMethod(memberStateWhen),
+            StringComparison.Ordinal);
+        Assert.Contains("member-not-null(\"_first\")", FormatProperty(property), StringComparison.Ordinal);
+        Assert.Contains("get-flow(not-null)", FormatProperty(property), StringComparison.Ordinal);
+        Assert.Contains("set-flow(disallow-null)", FormatProperty(property), StringComparison.Ordinal);
+        Assert.Contains("get-member-flow(member-not-null(\"_first\"))", FormatProperty(
+            typeof(NullableFlowMemberFixture).GetProperty(nameof(NullableFlowMemberFixture.AccessorState))!), StringComparison.Ordinal);
+        Assert.DoesNotContain("set-flow", FormatProperty(
+            typeof(NullableFlowMemberFixture).GetProperty(nameof(NullableFlowMemberFixture.PrivateSetter))!), StringComparison.Ordinal);
+    }
+#endif
+
     [Fact]
     public void ParameterFormatterPreservesMetadataOnlyOptionalParameters()
     {
@@ -504,22 +548,26 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return ObsoleteContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return ObsoleteContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static string FormatConstructor(ConstructorInfo constructor)
         => "C " + ConstructorAccess(constructor) + ObsoleteContract(constructor)
-            + OverloadResolutionPriorityContract(constructor) + RequiredMemberSatisfaction(constructor)
+            + OverloadResolutionPriorityContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
             + FormatType(constructor.DeclaringType!) + "(" + FormatParameters(constructor.GetParameters()) + ")";
 
     private static string FormatProperty(PropertyInfo property)
     {
         var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
+        var getter = IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
+        var setter = IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
         return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(
             property,
-            IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null,
-            IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null)
-            + OverloadResolutionPriorityContract(property) + RequiredMember(property)
+            getter,
+            setter)
+            + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
+            + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
+            + RequiredMember(property)
             + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property)
             + " {" + FormatPropertyAccessors(property) + "}";
     }
@@ -545,6 +593,68 @@ public sealed class PublicApiCompatibilityTests
         dynamic value,
         IReadOnlyDictionary<string, dynamic[]> nested)
         => value;
+
+#if NET10_0
+    [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(value))]
+    private static string? NullableFlowFixture(
+        bool result,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? value,
+        [System.Diagnostics.CodeAnalysis.DoesNotReturnIf(false)] bool assertion)
+        => result ? value : null;
+
+    private static void NullableFlowVariantsFixture(
+        [System.Diagnostics.CodeAnalysis.AllowNull] string allowNull,
+        [System.Diagnostics.CodeAnalysis.DisallowNull] string? disallowNull,
+        [System.Diagnostics.CodeAnalysis.MaybeNull] string maybeNull,
+        [System.Diagnostics.CodeAnalysis.NotNull] string? notNull,
+        [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] string? maybeNullWhen)
+    {
+        notNull ??= string.Empty;
+    }
+
+    [System.Diagnostics.CodeAnalysis.DoesNotReturn]
+    private static void DoesNotReturnFixture() => throw new InvalidOperationException();
+
+    private sealed class NullableFlowMemberFixture
+    {
+        private string? _first;
+        private string? _second;
+
+        [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_first))]
+        [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_second), nameof(_first))]
+        public void Ensure()
+        {
+            _first = string.Empty;
+            _second = string.Empty;
+        }
+
+        [System.Diagnostics.CodeAnalysis.MemberNotNullWhen(false, nameof(_second), nameof(_first))]
+        public bool TryEnsure() => true;
+
+        [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_first))]
+        public string? Value
+        {
+            [return: System.Diagnostics.CodeAnalysis.NotNull]
+            get => _first ??= string.Empty;
+            [param: System.Diagnostics.CodeAnalysis.DisallowNull]
+            set => _first = value ?? string.Empty;
+        }
+
+
+        public string AccessorState
+        {
+            [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_first))]
+            get => _first ??= string.Empty;
+        }
+
+        public string? PrivateSetter
+        {
+            get => _second;
+            [param: System.Diagnostics.CodeAnalysis.DisallowNull]
+            private set => _second = value;
+        }
+    }
+#endif
 
     private static void MetadataOnlyOptionalFixture(
         [System.Runtime.InteropServices.Optional] int value)
@@ -913,7 +1023,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + RequiredMember(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + RequiredMember(field) + NullableFlowContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
     private static string ObsoleteContract(params ICustomAttributeProvider?[] providers)
@@ -1045,7 +1155,7 @@ public sealed class PublicApiCompatibilityTests
         var suffix = parameter.HasDefaultValue
             ? " = " + FormatDefault(parameter.DefaultValue)
             : parameter.IsOptional ? " [optional]" : string.Empty;
-        return FormatParameterType(parameter) + " " + parameter.Name + suffix;
+        return NullableFlowContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
     }));
 
     private static string FormatParameterType(ParameterInfo parameter)
@@ -1115,7 +1225,7 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatReturnType(MethodInfo method, ICustomAttributeProvider owner)
     {
         var parameter = method.ReturnParameter;
-        var safetyPrefix = RefSafetyPrefix(parameter)
+        var safetyPrefix = NullableFlowContract(parameter) + RefSafetyPrefix(parameter)
             + (HasAttribute(owner, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")
                 || HasAttribute(method, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
         if (!method.ReturnType.IsByRef)
@@ -1130,12 +1240,132 @@ public sealed class PublicApiCompatibilityTests
             + FormatAnnotatedType(method.ReturnType.GetElementType()!, parameter);
     }
 
+    private static string MethodFlowContract(ICustomAttributeProvider provider)
+    {
+        var contracts = new List<string>();
+        foreach (var attribute in GetCustomAttributes(provider))
+        {
+            var name = attribute.AttributeType.FullName;
+            if (string.Equals(name, "System.Diagnostics.CodeAnalysis.DoesNotReturnAttribute", StringComparison.Ordinal))
+            {
+                contracts.Add("does-not-return");
+                continue;
+            }
+
+            if (string.Equals(name, "System.Diagnostics.CodeAnalysis.MemberNotNullAttribute", StringComparison.Ordinal)
+                && TryGetMemberNames(attribute, 0, out var members))
+            {
+                contracts.Add("member-not-null(" + string.Join(",", members.Select(FormatDefault)) + ")");
+                continue;
+            }
+
+            if (string.Equals(name, "System.Diagnostics.CodeAnalysis.MemberNotNullWhenAttribute", StringComparison.Ordinal)
+                && attribute.ConstructorArguments.Count >= 2
+                && attribute.ConstructorArguments[0].Value is bool condition
+                && TryGetMemberNames(attribute, 1, out members))
+            {
+                contracts.Add("member-not-null-when(" + FormatBoolean(condition) + "," + string.Join(",", members.Select(FormatDefault)) + ")");
+            }
+        }
+
+        return contracts.Count == 0
+            ? string.Empty
+            : string.Join(" ", contracts.OrderBy(value => value, StringComparer.Ordinal)) + " ";
+    }
+
+    private static bool TryGetMemberNames(CustomAttributeData attribute, int argumentIndex, out IReadOnlyList<string> members)
+    {
+        members = Array.Empty<string>();
+        if (argumentIndex >= attribute.ConstructorArguments.Count) return false;
+        var value = attribute.ConstructorArguments[argumentIndex].Value;
+        if (value is string member)
+        {
+            members = new[] { member };
+            return true;
+        }
+        if (value is not IEnumerable<CustomAttributeTypedArgument> values) return false;
+        var collected = values.Select(item => item.Value as string).ToArray();
+        if (collected.Any(string.IsNullOrEmpty)) return false;
+        members = collected.Cast<string>().OrderBy(item => item, StringComparer.Ordinal).ToArray();
+        return true;
+    }
+
+    private static string NullableFlowContract(ICustomAttributeProvider provider)
+    {
+        var contracts = new List<string>();
+        foreach (var attribute in GetCustomAttributes(provider))
+        {
+            var name = attribute.AttributeType.FullName;
+            if (string.Equals(name, "System.Diagnostics.CodeAnalysis.AllowNullAttribute", StringComparison.Ordinal)) contracts.Add("allow-null");
+            else if (string.Equals(name, "System.Diagnostics.CodeAnalysis.DisallowNullAttribute", StringComparison.Ordinal)) contracts.Add("disallow-null");
+            else if (string.Equals(name, "System.Diagnostics.CodeAnalysis.MaybeNullAttribute", StringComparison.Ordinal)) contracts.Add("maybe-null");
+            else if (string.Equals(name, "System.Diagnostics.CodeAnalysis.NotNullAttribute", StringComparison.Ordinal)) contracts.Add("not-null");
+            else if (string.Equals(name, "System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute", StringComparison.Ordinal)
+                && TryGetBooleanArgument(attribute, out var maybeNullWhen)) contracts.Add("maybe-null-when(" + FormatBoolean(maybeNullWhen) + ")");
+            else if (string.Equals(name, "System.Diagnostics.CodeAnalysis.NotNullWhenAttribute", StringComparison.Ordinal)
+                && TryGetBooleanArgument(attribute, out var notNullWhen)) contracts.Add("not-null-when(" + FormatBoolean(notNullWhen) + ")");
+            else if (string.Equals(name, "System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute", StringComparison.Ordinal)
+                && attribute.ConstructorArguments.Count == 1
+                && attribute.ConstructorArguments[0].Value is string parameterName)
+                contracts.Add("not-null-if-not-null(" + FormatDefault(parameterName) + ")");
+            else if (string.Equals(name, "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute", StringComparison.Ordinal)
+                && TryGetBooleanArgument(attribute, out var doesNotReturnIf)) contracts.Add("does-not-return-if(" + FormatBoolean(doesNotReturnIf) + ")");
+        }
+
+        return contracts.Count == 0
+            ? string.Empty
+            : string.Join(" ", contracts.OrderBy(value => value, StringComparer.Ordinal)) + " ";
+    }
+
+    private static bool TryGetBooleanArgument(CustomAttributeData attribute, out bool value)
+    {
+        value = false;
+        if (attribute.ConstructorArguments.Count != 1 || attribute.ConstructorArguments[0].Value is not bool argument) return false;
+        value = argument;
+        return true;
+    }
+
+    private static string FormatBoolean(bool value) => value ? "true" : "false";
+
     private static string FormatPropertyType(PropertyInfo property)
     {
+        var propertyFlow = NullableFlowContract(property);
+        var getter = IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
+        var setter = IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
+        var getterFlow = getter is null
+            ? string.Empty
+            : NamedFlowContract("get", getter.ReturnParameter);
+        var setterValue = setter?.GetParameters().LastOrDefault();
+        var setterFlow = setterValue is null ? string.Empty : NamedFlowContract("set", setterValue);
         if (property.PropertyType.IsByRef && property.GetMethod is not null)
-            return FormatReturnType(property.GetMethod, property);
+        {
+            if (getter is not null) return propertyFlow + setterFlow + FormatReturnType(getter, property);
+            var parameter = property.GetMethod.ReturnParameter;
+            var safety = RefSafetyPrefix(parameter)
+                + (HasAttribute(property, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
+            var readOnly = HasAttribute(parameter, "System.Runtime.CompilerServices.IsReadOnlyAttribute")
+                || parameter.GetRequiredCustomModifiers().Any(modifier => string.Equals(
+                    modifier.FullName,
+                    "System.Runtime.InteropServices.InAttribute",
+                    StringComparison.Ordinal));
+            return propertyFlow + setterFlow + safety + (readOnly ? "ref readonly " : "ref ")
+                + FormatAnnotatedType(property.PropertyType.GetElementType()!, parameter);
+        }
         var safetyPrefix = HasAttribute(property, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty;
-        return safetyPrefix + FormatAnnotatedType(property.PropertyType, property);
+        return propertyFlow + getterFlow + setterFlow + safetyPrefix + FormatAnnotatedType(property.PropertyType, property);
+    }
+
+    private static string NamedFlowContract(string name, ICustomAttributeProvider provider)
+    {
+        var contract = NullableFlowContract(provider).TrimEnd();
+        return contract.Length == 0 ? string.Empty : name + "-flow(" + contract + ") ";
+    }
+
+    private static string NamedMethodFlowContract(string name, ICustomAttributeProvider? provider)
+    {
+        if (provider is null) return string.Empty;
+        var contract = MethodFlowContract(provider).TrimEnd();
+        return contract.Length == 0 ? string.Empty : name + "-member-flow(" + contract + ") ";
     }
 
     private static string RefSafetyPrefix(ParameterInfo parameter)
