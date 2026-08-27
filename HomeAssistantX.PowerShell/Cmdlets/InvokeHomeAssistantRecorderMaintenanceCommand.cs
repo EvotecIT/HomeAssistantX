@@ -1,5 +1,6 @@
 using System.Management.Automation;
 using HomeAssistantX.Models;
+using HomeAssistantX.Recorder;
 using HomeAssistantX.Services;
 
 namespace HomeAssistantX.PowerShell;
@@ -50,7 +51,7 @@ public sealed class InvokeHomeAssistantRecorderMaintenanceCommand : HomeAssistan
                     throw new ArgumentException("Specify at least one EntityId, Domain, or EntityGlob.");
                 var entityIds = NormalizeEntityIds(EntityId);
                 var domains = NormalizeDomains(Domain);
-                var entityGlobs = NormalizeValues(EntityGlob, nameof(EntityGlob));
+                var entityGlobs = NormalizeEntityGlobs(EntityGlob);
                 if (!ShouldProcess(ConnectionDisplayName, "Purge matching Recorder entities")) return;
                 result = await Client.Recorder.PurgeEntitiesAsync(entityIds, domains, entityGlobs, KeepDays, CancelToken).ConfigureAwait(false);
                 break;
@@ -122,19 +123,29 @@ public sealed class InvokeHomeAssistantRecorderMaintenanceCommand : HomeAssistan
         return normalized.ToArray();
     }
 
-    private static string[]? NormalizeValues(IEnumerable<string>? values, string parameterName)
+    private static string[]? NormalizeEntityGlobs(IEnumerable<string>? values)
     {
         if (values is null)
         {
             return null;
         }
 
-        var normalized = values.Select(value => value?.Trim() ?? string.Empty).ToArray();
-        if (normalized.Any(string.IsNullOrWhiteSpace))
+        var normalized = new List<string>();
+        foreach (var value in values)
         {
-            throw new ArgumentException("Selector values cannot be empty.", parameterName);
+            if (!HomeAssistantRecorderEntityGlob.TryNormalize(value, out var entityGlob))
+            {
+                throw new ArgumentException(
+                    "EntityGlob must contain lowercase Home Assistant entity patterns such as 'sensor.*' or 'sensor.kitchen_*'.",
+                    nameof(EntityGlob));
+            }
+
+            if (!normalized.Contains(entityGlob, StringComparer.Ordinal))
+            {
+                normalized.Add(entityGlob);
+            }
         }
 
-        return normalized.Distinct(StringComparer.Ordinal).ToArray();
+        return normalized.ToArray();
     }
 }

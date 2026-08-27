@@ -182,9 +182,9 @@ public sealed class HomeAssistantStatisticImportMetadata
         if (!string.Equals(statisticSource, source, StringComparison.Ordinal))
             throw new ArgumentException("Source must exactly match the prefix before ':' in StatisticId.", nameof(Source));
         if (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), MeanType)) throw new ArgumentOutOfRangeException(nameof(MeanType));
-        if (!HasMean && !HasSum) throw new ArgumentException("Import metadata must enable mean or sum statistics.");
-        if (HasMean != (MeanType != HomeAssistantStatisticMeanType.None))
-            throw new ArgumentException("MeanType must be non-None exactly when HasMean is enabled.", nameof(MeanType));
+        if (MeanType == HomeAssistantStatisticMeanType.None && !HasSum) throw new ArgumentException("Import metadata must enable mean or sum statistics.");
+        if (HasMean != (MeanType == HomeAssistantStatisticMeanType.Arithmetic))
+            throw new ArgumentException("HasMean is the legacy arithmetic-mean flag and must be enabled exactly for Arithmetic MeanType.", nameof(MeanType));
         if (rows is null || rows.Count == 0) throw new ArgumentException("At least one statistics row is required.", nameof(rows));
 
         DateTimeOffset? previousStart = null;
@@ -196,8 +196,8 @@ public sealed class HomeAssistantStatisticImportMetadata
             if (previousStart.HasValue && row.Start.UtcDateTime.Ticks <= previousStart.Value.UtcDateTime.Ticks)
                 throw new ArgumentException("Imported statistics rows must be strictly ordered from oldest to newest by Start.", nameof(rows));
             previousStart = row.Start;
-            if (!HasMean && (row.Mean.HasValue || row.Minimum.HasValue || row.Maximum.HasValue))
-                throw new ArgumentException("Mean, Minimum, and Maximum require HasMean metadata.", nameof(rows));
+            if (MeanType == HomeAssistantStatisticMeanType.None && (row.Mean.HasValue || row.Minimum.HasValue || row.Maximum.HasValue))
+                throw new ArgumentException("Mean, Minimum, and Maximum require a non-None MeanType.", nameof(rows));
             if (!HasSum && (row.State.HasValue || row.Sum.HasValue || row.LastReset.HasValue))
                 throw new ArgumentException("State, Sum, and LastReset require HasSum metadata.", nameof(rows));
             ValidateFinite(row.Mean, nameof(row.Mean));

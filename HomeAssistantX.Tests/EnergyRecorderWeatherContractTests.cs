@@ -201,6 +201,15 @@ public sealed class EnergyRecorderWeatherContractTests
                 row.GetProperty("last_reset").GetString());
         }
 
+        await client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { " sensor.* ", "binary_sensor.door_?", "sensor.room_[0-9]", "sensor.*" });
+        using (var purge = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody)))
+        {
+            Assert.Equal(
+                new[] { "sensor.*", "binary_sensor.door_?", "sensor.room_[0-9]" },
+                purge.RootElement.GetProperty("service_data").GetProperty("entity_globs").EnumerateArray().Select(value => value.GetString()).ToArray());
+        }
+        server.ClearLastServiceCall();
+
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.UpdateStatisticsMetadataAsync(
             "sensor.grid_energy", " ", "kWh"));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ImportStatisticsAsync(
@@ -265,11 +274,12 @@ public sealed class EnergyRecorderWeatherContractTests
                 new[] { invalidRange }));
         }
 
-        new HomeAssistantStatisticImportMetadata
+        var circularMetadata = new HomeAssistantStatisticImportMetadata
         {
             StatisticId = "external:circular_direction", Source = "external",
-            HasMean = true, HasSum = false, MeanType = HomeAssistantStatisticMeanType.Circular
-        }.ValidateRows(new[]
+            HasMean = false, HasSum = false, MeanType = HomeAssistantStatisticMeanType.Circular
+        };
+        var circularRows = new[]
         {
             new HomeAssistantStatisticImportRow
             {
@@ -278,7 +288,13 @@ public sealed class EnergyRecorderWeatherContractTests
                 Minimum = 10,
                 Maximum = 350
             }
-        });
+        };
+        await client.Recorder.ImportStatisticsAsync(circularMetadata, circularRows);
+        using (var circular = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/import_statistics"))))
+        {
+            Assert.False(circular.RootElement.GetProperty("metadata").GetProperty("has_mean").GetBoolean());
+            Assert.Equal(2, circular.RootElement.GetProperty("metadata").GetProperty("mean_type").GetInt32());
+        }
 
         server.ClearLastWebSocketCommand("recorder/import_statistics");
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ImportStatisticsAsync(
@@ -358,6 +374,9 @@ public sealed class EnergyRecorderWeatherContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(domains: new[] { "SENSOR" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(domains: new[] { "sensor__bad" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { " " }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "Sensor.*" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor*" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor.[bad" }));
         Assert.Null(server.GetLastWebSocketCommand("recorder/clear_statistics"));
         Assert.Null(server.LastServiceCallBody);
     }
@@ -627,6 +646,9 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"beta\",\"has_mean\":false,\"has_sum\":true}]")]
     [InlineData("[{\"statistic_id\":\"alpha:energy\",\"source\":\"beta\",\"has_mean\":false,\"has_sum\":true}]")]
     [InlineData("[{\"statistic_id\":\"alpha:energy\",\"source\":\" Alpha \",\"has_mean\":false,\"has_sum\":true}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true,\"mean_type\":1}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":true,\"has_sum\":true,\"mean_type\":0}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":true,\"has_sum\":true,\"mean_type\":2}]")]
     public async Task RecorderMetadataRequiresIdentityAndCapabilityFields(string response)
     {
         using var server = new TestHomeAssistantServer { RecorderMetadataResponseJson = response };
@@ -634,6 +656,20 @@ public sealed class EnergyRecorderWeatherContractTests
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.ListStatisticsAsync());
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
+    }
+
+    [Fact]
+    public async Task RecorderMetadataPreservesCircularMeanWithoutLegacyArithmeticFlag()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.direction\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":false,\"mean_type\":2}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var metadata = Assert.Single(await client.Recorder.GetStatisticsMetadataAsync());
+        Assert.False(metadata.HasMean);
+        Assert.Equal(HomeAssistantStatisticMeanType.Circular, metadata.MeanType);
     }
 
     [Theory]

@@ -205,7 +205,7 @@ public sealed class HomeAssistantRecorderClient
         var call = new HomeAssistantServiceCall("recorder", "purge_entities");
         if (entityIds is { Count: > 0 }) call.WithData("entity_id", RequireEntityIds(entityIds, nameof(entityIds)));
         if (domains is { Count: > 0 }) call.WithData("domains", RequireDomains(domains, nameof(domains)));
-        if (entityGlobs is { Count: > 0 }) call.WithData("entity_globs", RequireIds(entityGlobs, nameof(entityGlobs)));
+        if (entityGlobs is { Count: > 0 }) call.WithData("entity_globs", RequireEntityGlobs(entityGlobs, nameof(entityGlobs)));
         if (keepDays.HasValue) call.WithData("keep_days", keepDays.Value);
         return _services.CallControlAsync(call, cancellationToken);
     }
@@ -244,7 +244,9 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var metadata = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(value, failureMessage);
-        if (metadata.Any(item => item.MeanType.HasValue && !Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)))
+        if (metadata.Any(item => item.MeanType.HasValue
+            && (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)
+                || item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic))))
             throw new HomeAssistantProtocolException(failureMessage);
         return metadata;
     }
@@ -331,6 +333,32 @@ public sealed class HomeAssistantRecorderClient
     {
         if (values is null || values.Count == 0 || values.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("At least one non-empty identifier is required.", name);
         return values.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string[] RequireEntityGlobs(IReadOnlyCollection<string> values, string name)
+    {
+        if (values is null || values.Count == 0)
+        {
+            throw new ArgumentException("At least one entity glob is required.", name);
+        }
+
+        var normalized = new List<string>(values.Count);
+        foreach (var value in values)
+        {
+            if (!HomeAssistantRecorderEntityGlob.TryNormalize(value, out var entityGlob))
+            {
+                throw new ArgumentException(
+                    "Entity globs must use lowercase Home Assistant entity patterns such as 'sensor.*' or 'sensor.kitchen_*'.",
+                    name);
+            }
+
+            if (!normalized.Contains(entityGlob, StringComparer.Ordinal))
+            {
+                normalized.Add(entityGlob);
+            }
+        }
+
+        return normalized.ToArray();
     }
 
     private static string[] RequireEntityIds(IReadOnlyCollection<string> values, string name)
