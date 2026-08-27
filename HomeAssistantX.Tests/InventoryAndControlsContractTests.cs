@@ -60,6 +60,21 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task InventoryRejectsNegativeCapabilityMasks()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates(
+            "[{\"entity_id\":\"light.kitchen\",\"state\":\"off\",\"attributes\":{" +
+            "\"supported_features\":-1}}]");
+        using var client = TestClientFactory.Create(server);
+
+        var snapshot = await client.Inventory.GetSnapshotAsync();
+        var light = Assert.Single(snapshot.Entities, value => value.EntityId == "light.kitchen");
+
+        Assert.Null(light.SupportedFeatures);
+    }
+
+    [Fact]
     public async Task InventoryJoinsInheritedAreaFloorDeviceStateAndActions()
     {
         using var server = new TestHomeAssistantServer();

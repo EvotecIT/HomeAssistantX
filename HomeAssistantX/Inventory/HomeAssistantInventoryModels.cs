@@ -115,7 +115,9 @@ public sealed class HomeAssistantEntityInfo
 
     public string? Icon => FirstAttribute<string>("icon");
 
-    public long? SupportedFeatures => FirstAttribute<long?>("supported_features");
+    public long? SupportedFeatures => HomeAssistantAttributeReader.GetNonNegativeInt64(
+        Attributes,
+        "supported_features");
 
     public string? DisabledBy { get; internal set; }
 
