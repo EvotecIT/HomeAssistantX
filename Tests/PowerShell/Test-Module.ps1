@@ -886,13 +886,18 @@ try {
     $standardVacuumAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('vacuum', 'start'))))
     $standardSirenAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('siren', 'turn_on'))))
     $standardValveAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('valve', 'open_valve'))))
+    $standardFanIncreaseAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('fan', 'increase_speed'))))
+    $standardFanDecreaseAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('fan', 'decrease_speed'))))
+    $standardFanOscillateAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('fan', 'oscillate'))))
+    $standardMediaSourceAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('media_player', 'select_source'))))
+    $standardNotificationAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('notify', 'send_message'))))
     if (-not $standardAction.Contains('light.turn_on')) {
         throw 'WhatIf output did not identify a validated standard Home Assistant action.'
     }
     if ($customAction.Contains('private_domain') -or $customAction.Contains('private_action')) {
         throw 'WhatIf output exposed a custom Home Assistant service name.'
     }
-    foreach ($standardDescriptor in $standardVacuumAction, $standardSirenAction, $standardValveAction) {
+    foreach ($standardDescriptor in $standardVacuumAction, $standardSirenAction, $standardValveAction, $standardFanIncreaseAction, $standardFanDecreaseAction, $standardFanOscillateAction, $standardMediaSourceAction, $standardNotificationAction) {
         if ($standardDescriptor -like '*Home Assistant target*') {
             throw 'A HomeAssistantX-owned standard action was reduced to an opaque confirmation fingerprint.'
         }
