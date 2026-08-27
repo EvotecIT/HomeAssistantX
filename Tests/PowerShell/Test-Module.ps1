@@ -321,6 +321,8 @@ try {
         { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -EntityId update.Kitchen -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -EntityId UPDATE.kitchen -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -App '..' -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId _light.kitchen -WhatIf -ErrorAction Stop }
         { Receive-HomeAssistantEvent -EntityId LIGHT.kitchen -Count 1 -TimeoutSeconds 1 -ErrorAction Stop }
     )) {
         $invalidEnumRejected = $false

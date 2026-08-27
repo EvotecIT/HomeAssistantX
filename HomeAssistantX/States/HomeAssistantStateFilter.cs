@@ -22,7 +22,7 @@ public sealed class HomeAssistantStateFilter
 
     public static HomeAssistantStateFilter ForEntities(params string[] entityIds)
     {
-        return new HomeAssistantStateFilter(Validate(entityIds, nameof(entityIds)), null);
+        return new HomeAssistantStateFilter(ValidateEntityIds(entityIds, nameof(entityIds)), null);
     }
 
     public static HomeAssistantStateFilter ForDomains(params string[] domains)
@@ -54,5 +54,31 @@ public sealed class HomeAssistantStateFilter
         }
 
         return values.Select(value => value.Trim()).ToArray();
+    }
+
+    private static IEnumerable<string> ValidateEntityIds(string[] values, string parameterName)
+    {
+        if (values is null || values.Length == 0)
+        {
+            throw new ArgumentException("At least one entity identifier is required.", parameterName);
+        }
+
+        var normalized = new List<string>(values.Length);
+        foreach (var value in values)
+        {
+            if (!HomeAssistantEntityId.TryNormalize(value, out var entityId))
+            {
+                throw new ArgumentException(
+                    "Entity identifiers must use the lowercase native Home Assistant format.",
+                    parameterName);
+            }
+
+            if (!normalized.Contains(entityId, StringComparer.Ordinal))
+            {
+                normalized.Add(entityId);
+            }
+        }
+
+        return normalized;
     }
 }

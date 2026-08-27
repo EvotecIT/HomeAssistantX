@@ -148,7 +148,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             HomeAssistantSupervisorLogTarget.Core => "/core/logs",
             HomeAssistantSupervisorLogTarget.Supervisor => "/supervisor/logs",
             HomeAssistantSupervisorLogTarget.Host => "/host/logs",
-            HomeAssistantSupervisorLogTarget.App => "/addons/" + Escape(app, nameof(app)) + "/logs",
+            HomeAssistantSupervisorLogTarget.App => "/addons/" + EscapeApp(app, nameof(app)) + "/logs",
             _ => throw new ArgumentOutOfRangeException(nameof(target))
         };
         return _transport.SendTextAsync(
@@ -191,7 +191,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             HomeAssistantSupervisorUpdateTarget.Core => "/core/update",
             HomeAssistantSupervisorUpdateTarget.Supervisor => "/supervisor/update",
             HomeAssistantSupervisorUpdateTarget.OperatingSystem => "/os/update",
-            HomeAssistantSupervisorUpdateTarget.App => "/addons/" + Escape(app, nameof(app)) + "/update",
+            HomeAssistantSupervisorUpdateTarget.App => "/addons/" + EscapeApp(app, nameof(app)) + "/update",
             _ => throw new ArgumentOutOfRangeException(nameof(target))
         };
         var data = new Dictionary<string, object?>();
@@ -216,7 +216,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         var operationName = operation.ToString().ToLowerInvariant();
         return SendAsync(
             HttpMethod.Post,
-            "/addons/" + Escape(app, nameof(app)) + "/" + operationName,
+            "/addons/" + EscapeApp(app, nameof(app)) + "/" + operationName,
             null,
             cancellationToken);
     }
@@ -275,6 +275,16 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         }
 
         return Uri.EscapeDataString(value);
+    }
+
+    private static string EscapeApp(string? value, string parameterName)
+    {
+        if (!HomeAssistantSupervisorIdentifier.TryNormalizeAppSlug(value, out var normalized))
+        {
+            throw new ArgumentException("A valid Supervisor app/add-on slug is required.", parameterName);
+        }
+
+        return Uri.EscapeDataString(normalized);
     }
 
     private static void ValidateEndpoint(string endpoint)

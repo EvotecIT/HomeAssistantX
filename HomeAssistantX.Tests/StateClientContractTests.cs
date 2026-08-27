@@ -9,6 +9,14 @@ namespace HomeAssistantX.Tests;
 public sealed class StateClientContractTests
 {
     [Fact]
+    public void EntityFiltersRequireCanonicalNativeIdentifiers()
+    {
+        Assert.Throws<ArgumentException>(() => HomeAssistantStateFilter.ForEntities("LIGHT.kitchen"));
+        Assert.Throws<ArgumentException>(() => HomeAssistantStateFilter.ForEntities("_light.kitchen"));
+        _ = HomeAssistantStateFilter.ForEntities(" light.kitchen ");
+    }
+
+    [Fact]
     public async Task BuffersEventsReceivedBetweenSubscriptionAndInitialSnapshot()
     {
         using var server = new TestHomeAssistantServer { SendStateChangeBeforeSnapshot = true };

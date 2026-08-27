@@ -462,6 +462,10 @@ public sealed class WebSocketContractTests
         target.EntityIds = new[] { " " };
         await Assert.ThrowsAsync<ArgumentException>(
             () => client.Services.CallAsync(HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target)));
+        target.EntityIds = new[] { "_light.kitchen" };
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => client.Services.CallAsync(HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target)));
+        Assert.Throws<ArgumentException>(() => HomeAssistantTarget.ForEntity("LIGHT.kitchen"));
     }
 
     [Fact]

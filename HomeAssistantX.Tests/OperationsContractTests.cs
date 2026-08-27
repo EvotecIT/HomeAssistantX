@@ -191,7 +191,11 @@ public sealed class OperationsContractTests
             Background = true,
             ExcludeDatabase = true
         });
-        await client.Supervisor.InvokeAppAsync("test_app", HomeAssistantAppOperation.Restart);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Supervisor.InstallUpdateAsync(HomeAssistantSupervisorUpdateTarget.App, ".."));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Supervisor.InvokeAppAsync("test/app", HomeAssistantAppOperation.Restart));
+        await client.Supervisor.InvokeAppAsync(" test_app ", HomeAssistantAppOperation.Restart);
 
         Assert.Equal("2026.08.0", info.Version);
         Assert.True(info.Healthy);

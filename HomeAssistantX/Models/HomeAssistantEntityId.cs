@@ -11,13 +11,13 @@ public static class HomeAssistantEntityId
         string domain,
         out string normalized)
     {
-        if (!TryNormalize(value, out normalized) || string.IsNullOrWhiteSpace(domain))
+        if (!TryNormalize(value, out normalized) || !IsValidSegment(domain, disallowDoubleUnderscore: true))
         {
             return false;
         }
 
         var separator = normalized.IndexOf('.');
-        return string.Equals(normalized.Substring(0, separator), domain, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(normalized.Substring(0, separator), domain, StringComparison.Ordinal);
     }
 
     internal static string RequireResponseEntityId(string? value)
@@ -44,13 +44,25 @@ public static class HomeAssistantEntityId
             return false;
         }
 
-        for (var index = 0; index < normalized.Length; index++)
+        var domain = normalized.Substring(0, separator);
+        var objectId = normalized.Substring(separator + 1);
+        return IsValidSegment(domain, disallowDoubleUnderscore: true)
+            && IsValidSegment(objectId, disallowDoubleUnderscore: false);
+    }
+
+    private static bool IsValidSegment(string value, bool disallowDoubleUnderscore)
+    {
+        if (value.Length == 0
+            || value[0] == '_'
+            || value[value.Length - 1] == '_'
+            || (disallowDoubleUnderscore && value.Contains("__")))
         {
-            var character = normalized[index];
-            if (index == separator)
-            {
-                continue;
-            }
+            return false;
+        }
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
 
             if (!((character >= 'a' && character <= 'z')
                   || (character >= '0' && character <= '9')

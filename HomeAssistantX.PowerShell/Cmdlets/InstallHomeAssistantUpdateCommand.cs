@@ -77,13 +77,14 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
                 AppParameterSet => HomeAssistantSupervisorUpdateTarget.App,
                 _ => throw new InvalidOperationException("Unexpected update parameter set.")
             };
-            var description = target == HomeAssistantSupervisorUpdateTarget.App ? "app " + App : target.ToString();
+            var app = target == HomeAssistantSupervisorUpdateTarget.App ? NormalizeSupervisorApp(App) : App;
+            var description = target == HomeAssistantSupervisorUpdateTarget.App ? "app " + app : target.ToString();
             if (!ShouldProcess(description, "Install Home Assistant update"))
             {
                 return;
             }
 
-            result = await Client.Supervisor.InstallUpdateAsync(target, App, Version, Backup, CancelToken).ConfigureAwait(false);
+            result = await Client.Supervisor.InstallUpdateAsync(target, app, Version, Backup, CancelToken).ConfigureAwait(false);
         }
 
         if (PassThru)
@@ -97,6 +98,16 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
         if (!HomeAssistantEntityId.TryNormalizeForDomain(value, "update", out var normalized))
         {
             throw new ArgumentException("An update entity identifier is required.", nameof(EntityId));
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeSupervisorApp(string value)
+    {
+        if (!HomeAssistantSupervisorIdentifier.TryNormalizeAppSlug(value, out var normalized))
+        {
+            throw new ArgumentException("A valid Supervisor app/add-on slug is required.", nameof(App));
         }
 
         return normalized;

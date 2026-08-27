@@ -1,5 +1,7 @@
 ﻿using System.Text.Json.Serialization;
 
+using HomeAssistantX.Models;
+
 namespace HomeAssistantX.Services;
 
 /// <summary>Identifies Home Assistant entities, devices, areas, floors, or labels targeted by an action.</summary>
@@ -42,7 +44,7 @@ public sealed class HomeAssistantTarget
 
     public HomeAssistantTarget WithEntities(params string[] entityIds)
     {
-        EntityIds = ValidateIds(entityIds, nameof(entityIds));
+        EntityIds = NormalizeEntityIds(entityIds, nameof(entityIds));
         return this;
     }
 
@@ -74,7 +76,7 @@ public sealed class HomeAssistantTarget
     {
         return new HomeAssistantTarget
         {
-            EntityIds = NormalizeIds(EntityIds, nameof(EntityIds)),
+            EntityIds = EntityIds is null ? null : NormalizeEntityIds(EntityIds, nameof(EntityIds)),
             DeviceIds = NormalizeIds(DeviceIds, nameof(DeviceIds)),
             AreaIds = NormalizeIds(AreaIds, nameof(AreaIds)),
             FloorIds = NormalizeIds(FloorIds, nameof(FloorIds)),
@@ -105,5 +107,31 @@ public sealed class HomeAssistantTarget
         }
 
         return ids.Select(id => id.Trim()).ToArray();
+    }
+
+    private static IReadOnlyList<string> NormalizeEntityIds(IReadOnlyList<string> ids, string parameterName)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            throw new ArgumentException("At least one entity identifier is required.", parameterName);
+        }
+
+        var normalized = new List<string>(ids.Count);
+        foreach (var value in ids)
+        {
+            if (!HomeAssistantEntityId.TryNormalize(value, out var entityId))
+            {
+                throw new ArgumentException(
+                    "Entity identifiers must use the lowercase native Home Assistant format.",
+                    parameterName);
+            }
+
+            if (!normalized.Contains(entityId, StringComparer.Ordinal))
+            {
+                normalized.Add(entityId);
+            }
+        }
+
+        return normalized;
     }
 }
