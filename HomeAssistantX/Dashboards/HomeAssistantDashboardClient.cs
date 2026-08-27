@@ -52,7 +52,7 @@ public sealed class HomeAssistantDashboardClient
         if (create is null) throw new ArgumentNullException(nameof(create));
         var urlPath = Require(create.UrlPath, nameof(create.UrlPath));
         var title = Require(create.Title, nameof(create.Title));
-        if (!create.AllowSingleWord && urlPath.IndexOf('-') < 0) throw new ArgumentException("Dashboard URL paths must contain a hyphen unless AllowSingleWord is explicitly enabled.", nameof(create));
+        ValidateUrlPath(urlPath, create.AllowSingleWord, nameof(create));
         var payload = new Dictionary<string, object?>
         {
             ["url_path"] = urlPath,
@@ -63,6 +63,15 @@ public sealed class HomeAssistantDashboardClient
         if (create.Icon is not null) payload["icon"] = RequireIcon(create.Icon, nameof(create.Icon));
         if (create.AllowSingleWord) payload["allow_single_word"] = true;
         return await RequestDashboardAsync("lovelace/dashboards/create", payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ValidateUrlPath(string urlPath, bool allowSingleWord, string parameterName)
+    {
+        if (!allowSingleWord && urlPath.IndexOf('-') < 0)
+            throw new ArgumentException("Dashboard URL paths must contain a hyphen unless AllowSingleWord is explicitly enabled.", parameterName);
+        if (urlPath[0] == '-' || urlPath[urlPath.Length - 1] == '-' || urlPath.Contains("--")
+            || urlPath.Any(character => !(character is >= 'a' and <= 'z') && !(character is >= '0' and <= '9') && character != '-'))
+            throw new ArgumentException("Dashboard URL paths must already be canonical lowercase slugs containing only letters, numbers, and single hyphens.", parameterName);
     }
 
     public Task<HomeAssistantDashboard> UpdateDashboardAsync(string dashboardId, HomeAssistantDashboardUpdate update, CancellationToken cancellationToken = default)

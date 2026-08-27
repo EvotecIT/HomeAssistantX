@@ -90,6 +90,8 @@ public sealed class HomeAssistantMediaBrowserClient
     {
         if (string.IsNullOrWhiteSpace(item.Title))
             throw new HomeAssistantProtocolException("The media response omitted an item title.");
+        if (string.IsNullOrWhiteSpace(item.MediaContentId) || string.IsNullOrWhiteSpace(item.MediaContentType))
+            throw new HomeAssistantProtocolException("The media response contained an item without a media content identifier or type.");
         if (item.Children is null)
             throw new HomeAssistantProtocolException("The media response contained a null children collection.");
         HomeAssistantJson.RequireNoNullCollectionEntries(item.Children, "The media response contained a null child.");

@@ -83,6 +83,46 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Null(server.GetLastWebSocketCommand("camera/update_prefs"));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(9)]
+    public async Task CameraPreferenceReadsRejectUndefinedOrientations(int orientation)
+    {
+        using var server = new TestHomeAssistantServer { CameraPreferencesResponseJson = "{\"preload_stream\":true,\"orientation\":" + orientation + "}" };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetPreferencesAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front", new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
+    }
+
+    [Theory]
+    [InlineData("House_Main")]
+    [InlineData("House-main")]
+    [InlineData("house--main")]
+    [InlineData("-house-main")]
+    [InlineData("house-main-")]
+    public async Task DashboardCreationRejectsNonCanonicalUrlSlugsBeforeDispatch(string urlPath)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate { UrlPath = urlPath, Title = "House" }));
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
+    }
+
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"media_content_type\":\"library\",\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"children\":[]}]}")]
+    public async Task MediaBrowseRejectsItemsWithoutContentIdentity(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
     [Fact]
     public async Task CameraAndAutomationBulkReadsRejectMalformedServerEntityIds()
     {

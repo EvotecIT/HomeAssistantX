@@ -273,6 +273,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string DashboardResourceMutationResponseJson { get; set; } =
         "{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\"module\"}";
 
+    public string CameraPreferencesResponseJson { get; set; } =
+        "{\"preload_stream\":true,\"orientation\":3,\"future_preference\":true}";
+
     public string LovelaceInfoResponseJson { get; set; } =
         "{\"resource_mode\":\"storage\",\"future_info\":true}";
 
@@ -894,7 +897,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 return;
             case "camera/get_prefs":
             case "camera/update_prefs":
-                await session.SendResultAsync(id, ParseJson("{\"preload_stream\":true,\"orientation\":3,\"future_preference\":true}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(CameraPreferencesResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "media_source/browse_media":
             case "media_player/browse_media":

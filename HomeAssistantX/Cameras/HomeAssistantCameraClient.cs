@@ -78,7 +78,7 @@ public sealed class HomeAssistantCameraClient
     {
         ValidateEntityId(entityId);
         var value = await _webSocket.RequestAsync("camera/get_prefs", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim() }, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantCameraPreferences>(value, "The camera preferences could not be decoded.");
+        return DecodePreferences(value, "The camera preferences could not be decoded.");
     }
 
     public async Task<HomeAssistantCameraPreferences> SavePreferencesAsync(string entityId, HomeAssistantCameraPreferencesUpdate update, CancellationToken cancellationToken = default)
@@ -86,7 +86,15 @@ public sealed class HomeAssistantCameraClient
         ValidateEntityId(entityId);
         if (update is null) throw new ArgumentNullException(nameof(update));
         var value = await _webSocket.RequestAsync("camera/update_prefs", update.ToPayload(entityId.Trim()), cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantCameraPreferences>(value, "The updated camera preferences could not be decoded.");
+        return DecodePreferences(value, "The updated camera preferences could not be decoded.");
+    }
+
+    private static HomeAssistantCameraPreferences DecodePreferences(JsonElement value, string failureMessage)
+    {
+        var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraPreferences>(value, failureMessage);
+        if (!Enum.IsDefined(typeof(HomeAssistantCameraOrientation), preferences.Orientation))
+            throw new HomeAssistantProtocolException(failureMessage);
+        return preferences;
     }
 
     public async Task<string> GetSignedImagePathAsync(string entityId, TimeSpan? expiration = null, int? width = null, int? height = null, CancellationToken cancellationToken = default)
