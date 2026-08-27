@@ -123,9 +123,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? LastRequestPath { get; private set; }
 
-    public string? ExactStateResponseJson { get; set; }
-    public string StateMutationResponseJson { get; set; } =
-        "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}";
     public int OAuthTokenRequestCount { get; private set; }
 
     public string? LastRevokedRefreshToken { get; private set; }
@@ -230,6 +227,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         "{\"id\":\"morning-routine\",\"alias\":\"Morning\",\"triggers\":[],\"actions\":[],\"future_automation\":true}";
 
     public string? ExactStateResponseJson { get; set; }
+    public string StateMutationResponseJson { get; set; } =
+        "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}";
 
     public string WeatherForecastResponseJson { get; set; } =
         "{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T00:00:00+00:00\",\"condition\":\"sunny\",\"temperature\":24.5,\"templow\":15.0,\"precipitation_probability\":10,\"future_field\":\"kept\"}]}}";
