@@ -1,5 +1,6 @@
 #if NET10_0
 using System.Text.Json;
+using HomeAssistantX.Authentication;
 using HomeAssistantX.Energy;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Recorder;
@@ -491,6 +492,89 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("[{\"statistic_id\":\"sensor.other\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true},{\"statistic_id\":\"SENSOR.ENERGY\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true}]")]
+    public async Task FilteredRecorderMetadataCorrelatesReturnedIdentifiers(string response)
+    {
+        using var server = new TestHomeAssistantServer { RecorderMetadataResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Recorder.GetStatisticsMetadataAsync(new[] { "sensor.energy" }));
+    }
+
+    [Fact]
+    public async Task RecorderSelectorsAreFrozenBeforeTokenResolutionAndDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        var tokenProvider = new BlockingTokenProvider();
+        using var client = TestClientFactory.Create(server, accessTokenProvider: tokenProvider);
+        var query = new HomeAssistantStatisticsQuery(
+            DateTimeOffset.UtcNow.AddHours(-1),
+            HomeAssistantStatisticPeriod.Hour,
+            "sensor.grid_energy");
+
+        var request = client.Recorder.GetStatisticsAsync(query);
+        await tokenProvider.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsType<string[]>(query.StatisticIds)[0] = "sensor.other";
+        tokenProvider.Release.TrySetResult(TestHomeAssistantServer.AccessToken);
+
+        Assert.Equal("sensor.grid_energy", Assert.Single(await request).StatisticId);
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/statistics_during_period")));
+        Assert.Equal("sensor.grid_energy", command.RootElement.GetProperty("statistic_ids")[0].GetString());
+    }
+
+    [Fact]
+    public async Task FilteredRecorderMetadataSelectorsAreFrozenBeforeTokenResolutionAndDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        var tokenProvider = new BlockingTokenProvider();
+        using var client = TestClientFactory.Create(server, accessTokenProvider: tokenProvider);
+        var statisticIds = new List<string> { "sensor.grid_energy" };
+
+        var request = client.Recorder.GetStatisticsMetadataAsync(statisticIds);
+        await tokenProvider.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        statisticIds[0] = "sensor.other";
+        tokenProvider.Release.TrySetResult(TestHomeAssistantServer.AccessToken);
+
+        Assert.Equal("sensor.grid_energy", Assert.Single(await request).StatisticId);
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/get_statistics_metadata")));
+        Assert.Equal("sensor.grid_energy", command.RootElement.GetProperty("statistic_ids")[0].GetString());
+    }
+
+    [Fact]
+    public async Task RecorderStatisticsNormalizeUnitOverridesAndRequireStrictRowOrdering()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":2,\"end\":3},{\"start\":1,\"end\":2}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, "sensor.energy")
+        {
+            Units = new Dictionary<string, string> { [" energy "] = " kWh " }
+        };
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(query));
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/statistics_during_period")));
+        Assert.Equal("kWh", command.RootElement.GetProperty("units").GetProperty("energy").GetString());
+    }
+
+    [Fact]
+    public async Task RecorderStatisticsRejectDuplicateNormalizedUnitNamesBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, "sensor.energy")
+        {
+            Units = new Dictionary<string, string> { ["energy"] = "kWh", [" ENERGY "] = "Wh" }
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.GetStatisticsAsync(query));
+        Assert.Null(server.GetLastWebSocketCommand("recorder/statistics_during_period"));
+    }
+
+    [Theory]
     [InlineData("2026-08-27T12:00:00")]
     [InlineData("2026-08-27 12:00:00Z")]
     public async Task WeatherForecastRequiresAnExplicitStrictOffset(string timestamp)
@@ -571,6 +655,18 @@ public sealed class EnergyRecorderWeatherContractTests
             "sensor.energy", now, 1, " "));
         Assert.Null(server.GetLastWebSocketCommand("energy/fossil_energy_consumption"));
         Assert.Null(server.GetLastWebSocketCommand("recorder/adjust_sum_statistics"));
+    }
+
+    private sealed class BlockingTokenProvider : IHomeAssistantAccessTokenProvider
+    {
+        internal TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource<string> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult(true);
+            return await Release.Task.WaitAsync(cancellationToken);
+        }
     }
 }
 #endif

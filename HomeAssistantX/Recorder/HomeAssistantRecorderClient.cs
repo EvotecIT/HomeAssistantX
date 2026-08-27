@@ -24,9 +24,18 @@ public sealed class HomeAssistantRecorderClient
         IReadOnlyCollection<string>? statisticIds = null,
         CancellationToken cancellationToken = default)
     {
-        var payload = statisticIds is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = RequireIds(statisticIds, nameof(statisticIds)) };
+        var requestedIdSnapshot = statisticIds is null ? null : RequireIds(statisticIds, nameof(statisticIds));
+        var payload = requestedIdSnapshot is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = requestedIdSnapshot };
         var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
-        return DecodeMetadata(value, "Recorder statistics metadata could not be decoded.");
+        var metadata = DecodeMetadata(value, "Recorder statistics metadata could not be decoded.");
+        if (requestedIdSnapshot is not null)
+        {
+            var requestedIds = new HashSet<string>(requestedIdSnapshot, StringComparer.OrdinalIgnoreCase);
+            var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (metadata.Any(item => !requestedIds.Contains(item.StatisticId) || !responseIds.Add(item.StatisticId)))
+                throw new HomeAssistantProtocolException("Recorder statistics metadata contained an unexpected or duplicate statistic identifier.");
+        }
+        return metadata;
     }
 
     public async Task<IReadOnlyList<HomeAssistantStatisticMetadata>> ListStatisticsAsync(
@@ -48,10 +57,11 @@ public sealed class HomeAssistantRecorderClient
         if (query is null) throw new ArgumentNullException(nameof(query));
         if (query.EndTime.HasValue && query.EndTime <= query.StartTime)
             throw new ArgumentOutOfRangeException(nameof(query), "The statistics end must be after the start.");
+        var requestedIdSnapshot = query.StatisticIds.ToArray();
         var payload = new Dictionary<string, object?>
         {
             ["start_time"] = query.StartTime.ToString("O", CultureInfo.InvariantCulture),
-            ["statistic_ids"] = query.StatisticIds,
+            ["statistic_ids"] = requestedIdSnapshot,
             ["period"] = PeriodName(query.Period)
         };
         if (query.EndTime.HasValue) payload["end_time"] = query.EndTime.Value.ToString("O", CultureInfo.InvariantCulture);
@@ -64,13 +74,21 @@ public sealed class HomeAssistantRecorderClient
         {
             if (query.Units.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value)))
                 throw new ArgumentException("Statistics unit names and values must be non-empty.", nameof(query));
-            payload["units"] = query.Units;
+            var units = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in query.Units)
+            {
+                var normalizedName = pair.Key.Trim();
+                if (units.ContainsKey(normalizedName))
+                    throw new ArgumentException("Statistics unit names must be unique after normalization.", nameof(query));
+                units.Add(normalizedName, pair.Value.Trim());
+            }
+            payload["units"] = units;
         }
 
         var value = await _webSocket.RequestAsync("recorder/statistics_during_period", payload, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Recorder statistics were not an object.");
         var series = new List<HomeAssistantStatisticSeries>();
-        var requestedIds = new HashSet<string>(query.StatisticIds, StringComparer.OrdinalIgnoreCase);
+        var requestedIds = new HashSet<string>(requestedIdSnapshot, StringComparer.OrdinalIgnoreCase);
         var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in value.EnumerateObject())
         {
@@ -211,6 +229,7 @@ public sealed class HomeAssistantRecorderClient
     {
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("A Recorder statistics series could not be decoded.");
+        long? previousStart = null;
         foreach (var row in value.EnumerateArray())
         {
             if (row.ValueKind != JsonValueKind.Object
@@ -225,6 +244,12 @@ public sealed class HomeAssistantRecorderClient
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a non-positive interval.");
             }
+
+            if (previousStart.HasValue && start <= previousStart.Value)
+            {
+                throw new HomeAssistantProtocolException("A Recorder statistics series was not ordered by strictly increasing start time.");
+            }
+            previousStart = start;
         }
     }
 
