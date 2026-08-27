@@ -11,13 +11,20 @@ public static class HomeAssistantEntityId
         string domain,
         out string normalized)
     {
-        if (!TryNormalize(value, out normalized) || !IsValidSegment(domain, disallowDoubleUnderscore: true))
+        if (!TryNormalize(value, out normalized) || !TryNormalizeDomain(domain, out var normalizedDomain))
         {
             return false;
         }
 
         var separator = normalized.IndexOf('.');
-        return string.Equals(normalized.Substring(0, separator), domain, StringComparison.Ordinal);
+        return string.Equals(normalized.Substring(0, separator), normalizedDomain, StringComparison.Ordinal);
+    }
+
+    /// <summary>Trims and validates a lowercase Home Assistant domain.</summary>
+    public static bool TryNormalizeDomain(string? value, out string normalized)
+    {
+        normalized = value?.Trim() ?? string.Empty;
+        return IsValidSegment(normalized, disallowDoubleUnderscore: true);
     }
 
     internal static string RequireResponseEntityId(string? value)

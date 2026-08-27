@@ -13,8 +13,11 @@ public sealed class ProtocolResponseContractTests
         Assert.True(HomeAssistantEntityId.TryNormalize(" light.kitchen ", out var normalized));
         Assert.Equal("light.kitchen", normalized);
         Assert.True(HomeAssistantEntityId.TryNormalize("light.kitchen__ceiling", out _));
+        Assert.True(HomeAssistantEntityId.TryNormalizeDomain(" light ", out var domain));
+        Assert.Equal("light", domain);
         Assert.False(HomeAssistantEntityId.TryNormalize("light.Kitchen", out _));
         Assert.False(HomeAssistantEntityId.TryNormalizeForDomain("light.kitchen", "LIGHT", out _));
+        Assert.False(HomeAssistantEntityId.TryNormalizeDomain("li__ght", out _));
         foreach (var invalid in new[]
         {
             "_light.kitchen",
