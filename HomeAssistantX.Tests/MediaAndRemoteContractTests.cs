@@ -415,6 +415,9 @@ public sealed class MediaAndRemoteContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.JoinAsync(
             target,
             new[] { "media_player.kitchen-speaker" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.JoinAsync(
+            target,
+            new[] { "media_player.Kitchen" }));
         Assert.Throws<ArgumentOutOfRangeException>(() => new HomeAssistantRemoteLearnOptions
         {
             Timeout = TimeSpan.FromSeconds((double)int.MaxValue + 1d)

@@ -361,7 +361,6 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
 
         return normalized.Substring(separator + 1).All(character =>
             (character >= 'a' && character <= 'z')
-            || (character >= 'A' && character <= 'Z')
             || (character >= '0' && character <= '9')
             || character == '_');
     }
