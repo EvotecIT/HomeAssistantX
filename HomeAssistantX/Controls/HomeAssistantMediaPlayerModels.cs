@@ -1,4 +1,5 @@
 using HomeAssistantX.Models;
+using HomeAssistantX.Exceptions;
 
 namespace HomeAssistantX.Controls;
 
@@ -300,12 +301,17 @@ public sealed class HomeAssistantMediaPlayerStatus
             throw new ArgumentException("A media_player entity state is required.", nameof(state));
         }
 
+        if (string.IsNullOrWhiteSpace(state.State))
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant media-player state omitted its required state value.");
+        }
+
         var attributes = state.Attributes;
         var duration = HomeAssistantAttributeReader.GetDouble(attributes, "media_duration");
         var position = HomeAssistantAttributeReader.GetDouble(attributes, "media_position");
         return new HomeAssistantMediaPlayerStatus(state)
         {
-            State = ParseState(state.State ?? string.Empty),
+            State = ParseState(state.State),
             FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name"),
             DeviceClass = HomeAssistantAttributeReader.GetString(attributes, "device_class"),
             SupportedFeatures = (HomeAssistantMediaPlayerFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features") ?? 0),

@@ -109,6 +109,16 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         ValidateJoinMembers(JoinMember);
         var mediaExtra = ConvertExtra(MediaExtra);
 
+        if (MediaContentId is not null && string.IsNullOrWhiteSpace(MediaContentId))
+        {
+            throw new ArgumentException("A supplied MediaContentId cannot be empty.", nameof(MediaContentId));
+        }
+
+        if (MediaContentType is not null && string.IsNullOrWhiteSpace(MediaContentType))
+        {
+            throw new ArgumentException("A supplied MediaContentType cannot be empty.", nameof(MediaContentType));
+        }
+
         var hasContent = !string.IsNullOrWhiteSpace(MediaContentId)
             || !string.IsNullOrWhiteSpace(MediaContentType);
         if (!HasAnyOperation(hasContent))

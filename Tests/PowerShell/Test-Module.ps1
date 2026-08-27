@@ -388,6 +388,8 @@ try {
         { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaContentId test -MediaContentType music -Enqueue Add -Announce -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent 30 -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaExtra @{ provider = 'value' } -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent 30 -MediaContentId ' ' -MediaContentType music -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent 30 -MediaContentId test -MediaContentType ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent ([double]::NaN) -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -JoinMember light.kitchen -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -JoinMember 'media_player.' -WhatIf -ErrorAction Stop },

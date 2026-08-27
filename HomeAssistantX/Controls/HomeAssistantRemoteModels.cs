@@ -1,4 +1,5 @@
 using HomeAssistantX.Models;
+using HomeAssistantX.Exceptions;
 
 namespace HomeAssistantX.Controls;
 
@@ -128,6 +129,11 @@ public sealed class HomeAssistantRemoteStatus
         if (!string.Equals(state.Domain, "remote", StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException("A remote entity state is required.", nameof(state));
+        }
+
+        if (string.IsNullOrWhiteSpace(state.State))
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant remote state omitted its required state value.");
         }
 
         var attributes = state.Attributes;

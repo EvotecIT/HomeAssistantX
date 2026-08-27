@@ -276,6 +276,19 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Theory]
+    [InlineData("media_player.kitchen")]
+    [InlineData("remote.living_room")]
+    public void TypedMediaAndRemoteViewsRejectMissingStateValues(string entityId)
+    {
+        var state = DeserializeState("{\"entity_id\":\"" + entityId + "\",\"state\":null,\"attributes\":{}}");
+
+        if (entityId.StartsWith("media_player", StringComparison.Ordinal))
+            Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantMediaPlayerStatus.FromState(state));
+        else
+            Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRemoteStatus.FromState(state));
+    }
+
+    [Theory]
     [InlineData("9007199254740993.0")]
     [InlineData("\"9007199254740993.0\"")]
     public void IntegralAttributesPreserveValuesBeyondDoublePrecision(string value)
