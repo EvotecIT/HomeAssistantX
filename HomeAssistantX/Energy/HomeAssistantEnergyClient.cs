@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.WebSockets;
 
@@ -43,7 +44,7 @@ public sealed class HomeAssistantEnergyClient
             || costSensors.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("solar_forecast_domains", out var forecastDomains)
             || forecastDomains.ValueKind != JsonValueKind.Array
-            || forecastDomains.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(item.GetString())))
+            || !HasCanonicalUniqueDomains(forecastDomains))
         {
             throw new HomeAssistantProtocolException("The Home Assistant Energy information was malformed.");
         }
@@ -68,6 +69,12 @@ public sealed class HomeAssistantEnergyClient
         var result = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in value.EnumerateObject())
         {
+            if (string.IsNullOrWhiteSpace(property.Name)
+                || !string.Equals(property.Name, property.Name.Trim(), StringComparison.Ordinal))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained an invalid configuration-entry identifier.");
+            }
+
             if (result.ContainsKey(property.Name))
             {
                 throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained a duplicate configuration-entry identifier.");
@@ -77,6 +84,24 @@ public sealed class HomeAssistantEnergyClient
         }
 
         return result;
+    }
+
+    private static bool HasCanonicalUniqueDomains(JsonElement domains)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in domains.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String
+                || item.GetString() is not string value
+                || !HomeAssistantEntityId.TryNormalizeDomain(value, out var normalized)
+                || !string.Equals(value, normalized, StringComparison.Ordinal)
+                || !seen.Add(normalized))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public async Task<IReadOnlyList<HomeAssistantFossilEnergyPeriod>> GetFossilEnergyConsumptionAsync(

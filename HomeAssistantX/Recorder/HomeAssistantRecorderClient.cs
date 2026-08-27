@@ -149,6 +149,7 @@ public sealed class HomeAssistantRecorderClient
     public async Task AdjustSumStatisticsAsync(string statisticId, DateTimeOffset start, double adjustment, string? unit, CancellationToken cancellationToken = default)
     {
         if (double.IsNaN(adjustment) || double.IsInfinity(adjustment)) throw new ArgumentOutOfRangeException(nameof(adjustment));
+        if (adjustment == 0d) throw new ArgumentOutOfRangeException(nameof(adjustment), "A statistics sum adjustment must be non-zero.");
         unit = NormalizeOptionalUnit(unit, nameof(unit));
         _ = await _webSocket.RequestAsync("recorder/adjust_sum_statistics", new Dictionary<string, object?>
         {
@@ -225,7 +226,11 @@ public sealed class HomeAssistantRecorderClient
                 || !string.Equals(statisticIdValue, normalizedStatisticId, StringComparison.Ordinal)
                 || !item.TryGetProperty("source", out var source)
                 || source.ValueKind != JsonValueKind.String
-                || string.IsNullOrWhiteSpace(source.GetString())
+                || source.GetString() is not string sourceValue
+                || !HomeAssistantStatisticIdentifier.IsSlug(sourceValue)
+                || (statisticIdValue.Contains(':')
+                    && (!HomeAssistantStatisticIdentifier.TryNormalizeExternal(statisticIdValue, out _, out var statisticSource)
+                        || !string.Equals(sourceValue, statisticSource, StringComparison.Ordinal)))
                 || !item.TryGetProperty("has_mean", out var hasMean)
                 || hasMean.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
                 || !item.TryGetProperty("has_sum", out var hasSum)

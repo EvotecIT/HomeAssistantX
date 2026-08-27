@@ -87,6 +87,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 return;
             case AdjustSet:
                 if (double.IsNaN(AdjustSum) || double.IsInfinity(AdjustSum)) throw new ArgumentOutOfRangeException(nameof(AdjustSum));
+                if (AdjustSum == 0d) throw new ArgumentOutOfRangeException(nameof(AdjustSum), "AdjustSum must be non-zero.");
                 var adjustmentUnit = Unit is null
                     ? null
                     : string.IsNullOrWhiteSpace(Unit)

@@ -26,7 +26,10 @@ public sealed class HomeAssistantWeatherClient
     public async Task<IReadOnlyList<HomeAssistantWeatherObservation>> GetAsync(CancellationToken cancellationToken = default)
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        return HomeAssistantEntityId.RequireResponseDomainStates(states, "weather")
+        var weatherStates = HomeAssistantEntityId.RequireResponseDomainStates(states, "weather").ToArray();
+        if (weatherStates.Select(state => state.EntityId).Distinct(StringComparer.Ordinal).Count() != weatherStates.Length)
+            throw new HomeAssistantProtocolException("The Home Assistant weather response contained duplicate entities.");
+        return weatherStates
             .Select(ToObservation)
             .OrderBy(item => item.EntityId, StringComparer.OrdinalIgnoreCase).ToArray();
     }
@@ -69,14 +72,19 @@ public sealed class HomeAssistantWeatherClient
         var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in units.EnumerateObject())
         {
-            if (result.ContainsKey(property.Name))
+            if (string.IsNullOrWhiteSpace(property.Name)
+                || !string.Equals(property.Name, property.Name.Trim(), StringComparison.Ordinal)
+                || result.ContainsKey(property.Name))
                 throw new HomeAssistantProtocolException("The weather convertible-unit response contained a duplicate unit category.");
             if (property.Value.ValueKind != JsonValueKind.Array)
                 throw new HomeAssistantProtocolException("A weather convertible-unit list was not an array.");
             var values = property.Value.EnumerateArray().ToArray();
-            if (values.Any(item => item.ValueKind != JsonValueKind.String))
+            if (values.Any(item => item.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(item.GetString())))
                 throw new HomeAssistantProtocolException("A weather convertible-unit list contained a non-string value.");
-            result[property.Name] = values.Select(item => item.GetString()!).ToArray();
+            var names = values.Select(item => item.GetString()!).ToArray();
+            if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
+                throw new HomeAssistantProtocolException("A weather convertible-unit list contained a duplicate value.");
+            result[property.Name] = names;
         }
         return result;
     }
