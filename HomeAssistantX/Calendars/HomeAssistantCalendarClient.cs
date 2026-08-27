@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Subscriptions;
@@ -140,8 +141,7 @@ public sealed class HomeAssistantCalendarClient
 
     private static string NormalizeEntityId(string entityId)
     {
-        var normalized = entityId?.Trim();
-        if (normalized is null || normalized.Length == 0)
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", out var normalized))
         {
             throw new ArgumentException("A calendar entity identifier is required.", nameof(entityId));
         }

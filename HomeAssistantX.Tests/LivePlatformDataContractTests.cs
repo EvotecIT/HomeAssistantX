@@ -153,6 +153,24 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task CalendarOperationsRejectMalformedOrWrongDomainEntityIdsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var input = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Event");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Calendars.CreateEventAsync("light.kitchen", input));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Calendars.CreateEventAsync("calendar.", input));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Calendars.CreateEventAsync("calendar.home.extra", input));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.GetCalendarEventsAsync(
+            "calendar.home.extra",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow.AddHours(1)));
+
+        Assert.Null(server.GetLastWebSocketCommand("calendar/event/create"));
+    }
+
+    [Fact]
     public async Task RegistrySnapshotIncludesLabelsAndScopedCategoryCrudPreservesTriStateUpdates()
     {
         using var server = new TestHomeAssistantServer();

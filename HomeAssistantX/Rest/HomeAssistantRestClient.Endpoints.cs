@@ -109,7 +109,10 @@ public sealed partial class HomeAssistantRestClient
         CancellationToken cancellationToken = default)
     {
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", cancellationToken, out var normalizedEntityId))
+        {
             throw new ArgumentException("A calendar entity identifier is required.", nameof(entityId));
+        }
+
         if (end <= start)
         {
             throw new ArgumentOutOfRangeException(nameof(end), "The calendar end must be after its start.");
