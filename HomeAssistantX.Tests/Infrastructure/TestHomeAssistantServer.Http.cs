@@ -64,6 +64,14 @@ internal sealed partial class TestHomeAssistantServer
 
         Interlocked.Increment(ref _authenticatedRequestCount);
 
+        if (method == "GET"
+            && pathWithoutQuery.StartsWith("/api/states/", StringComparison.Ordinal)
+            && ExactStateResponseJson is not null)
+        {
+            await WriteHttpResponseAsync(stream, 200, ExactStateResponseJson).ConfigureAwait(false);
+            return;
+        }
+
         switch (method + " " + pathWithoutQuery)
         {
             case "GET /supervisor/info":

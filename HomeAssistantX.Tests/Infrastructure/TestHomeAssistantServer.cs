@@ -92,6 +92,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? LastRequestPath { get; private set; }
 
+    public string? ExactStateResponseJson { get; set; }
+
     public int OAuthTokenRequestCount { get; private set; }
 
     public string? LastRevokedRefreshToken { get; private set; }

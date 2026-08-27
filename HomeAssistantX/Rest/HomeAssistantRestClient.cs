@@ -48,13 +48,15 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         return result;
     }
 
-    public Task<HomeAssistantState> GetStateAsync(string entityId, CancellationToken cancellationToken = default)
+    public async Task<HomeAssistantState> GetStateAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        return SendHomeAssistantAsync<HomeAssistantState>(
+        var normalizedEntityId = NormalizeEntityId(entityId);
+        var state = await SendHomeAssistantAsync<HomeAssistantState>(
             HttpMethod.Get,
-            "api/states/" + EscapePath(NormalizeEntityId(entityId)),
+            "api/states/" + EscapePath(normalizedEntityId),
             null,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
     }
 
     public Task<JsonElement> GetServicesAsync(CancellationToken cancellationToken = default)

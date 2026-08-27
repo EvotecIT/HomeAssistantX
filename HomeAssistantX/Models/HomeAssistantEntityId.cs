@@ -99,6 +99,22 @@ public static class HomeAssistantEntityId
         return state;
     }
 
+    internal static HomeAssistantState RequireResponseEntity(HomeAssistantState state, string expectedEntityId)
+    {
+        if (state is null)
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned a different entity than requested.");
+        }
+
+        var actualEntityId = RequireResponseEntityId(state.EntityId);
+        if (!string.Equals(actualEntityId, expectedEntityId, StringComparison.Ordinal))
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned a different entity than requested.");
+        }
+
+        return state;
+    }
+
     internal static IEnumerable<HomeAssistantState> RequireResponseDomainStates(
         IEnumerable<HomeAssistantState> states,
         string domain)
