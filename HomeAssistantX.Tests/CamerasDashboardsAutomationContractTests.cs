@@ -387,6 +387,11 @@ public sealed class CamerasDashboardsAutomationContractTests
             "/local/card.js",
             HomeAssistantDashboardResourceType.Module));
 
+        server.DashboardResourceMutationResponseJson = "{\"id\":\" resource-1 \",\"url\":\"/local/card.js\",\"type\":\"module\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateResourceAsync(
+            "/local/card.js",
+            HomeAssistantDashboardResourceType.Module));
+
         server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\" \"}}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
 
@@ -442,6 +447,18 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Fact]
+    public async Task PanelResponsesPreserveValidNonDashboardRoutes()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"config/integrations\":{\"component_name\":\"config\"}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal("config/integrations", Assert.Single(await client.Dashboards.GetPanelsAsync()).UrlPath);
     }
 
     [Theory]

@@ -20,7 +20,7 @@ public sealed class HomeAssistantDashboardClient
         var routes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
         {
-            var route = RequireResponseUrlPath(property.Name, "A frontend panel contained an invalid route.");
+            var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.");
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
             var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(property.Value, "A frontend panel could not be decoded.");
@@ -28,7 +28,7 @@ public sealed class HomeAssistantDashboardClient
             {
                 panel.UrlPath = route;
             }
-            else if (!string.Equals(RequireResponseUrlPath(panel.UrlPath, "A frontend panel contained an invalid route."), route, StringComparison.Ordinal))
+            else if (!string.Equals(RequireResponseSelector(panel.UrlPath, "A frontend panel contained an invalid route."), route, StringComparison.Ordinal))
             {
                 throw new HomeAssistantProtocolException("A frontend panel route did not match its registered key.");
             }
@@ -261,9 +261,8 @@ public sealed class HomeAssistantDashboardClient
 
     private static void ValidateListedDashboard(HomeAssistantDashboard dashboard)
     {
-        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(dashboard.UrlPath, allowSingleWord: true, out var urlPath)
-            || !string.Equals(dashboard.UrlPath, urlPath, StringComparison.Ordinal)
-            || string.IsNullOrWhiteSpace(dashboard.Title)
+        dashboard.UrlPath = RequireResponseUrlPath(dashboard.UrlPath, "A dashboard did not contain a canonical URL path.");
+        if (string.IsNullOrWhiteSpace(dashboard.Title)
             || string.IsNullOrWhiteSpace(dashboard.Mode))
             throw new HomeAssistantProtocolException("A dashboard did not contain its required fields.");
         if (dashboard.Mode == "storage")
@@ -272,8 +271,9 @@ public sealed class HomeAssistantDashboardClient
         }
         else if (dashboard.Mode == "yaml")
         {
-            if (string.IsNullOrWhiteSpace(dashboard.FileName)
-                || !string.Equals(dashboard.FileName, dashboard.FileName.Trim(), StringComparison.Ordinal))
+            if (dashboard.FileName is not string fileName
+                || string.IsNullOrWhiteSpace(fileName)
+                || !string.Equals(fileName, fileName.Trim(), StringComparison.Ordinal))
                 throw new HomeAssistantProtocolException("A YAML dashboard did not contain a canonical filename.");
         }
         else
@@ -313,8 +313,7 @@ public sealed class HomeAssistantDashboardClient
     private static void ValidateStorageResource(HomeAssistantDashboardResource resource)
     {
         ValidateListedResource(resource);
-        if (string.IsNullOrWhiteSpace(resource.Id))
-            throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not contain its identifier.");
+        resource.Id = RequireResponseSelector(resource.Id, "A Lovelace resource mutation response did not contain a canonical identifier.");
     }
 
     private static string ResourceTypeName(HomeAssistantDashboardResourceType value) => value switch
@@ -349,10 +348,11 @@ public sealed class HomeAssistantDashboardClient
 
     private static string RequireResponseSelector(string? value, string failureMessage)
     {
-        if (string.IsNullOrWhiteSpace(value)
-            || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+        if (value is not string selector
+            || string.IsNullOrWhiteSpace(selector)
+            || !string.Equals(selector, selector.Trim(), StringComparison.Ordinal))
             throw new HomeAssistantProtocolException(failureMessage);
-        return value;
+        return selector;
     }
 
     private static string RequireIcon(string value, string parameterName)
