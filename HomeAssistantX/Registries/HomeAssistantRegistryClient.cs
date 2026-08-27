@@ -61,6 +61,7 @@ public sealed class HomeAssistantRegistryClient
         var value = await _webSocket.RequestAsync("config/label_registry/list", null, cancellationToken).ConfigureAwait(false);
         var labels = DeserializeArray<HomeAssistantLabel>(value, "label registry", cancellationToken);
         foreach (var label in labels) ValidateLabel(label);
+        RequireUniqueIdentities(labels.Select(label => label.LabelId), "label registry");
         return labels;
     }
 
@@ -124,6 +125,7 @@ public sealed class HomeAssistantRegistryClient
         }, cancellationToken).ConfigureAwait(false);
         var categories = DeserializeArray<HomeAssistantCategory>(value, "category registry", cancellationToken);
         foreach (var category in categories) ValidateCategory(category);
+        RequireUniqueIdentities(categories.Select(category => category.CategoryId), "category registry");
         return categories;
     }
 
@@ -283,6 +285,13 @@ public sealed class HomeAssistantRegistryClient
             || !string.Equals(category.CategoryId, category.CategoryId.Trim(), StringComparison.Ordinal)
             || string.IsNullOrWhiteSpace(category.Name))
             throw new HomeAssistantProtocolException("A Home Assistant category did not contain its required identifier and name.");
+    }
+
+    private static void RequireUniqueIdentities(IEnumerable<string> identities, string registryName)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        if (identities.Any(identity => !seen.Add(identity)))
+            throw new HomeAssistantProtocolException("The Home Assistant " + registryName + " response contained a duplicate identifier.");
     }
 
     private async Task IgnoreResultAsync(

@@ -375,6 +375,21 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task RegistryListsAndSnapshotsRejectDuplicateLabelAndCategoryIdentities()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            LabelRegistryResponseJson = "[{\"label_id\":\"security\",\"name\":\"Security\"},{\"label_id\":\"security\",\"name\":\"Duplicate\"}]",
+            CategoryRegistryResponseJson = "[{\"category_id\":\"comfort\",\"name\":\"Comfort\"},{\"category_id\":\"comfort\",\"name\":\"Duplicate\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetLabelsAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetCategoriesAsync("automation"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetSnapshotAsync());
+    }
+
+    [Fact]
     public async Task RegistryMutationsRejectIncompleteLabelsAndCategories()
     {
         using var server = new TestHomeAssistantServer
