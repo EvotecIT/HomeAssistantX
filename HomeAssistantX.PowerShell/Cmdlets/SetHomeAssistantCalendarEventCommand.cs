@@ -5,7 +5,7 @@ using HomeAssistantX.Models;
 namespace HomeAssistantX.PowerShell;
 
 /// <summary>Creates or updates a timed or all-day Home Assistant calendar event.</summary>
-/// <example><summary>Create a timed event</summary><code>Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner -StartTime '2026-08-27 18:00' -EndTime '2026-08-27 20:00' -WhatIf</code></example>
+/// <example><summary>Create a timed event</summary><code>Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner -StartTime '2026-08-27T18:00:00+02:00' -EndTime '2026-08-27T20:00:00+02:00' -WhatIf</code></example>
 /// <example><summary>Update one recurring occurrence</summary><code>Set-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceId 20260827 -Summary Dinner -StartDate 2026-08-27 -EndDate 2026-08-28</code></example>
 [Cmdlet(VerbsCommon.Set, "HomeAssistantCalendarEvent", SupportsShouldProcess = true, DefaultParameterSetName = CreateTimed)]
 public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet

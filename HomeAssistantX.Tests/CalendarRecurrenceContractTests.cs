@@ -26,6 +26,7 @@ public sealed class CalendarRecurrenceContractTests
     [InlineData("FREQ=WEEKLY;COUNT=abc")]
     [InlineData("FREQ=WEEKLY;FREQ=DAILY")]
     [InlineData("FREQ=WEEKLY;INTERVAL=0")]
+    [InlineData("FREQ=DAILY;BYSECOND=60")]
     [InlineData("FREQ=WEEKLY;BYDAY=MONDAY")]
     [InlineData("FREQ=WEEKLY;COUNT=5;UNTIL=20261231")]
     [InlineData("FREQ=WEEKLY;")]

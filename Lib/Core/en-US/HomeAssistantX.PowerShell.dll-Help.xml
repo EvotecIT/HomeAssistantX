@@ -9087,7 +9087,7 @@
     <command:examples>
       <command:example>
         <maml:title>Create a timed event</maml:title>
-        <dev:code>Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner -StartTime '2026-08-27 18:00' -EndTime '2026-08-27 20:00' -WhatIf</dev:code>
+        <dev:code>Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner -StartTime '2026-08-27T18:00:00+02:00' -EndTime '2026-08-27T20:00:00+02:00' -WhatIf</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

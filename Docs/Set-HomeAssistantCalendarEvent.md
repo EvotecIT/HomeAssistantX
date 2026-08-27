@@ -36,7 +36,7 @@ Creates or updates a timed or all-day Home Assistant calendar event.
 
 ### EXAMPLE 1
 ```powershell
-Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner -StartTime '2026-08-27 18:00' -EndTime '2026-08-27 20:00' -WhatIf
+Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner -StartTime '2026-08-27T18:00:00+02:00' -EndTime '2026-08-27T20:00:00+02:00' -WhatIf
 ```
 
 

@@ -77,7 +77,7 @@ internal static class HomeAssistantRecurrenceRuleValidator
                 ValidateInteger(value, 1, int.MaxValue, allowZero: false, parameterName, name);
                 return;
             case "BYSECOND":
-                ValidateIntegerList(value, 0, 60, allowZero: true, parameterName, name);
+                ValidateIntegerList(value, 0, 59, allowZero: true, parameterName, name);
                 return;
             case "BYMINUTE":
                 ValidateIntegerList(value, 0, 59, allowZero: true, parameterName, name);
