@@ -65,9 +65,9 @@ public sealed class HomeAssistantUpdateClient
         CancellationToken cancellationToken = default)
     {
         var call = HomeAssistantServiceCall.Create("update", "install").ForEntity(NormalizeEntityId(entityId));
-        if (!string.IsNullOrWhiteSpace(version))
+        if (version is not null)
         {
-            call.WithData("version", version);
+            call.WithData("version", RequireVersion(version));
         }
 
         if (backup.HasValue)
@@ -77,6 +77,11 @@ public sealed class HomeAssistantUpdateClient
 
         return _services.CallAsync(call, cancellationToken);
     }
+
+    private static string RequireVersion(string value)
+        => string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A supplied update version cannot be empty.", nameof(value))
+            : value.Trim();
 
     private static string NormalizeEntityId(string entityId)
     {

@@ -1,10 +1,13 @@
 using System.Management.Automation;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HomeAssistantX.PowerShell;
 
 /// <summary>Common explicit-or-default session contract for HomeAssistantX cmdlets.</summary>
 public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
 {
+    private static readonly byte[] ConfirmationFingerprintKey = CreateConfirmationFingerprintKey();
     private Guid? _runspaceId;
 
     /// <summary>Optional explicit session returned by <c>Connect-HomeAssistant</c>. It also accepts pipeline input.</summary>
@@ -31,14 +34,14 @@ public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
     public new bool ShouldProcess(string? target)
     {
         var connection = RequireUsableConnection();
-        return base.ShouldProcess(connection.ConfirmationName);
+        return base.ShouldProcess(ConfirmationTarget(connection, target));
     }
 
     /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
     public new bool ShouldProcess(string? target, string action)
     {
         var connection = RequireUsableConnection();
-        return base.ShouldProcess(connection.ConfirmationName, action);
+        return base.ShouldProcess(ConfirmationTarget(connection, target), action);
     }
 
     /// <summary>Validates the current connection before an operation can display a confirmation prompt.</summary>
@@ -75,5 +78,42 @@ public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
         }
 
         return connection;
+    }
+
+    private static string ConfirmationTarget(HomeAssistantConnection connection, string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return "Home Assistant target on " + connection.ConfirmationName;
+        }
+
+        // Confirmation output can be collected in CI logs or transcripts. A process-scoped
+        // keyed fingerprint distinguishes targets without making predictable entity, app,
+        // dashboard, statistic, or local-path names recoverable from an unsalted hash.
+        var bytes = Encoding.UTF8.GetBytes(target!.Trim());
+        byte[] hash;
+        using (var algorithm = new HMACSHA256(ConfirmationFingerprintKey))
+        {
+            hash = algorithm.ComputeHash(bytes);
+        }
+
+        var fingerprint = new StringBuilder(8);
+        for (var index = 0; index < 4; index++)
+        {
+            fingerprint.Append(hash[index].ToString("X2", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return "Home Assistant target [" + fingerprint + "] on " + connection.ConfirmationName;
+    }
+
+    private static byte[] CreateConfirmationFingerprintKey()
+    {
+        var key = new byte[32];
+        using (var random = RandomNumberGenerator.Create())
+        {
+            random.GetBytes(key);
+        }
+
+        return key;
     }
 }

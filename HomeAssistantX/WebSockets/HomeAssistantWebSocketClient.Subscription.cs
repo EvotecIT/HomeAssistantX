@@ -115,6 +115,26 @@ public sealed partial class HomeAssistantWebSocketClient
                         {
                             await _handler(message, _source.Token).ConfigureAwait(false);
                         }
+                        catch (Exception) when (_source.IsCancellationRequested)
+                        {
+                            // A terminal upstream failure cancels an already-running handler so it
+                            // cannot keep Completion pending. Discarding buffered events lets the
+                            // reader completion settle while preserving the upstream exception.
+                            while (_channel.Reader.TryRead(out _))
+                            {
+                                Interlocked.Increment(ref _processedSequence);
+                                SignalProgress();
+                            }
+
+                            await _channel.Reader.Completion.ConfigureAwait(false);
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            _diagnostic(HomeAssistantDiagnosticLevel.Error, "subscription.handler_failed", "A Home Assistant subscription handler failed.", ex);
+                            await EnsureStopStarted(ex).ConfigureAwait(false);
+                            throw;
+                        }
                         finally
                         {
                             Interlocked.Increment(ref _processedSequence);
@@ -125,13 +145,6 @@ public sealed partial class HomeAssistantWebSocketClient
             }
             catch (OperationCanceledException) when (_source.IsCancellationRequested)
             {
-            }
-            catch (Exception ex)
-            {
-                _diagnostic(HomeAssistantDiagnosticLevel.Error, "subscription.handler_failed", "A Home Assistant subscription handler failed.", ex);
-                await EnsureStopStarted(ex).ConfigureAwait(false);
-
-                throw;
             }
             finally
             {
@@ -210,6 +223,7 @@ public sealed partial class HomeAssistantWebSocketClient
                 else
                 {
                     _channel.Writer.TryComplete(exception);
+                    CancelSource();
                 }
 
                 _stopTask = _stop(this, CancellationToken.None);

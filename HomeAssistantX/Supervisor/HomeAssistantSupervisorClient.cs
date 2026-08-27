@@ -195,9 +195,9 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             _ => throw new ArgumentOutOfRangeException(nameof(target))
         };
         var data = new Dictionary<string, object?>();
-        if (!string.IsNullOrWhiteSpace(version))
+        if (version is not null)
         {
-            data["version"] = version;
+            data["version"] = RequireOptionalValue(version, nameof(version));
         }
 
         if (backup.HasValue)
@@ -207,6 +207,11 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
 
         return SendAsync(HttpMethod.Post, endpoint, data.Count == 0 ? null : data, cancellationToken);
     }
+
+    private static string RequireOptionalValue(string value, string parameterName)
+        => string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A supplied value cannot be empty.", parameterName)
+            : value.Trim();
 
     public Task<JsonElement> InvokeAppAsync(
         string app,

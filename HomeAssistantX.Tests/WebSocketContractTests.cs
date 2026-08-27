@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using HomeAssistantX.Authentication;
+using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
@@ -176,6 +177,50 @@ public sealed class WebSocketContractTests
         Assert.Equal(1, provider.RecoveryCount);
         Assert.Equal(stoppedAt, server.WebSocketConnectionCount);
         Assert.Equal(HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted, client.WebSocket.State);
+    }
+
+    [Fact]
+    public async Task TerminalReconnectFailureCancelsRunningHandlerAndPreservesUpstreamDiagnostics()
+    {
+        using var server = new TestHomeAssistantServer();
+        var diagnostics = new RecordingDiagnosticsSink();
+        var provider = new NonRecoveringTokenProvider(TestHomeAssistantServer.AccessToken);
+        using var client = TestClientFactory.Create(server, accessTokenProvider: provider, diagnostics: diagnostics);
+        var handlerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", async (_, token) =>
+        {
+            handlerStarted.TrySetResult(true);
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new ObjectDisposedException("canceled-handler-resource");
+            }
+        });
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            TestHomeAssistantServer.KitchenLightOnStateJson);
+        await WithTimeoutAsync(handlerStarted.Task);
+        for (var index = 0; index < 8; index++)
+        {
+            await server.PublishStateChangeAsync(
+                "light.buffered_" + index,
+                TestHomeAssistantServer.KitchenLightOffStateJson,
+                TestHomeAssistantServer.KitchenLightOnStateJson);
+        }
+
+        await Task.Delay(100);
+        server.RequiredAccessToken = "replacement-token";
+        await server.DropWebSocketsAsync();
+
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.DoesNotContain(diagnostics.Events, value => value.Name == "subscription.handler_failed");
+        Assert.Contains(diagnostics.Events, value => value.Name == "websocket.reconnect_authentication_failed");
     }
 
     [Theory]
@@ -663,6 +708,15 @@ public sealed class WebSocketContractTests
             RecoveryCount++;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class RecordingDiagnosticsSink : IHomeAssistantDiagnosticsSink
+    {
+        private readonly ConcurrentQueue<HomeAssistantDiagnosticEvent> _events = new();
+
+        internal IReadOnlyList<HomeAssistantDiagnosticEvent> Events => _events.ToArray();
+
+        public void Write(HomeAssistantDiagnosticEvent diagnosticEvent) => _events.Enqueue(diagnosticEvent);
     }
 }
 #endif

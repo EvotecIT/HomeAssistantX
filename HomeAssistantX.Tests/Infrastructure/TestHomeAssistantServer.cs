@@ -28,6 +28,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private TaskCompletionSource<bool>? _pausedSubscriptionReceived;
     private TaskCompletionSource<bool>? _pausedSubscriptionRelease;
     private TaskCompletionSource<bool>? _pausedSubscriptionActivated;
+    private TaskCompletionSource<bool>? _pausedServiceCallReceived;
+    private TaskCompletionSource<bool>? _pausedServiceCallRelease;
     private readonly TaskCompletionSource<bool> _unsubscribeReceived =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource<bool> _systemHealthEventsSent =
@@ -79,6 +81,20 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string? LastServiceCallBody { get; private set; }
 
     public IReadOnlyList<string> ServiceCallBodies => _serviceCallBodies.ToArray();
+
+    public (Task Received, Action Release) PauseNextServiceCall()
+    {
+        lock (_stateGate)
+        {
+            if (_pausedServiceCallReceived is not null)
+                throw new InvalidOperationException("A service call is already paused.");
+            var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pausedServiceCallReceived = received;
+            _pausedServiceCallRelease = release;
+            return (received.Task, () => release.TrySetResult(true));
+        }
+    }
 
     public void ClearLastServiceCall()
     {
@@ -566,6 +582,25 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             case "call_service":
                 LastServiceCallBody = command.GetRawText();
                 _serviceCallBodies.Enqueue(LastServiceCallBody);
+                TaskCompletionSource<bool>? pausedReceived;
+                TaskCompletionSource<bool>? pausedRelease;
+                lock (_stateGate)
+                {
+                    pausedReceived = _pausedServiceCallReceived;
+                    pausedRelease = _pausedServiceCallRelease;
+                    _pausedServiceCallReceived = null;
+                    _pausedServiceCallRelease = null;
+                }
+                if (pausedReceived is not null && pausedRelease is not null)
+                {
+                    pausedReceived.TrySetResult(true);
+                    var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    using (_source.Token.Register(() => canceled.TrySetCanceled()))
+                    {
+                        var completed = await Task.WhenAny(pausedRelease.Task, canceled.Task).ConfigureAwait(false);
+                        await completed.ConfigureAwait(false);
+                    }
+                }
                 await session.SendResultAsync(id, new Dictionary<string, object?>
                 {
                     ["context"] = new Dictionary<string, object?> { ["id"] = "service-context" },
