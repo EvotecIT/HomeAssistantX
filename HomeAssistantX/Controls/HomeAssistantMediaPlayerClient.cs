@@ -261,15 +261,12 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         string soundMode,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(soundMode))
-        {
-            throw new ArgumentException("A sound mode is required.", nameof(soundMode));
-        }
+        var normalizedSoundMode = ControlValidation.Required(soundMode, nameof(soundMode));
 
         return CallAsync(
             "select_sound_mode",
             target,
-            call => call.WithData("sound_mode", soundMode),
+            call => call.WithData("sound_mode", normalizedSoundMode),
             cancellationToken);
     }
 
@@ -285,6 +282,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         IEnumerable<string> groupMembers,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var members = ValidateEntityIds(groupMembers, nameof(groupMembers));
         return CallAsync(
             "join",

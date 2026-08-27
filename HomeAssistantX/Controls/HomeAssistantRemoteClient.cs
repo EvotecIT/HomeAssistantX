@@ -92,6 +92,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         HomeAssistantRemoteSendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var values = ValidateCommands(commands, nameof(commands));
         var device = options?.Device is null ? null : RequiredSelector(options.Device, nameof(options.Device));
         return CallAsync(
@@ -128,6 +129,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         HomeAssistantRemoteLearnOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var device = options?.Device is null ? null : RequiredSelector(options.Device, nameof(options.Device));
         var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(
             options?.Timeout,
@@ -211,6 +213,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         string? device = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var values = ValidateCommands(commands, nameof(commands));
         var normalizedDevice = device is null ? null : RequiredSelector(device, nameof(device));
         return CallAsync(

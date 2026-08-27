@@ -723,6 +723,51 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task RemoteAndMediaEnumerablesHonorPreCanceledTokens()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var values = new ThrowingStringList();
+        var remoteTarget = HomeAssistantTarget.ForEntity("remote.living_room");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Remotes.SendCommandsAsync(remoteTarget, values, cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Remotes.LearnCommandsAsync(
+                remoteTarget,
+                new HomeAssistantRemoteLearnOptions { Commands = values },
+                cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Remotes.DeleteCommandsAsync(remoteTarget, values, cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.JoinAsync(
+                HomeAssistantTarget.ForEntity("media_player.kitchen"),
+                values,
+                cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Media.SearchSourcesResponseAsync("music", mediaClasses: values, cancellationToken: cancellation.Token));
+
+        Assert.Empty(server.ServiceCallBodies);
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+    }
+
+    [Fact]
+    public async Task DirectSoundModeSelectionNormalizesTheSelector()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Controls.MediaPlayers.SelectSoundModeAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            " Music ");
+
+        using var call = FindCall(server, "select_sound_mode");
+        Assert.Equal("Music", call.RootElement.GetProperty("service_data").GetProperty("sound_mode").GetString());
+    }
+
+    [Fact]
     public async Task RemoteLearningSendsAnEffectiveDefaultInsideTheTransportDeadline()
     {
         using var server = new TestHomeAssistantServer();
@@ -880,6 +925,19 @@ public sealed class MediaAndRemoteContractTests
         return await task;
     }
 #endif
+
+    private sealed class ThrowingStringList : IReadOnlyList<string>
+    {
+        public int Count => 1;
+
+        public string this[int index] => throw new InvalidOperationException("The collection must not be enumerated.");
+
+        public IEnumerator<string> GetEnumerator()
+            => throw new InvalidOperationException("The collection must not be enumerated.");
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
 
     private const string MediaPausedStateJson =
         "{\"entity_id\":\"media_player.kitchen\",\"state\":\"paused\",\"attributes\":{" +
