@@ -239,11 +239,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string WeatherForecastSubscriptionEventJson { get; set; } =
         "{\"type\":\"hourly\",\"forecast\":[{\"datetime\":\"2026-08-26T12:00:00+00:00\",\"condition\":\"rainy\",\"temperature\":18.0,\"precipitation\":1.2}]}";
 
-    public string CalendarSubscriptionEventJson { get; set; } =
-        "[{\"summary\":\"Dinner\",\"start\":\"2026-08-26T18:00:00+02:00\",\"end\":\"2026-08-26T20:00:00+02:00\",\"uid\":\"event-1\",\"rrule\":\"FREQ=WEEKLY\"}]";
-
-    public string? ExactStateResponseJson { get; set; }
-
     public string RecorderStatisticsResponseJson { get; set; } =
         "{\"sensor.grid_energy\":[{\"start\":1787731200000,\"end\":1787734800000,\"last_reset\":1787727600000,\"change\":1.5,\"state\":42.0,\"sum\":10.5,\"future_row\":true}]}";
 
