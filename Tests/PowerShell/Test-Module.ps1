@@ -255,8 +255,10 @@ try {
     $actionCmdlet = [HomeAssistantX.PowerShell.InvokeHomeAssistantActionCommand]::new()
     $actionCmdlet.Connection = $connection.PSObject.BaseObject
     $describeAction = $actionCmdlet.GetType().GetMethod('DescribeAction', [Reflection.BindingFlags]'NonPublic, Instance')
-    $standardAction = $describeAction.Invoke($actionCmdlet, @([HomeAssistantX.Services.HomeAssistantServiceCall]::Create('light', 'turn_on')))
-    $customAction = $describeAction.Invoke($actionCmdlet, @([HomeAssistantX.Services.HomeAssistantServiceCall]::Create('private_domain', 'private_action')))
+    $serviceCallType = $describeAction.GetParameters()[0].ParameterType
+    $createServiceCall = $serviceCallType.GetMethod('Create', [Reflection.BindingFlags]'Public, Static')
+    $standardAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('light', 'turn_on'))))
+    $customAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('private_domain', 'private_action'))))
     if (-not $standardAction.Contains('light.turn_on')) {
         throw 'WhatIf output did not identify a validated standard Home Assistant action.'
     }
