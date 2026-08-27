@@ -573,6 +573,7 @@ T sealed class HomeAssistantX.Dashboards.HomeAssistantPanel
   P instance System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
   P instance System.String? ComponentName {get;set;}
   P instance System.Nullable<System.Text.Json.JsonElement> Configuration {get;set;}
+  P instance System.Boolean DefaultVisible {get;set;}
   P instance System.String? Icon {get;set;}
   P instance System.Boolean RequireAdmin {get;set;}
   P instance System.Boolean ShowInSidebar {get;set;}
