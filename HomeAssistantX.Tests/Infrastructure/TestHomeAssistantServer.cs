@@ -190,6 +190,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? SignedPathResponseJson { get; set; }
 
+    public string PersistentNotificationSubscriptionEventJson { get; set; } =
+        "{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\"},\"Alert\":{\"notification_id\":\"Alert\",\"message\":\"Upper\"},\"alert\":{\"notification_id\":\"alert\",\"message\":\"Lower\"}}}";
+
     public Task WaitForSystemHealthEventsAsync()
     {
         return _systemHealthEventsSent.Task;
@@ -714,7 +717,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             case "persistent_notification/subscribe":
                 session.SubscriptionIds.Add(id);
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
-                await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\"},\"Alert\":{\"notification_id\":\"Alert\",\"message\":\"Upper\"},\"alert\":{\"notification_id\":\"alert\",\"message\":\"Lower\"}}}"), _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson(PersistentNotificationSubscriptionEventJson), _source.Token).ConfigureAwait(false);
                 return;
             case "calendar/event/create":
             case "calendar/event/update":

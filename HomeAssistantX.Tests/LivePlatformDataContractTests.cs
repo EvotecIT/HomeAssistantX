@@ -1,6 +1,7 @@
 #if NET10_0
 using System.Text.Json;
 using HomeAssistantX.Calendars;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Notifications;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Services;
@@ -65,6 +66,19 @@ public sealed class LivePlatformDataContractTests
             Assert.Equal("window-open", data.GetProperty("notification_id").GetString()));
         await client.Notifications.DismissAllPersistentAsync();
         AssertServiceCall(server, "persistent_notification", "dismiss_all", data => Assert.Equal(JsonValueKind.Undefined, data.ValueKind));
+    }
+
+    [Fact]
+    public async Task PersistentNotificationSubscriptionRejectsNullDictionaryValues()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            PersistentNotificationSubscriptionEventJson = "{\"type\":\"Current\",\"notifications\":{\"notice-1\":null}}"
+        };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
     }
 
     [Fact]
