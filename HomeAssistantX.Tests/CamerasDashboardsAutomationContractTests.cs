@@ -303,6 +303,36 @@ public sealed class CamerasDashboardsAutomationContractTests
         await client.Automations.DeleteConfigurationAsync("morning-routine");
     }
 
+    [Theory]
+    [InlineData("{\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"other-routine\",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":42,\"alias\":\"Morning\"}")]
+    public async Task AutomationConfigurationCorrelatesReturnedIdentifier(string response)
+    {
+        using var server = new TestHomeAssistantServer { AutomationConfigurationResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Automations.GetConfigurationAsync("morning-routine"));
+    }
+
+    [Theory]
+    [InlineData("camera.front")]
+    [InlineData("automation.morning")]
+    public async Task TypedCameraAndAutomationReadsRejectMissingStateValues(string entityId)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExactStateResponseJson = "{\"entity_id\":\"" + entityId + "\",\"state\":null,\"attributes\":{}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        if (entityId.StartsWith("camera", StringComparison.Ordinal))
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetAsync(entityId));
+        else
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Automations.GetAsync(entityId));
+    }
+
     [Fact]
     public async Task AutomationTriggerRejectsWrongDomainEntityTargetsBeforeDispatch()
     {

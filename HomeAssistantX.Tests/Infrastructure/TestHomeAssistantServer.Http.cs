@@ -155,7 +155,7 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, "test-image-bytes").ConfigureAwait(false);
                 break;
             case "GET /api/config/automation/config/morning-routine":
-                await WriteHttpResponseAsync(stream, 200, "{\"id\":\"morning-routine\",\"alias\":\"Morning\",\"triggers\":[],\"actions\":[],\"future_automation\":true}").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, AutomationConfigurationResponseJson).ConfigureAwait(false);
                 break;
             case "POST /api/config/automation/config/morning-routine":
                 await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\"}").ConfigureAwait(false);

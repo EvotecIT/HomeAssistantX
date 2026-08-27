@@ -138,6 +138,7 @@ public sealed class HomeAssistantCameraClient
     private static HomeAssistantCameraStatus ToStatus(HomeAssistantState state)
     {
         if (!string.Equals(state.Domain, "camera", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The entity is not a camera.", nameof(state));
+        if (string.IsNullOrWhiteSpace(state.State)) throw new HomeAssistantProtocolException("The Home Assistant camera state omitted its required state value.");
         return new HomeAssistantCameraStatus
         {
             EntityId = state.EntityId,

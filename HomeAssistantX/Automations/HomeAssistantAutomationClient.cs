@@ -56,6 +56,12 @@ public sealed class HomeAssistantAutomationClient
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
         var value = await _rest.SendAsync<JsonElement>(HttpMethod.Get, ConfigurationPath(id), null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Home Assistant returned a non-object automation definition.");
+        if (!value.TryGetProperty("id", out var responseId)
+            || responseId.ValueKind != JsonValueKind.String
+            || !string.Equals(responseId.GetString(), id, StringComparison.Ordinal))
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with a mismatched identifier.");
+        }
         return new HomeAssistantAutomationConfiguration { AutomationId = id, Definition = value.Clone() };
     }
 
@@ -77,6 +83,7 @@ public sealed class HomeAssistantAutomationClient
     private static HomeAssistantAutomationStatus ToStatus(HomeAssistantState state)
     {
         if (!string.Equals(state.Domain, "automation", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The entity is not an automation.", nameof(state));
+        if (string.IsNullOrWhiteSpace(state.State)) throw new HomeAssistantProtocolException("The Home Assistant automation state omitted its required state value.");
         return new HomeAssistantAutomationStatus
         {
             EntityId = state.EntityId,

@@ -226,6 +226,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string EntityRegistryResponseJson { get; set; } =
         "[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"list_only\":{\"source\":\"partial\"}},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"},{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\"}]";
 
+    public string AutomationConfigurationResponseJson { get; set; } =
+        "{\"id\":\"morning-routine\",\"alias\":\"Morning\",\"triggers\":[],\"actions\":[],\"future_automation\":true}";
+
     public string? ExactStateResponseJson { get; set; }
 
     public string WeatherForecastResponseJson { get; set; } =
