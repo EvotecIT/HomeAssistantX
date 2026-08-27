@@ -50,6 +50,11 @@ public sealed class HomeAssistantMobileAppClient
             throw new HomeAssistantProtocolException("Home Assistant did not return the requested mobile-app encryption secret.");
         }
 
+        if (!frozenRequest.SupportsEncryption && registration.Secret is not null)
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned a mobile-app encryption secret for a registration that did not request encryption.");
+        }
+
         RequireHttpUri(registration.CloudhookUri, "cloudhook URL");
         RequireHttpUri(registration.RemoteUiUri, "remote UI URL");
 

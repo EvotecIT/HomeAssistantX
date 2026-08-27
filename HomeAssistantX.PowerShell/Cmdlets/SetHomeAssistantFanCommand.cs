@@ -25,7 +25,12 @@ public sealed class SetHomeAssistantFanCommand : HomeAssistantTargetCmdlet
 
     protected override async Task ProcessTargetRecordAsync()
     {
-        var count = (Action.HasValue ? 1 : 0) + (Percentage.HasValue ? 1 : 0) + (Oscillating.HasValue ? 1 : 0) + (Direction.HasValue ? 1 : 0) + (!string.IsNullOrWhiteSpace(PresetMode) ? 1 : 0);
+        var presetMode = PresetMode is null
+            ? null
+            : string.IsNullOrWhiteSpace(PresetMode)
+                ? throw new ArgumentException("PresetMode must not be blank.", nameof(PresetMode))
+                : PresetMode.Trim();
+        var count = (Action.HasValue ? 1 : 0) + (Percentage.HasValue ? 1 : 0) + (Oscillating.HasValue ? 1 : 0) + (Direction.HasValue ? 1 : 0) + (presetMode is not null ? 1 : 0);
         if (count != 1) throw new ArgumentException("Specify exactly one fan operation.");
         if (Action.HasValue && !Enum.IsDefined(typeof(HomeAssistantFanAction), Action.Value)) throw new ArgumentOutOfRangeException(nameof(Action));
         if (Direction.HasValue && !Enum.IsDefined(typeof(HomeAssistantFanDirection), Direction.Value)) throw new ArgumentOutOfRangeException(nameof(Direction));
@@ -36,7 +41,7 @@ public sealed class SetHomeAssistantFanCommand : HomeAssistantTargetCmdlet
             : Percentage.HasValue ? await Client.Controls.Fans.SetPercentageAsync(target.Target, Percentage.Value, CancelToken).ConfigureAwait(false)
             : Oscillating.HasValue ? await Client.Controls.Fans.SetOscillationAsync(target.Target, Oscillating.Value, CancelToken).ConfigureAwait(false)
             : Direction.HasValue ? await Client.Controls.Fans.SetDirectionAsync(target.Target, Direction.Value, CancelToken).ConfigureAwait(false)
-            : await Client.Controls.Fans.SetPresetModeAsync(target.Target, PresetMode!, CancelToken).ConfigureAwait(false);
+            : await Client.Controls.Fans.SetPresetModeAsync(target.Target, presetMode!, CancelToken).ConfigureAwait(false);
         WriteObject(result);
     }
 }

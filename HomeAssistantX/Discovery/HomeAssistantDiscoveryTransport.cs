@@ -145,6 +145,7 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
             _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             _client.Client.Bind(new IPEndPoint(localAddress, 0));
             ConfigureOutboundInterface(_client.Client, localAddress);
+            ConfigureMulticastTimeToLive(_client.Client);
             _client.JoinMulticastGroup(multicastAddress, localAddress);
             _endpoint = new IPEndPoint(multicastAddress, multicastPort);
         }
@@ -162,6 +163,12 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
         if (localAddress.AddressFamily != AddressFamily.InterNetwork)
             throw new ArgumentException("An IPv4 local address is required.", nameof(localAddress));
         socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, localAddress.GetAddressBytes());
+    }
+
+    internal static void ConfigureMulticastTimeToLive(Socket socket)
+    {
+        if (socket is null) throw new ArgumentNullException(nameof(socket));
+        socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
     }
 
     public async Task SendAsync(byte[] query, CancellationToken cancellationToken)

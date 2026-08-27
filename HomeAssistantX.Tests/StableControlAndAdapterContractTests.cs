@@ -7,6 +7,7 @@ using System.Text.Json;
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Discovery;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.MobileApp;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
@@ -560,6 +561,18 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdTransportConfiguresRequiredMulticastTimeToLive()
+    {
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+
+        UdpHomeAssistantDiscoveryTransport.ConfigureMulticastTimeToLive(socket);
+
+        Assert.Equal(255, Convert.ToInt32(
+            socket.GetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive),
+            System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
     public async Task DnsSdDiscoveryNormalizesSendTimeoutAndPreservesCallerCancellation()
     {
         var address = IPAddress.Parse("192.0.2.10");
@@ -689,6 +702,21 @@ public sealed class StableControlAndAdapterContractTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => client.MobileApp.RegisterAsync(request));
 
         Assert.Null(server.LastRequestBody);
+    }
+
+    [Theory]
+    [InlineData("secret")]
+    [InlineData("")]
+    public async Task MobileAppRegistrationRejectsSecretsWhenEncryptionWasNotRequested(string secret)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MobileRegistrationResponseJson = "{\"webhook_id\":\"test-webhook\",\"secret\":\"" + secret + "\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.MobileApp.RegisterAsync(RegistrationRequest(false)));
     }
 
     [Fact]
