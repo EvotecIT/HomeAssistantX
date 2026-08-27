@@ -481,6 +481,23 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task TypedMediaAndRemoteGettersRejectMismatchedResponseEntities()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExactStateResponseJson = "{\"entity_id\":\"media_player.bedroom\",\"state\":\"idle\",\"attributes\":{}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Controls.MediaPlayers.GetAsync("media_player.kitchen"));
+
+        server.ExactStateResponseJson = "{\"entity_id\":\"remote.bedroom\",\"state\":\"on\",\"attributes\":{}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Controls.Remotes.GetAsync("remote.living_room"));
+    }
+
+    [Fact]
     public async Task TypedBulkReadsRejectMalformedServerEntityIds()
     {
         using var server = new TestHomeAssistantServer();
