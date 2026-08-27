@@ -123,8 +123,9 @@ public sealed class HomeAssistantCalendarClient
             };
             if (update.IsAvailable)
             {
-                update.Events = value.Deserialize<HomeAssistantCalendarEvent[]>(HomeAssistantJson.SerializerOptions)
-                    ?? throw new HomeAssistantProtocolException("The Home Assistant calendar subscription could not be decoded.");
+                update.Events = HomeAssistantJson.DeserializeResponse<HomeAssistantCalendarEvent[]>(
+                    value,
+                    "The Home Assistant calendar subscription could not be decoded.");
             }
 
             await handler(update, token).ConfigureAwait(false);

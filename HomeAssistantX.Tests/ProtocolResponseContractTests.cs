@@ -2,6 +2,7 @@ using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
+using HomeAssistantX.Rest;
 
 namespace HomeAssistantX.Tests;
 
@@ -259,6 +260,17 @@ public sealed class ProtocolResponseContractTests
 
         Assert.Throws<HomeAssistantProtocolException>(() =>
             HomeAssistantEntityId.RequireResponseDomain(state, "media_player"));
+    }
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("{\"dateTime\":\"not-a-timestamp\"}")]
+    [InlineData("{\"dateTime\":\"2026-08-27\"}")]
+    [InlineData("{\"dateTime\":\"08/27/2026\"}")]
+    [InlineData("{\"date\":42}")]
+    public void CalendarBoundaryConverterRejectsInvalidTypedShapesWithJsonException(string json)
+    {
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<HomeAssistantCalendarBoundary>(json));
     }
 
     private sealed class CancellationProbeEnumerable : IEnumerable<string>

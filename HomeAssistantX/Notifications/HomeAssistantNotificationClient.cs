@@ -23,8 +23,7 @@ public sealed class HomeAssistantNotificationClient
         CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("persistent_notification/get", null, cancellationToken).ConfigureAwait(false);
-        return value.Deserialize<HomeAssistantPersistentNotification[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant persistent-notification response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification[]>(value, "The Home Assistant persistent-notification response could not be decoded.");
     }
 
     public Task<HomeAssistantServiceCallResult> CreatePersistentAsync(
@@ -95,8 +94,9 @@ public sealed class HomeAssistantNotificationClient
             }
 
             var rawType = typeValue.GetString() ?? string.Empty;
-            var notifications = notificationsValue.Deserialize<Dictionary<string, HomeAssistantPersistentNotification>>(HomeAssistantJson.SerializerOptions)
-                ?? throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update could not be decoded.");
+            var notifications = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantPersistentNotification>>(
+                notificationsValue,
+                "The Home Assistant persistent-notification update could not be decoded.");
             await handler(new HomeAssistantPersistentNotificationUpdate
             {
                 RawType = rawType,

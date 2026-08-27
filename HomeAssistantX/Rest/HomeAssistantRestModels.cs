@@ -143,16 +143,67 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
 
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("A Home Assistant calendar boundary must be a string or object.");
+        }
+
+        string? dateValue = null;
+        if (root.TryGetProperty("date", out var date))
+        {
+            if (date.ValueKind != JsonValueKind.String)
+            {
+                throw new JsonException("A Home Assistant calendar date must be a string.");
+            }
+
+            dateValue = date.GetString();
+        }
+
+        DateTimeOffset? parsedDateTime = null;
+        if (root.TryGetProperty("dateTime", out var dateTimeValue))
+        {
+            if (!TryReadWireDateTime(dateTimeValue, out var dateTime))
+            {
+                throw new JsonException("A Home Assistant calendar dateTime must be a valid timestamp string.");
+            }
+
+            parsedDateTime = dateTime;
+        }
+
         return new HomeAssistantCalendarBoundary
         {
-            Date = root.TryGetProperty("date", out var date) && date.ValueKind == JsonValueKind.String ? date.GetString() : null,
-            DateTime = root.TryGetProperty("dateTime", out var dateTimeValue) && dateTimeValue.ValueKind == JsonValueKind.String
-                ? dateTimeValue.GetDateTimeOffset()
-                : null,
+            Date = dateValue,
+            DateTime = parsedDateTime,
             AdditionalData = root.EnumerateObject()
                 .Where(property => property.Name != "date" && property.Name != "dateTime")
                 .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.Ordinal)
         };
+    }
+
+    private static bool TryReadWireDateTime(JsonElement value, out DateTimeOffset result)
+    {
+        result = default;
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var text = value.GetString();
+        if (text is null)
+        {
+            return false;
+        }
+
+        if (text.Length < 20 || text[10] != 'T')
+        {
+            return false;
+        }
+
+        var hasUtcSuffix = text.EndsWith("Z", StringComparison.Ordinal);
+        var hasOffsetSuffix = text.Length >= 25
+            && (text[text.Length - 6] == '+' || text[text.Length - 6] == '-')
+            && text[text.Length - 3] == ':';
+        return (hasUtcSuffix || hasOffsetSuffix) && value.TryGetDateTimeOffset(out result);
     }
 
     public override void Write(Utf8JsonWriter writer, HomeAssistantCalendarBoundary value, JsonSerializerOptions options)
