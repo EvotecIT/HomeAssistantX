@@ -162,14 +162,7 @@ public sealed class HomeAssistantRecorderClient
         List<HomeAssistantStatisticSeries> series,
         IComparer<string> comparer)
     {
-        try
-        {
-            series.Sort((left, right) => comparer.Compare(left.StatisticId, right.StatisticId));
-        }
-        catch (InvalidOperationException ex) when (ex.InnerException is OperationCanceledException cancellation)
-        {
-            throw cancellation;
-        }
+        CancellationAwareSort.Sort(series, (left, right) => comparer.Compare(left.StatisticId, right.StatisticId));
     }
 
     public Task<JsonElement> ValidateStatisticsAsync(CancellationToken cancellationToken = default)

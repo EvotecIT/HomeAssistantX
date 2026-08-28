@@ -179,14 +179,7 @@ public sealed class HomeAssistantWeatherClient
         CancellationToken cancellationToken)
     {
         var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
-        try
-        {
-            observations.Sort((left, right) => comparer.Compare(left.EntityId, right.EntityId));
-        }
-        catch (InvalidOperationException ex) when (ex.InnerException is OperationCanceledException canceled)
-        {
-            throw canceled;
-        }
+        CancellationAwareSort.Sort(observations, (left, right) => comparer.Compare(left.EntityId, right.EntityId));
     }
 
     private static HomeAssistantWeatherObservation ToObservation(

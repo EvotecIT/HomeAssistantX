@@ -185,14 +185,7 @@ public sealed class HomeAssistantEnergyClient
         List<HomeAssistantFossilEnergyPeriod> periods,
         Comparison<HomeAssistantFossilEnergyPeriod> comparison)
     {
-        try
-        {
-            periods.Sort(comparison);
-        }
-        catch (InvalidOperationException ex) when (ex.InnerException is OperationCanceledException cancellation)
-        {
-            throw cancellation;
-        }
+        CancellationAwareSort.Sort(periods, comparison);
     }
 
     private static bool IsWithinRequestedWindow(
