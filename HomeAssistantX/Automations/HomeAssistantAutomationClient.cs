@@ -24,12 +24,23 @@ public sealed class HomeAssistantAutomationClient
     }
 
     public async Task<IReadOnlyList<HomeAssistantAutomationStatus>> GetAsync(CancellationToken cancellationToken = default)
-        => HomeAssistantEntityId.RequireResponseDomainStates(
-                await _states.GetAllAsync(cancellationToken).ConfigureAwait(false),
-                "automation",
-                cancellationToken)
-            .Select(ToStatus)
-            .OrderBy(item => item.EntityId, StringComparer.OrdinalIgnoreCase).ToArray();
+    {
+        var states = HomeAssistantEntityId.RequireResponseDomainStates(
+            await _states.GetAllAsync(cancellationToken).ConfigureAwait(false),
+            "automation",
+            cancellationToken);
+        var result = new List<HomeAssistantAutomationStatus>();
+        foreach (var state in states)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result.Add(ToStatus(state));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        result.Sort((left, right) => comparer.Compare(left.EntityId, right.EntityId));
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
 
     public async Task<HomeAssistantAutomationStatus> GetAsync(string entityId, CancellationToken cancellationToken = default)
     {

@@ -5,6 +5,7 @@ using HomeAssistantX.Automations;
 using HomeAssistantX.Cameras;
 using HomeAssistantX.Dashboards;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.IO;
 using HomeAssistantX.Media;
 using HomeAssistantX.Models;
 using HomeAssistantX.Services;
@@ -314,6 +315,23 @@ public sealed class CamerasDashboardsAutomationContractTests
             HomeAssistantMediaBrowserClient.DecodeItemAsync(document.RootElement, cancellation.Token));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" music ")]
+    public async Task MediaBrowseRejectsNoncanonicalSearchMediaClasses(string mediaClass)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson =
+                "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":true,\"search_media_classes\":[\""
+                + mediaClass + "\"],\"children\":[]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
     [Fact]
     public async Task TypedMediaResponsesRejectDuplicateProperties()
     {
@@ -605,6 +623,9 @@ public sealed class CamerasDashboardsAutomationContractTests
         server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\" \"}}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
 
+        server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\" lovelace \"}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
         server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\"lovelace\",\"show_in_sidebar\":true}}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
 
@@ -613,6 +634,65 @@ public sealed class CamerasDashboardsAutomationContractTests
 
         server.LovelaceInfoResponseJson = "{}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetInfoAsync());
+    }
+
+    [Fact]
+    public async Task DashboardResourcesRetryWhenResourceModeChangesDuringTheRead()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardResourceListResponseJson = "[{\"url\":\"/local/card.js\",\"type\":\"module\"}]"
+        };
+        server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"storage\"}");
+        server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"yaml\"}");
+        server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"yaml\"}");
+        server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"yaml\"}");
+        using var client = TestClientFactory.Create(server);
+
+        var resource = Assert.Single(await client.Dashboards.GetResourcesAsync());
+
+        Assert.Empty(resource.Id);
+    }
+
+    [Fact]
+    public async Task DashboardResourcesFailWhenResourceModeNeverStabilizes()
+    {
+        using var server = new TestHomeAssistantServer();
+        for (var index = 0; index < 3; index++)
+        {
+            server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"storage\"}");
+            server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"yaml\"}");
+        }
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantConnectionException>(() => client.Dashboards.GetResourcesAsync());
+    }
+
+    [Fact]
+    public void AtomicExportsPreserveUnixDestinationPermissions()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-permissions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.SetUnixFileMode(
+                temporary,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+            HomeAssistantAtomicFile.PreserveDestinationPermissions(destination, temporary);
+
+            Assert.Equal(File.GetUnixFileMode(destination), File.GetUnixFileMode(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Theory]
@@ -721,6 +801,34 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Theory]
+    [InlineData("home")]
+    [InlineData(" mdi:home ")]
+    public async Task PanelResponsesRejectNoncanonicalIcons(string icon)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson =
+                "{\"lovelace\":{\"component_name\":\"lovelace\",\"icon\":\"" + icon
+                + "\",\"default_visible\":true,\"require_admin\":false,\"show_in_sidebar\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("true")]
+    public async Task DashboardConfigurationReadsRejectNonObjectResponses(string response)
+    {
+        using var server = new TestHomeAssistantServer { LovelaceConfigurationResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetConfigurationAsync());
     }
 
     [Fact]

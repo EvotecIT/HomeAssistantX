@@ -47,8 +47,15 @@ public sealed class HomeAssistantDashboardClient
                 if (!string.Equals(panel.UrlPath, route, StringComparison.Ordinal))
                     throw new HomeAssistantProtocolException("A frontend panel route did not match its registered key.");
             }
-            if (string.IsNullOrWhiteSpace(panel.UrlPath) || string.IsNullOrWhiteSpace(panel.ComponentName))
+            if (string.IsNullOrWhiteSpace(panel.UrlPath))
                 throw new HomeAssistantProtocolException("A frontend panel did not contain its required fields.");
+            panel.ComponentName = RequireResponseSelector(
+                panel.ComponentName,
+                "A frontend panel contained a noncanonical component name.");
+            if (panel.Icon is not null
+                && (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(panel.Icon, out var normalizedIcon)
+                    || !string.Equals(panel.Icon, normalizedIcon, StringComparison.Ordinal)))
+                throw new HomeAssistantProtocolException("A frontend panel contained a noncanonical icon.");
             result.Add(panel);
         }
         return result.OrderBy(item => item.UrlPath, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -164,16 +171,19 @@ public sealed class HomeAssistantDashboardClient
             "The dashboard deletion response contained duplicate JSON properties.",
             cancellationToken);
 
-    public Task<JsonElement> GetConfigurationAsync(string? urlPath = null, bool force = false, CancellationToken cancellationToken = default)
+    public async Task<JsonElement> GetConfigurationAsync(string? urlPath = null, bool force = false, CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, object?>();
         if (force) payload["force"] = true;
         if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
-        return RequestJsonAsync(
+        var value = await RequestJsonAsync(
             "lovelace/config",
             payload,
             "The Lovelace configuration contained duplicate JSON properties.",
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        if (value.ValueKind != JsonValueKind.Object)
+            throw new HomeAssistantProtocolException("The Lovelace configuration was not an object.");
+        return value;
     }
 
     public Task<JsonElement> SaveConfigurationAsync(JsonElement configuration, string? urlPath = null, CancellationToken cancellationToken = default)
@@ -211,8 +221,26 @@ public sealed class HomeAssistantDashboardClient
 
     public async Task<IReadOnlyList<HomeAssistantDashboardResource>> GetResourcesAsync(CancellationToken cancellationToken = default)
     {
-        var resourceMode = (await GetInfoAsync(cancellationToken).ConfigureAwait(false)).ResourceMode;
-        var value = await _webSocket.RequestAsync("lovelace/resources/list", null, cancellationToken).ConfigureAwait(false);
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var resourceMode = (await GetInfoAsync(cancellationToken).ConfigureAwait(false)).ResourceMode;
+            var value = await _webSocket.RequestAsync("lovelace/resources/list", null, cancellationToken).ConfigureAwait(false);
+            var confirmedMode = (await GetInfoAsync(cancellationToken).ConfigureAwait(false)).ResourceMode;
+            if (!string.Equals(resourceMode, confirmedMode, StringComparison.Ordinal)) continue;
+
+            return DecodeResources(value, resourceMode, cancellationToken);
+        }
+
+        throw new HomeAssistantConnectionException(
+            "The Lovelace resource mode changed while resources were being read.",
+            new InvalidOperationException("The resource mode did not remain stable across the resource-list request."));
+    }
+
+    private static IReadOnlyList<HomeAssistantDashboardResource> DecodeResources(
+        JsonElement value,
+        string resourceMode,
+        CancellationToken cancellationToken)
+    {
         RequireNoDuplicateProperties(
             value,
             "The Lovelace resource list contained duplicate JSON properties.",

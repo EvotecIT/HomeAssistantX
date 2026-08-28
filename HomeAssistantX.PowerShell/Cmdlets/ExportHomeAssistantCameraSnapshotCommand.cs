@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using HomeAssistantX.IO;
 using HomeAssistantX.Models;
 
 namespace HomeAssistantX.PowerShell;
@@ -51,6 +52,7 @@ public sealed class ExportHomeAssistantCameraSnapshotCommand : HomeAssistantCmdl
                     throw new IOException("The destination file already exists. Use -Force to overwrite it.");
                 }
 
+                HomeAssistantAtomicFile.PreserveDestinationPermissions(_resolvedPath, temporaryPath);
                 File.Replace(temporaryPath, _resolvedPath, null);
             }
             else File.Move(temporaryPath, _resolvedPath);

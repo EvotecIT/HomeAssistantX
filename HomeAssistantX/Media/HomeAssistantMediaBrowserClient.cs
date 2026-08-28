@@ -127,6 +127,7 @@ public sealed class HomeAssistantMediaBrowserClient
         if (value.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("media_class", out var mediaClass)
             || mediaClass.ValueKind != JsonValueKind.String
+            || !IsCanonicalMediaClass(mediaClass.GetString())
             || !value.TryGetProperty("media_content_id", out var mediaContentId)
             || mediaContentId.ValueKind != JsonValueKind.String
             || !value.TryGetProperty("media_content_type", out var mediaContentType)
@@ -142,6 +143,12 @@ public sealed class HomeAssistantMediaBrowserClient
         {
             throw new HomeAssistantProtocolException("The media response omitted its required identity or actionability fields.");
         }
+
+        if (value.TryGetProperty("children_media_class", out var childrenMediaClass)
+            && childrenMediaClass.ValueKind != JsonValueKind.Null
+            && (childrenMediaClass.ValueKind != JsonValueKind.String
+                || !IsCanonicalMediaClass(childrenMediaClass.GetString())))
+            throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
 
         if (!value.TryGetProperty("children", out var children)) return;
         if (children.ValueKind != JsonValueKind.Array)
@@ -160,6 +167,10 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(item.Title))
             throw new HomeAssistantProtocolException("The media response omitted an item title.");
+        if (!IsCanonicalMediaClass(item.MediaClass))
+            throw new HomeAssistantProtocolException("The media response contained a noncanonical media class.");
+        if (item.ChildrenMediaClass is not null && !IsCanonicalMediaClass(item.ChildrenMediaClass))
+            throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
         if ((item.CanPlay || item.CanExpand)
             && (string.IsNullOrWhiteSpace(item.MediaContentId) || string.IsNullOrWhiteSpace(item.MediaContentType)))
             throw new HomeAssistantProtocolException("The media response contained an item without a media content identifier or type.");
@@ -170,8 +181,9 @@ public sealed class HomeAssistantMediaBrowserClient
             foreach (var mediaClass in item.SearchMediaClasses)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (mediaClass is null)
-                    throw new HomeAssistantProtocolException("The media response contained a null search media class.");
+                if (string.IsNullOrWhiteSpace(mediaClass)
+                    || !string.Equals(mediaClass, mediaClass.Trim(), StringComparison.Ordinal))
+                    throw new HomeAssistantProtocolException("The media response contained a noncanonical search media class.");
             }
         }
 
@@ -185,6 +197,11 @@ public sealed class HomeAssistantMediaBrowserClient
 
         cancellationToken.ThrowIfCancellationRequested();
     }
+
+    private static bool IsCanonicalMediaClass(string? value)
+        => value is string mediaClass
+            && !string.IsNullOrWhiteSpace(mediaClass)
+            && string.Equals(mediaClass, mediaClass.Trim(), StringComparison.Ordinal);
 
     internal static bool IsValidResolvedUrl(string? value)
     {

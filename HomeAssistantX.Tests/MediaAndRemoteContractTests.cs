@@ -1870,6 +1870,8 @@ public sealed class MediaAndRemoteContractTests
     [Theory]
     [InlineData("{\"title\":\"Music\",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":0,\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\" music \",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"children_media_class\":\" album \",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"music\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
     public async Task MediaBrowseRejectsMissingOrInvalidIdentityFields(string response)
@@ -1878,6 +1880,20 @@ public sealed class MediaAndRemoteContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task MediaBrowseAcceptsNullOptionalChildrenMediaClass()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Music\",\"media_class\":\"directory\",\"children_media_class\":null,\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var item = await client.Media.BrowseSourcesAsync();
+
+        Assert.Null(item.ChildrenMediaClass);
     }
 
     private static string[] ReadServices(TestHomeAssistantServer server)

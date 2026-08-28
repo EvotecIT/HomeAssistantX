@@ -289,8 +289,13 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string LovelaceInfoResponseJson { get; set; } =
         "{\"resource_mode\":\"storage\",\"future_info\":true}";
 
+    public ConcurrentQueue<string> LovelaceInfoResponses { get; } = new();
+
     public string FrontendPanelsResponseJson { get; set; } =
         "{\"lovelace\":{\"title\":\"Overview\",\"component_name\":\"lovelace\",\"default_visible\":true,\"show_in_sidebar\":true,\"require_admin\":false,\"future_panel\":true}}";
+
+    public string LovelaceConfigurationResponseJson { get; set; } =
+        "{\"title\":\"Home\",\"views\":[{\"title\":\"Kitchen\"}],\"future_config\":true}";
 
     public Task WaitForSystemHealthEventsAsync()
     {
@@ -921,7 +926,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(ResolvedMediaResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "lovelace/info":
-                await session.SendResultAsync(id, ParseJson(LovelaceInfoResponseJson), false, _source.Token).ConfigureAwait(false);
+                var infoResponse = LovelaceInfoResponses.TryDequeue(out var queuedInfoResponse)
+                    ? queuedInfoResponse
+                    : LovelaceInfoResponseJson;
+                await session.SendResultAsync(id, ParseJson(infoResponse), false, _source.Token).ConfigureAwait(false);
                 return;
             case "lovelace/dashboards/list":
                 await session.SendResultAsync(id, ParseJson(DashboardListResponseJson), false, _source.Token).ConfigureAwait(false);
@@ -937,7 +945,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "lovelace/config":
-                await session.SendResultAsync(id, ParseJson("{\"title\":\"Home\",\"views\":[{\"title\":\"Kitchen\"}],\"future_config\":true}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(LovelaceConfigurationResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "lovelace/resources/list":
                 await session.SendResultAsync(id, ParseJson(DashboardResourceListResponseJson), false, _source.Token).ConfigureAwait(false);
