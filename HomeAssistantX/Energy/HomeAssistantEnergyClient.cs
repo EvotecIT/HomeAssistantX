@@ -25,7 +25,7 @@ public sealed class HomeAssistantEnergyClient
             value,
             "The Home Assistant Energy preferences could not be decoded.",
             cancellationToken: cancellationToken);
-        ValidatePreferences(preferences);
+        ValidatePreferences(preferences, cancellationToken);
         return preferences;
     }
 
@@ -39,7 +39,7 @@ public sealed class HomeAssistantEnergyClient
             value,
             "The updated Home Assistant Energy preferences could not be decoded.",
             cancellationToken: cancellationToken);
-        ValidatePreferences(preferences);
+        ValidatePreferences(preferences, cancellationToken);
         return preferences;
     }
 
@@ -51,7 +51,7 @@ public sealed class HomeAssistantEnergyClient
             || costSensors.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("solar_forecast_domains", out var forecastDomains)
             || forecastDomains.ValueKind != JsonValueKind.Array
-            || !HasCanonicalUniqueDomains(forecastDomains))
+            || !HasCanonicalUniqueDomains(forecastDomains, cancellationToken))
         {
             throw new HomeAssistantProtocolException("The Home Assistant Energy information was malformed.");
         }
@@ -79,6 +79,7 @@ public sealed class HomeAssistantEnergyClient
         var result = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in value.EnumerateObject())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(property.Name)
                 || !string.Equals(property.Name, property.Name.Trim(), StringComparison.Ordinal)
                 || property.Value.ValueKind != JsonValueKind.Object)
@@ -91,17 +92,21 @@ public sealed class HomeAssistantEnergyClient
                 throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained a duplicate configuration-entry identifier.");
             }
 
-            result.Add(property.Name, property.Value.Clone());
+            result.Add(property.Name, HomeAssistantJson.DeserializeResponse<JsonElement>(
+                property.Value,
+                "A Home Assistant solar-forecast entry could not be decoded.",
+                cancellationToken: cancellationToken));
         }
 
         return result;
     }
 
-    private static bool HasCanonicalUniqueDomains(JsonElement domains)
+    private static bool HasCanonicalUniqueDomains(JsonElement domains, CancellationToken cancellationToken)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in domains.EnumerateArray())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind != JsonValueKind.String
                 || item.GetString() is not string value
                 || !HomeAssistantEntityId.TryNormalizeDomain(value, out var normalized)
@@ -124,7 +129,7 @@ public sealed class HomeAssistantEnergyClient
         CancellationToken cancellationToken = default)
     {
         if (end <= start) throw new ArgumentOutOfRangeException(nameof(end), "The end must be after the start.");
-        var ids = RequireIds(energyStatisticIds, nameof(energyStatisticIds));
+        var ids = RequireIds(energyStatisticIds, nameof(energyStatisticIds), cancellationToken);
         var normalizedCo2StatisticId = RequireStatisticId(co2StatisticId, nameof(co2StatisticId));
         var value = await _webSocket.RequestAsync("energy/fossil_energy_consumption", new Dictionary<string, object?>
         {
@@ -143,6 +148,7 @@ public sealed class HomeAssistantEnergyClient
         var starts = new HashSet<long>();
         foreach (var property in value.EnumerateObject())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantTimestamp.TryParse(property.Name, out var timestamp)
                 || property.Value.ValueKind != JsonValueKind.Number
                 || !property.Value.TryGetDouble(out var amount)
@@ -160,17 +166,29 @@ public sealed class HomeAssistantEnergyClient
             result.Add(new HomeAssistantFossilEnergyPeriod { Start = timestamp, EnergyKiloWattHours = amount });
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return result.OrderBy(item => item.Start).ToArray();
     }
 
-    private static string[] RequireIds(IReadOnlyCollection<string> values, string parameterName)
+    private static string[] RequireIds(
+        IReadOnlyCollection<string> values,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
         if (values is null || values.Count == 0)
             throw new ArgumentException("At least one statistic identifier is required.", parameterName);
-        var normalized = values.Select(value => RequireStatisticId(value, parameterName)).ToArray();
-        if (normalized.Distinct(StringComparer.Ordinal).Count() != normalized.Length)
-            throw new ArgumentException("Statistic identifiers must be unique.", parameterName);
-        return normalized;
+        var normalized = new List<string>(values.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var identifier = RequireStatisticId(value, parameterName);
+            if (!seen.Add(identifier))
+                throw new ArgumentException("Statistic identifiers must be unique.", parameterName);
+            normalized.Add(identifier);
+        }
+
+        return normalized.ToArray();
     }
 
     private static string RequireStatisticId(string value, string parameterName)
@@ -180,24 +198,38 @@ public sealed class HomeAssistantEnergyClient
         return normalized;
     }
 
-    private static void ValidatePreferences(HomeAssistantEnergyPreferences preferences)
+    private static void ValidatePreferences(
+        HomeAssistantEnergyPreferences preferences,
+        CancellationToken cancellationToken)
     {
-        RequireObjectArray(preferences.EnergySources, "energy_sources");
-        RequireObjectArray(preferences.DeviceConsumption, "device_consumption");
-        RequireObjectArray(preferences.DeviceConsumptionWater, "device_consumption_water", required: false);
+        RequireObjectArray(preferences.EnergySources, "energy_sources", cancellationToken);
+        RequireObjectArray(preferences.DeviceConsumption, "device_consumption", cancellationToken);
+        RequireObjectArray(preferences.DeviceConsumptionWater, "device_consumption_water", cancellationToken, required: false);
     }
 
-    private static void RequireObjectArray(JsonElement value, string name, bool required = true)
+    private static void RequireObjectArray(
+        JsonElement value,
+        string name,
+        CancellationToken cancellationToken,
+        bool required = true)
     {
         if (!required && value.ValueKind == JsonValueKind.Undefined)
         {
             return;
         }
 
-        if (value.ValueKind != JsonValueKind.Array
-            || value.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.Object))
+        if (value.ValueKind != JsonValueKind.Array)
         {
             throw new HomeAssistantProtocolException($"The Home Assistant {name} preference collection was malformed.");
+        }
+
+        foreach (var item in value.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                throw new HomeAssistantProtocolException($"The Home Assistant {name} preference collection was malformed.");
+            }
         }
     }
 
