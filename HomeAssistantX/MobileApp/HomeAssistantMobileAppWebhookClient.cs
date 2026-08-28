@@ -1,5 +1,4 @@
 using System.Net.Http;
-using System.Text;
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
@@ -120,17 +119,20 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             }
             else
             {
-                var requestPlaintext = JsonSerializer.SerializeToUtf8Bytes(
-                    frozenData,
-                    HomeAssistantJson.SerializerOptions);
+                var requestPlaintext = HomeAssistantJson.SerializeToUtf8Bytes(frozenData, operationToken);
                 var encrypted = await _protector!.ProtectAsync(requestPlaintext, _secret!, operationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(encrypted)) throw new HomeAssistantProtocolException("The mobile-app payload protector returned an empty request payload.");
                 envelope = new Dictionary<string, object?> { ["type"] = command, ["encrypted"] = true, ["encrypted_data"] = encrypted };
             }
 
+            var requestBytes = HomeAssistantJson.SerializeToUtf8Bytes(envelope, operationToken);
             using var request = new HttpRequestMessage(HttpMethod.Post, _webhookUri)
             {
-                Content = new StringContent(JsonSerializer.Serialize(envelope, HomeAssistantJson.SerializerOptions), Encoding.UTF8, "application/json")
+                Content = new ByteArrayContent(requestBytes)
+            };
+            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json")
+            {
+                CharSet = "utf-8"
             };
             using var response = await SendRequestAsync(request, operationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
@@ -146,11 +148,11 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
                     throw new HomeAssistantProtocolException("Home Assistant returned an unencrypted response for an encrypted mobile-app request.");
                 }
 
-                return JsonDocument.Parse("{}").RootElement.Clone();
+                return await ParseResponseAsync(new byte[] { (byte)'{', (byte)'}' }, operationToken)
+                    .ConfigureAwait(false);
             }
 
-            using var document = ParseResponse(bytes);
-            var root = document.RootElement;
+            var root = await ParseResponseAsync(bytes, operationToken).ConfigureAwait(false);
             var isEncryptedResponse = root.ValueKind == JsonValueKind.Object
                 && root.TryGetProperty("encrypted", out var encryptedFlag)
                 && encryptedFlag.ValueKind == JsonValueKind.True;
@@ -171,11 +173,11 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
                 }
 
                 var plaintext = await _protector.UnprotectAsync(encryptedData.GetString()!, _secret!, operationToken).ConfigureAwait(false);
-                using var decrypted = ParseResponse(plaintext);
-                return decrypted.RootElement.Clone();
+                return await ParseResponseAsync(plaintext, operationToken).ConfigureAwait(false);
             }
 
-            return root.Clone();
+            operationToken.ThrowIfCancellationRequested();
+            return root;
         }
         catch (OperationCanceledException) when (operationToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
@@ -212,15 +214,29 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         }
     }
 
-    private static JsonDocument ParseResponse(byte[] bytes)
+    internal static async Task<JsonElement> ParseResponseAsync(
+        byte[] bytes,
+        CancellationToken cancellationToken)
     {
+        JsonDocument? document = null;
+        var ownershipTransferred = false;
+        cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            return JsonDocument.Parse(bytes);
+            using var stream = new MemoryStream(bytes, writable: false);
+            document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            ownershipTransferred = true;
+            return document.RootElement;
         }
         catch (JsonException ex)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             throw new HomeAssistantProtocolException("Home Assistant returned invalid mobile-app JSON.", ex);
+        }
+        finally
+        {
+            if (!ownershipTransferred) document?.Dispose();
         }
     }
 

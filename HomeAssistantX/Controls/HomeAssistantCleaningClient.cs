@@ -38,7 +38,7 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
         }, target, null, cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> SetFanSpeedAsync(HomeAssistantTarget target, string fanSpeed, CancellationToken cancellationToken = default)
-        => CallAsync("set_fan_speed", target, call => call.WithData("fan_speed", ControlValidation.Required(fanSpeed, nameof(fanSpeed))), cancellationToken);
+        => CallAsync("set_fan_speed", target, call => call.WithData("fan_speed", ControlValidation.RequiredUnchanged(fanSpeed, nameof(fanSpeed))), cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> CleanAreaAsync(HomeAssistantTarget target, IReadOnlyList<string> areaIds, CancellationToken cancellationToken = default)
         => CallAsync("clean_area", target, call => call.WithData(
@@ -49,7 +49,7 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
     public Task<HomeAssistantServiceCallResult> SendCommandAsync(HomeAssistantTarget target, string command, object? parameters = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var normalizedCommand = ControlValidation.Required(command, nameof(command));
+        var normalizedCommand = ControlValidation.RequiredUnchanged(command, nameof(command));
         var frozenParameters = parameters is null ? (System.Text.Json.JsonElement?)null : HomeAssistantJson.FreezeValue(parameters, nameof(parameters), "Parameters", cancellationToken);
         return CallAsync("send_command", target, call =>
         {

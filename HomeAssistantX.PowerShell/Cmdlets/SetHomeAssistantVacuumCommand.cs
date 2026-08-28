@@ -21,7 +21,7 @@ public sealed class SetHomeAssistantVacuumCommand : HomeAssistantTargetCmdlet
             ? null
             : string.IsNullOrWhiteSpace(FanSpeed)
                 ? throw new ArgumentException("FanSpeed must not be blank.", nameof(FanSpeed))
-                : FanSpeed.Trim();
+                : FanSpeed;
         var cleaningAreaIds = CleaningAreaId is null
             ? null
             : ControlValidation.RequiredValues(CleaningAreaId, nameof(CleaningAreaId), CancelToken);

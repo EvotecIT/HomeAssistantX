@@ -62,5 +62,5 @@ public sealed class HomeAssistantFanClient : HomeAssistantControlClientBase
         }), cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> SetPresetModeAsync(HomeAssistantTarget target, string presetMode, CancellationToken cancellationToken = default)
-        => CallAsync("set_preset_mode", target, call => call.WithData("preset_mode", ControlValidation.Required(presetMode, nameof(presetMode))), cancellationToken);
+        => CallAsync("set_preset_mode", target, call => call.WithData("preset_mode", ControlValidation.RequiredUnchanged(presetMode, nameof(presetMode))), cancellationToken);
 }

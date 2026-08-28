@@ -473,6 +473,36 @@ public sealed class InventoryAndControlsContractTests
         Assert.Equal(45, humidity.RootElement.GetProperty("service_data").GetProperty("humidity").GetDouble());
     }
 
+    [Fact]
+    public async Task ClimateAndMediaIntegrationOptionsPreserveExactText()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Controls.Climate.SetAsync(
+            HomeAssistantTarget.ForEntity("climate.kitchen"),
+            new HomeAssistantClimateOptions { FanMode = " Silent ", PresetMode = " Away " });
+        using (var fan = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_fan_mode")))
+        {
+            Assert.Equal(" Silent ", fan.RootElement.GetProperty("service_data").GetProperty("fan_mode").GetString());
+        }
+        using (var preset = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_preset_mode")))
+        {
+            Assert.Equal(" Away ", preset.RootElement.GetProperty("service_data").GetProperty("preset_mode").GetString());
+        }
+
+        server.ClearLastServiceCall();
+        await client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions { Source = " HDMI 2 ", SoundMode = " Night " });
+        using (var source = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "select_source")))
+        {
+            Assert.Equal(" HDMI 2 ", source.RootElement.GetProperty("service_data").GetProperty("source").GetString());
+        }
+        using var sound = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "select_sound_mode"));
+        Assert.Equal(" Night ", sound.RootElement.GetProperty("service_data").GetProperty("sound_mode").GetString());
+    }
+
     private static string FindServiceCall(IEnumerable<string> bodies, string service)
     {
         return bodies.Single(body =>

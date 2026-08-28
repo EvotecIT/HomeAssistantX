@@ -63,8 +63,46 @@ public sealed class StableControlAndAdapterContractTests
         await client.Controls.WaterHeaters.SetTemperatureAsync(HomeAssistantTarget.ForEntity("water_heater.tank"), 53, " comfort ");
         using (var call = LastCall(server))
         {
-            Assert.Equal("comfort", call.RootElement.GetProperty("service_data").GetProperty("operation_mode").GetString());
+            Assert.Equal(" comfort ", call.RootElement.GetProperty("service_data").GetProperty("operation_mode").GetString());
         }
+    }
+
+    [Fact]
+    public async Task IntegrationDefinedControlOptionsPreserveExactText()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Controls.Fans.SetPresetModeAsync(HomeAssistantTarget.ForEntity("fan.office"), " Breeze ");
+        AssertCall(server, "fan", "set_preset_mode", "preset_mode", " Breeze ");
+
+        await client.Controls.Humidifiers.SetModeAsync(HomeAssistantTarget.ForEntity("humidifier.bedroom"), " Quiet ");
+        AssertCall(server, "humidifier", "set_mode", "mode", " Quiet ");
+
+        await client.Controls.Vacuums.SetFanSpeedAsync(HomeAssistantTarget.ForEntity("vacuum.downstairs"), " Max+ ");
+        AssertCall(server, "vacuum", "set_fan_speed", "fan_speed", " Max+ ");
+
+        await client.Controls.Sirens.ActAsync(
+            HomeAssistantTarget.ForEntity("siren.house"),
+            HomeAssistantSirenAction.TurnOn,
+            new HomeAssistantSirenOptions { Tone = " Alert 2 " });
+        AssertCall(server, "siren", "turn_on", "tone", " Alert 2 ");
+
+        await client.Controls.Lights.TurnOnAsync(
+            HomeAssistantTarget.ForEntity("light.office"),
+            new HomeAssistantLightOptions { Effect = " Aurora + " });
+        AssertCall(server, "light", "turn_on", "effect", " Aurora + ");
+
+        await client.Controls.Vacuums.SendCommandAsync(
+            HomeAssistantTarget.ForEntity("vacuum.downstairs"),
+            " Provider Command ");
+        AssertCall(server, "vacuum", "send_command", "command", " Provider Command ");
+    }
+
+    [Fact]
+    public void IntegrationDefinedLightEffectsRejectBlanksAtOptionConstruction()
+    {
+        Assert.Throws<ArgumentException>(() => new HomeAssistantLightOptions { Effect = " " });
     }
 
     [Fact]
@@ -1557,6 +1595,39 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task MobileAppWebhookHonorsCancellationBeforeSerializingTheOutboundEnvelope()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "cancel-envelope",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/cancel-envelope"),
+                Secret = "test-secret"
+            },
+            new CancelAfterProtectPayloadProtector(cancellation));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            webhook.SendAsync("test", new Dictionary<string, object?> { ["value"] = "payload" }, cancellation.Token));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookResponseParsingObservesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantMobileAppWebhookClient.ParseResponseAsync(
+                Encoding.UTF8.GetBytes("{\"value\":[1,2,3]}"),
+                cancellation.Token));
+    }
+
+    [Fact]
     public async Task HelperTimesRejectFractionalSecondsBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();
@@ -1775,6 +1846,25 @@ public sealed class StableControlAndAdapterContractTests
 
         public Task<byte[]> UnprotectAsync(string protectedPayload, string secret, CancellationToken cancellationToken = default)
             => Task.FromException<byte[]>(_exception);
+    }
+
+    private sealed class CancelAfterProtectPayloadProtector : IHomeAssistantMobileAppPayloadProtector
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancelAfterProtectPayloadProtector(CancellationTokenSource cancellation)
+        {
+            _cancellation = cancellation;
+        }
+
+        public Task<string> ProtectAsync(byte[] plaintextJson, string secret, CancellationToken cancellationToken = default)
+        {
+            _cancellation.Cancel();
+            return Task.FromResult(Convert.ToBase64String(plaintextJson));
+        }
+
+        public Task<byte[]> UnprotectAsync(string protectedPayload, string secret, CancellationToken cancellationToken = default)
+            => Task.FromResult(Convert.FromBase64String(protectedPayload));
     }
 
     private sealed class CancellationProbeEnumerable : IEnumerable<string>

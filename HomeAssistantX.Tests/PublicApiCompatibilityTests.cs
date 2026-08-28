@@ -112,6 +112,18 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("System.String?", FormatAnnotatedType(property.PropertyType, property));
     }
 
+    [Fact]
+    public void MemberFormatterPreservesReadonlyStructMembers()
+    {
+        var method = typeof(ReadonlyMemberFixture).GetMethod(nameof(ReadonlyMemberFixture.Read))!;
+        var getter = typeof(ReadonlyMemberFixture).GetProperty(nameof(ReadonlyMemberFixture.Value))!.GetMethod!;
+        var overrideMethod = typeof(ReadonlyOverrideFixture).GetMethod(nameof(ToString))!;
+
+        Assert.Equal("instance readonly", MemberScope(method));
+        Assert.Equal("instance readonly", MemberScope(getter));
+        Assert.Equal("override readonly", MemberScope(overrideMethod));
+    }
+
 #if NET10_0
     [Fact]
     public void MemberFormatterPreservesNullableFlowContracts()
@@ -854,6 +866,26 @@ public sealed class PublicApiCompatibilityTests
     {
     }
 
+    private struct ReadonlyMemberFixture
+    {
+        private int _value;
+
+        public readonly int Value => _value;
+
+        public readonly int Read() => _value;
+
+        public void Write(int value) => _value = value;
+    }
+
+    private struct ReadonlyOverrideFixture
+    {
+        private int _value;
+
+        public readonly override string ToString() => _value.ToString();
+
+        public void Write(int value) => _value = value;
+    }
+
     [StructLayout(LayoutKind.Explicit, Pack = 4, Size = 16, CharSet = CharSet.Unicode)]
     private struct StructLayoutFixture
     {
@@ -1050,14 +1082,17 @@ public sealed class PublicApiCompatibilityTests
             }
             return "static";
         }
+        var scope = "instance";
         if (method is MethodInfo methodInfo && methodInfo.IsVirtual)
         {
             var isOverride = methodInfo.GetBaseDefinition().DeclaringType != methodInfo.DeclaringType;
-            if (methodInfo.IsAbstract) return isOverride ? "abstract override" : "abstract";
-            if (isOverride) return methodInfo.IsFinal ? "sealed override" : "override";
-            if (!methodInfo.IsFinal) return "virtual";
+            if (methodInfo.IsAbstract) scope = isOverride ? "abstract override" : "abstract";
+            else if (isOverride) scope = methodInfo.IsFinal ? "sealed override" : "override";
+            else if (!methodInfo.IsFinal) scope = "virtual";
         }
-        return "instance";
+        return HasAttribute(method, "System.Runtime.CompilerServices.IsReadOnlyAttribute")
+            ? scope + " readonly"
+            : scope;
     }
 
     private static bool IsExternallyAccessibleType(Type type)

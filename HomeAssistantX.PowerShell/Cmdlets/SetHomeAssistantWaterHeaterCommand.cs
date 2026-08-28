@@ -23,7 +23,6 @@ public sealed class SetHomeAssistantWaterHeaterCommand : HomeAssistantTargetCmdl
         if (OperationMode is not null)
         {
             if (string.IsNullOrWhiteSpace(OperationMode)) throw new ArgumentException("A non-empty operation mode is required.", nameof(OperationMode));
-            OperationMode = OperationMode.Trim();
         }
         var count = (Action.HasValue ? 1 : 0) + (Temperature.HasValue ? 1 : 0) + (!Temperature.HasValue && OperationMode is not null ? 1 : 0) + (AwayMode.HasValue ? 1 : 0);
         if (count != 1) throw new ArgumentException("Specify exactly one water-heater operation; OperationMode may accompany Temperature.");

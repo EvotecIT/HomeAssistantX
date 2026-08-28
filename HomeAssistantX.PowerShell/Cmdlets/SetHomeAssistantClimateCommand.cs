@@ -51,8 +51,8 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
         ValidateFinite(TargetTemperatureLow, nameof(TargetTemperatureLow));
         ValidateFinite(TargetTemperatureHigh, nameof(TargetTemperatureHigh));
         HvacMode = NormalizeOptionalMode(HvacMode, nameof(HvacMode));
-        FanMode = NormalizeOptionalMode(FanMode, nameof(FanMode));
-        PresetMode = NormalizeOptionalMode(PresetMode, nameof(PresetMode));
+        FanMode = PreserveOptionalMode(FanMode, nameof(FanMode));
+        PresetMode = PreserveOptionalMode(PresetMode, nameof(PresetMode));
 
         if (!Temperature.HasValue
             && !TargetTemperatureLow.HasValue
@@ -110,5 +110,12 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
         if (value is null) return null;
         if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty mode is required.", name);
         return value.Trim();
+    }
+
+    private static string? PreserveOptionalMode(string? value, string name)
+    {
+        if (value is null) return null;
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty mode is required.", name);
+        return value;
     }
 }

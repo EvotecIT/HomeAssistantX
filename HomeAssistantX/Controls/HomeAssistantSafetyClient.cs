@@ -40,7 +40,7 @@ public sealed class HomeAssistantSirenOptions
 
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Tone cannot be blank.", nameof(Tone));
             if (_toneId.HasValue) throw new ArgumentException("Tone and ToneId cannot be combined.", nameof(Tone));
-            _tone = value.Trim();
+            _tone = value;
         }
     }
 

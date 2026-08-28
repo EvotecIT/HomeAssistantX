@@ -29,6 +29,7 @@ public sealed class HomeAssistantLightOptions
 {
     private double? _brightnessPercent;
     private int? _colorTemperatureKelvin;
+    private string? _effect;
     private IReadOnlyList<int>? _rgbColor;
     private TimeSpan? _transition;
 
@@ -68,7 +69,13 @@ public sealed class HomeAssistantLightOptions
         }
     }
 
-    public string? Effect { get; set; }
+    public string? Effect
+    {
+        get => _effect;
+        set => _effect = value is null
+            ? null
+            : ControlValidation.RequiredUnchanged(value, nameof(Effect));
+    }
 
     public TimeSpan? Transition
     {
@@ -93,7 +100,7 @@ public sealed class HomeAssistantLightOptions
             call.WithData("rgb_color", RgbColor);
         }
 
-        if (!string.IsNullOrWhiteSpace(Effect))
+        if (Effect is not null)
         {
             call.WithData("effect", Effect);
         }
@@ -208,12 +215,15 @@ public sealed class HomeAssistantClimateOptions
         }
 
         HvacMode = NormalizeOptional(HvacMode, nameof(HvacMode));
-        FanMode = NormalizeOptional(FanMode, nameof(FanMode));
-        PresetMode = NormalizeOptional(PresetMode, nameof(PresetMode));
+        FanMode = PreserveOptional(FanMode, nameof(FanMode));
+        PresetMode = PreserveOptional(PresetMode, nameof(PresetMode));
     }
 
     private static string? NormalizeOptional(string? value, string name)
         => value is null ? null : ControlValidation.Required(value, name);
+
+    private static string? PreserveOptional(string? value, string name)
+        => value is null ? null : ControlValidation.RequiredUnchanged(value, name);
 }
 
 internal static class ControlValidation

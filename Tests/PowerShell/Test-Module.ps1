@@ -1079,6 +1079,21 @@ try {
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Source ' ' -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -SoundMode ' ' -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Enqueue 99 -MediaContentId test -MediaContentType music -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRoutine -Entity scene.evening -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantFan -Entity fan.office -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLight -Entity light.kitchen -Power On -Effect ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantValve -Entity valve.water -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantVacuum -Entity vacuum.downstairs -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantVacuum -Entity vacuum.downstairs -CleaningAreaId kitchen, ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLawnMower -Entity lawn_mower.garden -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action Disarm -Code ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantSiren -Entity siren.house -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantSiren -Entity siren.house -Action TurnOn -Tone ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantHumidifier -Entity humidifier.bedroom -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantHumidifier -Entity humidifier.bedroom -Mode ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantWaterHeater -Entity water_heater.tank -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantWaterHeater -Entity water_heater.tank -Temperature 52 -OperationMode ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantClimate -Area Kitchen -Temperature 21 -HvacMode ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantClimate -Area Kitchen -FanMode ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ChangeUnit -OldUnit ' ' -NewUnit MWh -WhatIf -ErrorAction Stop },
@@ -1153,12 +1168,52 @@ try {
         throw 'The typed fan cmdlet produced the wrong action payload.'
     }
 
+    $null = Set-HomeAssistantFan -Entity fan.office -PresetMode ' Breeze ' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedFanPresetCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedFanPresetCall.service -ne 'set_preset_mode' -or $typedFanPresetCall.service_data.preset_mode -cne ' Breeze ') {
+        throw 'The typed fan cmdlet did not preserve integration-defined preset text.'
+    }
+
+    $null = Set-HomeAssistantSiren -Entity siren.house -Action TurnOn -Tone ' Alert 2 ' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedSirenToneCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedSirenToneCall.service -ne 'turn_on' -or $typedSirenToneCall.service_data.tone -cne ' Alert 2 ') {
+        throw 'The typed siren cmdlet did not preserve integration-defined tone text.'
+    }
+
+    $null = Set-HomeAssistantLight -Entity light.kitchen -Power On -Effect ' Aurora + ' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedLightEffectCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedLightEffectCall.service -ne 'turn_on' -or $typedLightEffectCall.service_data.effect -cne ' Aurora + ') {
+        throw 'The typed light cmdlet did not preserve integration-defined effect text.'
+    }
+
     $null = Set-HomeAssistantHelper -Entity input_number.volume -Domain InputNumber -Number 15 -Confirm:$false
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     $typedHelperCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
     if ($typedHelperCall.domain -ne 'input_number' -or $typedHelperCall.service -ne 'set_value' -or $typedHelperCall.service_data.value -ne 15) {
         throw 'The typed helper cmdlet produced the wrong action payload.'
+    }
+
+    $null = Set-HomeAssistantHelper -Entity select.house_mode -Domain Select -Option ' Away ' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedSelectCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedSelectCall.service_data.option -cne ' Away ') {
+        throw 'The typed helper cmdlet did not preserve select-option whitespace.'
+    }
+
+    $null = Set-HomeAssistantHelper -Entity input_select.house_mode -Domain InputSelect -Options ' Home ', 'Away' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedSelectOptionsCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if (@($typedSelectOptionsCall.service_data.options)[0] -cne ' Home ' -or @($typedSelectOptionsCall.service_data.options)[1] -cne 'Away') {
+        throw 'The typed helper cmdlet did not preserve input-select option whitespace.'
     }
 
     $server.StandardInput.WriteLine('CLEAR_LAST_SUPERVISOR_COMMAND')
