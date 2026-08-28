@@ -152,6 +152,11 @@ public sealed class HomeAssistantMediaBrowserClient
                 || !IsCanonicalMediaClass(childrenMediaClass.GetString())))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
 
+        if ((canPlay.GetBoolean() || canExpand.GetBoolean())
+            && (!IsCanonicalActionableSelector(mediaContentId.GetString())
+                || !IsCanonicalActionableSelector(mediaContentType.GetString())))
+            throw new HomeAssistantProtocolException("An actionable media response contained a noncanonical selector.");
+
         if (!value.TryGetProperty("children", out var children)) return;
         if (children.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media response contained an invalid children collection.");
@@ -231,6 +236,11 @@ public sealed class HomeAssistantMediaBrowserClient
         return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
             && absolute.IsWellFormedOriginalString();
     }
+
+    private static bool IsCanonicalActionableSelector(string? value)
+        => value is not null
+            && !string.IsNullOrWhiteSpace(value)
+            && string.Equals(value, value.Trim(), StringComparison.Ordinal);
 
     private static Dictionary<string, object?> PlayerPayload(string entityId, string? mediaContentType, string? mediaContentId)
     {

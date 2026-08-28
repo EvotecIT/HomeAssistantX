@@ -1,6 +1,7 @@
 using System.Management.Automation;
 using System.Text.Json;
 using HomeAssistantX.Automations;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -18,7 +19,7 @@ public sealed class SetHomeAssistantAutomationCommand : HomeAssistantCmdlet
     {
         var automationId = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(AutomationId);
         CancelToken.ThrowIfCancellationRequested();
-        using var document = JsonDocument.Parse(ConfigurationJson);
+        using var document = await HomeAssistantJson.ParseDocumentAsync(ConfigurationJson, CancelToken).ConfigureAwait(false);
         if (document.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("ConfigurationJson must be a JSON object.", nameof(ConfigurationJson));
         var configuration = document.RootElement;
         HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(

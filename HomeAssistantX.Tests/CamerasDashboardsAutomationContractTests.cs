@@ -8,6 +8,7 @@ using HomeAssistantX.Exceptions;
 using HomeAssistantX.IO;
 using HomeAssistantX.Media;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
 
@@ -272,12 +273,42 @@ public sealed class CamerasDashboardsAutomationContractTests
     [Theory]
     [InlineData("{\"title\":\"Music\",\"media_content_type\":\"library\",\"can_play\":true,\"children\":[]}")]
     [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"can_expand\":true,\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"can_play\":true,\"children\":[]}]}")]
-    public async Task MediaBrowseRejectsItemsWithoutContentIdentity(string response)
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\" track-1 \",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\"track-1\",\"media_content_type\":\" audio/mpeg \",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":[]}")]
+    public async Task MediaBrowseRejectsInvalidActionableContentIdentity(string response)
     {
         using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task CallerJsonParsingReturnsPromptlyWhenCancellationArrives()
+    {
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+        try
+        {
+            var parsing = HomeAssistantJson.ParseDocumentAsync(
+                "{}",
+                cancellation.Token,
+                value =>
+                {
+                    started.TrySetResult(true);
+                    release.Task.GetAwaiter().GetResult();
+                    return JsonDocument.Parse(value);
+                });
+            await started.Task;
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => parsing);
+        }
+        finally
+        {
+            release.TrySetResult(true);
+        }
     }
 
     [Fact]
@@ -755,6 +786,35 @@ public sealed class CamerasDashboardsAutomationContractTests
     public void AtomicExportsRejectUnknownNativeStatLayouts()
     {
         Assert.Throws<PlatformNotSupportedException>(() => HomeAssistantAtomicFile.UnixModeOffset("Linux", "FutureCpu"));
+    }
+
+    [Fact]
+    public void AtomicExportsDoNotCommitAfterCancellation()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-canceled-export-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            Assert.ThrowsAny<OperationCanceledException>(() => HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                cancellation.Token));
+
+            Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(destination));
+            Assert.True(File.Exists(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Theory]

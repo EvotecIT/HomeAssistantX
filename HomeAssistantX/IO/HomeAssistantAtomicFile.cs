@@ -5,6 +5,27 @@ namespace HomeAssistantX.IO;
 
 internal static class HomeAssistantAtomicFile
 {
+    internal static void CommitTemporaryFile(
+        string temporaryPath,
+        string destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (File.Exists(destinationPath))
+        {
+            if (!overwrite)
+                throw new IOException("The destination file already exists. Use -Force to overwrite it.");
+            PreserveDestinationPermissions(destinationPath, temporaryPath);
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Replace(temporaryPath, destinationPath, null);
+            return;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        File.Move(temporaryPath, destinationPath);
+    }
+
     internal static void PreserveDestinationPermissions(string destinationPath, string temporaryPath)
         => PreserveDestinationPermissions(destinationPath, temporaryPath, useManagedApis: true);
 

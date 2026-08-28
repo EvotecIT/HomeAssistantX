@@ -1,6 +1,7 @@
 using System.Management.Automation;
 using System.Text.Json;
 using HomeAssistantX.Dashboards;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -95,7 +96,7 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 break;
             default:
                 CancelToken.ThrowIfCancellationRequested();
-                using (var document = JsonDocument.Parse(ConfigurationJson!))
+                using (var document = await HomeAssistantJson.ParseDocumentAsync(ConfigurationJson!, CancelToken).ConfigureAwait(false))
                 {
                     var configuration = document.RootElement;
                     HomeAssistantDashboardIdentifier.ValidateConfigurationForSave(
