@@ -639,7 +639,10 @@ public sealed class EnergyRecorderWeatherContractTests
     [Fact]
     public async Task WeatherCurrentForecastUnitsAndSubscriptionAreTypedAndPushBased()
     {
-        using var server = new TestHomeAssistantServer();
+        using var server = new TestHomeAssistantServer
+        {
+            WeatherConvertibleUnitsResponseJson = "{\"units\":{\"temperature_unit\":[\"°C\",\"°F\"],\"wind_speed_unit\":[\"km/h\",\"m/s\"]},\"future_weather_contract\":{\"enabled\":true}}"
+        };
         server.SetStates("[" +
             "{\"entity_id\":\"weather.home\",\"state\":\"partlycloudy\",\"attributes\":{\"friendly_name\":\"Home\",\"temperature\":21.5,\"temperature_unit\":\"°C\",\"humidity\":55,\"wind_bearing\":180,\"supported_features\":3}}," +
             "{\"entity_id\":\"weather.bad\",\"state\":\"unknown\",\"attributes\":{\"supported_features\":4294967297}}]");
@@ -658,8 +661,11 @@ public sealed class EnergyRecorderWeatherContractTests
         var daily = Assert.Single(forecast.Forecast);
         Assert.Equal(24.5, daily.Temperature);
         Assert.Equal("kept", daily.AdditionalData["future_field"].GetString());
-        var units = await client.Weather.GetConvertibleUnitsAsync();
-        Assert.Contains("°C", units["temperature_unit"]);
+        var unitsResponse = await client.Weather.GetConvertibleUnitsResponseAsync();
+        Assert.Contains("°C", unitsResponse.Units["temperature_unit"]);
+        Assert.True(unitsResponse.AdditionalData["future_weather_contract"].GetProperty("enabled").GetBoolean());
+        Assert.Equal(JsonValueKind.Object, unitsResponse.Raw.ValueKind);
+        Assert.Contains("°C", (await client.Weather.GetConvertibleUnitsAsync())["temperature_unit"]);
 
         var received = new TaskCompletionSource<HomeAssistantWeatherForecastUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = await client.Weather.SubscribeForecastAsync(
@@ -916,6 +922,7 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":true,\"has_sum\":true,\"mean_type\":0}]")]
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":true,\"has_sum\":true,\"mean_type\":2}]")]
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":false}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"statistic_id\":\"sensor.other\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true}]")]
     public async Task RecorderMetadataRequiresIdentityAndCapabilityFields(string response)
     {
         using var server = new TestHomeAssistantServer { RecorderMetadataResponseJson = response };
@@ -980,6 +987,8 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("{\"sensor.other\":[{\"start\":1,\"end\":2}]}")]
     [InlineData("{\"sensor.energy\":[{\"start\":2,\"end\":2}]}")]
     [InlineData("{\"sensor.energy\":[{\"start\":3,\"end\":2}]}")]
+    [InlineData("{\"sensor.energy\":[{\"start\":1,\"end\":2,\"last_reset\":3}]}")]
+    [InlineData("{\"sensor.energy\":[{\"start\":1,\"start\":2,\"end\":3}]}")]
     public async Task RecorderStatisticsCorrelateIdentifiersAndRequirePositiveIntervals(string response)
     {
         using var server = new TestHomeAssistantServer { RecorderStatisticsResponseJson = response };
@@ -1124,6 +1133,27 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Equal("sensor.grid_energy", Assert.Single(await request).StatisticId);
         using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/get_statistics_metadata")));
         Assert.Equal("sensor.grid_energy", command.RootElement.GetProperty("statistic_ids")[0].GetString());
+    }
+
+    [Fact]
+    public async Task RecorderStatisticSelectorNormalizationStopsWhenCancellationArrives()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var readCancellation = new CancellationTokenSource();
+        using var clearCancellation = new CancellationTokenSource();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Recorder.GetStatisticsMetadataAsync(
+                new CancellingStatisticIds(readCancellation),
+                readCancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Recorder.ClearStatisticsAsync(
+                new CancellingStatisticIds(clearCancellation),
+                clearCancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("recorder/get_statistics_metadata"));
+        Assert.Null(server.GetLastWebSocketCommand("recorder/clear_statistics"));
     }
 
     [Theory]
@@ -1456,6 +1486,24 @@ public sealed class EnergyRecorderWeatherContractTests
 
         public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
             => new[] { new KeyValuePair<string, string>(null!, "kWh") }.AsEnumerable().GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancellingStatisticIds : IReadOnlyCollection<string>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancellingStatisticIds(CancellationTokenSource cancellation) => _cancellation = cancellation;
+
+        public int Count => 2;
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            yield return "sensor.grid_energy";
+            _cancellation.Cancel();
+            yield return "sensor.solar_energy";
+        }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }

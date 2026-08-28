@@ -82,11 +82,31 @@ public sealed class HomeAssistantWeatherClient
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetConvertibleUnitsAsync(CancellationToken cancellationToken = default)
+        => (await GetConvertibleUnitsResponseAsync(cancellationToken).ConfigureAwait(false)).Units;
+
+    /// <summary>Returns typed convertible units while retaining response-level extension data.</summary>
+    public async Task<HomeAssistantWeatherConvertibleUnitsResponse> GetConvertibleUnitsResponseAsync(
+        CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("weather/convertible_units", null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("units", out var units) || units.ValueKind != JsonValueKind.Object)
             throw new HomeAssistantProtocolException("The weather convertible-unit response had an unexpected shape.");
-        return ParseConvertibleUnits(units, cancellationToken);
+        if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+            throw new HomeAssistantProtocolException("The weather convertible-unit response contained duplicate JSON properties.");
+        var additionalData = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.Equals(property.Name, "units", StringComparison.Ordinal))
+                additionalData.Add(property.Name, property.Value);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return new HomeAssistantWeatherConvertibleUnitsResponse
+        {
+            Units = ParseConvertibleUnits(units, cancellationToken),
+            AdditionalData = additionalData,
+            Raw = value
+        };
     }
 
     internal static IReadOnlyDictionary<string, IReadOnlyList<string>> ParseConvertibleUnits(

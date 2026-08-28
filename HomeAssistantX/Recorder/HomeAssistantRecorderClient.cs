@@ -24,20 +24,28 @@ public sealed class HomeAssistantRecorderClient
         IReadOnlyCollection<string>? statisticIds = null,
         CancellationToken cancellationToken = default)
     {
-        var requestedIdSnapshot = statisticIds is null ? null : RequireStatisticIds(statisticIds, nameof(statisticIds));
+        var requestedIdSnapshot = statisticIds is null ? null : RequireStatisticIds(statisticIds, nameof(statisticIds), cancellationToken);
         var payload = requestedIdSnapshot is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = requestedIdSnapshot };
         var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
         var metadata = DecodeMetadata(value, "Recorder statistics metadata could not be decoded.", cancellationToken);
         var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (metadata.Any(item => !responseIds.Add(item.StatisticId)))
-            throw new HomeAssistantProtocolException("Recorder statistics metadata contained a duplicate statistic identifier.");
+        foreach (var item in metadata)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!responseIds.Add(item.StatisticId))
+                throw new HomeAssistantProtocolException("Recorder statistics metadata contained a duplicate statistic identifier.");
+        }
         if (requestedIdSnapshot is not null)
         {
             var requestedIds = new HashSet<string>(requestedIdSnapshot, StringComparer.OrdinalIgnoreCase);
-            if (metadata.Any(item => !requestedIds.Contains(item.StatisticId)))
-                throw new HomeAssistantProtocolException("Recorder statistics metadata contained an unexpected statistic identifier.");
+            foreach (var item in metadata)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!requestedIds.Contains(item.StatisticId))
+                    throw new HomeAssistantProtocolException("Recorder statistics metadata contained an unexpected statistic identifier.");
+            }
         }
-
+        cancellationToken.ThrowIfCancellationRequested();
         return metadata;
     }
 
@@ -52,18 +60,22 @@ public sealed class HomeAssistantRecorderClient
         var value = await _webSocket.RequestAsync("recorder/list_statistic_ids", payload, cancellationToken).ConfigureAwait(false);
         var metadata = DecodeMetadata(value, "Recorder statistic identifiers could not be decoded.", cancellationToken);
         var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (metadata.Any(item => !responseIds.Add(item.StatisticId)))
+        foreach (var item in metadata)
         {
-            throw new HomeAssistantProtocolException("Recorder statistic identifiers contained a duplicate identifier.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!responseIds.Add(item.StatisticId))
+                throw new HomeAssistantProtocolException("Recorder statistic identifiers contained a duplicate identifier.");
         }
 
-        if (kind == HomeAssistantStatisticKind.Mean
-                && metadata.Any(item => !item.HasMean && item.MeanType != HomeAssistantStatisticMeanType.Circular)
-            || kind == HomeAssistantStatisticKind.Sum && metadata.Any(item => !item.HasSum))
+        foreach (var item in metadata)
         {
-            throw new HomeAssistantProtocolException("Recorder statistic identifiers did not match the requested statistic type.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (kind == HomeAssistantStatisticKind.Mean
+                    && !item.HasMean && item.MeanType != HomeAssistantStatisticMeanType.Circular
+                || kind == HomeAssistantStatisticKind.Sum && !item.HasSum)
+                throw new HomeAssistantProtocolException("Recorder statistic identifiers did not match the requested statistic type.");
         }
-
+        cancellationToken.ThrowIfCancellationRequested();
         return metadata;
     }
 
@@ -74,7 +86,7 @@ public sealed class HomeAssistantRecorderClient
         if (query is null) throw new ArgumentNullException(nameof(query));
         if (query.EndTime.HasValue && query.EndTime <= query.StartTime)
             throw new ArgumentOutOfRangeException(nameof(query), "The statistics end must be after the start.");
-        var requestedIdSnapshot = RequireStatisticIds(query.StatisticIds, nameof(query));
+        var requestedIdSnapshot = RequireStatisticIds(query.StatisticIds, nameof(query), cancellationToken);
         var payload = new Dictionary<string, object?>
         {
             ["start_time"] = query.StartTime.ToString("O", CultureInfo.InvariantCulture),
@@ -85,17 +97,25 @@ public sealed class HomeAssistantRecorderClient
         if (query.Types is not null)
         {
             if (query.Types.Count == 0) throw new ArgumentException("Statistics types cannot be empty.", nameof(query));
-            payload["types"] = query.Types.Select(TypeName).Distinct(StringComparer.Ordinal).ToArray();
+            var types = new List<string>(query.Types.Count);
+            foreach (var type in query.Types)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var name = TypeName(type);
+                if (!types.Contains(name, StringComparer.Ordinal)) types.Add(name);
+            }
+            payload["types"] = types.ToArray();
         }
         if (query.Units is not null)
         {
-            if (query.Units.Any(pair => string.IsNullOrEmpty(pair.Key)
-                || !HomeAssistantStatisticIdentifier.IsSlug(pair.Key)
-                || string.IsNullOrWhiteSpace(pair.Value)))
-                throw new ArgumentException("Statistics unit-class keys must be canonical lowercase identifiers and unit values must be non-empty.", nameof(query));
             var units = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in query.Units)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (string.IsNullOrEmpty(pair.Key)
+                    || !HomeAssistantStatisticIdentifier.IsSlug(pair.Key)
+                    || string.IsNullOrWhiteSpace(pair.Value))
+                    throw new ArgumentException("Statistics unit-class keys must be canonical lowercase identifiers and unit values must be non-empty.", nameof(query));
                 var normalizedName = pair.Key;
                 if (units.ContainsKey(normalizedName))
                     throw new ArgumentException("Statistics unit names must be unique after normalization.", nameof(query));
@@ -111,6 +131,7 @@ public sealed class HomeAssistantRecorderClient
         var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in value.EnumerateObject())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantStatisticIdentifier.TryNormalize(property.Name, out var normalizedStatisticId)
                 || !string.Equals(property.Name, normalizedStatisticId, StringComparison.Ordinal)
                 || !requestedIds.Contains(normalizedStatisticId)
@@ -123,7 +144,10 @@ public sealed class HomeAssistantRecorderClient
                 cancellationToken: cancellationToken);
             series.Add(new HomeAssistantStatisticSeries { StatisticId = normalizedStatisticId, Rows = rows });
         }
-        return series.OrderBy(item => item.StatisticId, StringComparer.OrdinalIgnoreCase).ToArray();
+        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        series.Sort((left, right) => comparer.Compare(left.StatisticId, right.StatisticId));
+        cancellationToken.ThrowIfCancellationRequested();
+        return series;
     }
 
     public Task<JsonElement> ValidateStatisticsAsync(CancellationToken cancellationToken = default)
@@ -133,7 +157,7 @@ public sealed class HomeAssistantRecorderClient
         => _ = await _webSocket.RequestAsync("recorder/update_statistics_issues", null, cancellationToken).ConfigureAwait(false);
 
     public async Task ClearStatisticsAsync(IReadOnlyCollection<string> statisticIds, CancellationToken cancellationToken = default)
-        => _ = await _webSocket.RequestAsync("recorder/clear_statistics", new Dictionary<string, object?> { ["statistic_ids"] = RequireStatisticIds(statisticIds, nameof(statisticIds)) }, cancellationToken).ConfigureAwait(false);
+        => _ = await _webSocket.RequestAsync("recorder/clear_statistics", new Dictionary<string, object?> { ["statistic_ids"] = RequireStatisticIds(statisticIds, nameof(statisticIds), cancellationToken) }, cancellationToken).ConfigureAwait(false);
 
     public async Task UpdateStatisticsMetadataAsync(string statisticId, string? unitClass, string? unitOfMeasurement, CancellationToken cancellationToken = default)
     {
@@ -252,6 +276,7 @@ public sealed class HomeAssistantRecorderClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind != JsonValueKind.Object
+                || HomeAssistantJson.HasDuplicateProperties(item, cancellationToken)
                 || !item.TryGetProperty("statistic_id", out var statisticId)
                 || statisticId.ValueKind != JsonValueKind.String
                 || statisticId.GetString() is not string statisticIdValue
@@ -321,10 +346,14 @@ public sealed class HomeAssistantRecorderClient
         foreach (var row in value.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var hasLastReset = row.ValueKind == JsonValueKind.Object
+                && row.TryGetProperty("last_reset", out var lastResetValue)
+                && lastResetValue.ValueKind != JsonValueKind.Null;
             if (row.ValueKind != JsonValueKind.Object
+                || HomeAssistantJson.HasDuplicateProperties(row, cancellationToken)
                 || !TryGetUnixMilliseconds(row, "start", required: true, out var start)
                 || !TryGetUnixMilliseconds(row, "end", required: true, out var end)
-                || !TryGetUnixMilliseconds(row, "last_reset", required: false, out _)
+                || !TryGetUnixMilliseconds(row, "last_reset", required: false, out var lastReset)
                 || !TryGetFiniteDouble(row, "mean", out _)
                 || !TryGetFiniteDouble(row, "min", out var minimum)
                 || !TryGetFiniteDouble(row, "max", out var maximum)
@@ -338,6 +367,11 @@ public sealed class HomeAssistantRecorderClient
             if (end <= start)
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a non-positive interval.");
+            }
+
+            if (hasLastReset && lastReset > end)
+            {
+                throw new HomeAssistantProtocolException("A Recorder statistics series contained a reset timestamp after its interval.");
             }
 
             if (minimum.HasValue && maximum.HasValue && minimum.Value > maximum.Value)
@@ -461,16 +495,22 @@ public sealed class HomeAssistantRecorderClient
         return normalized.ToArray();
     }
 
-    private static string[] RequireStatisticIds(IReadOnlyCollection<string> values, string name)
+    private static string[] RequireStatisticIds(
+        IReadOnlyCollection<string> values,
+        string name,
+        CancellationToken cancellationToken)
     {
         if (values is null || values.Count == 0) throw new ArgumentException("At least one statistic identifier is required.", name);
         var normalized = new List<string>(values.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var statisticId))
                 throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", name);
-            if (!normalized.Contains(statisticId, StringComparer.Ordinal)) normalized.Add(statisticId);
+            if (seen.Add(statisticId)) normalized.Add(statisticId);
         }
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized.ToArray();
     }
 

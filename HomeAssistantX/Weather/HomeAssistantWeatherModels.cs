@@ -20,6 +20,18 @@ public enum HomeAssistantWeatherFeature
     TwiceDailyForecast = 4
 }
 
+/// <summary>Convertible weather units plus response-level fields added by Home Assistant or integrations.</summary>
+public sealed class HomeAssistantWeatherConvertibleUnitsResponse
+{
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> Units { get; set; }
+        = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyDictionary<string, JsonElement> AdditionalData { get; set; }
+        = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+
+    public JsonElement Raw { get; set; }
+}
+
 /// <summary>A typed current observation from a Home Assistant weather entity.</summary>
 public sealed class HomeAssistantWeatherObservation
 {
