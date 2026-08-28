@@ -23,14 +23,20 @@ public sealed class HomeAssistantCalendarClient
     public async Task<IReadOnlyList<HomeAssistantCalendar>> GetAsync(CancellationToken cancellationToken = default)
     {
         var calendars = await _rest.GetCalendarsAsync(cancellationToken).ConfigureAwait(false);
-        HomeAssistantJson.RequireNoNullCollectionEntries(calendars, "The Home Assistant calendar list contained a null item.");
+        HomeAssistantJson.RequireNoNullCollectionEntries(
+            calendars,
+            "The Home Assistant calendar list contained a null item.",
+            cancellationToken: cancellationToken);
         var entityIds = new HashSet<string>(StringComparer.Ordinal);
-        if (calendars.Any(calendar =>
-                !HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out var normalized)
-                || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
-                || !entityIds.Add(normalized)))
+        foreach (var calendar in calendars)
         {
-            throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out var normalized)
+                || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
+                || !entityIds.Add(normalized))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
+            }
         }
 
         return calendars;
@@ -45,7 +51,7 @@ public sealed class HomeAssistantCalendarClient
         var normalizedEntityId = NormalizeEntityId(entityId);
         ValidateRange(start, end);
         var events = await _rest.GetCalendarEventsAsync(normalizedEntityId, start, end, cancellationToken).ConfigureAwait(false);
-        ValidateEvents(events);
+        ValidateEvents(events, cancellationToken);
         return events;
     }
 

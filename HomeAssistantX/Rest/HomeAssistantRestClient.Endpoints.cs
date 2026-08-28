@@ -101,14 +101,20 @@ public sealed partial class HomeAssistantRestClient
     {
         var calendars = await SendHomeAssistantAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
             .ConfigureAwait(false);
-        HomeAssistantJson.RequireNoNullCollectionEntries(calendars, "The Home Assistant calendar list contained a null item.");
+        HomeAssistantJson.RequireNoNullCollectionEntries(
+            calendars,
+            "The Home Assistant calendar list contained a null item.",
+            cancellationToken: cancellationToken);
         var entityIds = new HashSet<string>(StringComparer.Ordinal);
-        if (calendars.Any(calendar =>
-                !HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out var normalized)
-                || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
-                || !entityIds.Add(normalized)))
+        foreach (var calendar in calendars)
         {
-            throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out var normalized)
+                || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
+                || !entityIds.Add(normalized))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
+            }
         }
 
         return calendars;

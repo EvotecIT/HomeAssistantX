@@ -230,23 +230,29 @@ public sealed class HomeAssistantRegistryClient
             allowNullCollectionEntries: true,
             cancellationToken: cancellationToken);
 
-        return partialEntries.Select(partial =>
+        var merged = new List<HomeAssistantEntityRegistryEntry>(partialEntries.Count);
+        foreach (var partial in partialEntries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!extendedEntries.TryGetValue(partial.EntityId, out var extended) || extended is null)
             {
-                return partial;
+                merged.Add(partial);
+                continue;
             }
 
             foreach (var pair in partial.AdditionalData)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!extended.AdditionalData.ContainsKey(pair.Key))
                 {
                     extended.AdditionalData[pair.Key] = pair.Value;
                 }
             }
 
-            return extended;
-        }).ToArray();
+            merged.Add(extended);
+        }
+
+        return merged;
     }
 
     private static IReadOnlyList<T> DeserializeArray<T>(
