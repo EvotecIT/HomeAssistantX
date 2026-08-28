@@ -194,6 +194,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string HistoryResponseJson { get; set; } = "[[" + KitchenTemperatureStateJson + "]]";
 
+    public string LogbookResponseJson { get; set; } =
+        "[{\"when\":\"2026-08-24T12:00:00+00:00\",\"name\":\"Kitchen light\",\"message\":\"turned on\",\"domain\":\"light\",\"entity_id\":\"light.kitchen\"}]";
+
     public string ActionCatalogResponseJson { get; set; } =
         "{\"light\":{\"turn_on\":{\"name\":\"Turn on\",\"description\":\"Turns on a light.\",\"fields\":{\"brightness_pct\":{\"name\":\"Brightness\",\"description\":\"Brightness percentage.\",\"required\":false,\"example\":45,\"selector\":{\"number\":{\"min\":0,\"max\":100}}}},\"target\":{\"entity\":[{\"domain\":\"light\"}]}},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}},\"switch\":{\"turn_on\":{\"name\":\"Turn on\"},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}}}";
 

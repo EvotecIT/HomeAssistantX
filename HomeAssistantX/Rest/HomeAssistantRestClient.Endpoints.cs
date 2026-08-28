@@ -79,11 +79,18 @@ public sealed partial class HomeAssistantRestClient
             parameters.Add(new KeyValuePair<string, string?>("entity", NormalizeEntityId(query.EntityId!, cancellationToken)));
         }
 
-        return await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
+        var entries = await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
             HttpMethod.Get,
             AppendQuery(path, parameters),
             null,
             cancellationToken).ConfigureAwait(false);
+        if (entries.Any(entry => entry is null || !entry.When.HasValue))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant logbook response contained an entry without a timestamp.");
+        }
+
+        return entries;
     }
 
     /// <summary>Gets the current Home Assistant error log as plaintext.</summary>

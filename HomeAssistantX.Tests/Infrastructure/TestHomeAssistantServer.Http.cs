@@ -127,9 +127,7 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, HistoryResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/logbook/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
-                await WriteHttpResponseAsync(stream, 200,
-                    "[{\"when\":\"2026-08-24T12:00:00+00:00\",\"name\":\"Kitchen light\",\"message\":\"turned on\",\"domain\":\"light\",\"entity_id\":\"light.kitchen\"}]")
-                    .ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, LogbookResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/states":
                 await WriteHttpResponseAsync(stream, 200, GetStates()).ConfigureAwait(false);

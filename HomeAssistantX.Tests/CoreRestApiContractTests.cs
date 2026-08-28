@@ -254,4 +254,18 @@ public sealed class CoreRestApiContractTests
 
         Assert.Null(server.LastRequestPath);
     }
+
+    [Theory]
+    [InlineData("[{}]")]
+    [InlineData("[{\"when\":null}]")]
+    [InlineData("[null]")]
+    public async Task LogbookRejectsEntriesWithoutRequiredTimestamps(string responseJson)
+    {
+        using var server = new TestHomeAssistantServer { LogbookResponseJson = responseJson };
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery { StartTime = start }));
+    }
 }
