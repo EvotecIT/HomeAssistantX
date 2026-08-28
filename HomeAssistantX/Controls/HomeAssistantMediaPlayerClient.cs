@@ -69,7 +69,8 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target))).NormalizeForDomain(Domain);
+        var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
+            .NormalizeForDomain(Domain, cancellationToken);
         var power = options.Power;
         var playback = options.Playback;
         var volumePercent = options.VolumePercent;
@@ -128,35 +129,46 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentException("At least one media-player value or action is required.", nameof(options));
         }
 
+        var transport = CaptureTransport(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (powerAction is not null)
         {
-            results.Add(await CallAsync(powerAction, frozenTarget, null, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(powerAction, frozenTarget, null, transport, cancellationToken).ConfigureAwait(false));
         }
 
         if (volumePercent.HasValue)
         {
-            results.Add(await CallAsync("volume_set", frozenTarget, call => call.WithData("volume_level", volumePercent.Value / 100d), cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("volume_set", frozenTarget, call => call.WithData("volume_level", volumePercent.Value / 100d), transport, cancellationToken).ConfigureAwait(false));
         }
 
         if (muted.HasValue)
         {
-            results.Add(await CallAsync("volume_mute", frozenTarget, call => call.WithData("is_volume_muted", muted.Value), cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("volume_mute", frozenTarget, call => call.WithData("is_volume_muted", muted.Value), transport, cancellationToken).ConfigureAwait(false));
         }
 
         if (!string.IsNullOrWhiteSpace(source))
         {
-            results.Add(await CallAsync("select_source", frozenTarget, call => call.WithData("source", source), cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("select_source", frozenTarget, call => call.WithData("source", source), transport, cancellationToken).ConfigureAwait(false));
         }
 
         if (!string.IsNullOrWhiteSpace(soundMode))
         {
-            results.Add(await SelectSoundModeAsync(frozenTarget, soundMode!, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(
+                "select_sound_mode",
+                frozenTarget,
+                call => call.WithData("sound_mode", soundMode),
+                transport,
+                cancellationToken).ConfigureAwait(false));
         }
 
         if (shuffle.HasValue)
         {
-            results.Add(await SetShuffleAsync(frozenTarget, shuffle.Value, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(
+                "shuffle_set",
+                frozenTarget,
+                call => call.WithData("shuffle", shuffle.Value),
+                transport,
+                cancellationToken).ConfigureAwait(false));
         }
 
         if (repeatMode is not null)
@@ -165,27 +177,41 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 "repeat_set",
                 frozenTarget,
                 call => call.WithData("repeat", repeatMode),
+                transport,
                 cancellationToken).ConfigureAwait(false));
         }
 
         if (!string.IsNullOrWhiteSpace(mediaContentId))
         {
-            results.Add(await PlayMediaAsync(
+            results.Add(await CallAsync(
+                "play_media",
                 frozenTarget,
-                mediaContentId!,
-                mediaContentType!,
-                new HomeAssistantPlayMediaOptions
+                call =>
                 {
-                    Enqueue = enqueue,
-                    Announce = announce,
-                    Extra = frozenMediaExtra
+                    call.WithData("media_content_id", mediaContentId)
+                        .WithData("media_content_type", mediaContentType);
+                    if (enqueueMode is not null)
+                    {
+                        call.WithData("enqueue", enqueueMode);
+                    }
+
+                    if (announce.HasValue)
+                    {
+                        call.WithData("announce", announce.Value);
+                    }
+
+                    if (frozenMediaExtra is not null)
+                    {
+                        call.WithData("extra", frozenMediaExtra);
+                    }
                 },
+                transport,
                 cancellationToken).ConfigureAwait(false));
         }
 
         if (playbackAction is not null)
         {
-            results.Add(await CallAsync(playbackAction, frozenTarget, null, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(playbackAction, frozenTarget, null, transport, cancellationToken).ConfigureAwait(false));
         }
 
         return results;

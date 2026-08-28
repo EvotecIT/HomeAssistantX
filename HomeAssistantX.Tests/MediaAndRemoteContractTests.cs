@@ -443,6 +443,39 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task CompoundTypedControlsCaptureOneTransportPerOperation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var pause = server.PauseNextServiceCall();
+
+        var operation = client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions
+            {
+                Power = HomeAssistantPowerAction.On,
+                VolumePercent = 35
+            });
+
+        await pause.Received.WaitAsync(TimeSpan.FromSeconds(2));
+        client.Options.ControlServiceCallTransport = HomeAssistantServiceCallTransport.Rest;
+        pause.Release();
+        await operation;
+
+        Assert.Equal(2, server.ServiceCallBodies.Count);
+        foreach (var body in server.ServiceCallBodies)
+        {
+            using var call = JsonDocument.Parse(body);
+            Assert.Equal("call_service", call.RootElement.GetProperty("type").GetString());
+        }
+
+        await client.Controls.MediaPlayers.SetVolumeAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            40);
+        Assert.Equal("/api/services/media_player/volume_set", server.LastRequestPath);
+    }
+
+    [Fact]
     public async Task MediaSeekGroupingPlaylistAndPlayMediaUseExactHomeAssistantFields()
     {
         using var server = new TestHomeAssistantServer();
@@ -804,6 +837,11 @@ public sealed class MediaAndRemoteContractTests
                 HomeAssistantTarget.ForEntity("media_player.kitchen"),
                 values,
                 cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.SetVolumeAsync(
+                new HomeAssistantTarget { EntityIds = values },
+                35,
+                cancellation.Token));
         var cyclicExtra = new Dictionary<string, object?>();
         cyclicExtra["self"] = cyclicExtra;
         var mediaTarget = HomeAssistantTarget.ForEntity("media_player.kitchen");
@@ -868,6 +906,17 @@ public sealed class MediaAndRemoteContractTests
                 client.Controls.MediaPlayers.JoinAsync(
                     HomeAssistantTarget.ForEntity("media_player.kitchen"),
                     values,
+                    cancellation.Token));
+            Assert.InRange(values.ReadCount, 1, 64);
+        }
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var values = new CancellationProbeStringList(cancellation, "media_player.kitchen");
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Controls.MediaPlayers.SetVolumeAsync(
+                    new HomeAssistantTarget { EntityIds = values },
+                    35,
                     cancellation.Token));
             Assert.InRange(values.ReadCount, 1, 64);
         }

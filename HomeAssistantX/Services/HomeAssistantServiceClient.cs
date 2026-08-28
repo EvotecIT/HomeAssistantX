@@ -120,7 +120,26 @@ public sealed class HomeAssistantServiceClient
         HomeAssistantServiceCall call,
         CancellationToken cancellationToken)
     {
-        return _options.ControlServiceCallTransport switch
+        return CallControlAsync(call, CaptureControlTransport(), cancellationToken);
+    }
+
+    internal HomeAssistantServiceCallTransport CaptureControlTransport()
+    {
+        var transport = _options.ControlServiceCallTransport;
+        return transport switch
+        {
+            HomeAssistantServiceCallTransport.WebSocket => transport,
+            HomeAssistantServiceCallTransport.Rest => transport,
+            _ => throw new InvalidOperationException("The configured typed-control transport is not supported.")
+        };
+    }
+
+    internal Task<HomeAssistantServiceCallResult> CallControlAsync(
+        HomeAssistantServiceCall call,
+        HomeAssistantServiceCallTransport transport,
+        CancellationToken cancellationToken)
+    {
+        return transport switch
         {
             HomeAssistantServiceCallTransport.WebSocket => CallAsync(call, cancellationToken),
             HomeAssistantServiceCallTransport.Rest => CallRestAsync(call, cancellationToken),

@@ -72,26 +72,29 @@ public sealed class HomeAssistantTarget
         return this;
     }
 
-    internal HomeAssistantTarget Normalize()
+    internal HomeAssistantTarget Normalize(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return new HomeAssistantTarget
         {
-            EntityIds = EntityIds is null ? null : NormalizeEntityIds(EntityIds, nameof(EntityIds)),
-            DeviceIds = NormalizeIds(DeviceIds, nameof(DeviceIds)),
-            AreaIds = NormalizeIds(AreaIds, nameof(AreaIds)),
-            FloorIds = NormalizeIds(FloorIds, nameof(FloorIds)),
-            LabelIds = NormalizeIds(LabelIds, nameof(LabelIds))
+            EntityIds = EntityIds is null ? null : NormalizeEntityIds(EntityIds, nameof(EntityIds), cancellationToken),
+            DeviceIds = NormalizeIds(DeviceIds, nameof(DeviceIds), cancellationToken),
+            AreaIds = NormalizeIds(AreaIds, nameof(AreaIds), cancellationToken),
+            FloorIds = NormalizeIds(FloorIds, nameof(FloorIds), cancellationToken),
+            LabelIds = NormalizeIds(LabelIds, nameof(LabelIds), cancellationToken)
         };
     }
 
-    internal HomeAssistantTarget NormalizeForDomain(string domain)
+    internal HomeAssistantTarget NormalizeForDomain(string domain, CancellationToken cancellationToken = default)
     {
-        var normalized = Normalize();
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalized = Normalize(cancellationToken);
         if (normalized.EntityIds is not null)
         {
             var entityIds = new string[normalized.EntityIds.Count];
             for (var index = 0; index < normalized.EntityIds.Count; index++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!HomeAssistantEntityId.TryNormalizeForDomain(normalized.EntityIds[index], domain, out entityIds[index]))
                 {
                     throw new ArgumentException($"Target entity identifiers must belong to the '{domain}' domain.", nameof(EntityIds));
@@ -114,22 +117,41 @@ public sealed class HomeAssistantTarget
         return ids.Select(id => id.Trim()).ToArray();
     }
 
-    private static IReadOnlyList<string>? NormalizeIds(IReadOnlyList<string>? ids, string parameterName)
+    private static IReadOnlyList<string>? NormalizeIds(
+        IReadOnlyList<string>? ids,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
         if (ids is null)
         {
             return null;
         }
 
-        if (ids.Count == 0 || ids.Any(string.IsNullOrWhiteSpace))
+        if (ids.Count == 0)
         {
             throw new ArgumentException("Target identifiers cannot be empty.", parameterName);
         }
 
-        return ids.Select(id => id.Trim()).ToArray();
+        var normalized = new string[ids.Count];
+        for (var index = 0; index < ids.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var id = ids[index];
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                throw new ArgumentException("Target identifiers cannot be empty.", parameterName);
+            }
+
+            normalized[index] = id.Trim();
+        }
+
+        return normalized;
     }
 
-    private static IReadOnlyList<string> NormalizeEntityIds(IReadOnlyList<string> ids, string parameterName)
+    private static IReadOnlyList<string> NormalizeEntityIds(
+        IReadOnlyList<string> ids,
+        string parameterName,
+        CancellationToken cancellationToken = default)
     {
         if (ids is null || ids.Count == 0)
         {
@@ -137,8 +159,10 @@ public sealed class HomeAssistantTarget
         }
 
         var normalized = new List<string>(ids.Count);
+        var unique = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in ids)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantEntityId.TryNormalize(value, out var entityId))
             {
                 throw new ArgumentException(
@@ -146,7 +170,7 @@ public sealed class HomeAssistantTarget
                     parameterName);
             }
 
-            if (!normalized.Contains(entityId, StringComparer.Ordinal))
+            if (unique.Add(entityId))
             {
                 normalized.Add(entityId);
             }
