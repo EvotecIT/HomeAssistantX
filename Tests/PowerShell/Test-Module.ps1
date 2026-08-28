@@ -770,6 +770,7 @@ try {
         { Set-HomeAssistantCamera camera.front -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantCamera camera.Front -PreloadStream $true -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ConfigurationJson '[]' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantDashboard -ConfigurationJson '{"views":[],"views":[{}]}' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -New -UrlPath house -Title House -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -New -UrlPath house-main -Title ' ' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -New -UrlPath ' ' -Title House -AllowSingleWord -WhatIf -ErrorAction Stop }

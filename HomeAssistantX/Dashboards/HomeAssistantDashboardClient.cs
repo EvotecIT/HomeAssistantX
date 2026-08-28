@@ -145,22 +145,30 @@ public sealed class HomeAssistantDashboardClient
     }
 
     public Task<JsonElement> DeleteDashboardAsync(string dashboardId, CancellationToken cancellationToken = default)
-        => _webSocket.RequestAsync("lovelace/dashboards/delete", new Dictionary<string, object?> { ["dashboard_id"] = Require(dashboardId, nameof(dashboardId)) }, cancellationToken);
+        => RequestJsonAsync(
+            "lovelace/dashboards/delete",
+            new Dictionary<string, object?> { ["dashboard_id"] = Require(dashboardId, nameof(dashboardId)) },
+            "The dashboard deletion response contained duplicate JSON properties.",
+            cancellationToken);
 
     public Task<JsonElement> GetConfigurationAsync(string? urlPath = null, bool force = false, CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, object?>();
         if (force) payload["force"] = true;
         if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
-        return _webSocket.RequestAsync("lovelace/config", payload, cancellationToken);
+        return RequestJsonAsync(
+            "lovelace/config",
+            payload,
+            "The Lovelace configuration contained duplicate JSON properties.",
+            cancellationToken);
     }
 
     public Task<JsonElement> SaveConfigurationAsync(JsonElement configuration, string? urlPath = null, CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (configuration.ValueKind != JsonValueKind.Object) throw new ArgumentException("A Lovelace configuration JSON object is required.", nameof(configuration));
-        if (HomeAssistantJson.HasDuplicateProperties(configuration, cancellationToken))
-            throw new ArgumentException("A Lovelace configuration cannot contain duplicate JSON properties.", nameof(configuration));
+        HomeAssistantDashboardIdentifier.ValidateConfigurationForSave(
+            configuration,
+            nameof(configuration),
+            cancellationToken);
         var payload = new Dictionary<string, object?>
         {
             ["config"] = HomeAssistantJson.FreezeValue(
@@ -170,14 +178,22 @@ public sealed class HomeAssistantDashboardClient
                 cancellationToken)
         };
         if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
-        return _webSocket.RequestAsync("lovelace/config/save", payload, cancellationToken);
+        return RequestJsonAsync(
+            "lovelace/config/save",
+            payload,
+            "The Lovelace configuration mutation response contained duplicate JSON properties.",
+            cancellationToken);
     }
 
     public Task<JsonElement> DeleteConfigurationAsync(string? urlPath = null, CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, object?>();
         if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
-        return _webSocket.RequestAsync("lovelace/config/delete", payload, cancellationToken);
+        return RequestJsonAsync(
+            "lovelace/config/delete",
+            payload,
+            "The Lovelace configuration deletion response contained duplicate JSON properties.",
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantDashboardResource>> GetResourcesAsync(CancellationToken cancellationToken = default)
@@ -229,7 +245,11 @@ public sealed class HomeAssistantDashboardClient
     }
 
     public Task<JsonElement> DeleteResourceAsync(string resourceId, CancellationToken cancellationToken = default)
-        => _webSocket.RequestAsync("lovelace/resources/delete", new Dictionary<string, object?> { ["resource_id"] = Require(resourceId, nameof(resourceId)) }, cancellationToken);
+        => RequestJsonAsync(
+            "lovelace/resources/delete",
+            new Dictionary<string, object?> { ["resource_id"] = Require(resourceId, nameof(resourceId)) },
+            "The Lovelace resource deletion response contained duplicate JSON properties.",
+            cancellationToken);
 
     private async Task<HomeAssistantDashboard> RequestDashboardAsync(
         string command,
@@ -244,6 +264,10 @@ public sealed class HomeAssistantDashboardClient
         bool? expectedRequireAdmin = null)
     {
         var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicateProperties(
+            value,
+            "A dashboard mutation response contained duplicate JSON properties.",
+            cancellationToken);
         var dashboard = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard>(
             value,
             "The dashboard response could not be decoded.",
@@ -277,8 +301,13 @@ public sealed class HomeAssistantDashboardClient
         string? expectedUrl = null,
         string? expectedType = null)
     {
+        var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicateProperties(
+            value,
+            "A Lovelace resource mutation response contained duplicate JSON properties.",
+            cancellationToken);
         var resource = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource>(
-            await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false),
+            value,
             "The Lovelace resource response could not be decoded.",
             cancellationToken: cancellationToken);
         ValidateStorageResource(resource);
@@ -289,6 +318,28 @@ public sealed class HomeAssistantDashboardClient
         if (expectedType is not null && !string.Equals(resource.Type, expectedType, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested type.");
         return resource;
+    }
+
+    private async Task<JsonElement> RequestJsonAsync(
+        string command,
+        IReadOnlyDictionary<string, object?> payload,
+        string duplicateFailureMessage,
+        CancellationToken cancellationToken)
+    {
+        var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicateProperties(value, duplicateFailureMessage, cancellationToken);
+        return value;
+    }
+
+    private static void RequireNoDuplicateProperties(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException(failureMessage);
+        }
     }
 
     private static void ValidateListedDashboard(HomeAssistantDashboard dashboard)

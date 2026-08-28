@@ -94,10 +94,14 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 result = await Client.Dashboards.UpdateResourceAsync(resourceId, updateResourceUrl, ResourceType, CancelToken).ConfigureAwait(false);
                 break;
             default:
+                CancelToken.ThrowIfCancellationRequested();
                 using (var document = JsonDocument.Parse(ConfigurationJson!))
                 {
-                    if (document.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("ConfigurationJson must be a JSON object.", nameof(ConfigurationJson));
-                    var configuration = document.RootElement.Clone();
+                    var configuration = document.RootElement;
+                    HomeAssistantDashboardIdentifier.ValidateConfigurationForSave(
+                        configuration,
+                        nameof(ConfigurationJson),
+                        CancelToken);
                     string? configurationUrlPath = null;
                     if (UrlPath is not null
                         && !HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, allowSingleWord: true, out configurationUrlPath))

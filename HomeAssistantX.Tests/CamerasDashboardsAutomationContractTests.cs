@@ -709,6 +709,27 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task DashboardMutationResponsesRejectDuplicatePropertiesBeforeProjection()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardMutationResponseJson =
+                "{\"id\":\"other\",\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { Title = "House" }));
+
+        server.DashboardResourceMutationResponseJson =
+            "{\"id\":\"other\",\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\"module\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateResourceAsync(
+            "resource-1",
+            url: "/local/card.js"));
+    }
+
+    [Fact]
     public async Task DashboardMutationsCorrelateEverySuppliedField()
     {
         using var server = new TestHomeAssistantServer();

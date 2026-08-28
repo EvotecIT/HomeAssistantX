@@ -58,18 +58,30 @@ public sealed class HomeAssistantAutomationClient
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
         var value = await _rest.SendAsync<JsonElement>(HttpMethod.Get, ConfigurationPath(id), null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Home Assistant returned a non-object automation definition.");
-        if (HomeAssistantAutomationIdentifier.HasDuplicateProperties(value)) throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with duplicate JSON properties.");
-        var responseIds = value.EnumerateObject()
-            .Where(property => property.NameEquals("id"))
-            .Select(property => property.Value)
-            .ToArray();
-        if (responseIds.Length != 1
+        if (HomeAssistantAutomationIdentifier.HasDuplicateProperties(value, cancellationToken)) throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with duplicate JSON properties.");
+        var responseIds = new List<JsonElement>();
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (property.NameEquals("id"))
+            {
+                responseIds.Add(property.Value);
+            }
+        }
+        if (responseIds.Count != 1
             || responseIds[0].ValueKind != JsonValueKind.String
             || !string.Equals(responseIds[0].GetString(), id, StringComparison.Ordinal))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with a mismatched identifier.");
         }
-        return new HomeAssistantAutomationConfiguration { AutomationId = id, Definition = value.Clone() };
+        return new HomeAssistantAutomationConfiguration
+        {
+            AutomationId = id,
+            Definition = HomeAssistantJson.DeserializeResponse<JsonElement>(
+                value,
+                "The automation definition could not be snapshotted.",
+                cancellationToken: cancellationToken)
+        };
     }
 
     /// <summary>Creates or replaces an editable automation definition and requests a targeted automation reload.</summary>

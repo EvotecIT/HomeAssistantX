@@ -17,9 +17,10 @@ public sealed class SetHomeAssistantAutomationCommand : HomeAssistantCmdlet
     protected override async Task ProcessRecordAsync()
     {
         var automationId = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(AutomationId);
+        CancelToken.ThrowIfCancellationRequested();
         using var document = JsonDocument.Parse(ConfigurationJson);
         if (document.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("ConfigurationJson must be a JSON object.", nameof(ConfigurationJson));
-        var configuration = document.RootElement.Clone();
+        var configuration = document.RootElement;
         HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(
             automationId,
             configuration,
