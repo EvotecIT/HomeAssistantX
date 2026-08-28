@@ -89,7 +89,9 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets an image from a camera entity.</summary>
     public Task<byte[]> GetCameraImageAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        return GetBytesAsync("api/camera_proxy/" + EscapePath(entityId), cancellationToken);
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", out var normalizedEntityId))
+            throw new ArgumentException("A camera entity identifier is required.", nameof(entityId));
+        return GetBytesAsync("api/camera_proxy/" + EscapePath(normalizedEntityId), cancellationToken);
     }
 
     /// <summary>Gets all calendar entities.</summary>
@@ -106,13 +108,15 @@ public sealed partial class HomeAssistantRestClient
         DateTimeOffset end,
         CancellationToken cancellationToken = default)
     {
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", out var normalizedEntityId))
+            throw new ArgumentException("A calendar entity identifier is required.", nameof(entityId));
         if (end <= start)
         {
             throw new ArgumentOutOfRangeException(nameof(end), "The calendar end must be after its start.");
         }
 
         var path = AppendQuery(
-            "api/calendars/" + EscapePath(entityId),
+            "api/calendars/" + EscapePath(normalizedEntityId),
             new[]
             {
                 new KeyValuePair<string, string?>("start", FormatTimestamp(start)),

@@ -143,4 +143,34 @@ public sealed class CoreRestApiContractTests
         Assert.Contains("filter_entity_id=sensor.kitchen_temperature", server.LastRequestPath);
         Assert.DoesNotContain("%20", server.LastRequestPath);
     }
+
+    [Theory]
+    [InlineData("sensor.front")]
+    [InlineData("CAMERA.front")]
+    [InlineData("camera.Front")]
+    public async Task CameraImageRejectsIdentifiersOutsideTheCanonicalCameraDomain(string entityId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.GetCameraImageAsync(entityId));
+
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Theory]
+    [InlineData("sensor.home")]
+    [InlineData("CALENDAR.home")]
+    [InlineData("calendar.Home")]
+    public async Task CalendarEventsRejectIdentifiersOutsideTheCanonicalCalendarDomain(string entityId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Rest.GetCalendarEventsAsync(entityId, start, start.AddDays(1)));
+
+        Assert.Null(server.LastRequestPath);
+    }
 }
