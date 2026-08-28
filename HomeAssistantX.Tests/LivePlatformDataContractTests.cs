@@ -161,6 +161,22 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task PersistentNotificationSubscriptionRejectsBlankUpdateTypes(string type)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            PersistentNotificationSubscriptionEventJson =
+                "{\"type\":" + JsonSerializer.Serialize(type) + ",\"notifications\":{}}"
+        };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
+    [Theory]
     [InlineData("{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"message\":\"Door open\"}}}")]
     [InlineData("{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\"}}}")]
     public async Task PersistentNotificationSubscriptionRejectsIncompleteItems(string payload)

@@ -63,7 +63,40 @@ internal static class HomeAssistantRecurrenceRuleValidator
         {
             throw Invalid(parameterName, "BYSETPOS requires at least one other BY rule.");
         }
+
+        ValidateFrequencyCombinations(clauses, frequency, parameterName);
     }
+
+    private static void ValidateFrequencyCombinations(
+        IReadOnlyDictionary<string, string> clauses,
+        string frequency,
+        string parameterName)
+    {
+        if (frequency == "WEEKLY" && clauses.ContainsKey("BYMONTHDAY"))
+        {
+            throw Invalid(parameterName, "BYMONTHDAY cannot be combined with a weekly recurrence.");
+        }
+
+        if (frequency != "YEARLY" && clauses.ContainsKey("BYWEEKNO"))
+        {
+            throw Invalid(parameterName, "BYWEEKNO requires a yearly recurrence.");
+        }
+
+        if (frequency is "DAILY" or "WEEKLY" or "MONTHLY" && clauses.ContainsKey("BYYEARDAY"))
+        {
+            throw Invalid(parameterName, "BYYEARDAY cannot be combined with a daily, weekly, or monthly recurrence.");
+        }
+
+        if (clauses.TryGetValue("BYDAY", out var byDay)
+            && byDay.Split(',').Any(HasWeekdayOrdinal)
+            && (frequency is not ("MONTHLY" or "YEARLY")
+                || frequency == "YEARLY" && clauses.ContainsKey("BYWEEKNO")))
+        {
+            throw Invalid(parameterName, "Numeric BYDAY values require a monthly or yearly recurrence and cannot be combined with BYWEEKNO.");
+        }
+    }
+
+    private static bool HasWeekdayOrdinal(string value) => value.Length > 2;
 
     private static void ValidateClause(
         string name,

@@ -33,6 +33,13 @@ public sealed class CalendarRecurrenceContractTests
     [InlineData("FREQ=WEEKLY;")]
     [InlineData("FREQ=WEEKLY;FUTURE=value")]
     [InlineData("FREQ=DAILY;BYSETPOS=1")]
+    [InlineData("FREQ=WEEKLY;BYMONTHDAY=1")]
+    [InlineData("FREQ=DAILY;BYYEARDAY=1")]
+    [InlineData("FREQ=WEEKLY;BYYEARDAY=1")]
+    [InlineData("FREQ=MONTHLY;BYYEARDAY=1")]
+    [InlineData("FREQ=MONTHLY;BYWEEKNO=1")]
+    [InlineData("FREQ=DAILY;BYDAY=1MO")]
+    [InlineData("FREQ=YEARLY;BYWEEKNO=1;BYDAY=1MO")]
     public void CalendarInputRejectsMalformedRecurrenceClauses(string rule)
     {
         var input = HomeAssistantCalendarEventInput.AllDay(
@@ -41,6 +48,22 @@ public sealed class CalendarRecurrenceContractTests
             "Recurring event");
 
         Assert.Throws<ArgumentException>(() => input.RecurrenceRule = rule);
+    }
+
+    [Theory]
+    [InlineData("FREQ=YEARLY;BYYEARDAY=1")]
+    [InlineData("FREQ=YEARLY;BYWEEKNO=1;BYDAY=MO")]
+    [InlineData("FREQ=MONTHLY;BYDAY=1MO")]
+    public void CalendarInputAcceptsValidFrequencyDependentRules(string rule)
+    {
+        var input = HomeAssistantCalendarEventInput.AllDay(
+            "2026-08-27",
+            "2026-08-28",
+            "Recurring event");
+
+        input.RecurrenceRule = rule;
+
+        Assert.Equal(rule, input.RecurrenceRule);
     }
 
     [Fact]

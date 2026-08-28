@@ -126,6 +126,10 @@ public sealed class HomeAssistantNotificationClient
             }
 
             var rawType = typeValue.GetString() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(rawType))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update omitted its event type.");
+            }
             var notificationKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (var item in notificationsValue.EnumerateObject())
             {
