@@ -245,14 +245,32 @@ internal static class ControlValidation
         return value!;
     }
 
-    public static IReadOnlyList<string> RequiredValues(IReadOnlyList<string>? values, string name)
+    public static IReadOnlyList<string> RequiredValues(
+        IReadOnlyList<string>? values,
+        string name,
+        CancellationToken cancellationToken = default)
     {
-        if (values is null || values.Count == 0 || values.Any(string.IsNullOrWhiteSpace))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (values is null || values.Count == 0)
         {
             throw new ArgumentException("At least one non-empty value is required.", name);
         }
 
-        return values!.Select(value => value.Trim()).ToArray();
+        var normalized = new string[values.Count];
+        for (var index = 0; index < values.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var value = values[index];
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new ArgumentException("At least one non-empty value is required.", name);
+            }
+
+            normalized[index] = value.Trim();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return normalized;
     }
 
     public static double? Percent(double? value, string name)

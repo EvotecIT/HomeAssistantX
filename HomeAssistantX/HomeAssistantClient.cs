@@ -49,7 +49,7 @@ public sealed class HomeAssistantClient : IDisposable
         System = new HomeAssistantSystemClient(WebSocket);
         Cameras = new HomeAssistantCameraClient(Rest, States, WebSocket, System);
         Media = new HomeAssistantMediaBrowserClient(WebSocket);
-        MobileApp = new HomeAssistantMobileAppClient(Rest, options.BaseUri, options.RequestTimeout, options.MaximumRestResponseBytes);
+        MobileApp = new HomeAssistantMobileAppClient(Rest, options);
         Dashboards = new HomeAssistantDashboardClient(WebSocket);
         Automations = new HomeAssistantAutomationClient(States, Rest, Services);
         Operations = new HomeAssistantOperationsClient(Rest, WebSocket, States, Services);

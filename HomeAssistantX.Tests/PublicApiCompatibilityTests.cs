@@ -64,6 +64,16 @@ public sealed class PublicApiCompatibilityTests
             FormatTypeDeclarationName(typeof(CollisionOwner<,>.Nested)));
     }
 
+#if NET10_0
+    [Fact]
+    public void TypeFormatterPreservesCollectionBuilderContracts()
+    {
+        Assert.Equal(
+            "collection-builder(HomeAssistantX.Tests.PublicApiCompatibilityTests+CollectionBuilderFixtureBuilder,\"Create\") ",
+            CollectionBuilderContract(typeof(CollectionBuilderFixture)));
+    }
+#endif
+
     [Fact]
     public void TypeAndFieldFormattersPreserveArrayRankAndFieldContracts()
     {
@@ -466,7 +476,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ConditionalContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ConditionalContract(type) + CollectionBuilderContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -520,6 +530,23 @@ public sealed class PublicApiCompatibilityTests
         }
 
         return type.GetInterfaces().Where(contract => !inherited.Contains(contract));
+    }
+
+    private static string CollectionBuilderContract(Type type)
+    {
+        var attribute = GetCustomAttributes(type).FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Runtime.CompilerServices.CollectionBuilderAttribute",
+            StringComparison.Ordinal));
+        if (attribute is null
+            || attribute.ConstructorArguments.Count != 2
+            || attribute.ConstructorArguments[0].Value is not Type builderType
+            || attribute.ConstructorArguments[1].Value is not string methodName)
+        {
+            return string.Empty;
+        }
+
+        return "collection-builder(" + FormatType(builderType) + "," + FormatDefault(methodName) + ") ";
     }
 
     private static IReadOnlyList<string> FormatInheritanceContracts(Type type)
@@ -1804,6 +1831,27 @@ public sealed class PublicApiCompatibilityTests
 
         public bool Next() => _index < _flags.Length && _flags[_index++];
     }
+
+#if NET10_0
+    [System.Runtime.CompilerServices.CollectionBuilder(typeof(CollectionBuilderFixtureBuilder), nameof(CollectionBuilderFixtureBuilder.Create))]
+    private sealed class CollectionBuilderFixture : List<int>
+    {
+    }
+
+    private static class CollectionBuilderFixtureBuilder
+    {
+        public static CollectionBuilderFixture Create(ReadOnlySpan<int> values)
+        {
+            var result = new CollectionBuilderFixture();
+            foreach (var value in values)
+            {
+                result.Add(value);
+            }
+
+            return result;
+        }
+    }
+#endif
 }
 
 public class PublicApiProtectedNestedFixture

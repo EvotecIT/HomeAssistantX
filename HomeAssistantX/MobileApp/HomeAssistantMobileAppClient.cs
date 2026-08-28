@@ -1,4 +1,5 @@
 using System.Net.Http;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
@@ -9,16 +10,12 @@ namespace HomeAssistantX.MobileApp;
 public sealed class HomeAssistantMobileAppClient
 {
     private readonly HomeAssistantRestClient _rest;
-    private readonly Uri _baseUri;
-    private readonly TimeSpan _requestTimeout;
-    private readonly int _maximumResponseBytes;
+    private readonly HomeAssistantClientOptions _options;
 
-    internal HomeAssistantMobileAppClient(HomeAssistantRestClient rest, Uri baseUri, TimeSpan requestTimeout, int maximumResponseBytes)
+    internal HomeAssistantMobileAppClient(HomeAssistantRestClient rest, HomeAssistantClientOptions options)
     {
         _rest = rest;
-        _baseUri = baseUri;
-        _requestTimeout = requestTimeout;
-        _maximumResponseBytes = maximumResponseBytes;
+        _options = options;
     }
 
     public async Task<HomeAssistantMobileAppRegistration> RegisterAsync(HomeAssistantMobileAppRegistrationRequest request, CancellationToken cancellationToken = default)
@@ -67,8 +64,14 @@ public sealed class HomeAssistantMobileAppClient
     {
         if (registration is null) throw new ArgumentNullException(nameof(registration));
         if (string.IsNullOrWhiteSpace(registration.WebhookId)) throw new ArgumentException("A webhook identifier is required.", nameof(registration));
-        var uri = registration.CloudhookUri ?? new Uri(_baseUri, "api/webhook/" + Uri.EscapeDataString(registration.WebhookId));
-        return new HomeAssistantMobileAppWebhookClient(uri, registration.Secret, protector, _requestTimeout, _maximumResponseBytes);
+        _options.Validate();
+        var uri = registration.CloudhookUri ?? new Uri(_options.BaseUri, "api/webhook/" + Uri.EscapeDataString(registration.WebhookId));
+        return new HomeAssistantMobileAppWebhookClient(
+            uri,
+            registration.Secret,
+            protector,
+            _options.RequestTimeout,
+            _options.MaximumRestResponseBytes);
     }
 
     private static void RequireHttpUri(Uri? value, string name)

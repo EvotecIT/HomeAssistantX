@@ -41,7 +41,9 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
         => CallAsync("set_fan_speed", target, call => call.WithData("fan_speed", ControlValidation.Required(fanSpeed, nameof(fanSpeed))), cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> CleanAreaAsync(HomeAssistantTarget target, IReadOnlyList<string> areaIds, CancellationToken cancellationToken = default)
-        => CallAsync("clean_area", target, call => call.WithData("cleaning_area_id", ControlValidation.RequiredValues(areaIds, nameof(areaIds))), cancellationToken);
+        => CallAsync("clean_area", target, call => call.WithData(
+            "cleaning_area_id",
+            ControlValidation.RequiredValues(areaIds, nameof(areaIds), cancellationToken)), cancellationToken);
 
     /// <summary>Sends a provider-specific vacuum command while keeping the common target contract typed.</summary>
     public Task<HomeAssistantServiceCallResult> SendCommandAsync(HomeAssistantTarget target, string command, object? parameters = null, CancellationToken cancellationToken = default)

@@ -1310,13 +1310,36 @@ public sealed class StableControlAndAdapterContractTests
     public async Task MobileAppWebhookHonorsConnectionTimeoutAndResponseLimit()
     {
         using var server = new TestHomeAssistantServer();
-        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromMilliseconds(100), maximumRestResponseBytes: 1024);
+        using var client = TestClientFactory.Create(server);
+        client.Options.RequestTimeout = TimeSpan.FromMilliseconds(100);
+        client.Options.MaximumRestResponseBytes = 1024;
         using var stalled = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration { WebhookId = "stall" });
         using var oversized = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration { WebhookId = "oversize" });
 
         var timeout = await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantConnectionException>(() => stalled.GetConfigurationAsync());
         Assert.IsType<TimeoutException>(timeout.InnerException);
         await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(() => oversized.GetConfigurationAsync());
+    }
+
+    [Fact]
+    public async Task ListControlPayloadsHonorCancellationBeforeValidation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var values = new[] { "one", " " };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Vacuums.CleanAreaAsync(
+            HomeAssistantTarget.ForEntity("vacuum.house"),
+            values,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Helpers.SetSelectOptionsAsync(
+            HomeAssistantTarget.ForEntity("input_select.mode"),
+            values,
+            cancellation.Token));
+
+        Assert.Null(server.LastServiceCallBody);
     }
 
     [Fact]
