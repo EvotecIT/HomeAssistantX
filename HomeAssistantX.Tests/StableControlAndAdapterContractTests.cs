@@ -28,11 +28,11 @@ public sealed class StableControlAndAdapterContractTests
         await client.Controls.Valves.SetPositionAsync(HomeAssistantTarget.ForEntity("valve.water"), 35);
         AssertCall(server, "valve", "set_valve_position", "position", 35d);
 
-        await client.Controls.Vacuums.CleanAreaAsync(HomeAssistantTarget.ForEntity("vacuum.downstairs"), new[] { "kitchen", "hall" });
+        await client.Controls.Vacuums.CleanAreaAsync(HomeAssistantTarget.ForEntity("vacuum.downstairs"), new[] { "kitchen", " hall " });
         using (var call = LastCall(server))
         {
             Assert.Equal("clean_area", call.RootElement.GetProperty("service").GetString());
-            Assert.Equal("hall", call.RootElement.GetProperty("service_data").GetProperty("cleaning_area_id")[1].GetString());
+            Assert.Equal(" hall ", call.RootElement.GetProperty("service_data").GetProperty("cleaning_area_id")[1].GetString());
         }
 
         await client.Controls.LawnMowers.ActAsync(HomeAssistantTarget.ForEntity("lawn_mower.garden"), HomeAssistantLawnMowerAction.Dock);
@@ -394,6 +394,46 @@ public sealed class StableControlAndAdapterContractTests
         var instance = Assert.Single(aggregate.Build());
 
         Assert.Equal("primary-b.local", instance.HostName);
+    }
+
+    [Fact]
+    public void DnsSdWeightedSelectionIncludesZeroWeightRecordsAtTheInclusiveZeroDraw()
+    {
+        var observedMaximum = 0;
+        var zeroDraw = new DnsDiscoveryAggregate(weightedSelector: maximum =>
+        {
+            observedMaximum = maximum;
+            return 0;
+        });
+        zeroDraw.AddInstance("Test._home-assistant._tcp.local");
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 0, "zero.local", 8123), zeroDraw);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 9, "positive.local", 8123), zeroDraw);
+
+        Assert.Equal("zero.local", Assert.Single(zeroDraw.Build()).HostName);
+        Assert.Equal(10, observedMaximum);
+
+        var positiveDraw = new DnsDiscoveryAggregate(weightedSelector: _ => 1);
+        positiveDraw.AddInstance("Test._home-assistant._tcp.local");
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 0, "zero.local", 8123), positiveDraw);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 9, "positive.local", 8123), positiveDraw);
+        Assert.Equal("positive.local", Assert.Single(positiveDraw.Build()).HostName);
+    }
+
+    [Fact]
+    public void DnsSdNoServiceSrvSuppressesTheAdvertisedInstance()
+    {
+        var aggregate = new DnsDiscoveryAggregate(clock: () => TimeSpan.Zero);
+        DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(), aggregate);
+        Assert.Single(aggregate.Build());
+
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 0, 0, ".", 0), aggregate);
+        Assert.Empty(aggregate.Build());
+        Assert.Equal(0, aggregate.ServiceCount);
+        Assert.Equal(0, aggregate.TextOwnerCount);
+        Assert.Equal(0, aggregate.AddressHostCount);
+
+        DnsDiscoveryPacket.ReadInto(CreatePtrOnlyPacket(120), aggregate);
+        Assert.Empty(aggregate.Build());
     }
 
     [Fact]
@@ -1790,7 +1830,9 @@ public sealed class StableControlAndAdapterContractTests
         U16(stream, 0); U16(stream, 0x8400); U16(stream, 0); U16(stream, 1); U16(stream, 0); U16(stream, 0);
         Name(stream, "Test._home-assistant._tcp.local"); U16(stream, 33); U16(stream, cacheFlush ? 0x8001 : 1); U32(stream, ttl);
         using var data = new MemoryStream();
-        U16(data, priority); U16(data, weight); U16(data, port); Name(data, host); WriteData(stream, data.ToArray());
+        U16(data, priority); U16(data, weight); U16(data, port);
+        if (host == ".") data.WriteByte(0); else Name(data, host);
+        WriteData(stream, data.ToArray());
         return stream.ToArray();
     }
 

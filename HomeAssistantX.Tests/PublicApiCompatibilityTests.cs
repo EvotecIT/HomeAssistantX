@@ -96,6 +96,34 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void TypeAndFieldFormattersPreserveNativeBufferAndDelegateContracts()
+    {
+        var fixedBuffer = typeof(FixedBufferFixture).GetField(nameof(FixedBufferFixture.Data))!;
+        Assert.Equal(
+            "fixed-buffer(element=System.Byte,length=16) ",
+            FixedBufferContract(fixedBuffer));
+
+        var delegateContract = UnmanagedFunctionPointerContract(typeof(UnmanagedDelegateFixture));
+        Assert.Contains("calling-convention=Cdecl", delegateContract, StringComparison.Ordinal);
+        Assert.Contains("charset=Unicode", delegateContract, StringComparison.Ordinal);
+        Assert.Contains("set-last-error=true", delegateContract, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TypeFormatterPreservesFunctionPointerSignatures()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(FunctionPointerFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var formatted = FormatType(method.GetParameters()[0].ParameterType);
+
+        Assert.Contains("delegate* unmanaged", formatted, StringComparison.Ordinal);
+        Assert.Contains("System.Int32", formatted, StringComparison.Ordinal);
+        Assert.EndsWith(",System.Void>", formatted, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MethodFormatterPreservesUnmanagedCallableMetadata()
     {
         var method = typeof(PublicApiCompatibilityTests).GetMethod(
@@ -598,7 +626,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PlatformContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PlatformContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -683,6 +711,32 @@ public sealed class PublicApiCompatibilityTests
                 : string.Empty;
     }
 
+    private static string UnmanagedFunctionPointerContract(Type type)
+    {
+        var attribute = type.GetCustomAttribute<UnmanagedFunctionPointerAttribute>();
+        if (attribute is null)
+        {
+            return string.Empty;
+        }
+
+        return "unmanaged-function-pointer(calling-convention=" + attribute.CallingConvention
+            + ",charset=" + attribute.CharSet
+            + ",best-fit=" + FormatDefault(attribute.BestFitMapping)
+            + ",throw-on-unmappable=" + FormatDefault(attribute.ThrowOnUnmappableChar)
+            + ",set-last-error=" + FormatDefault(attribute.SetLastError)
+            + ") ";
+    }
+
+    private static string FixedBufferContract(FieldInfo field)
+    {
+        var attribute = field.GetCustomAttribute<FixedBufferAttribute>();
+        return attribute is null
+            ? string.Empty
+            : "fixed-buffer(element=" + FormatType(attribute.ElementType)
+                + ",length=" + attribute.Length.ToString(CultureInfo.InvariantCulture)
+                + ") ";
+    }
+
     private static string StructLayoutContract(Type type)
     {
         if (type.IsEnum)
@@ -700,7 +754,7 @@ public sealed class PublicApiCompatibilityTests
             .Select(field =>
             {
                 var offset = field.GetCustomAttribute<FieldOffsetAttribute>();
-                return MarshalAsContract(field) + FormatType(field.FieldType) + " " + field.Name
+                return MarshalAsContract(field) + FixedBufferContract(field) + FormatType(field.FieldType) + " " + field.Name
                     + (offset is null ? string.Empty : "@" + offset.Value.ToString(CultureInfo.InvariantCulture));
             })
             .ToArray();
@@ -867,6 +921,23 @@ public sealed class PublicApiCompatibilityTests
     private static void UnmanagedCallableFixture()
     {
     }
+
+    private static unsafe void FunctionPointerFixture(delegate* unmanaged[Cdecl]<int, void> callback)
+    {
+    }
+
+    private unsafe struct FixedBufferFixture
+    {
+        public fixed byte Data[16];
+    }
+
+    [UnmanagedFunctionPointer(
+        CallingConvention.Cdecl,
+        CharSet = CharSet.Unicode,
+        BestFitMapping = false,
+        ThrowOnUnmappableChar = true,
+        SetLastError = true)]
+    private delegate int UnmanagedDelegateFixture(int value);
 
     [System.Diagnostics.CodeAnalysis.Experimental("HAX001", UrlFormat = "https://example.invalid/{0}")]
     private static void ExperimentalFixture()
@@ -1431,7 +1502,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + RequiredMember(field) + MarshalAsContract(field) + NullableFlowContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
     private static string ExperimentalContract(params ICustomAttributeProvider?[] providers)
@@ -2099,6 +2170,9 @@ public sealed class PublicApiCompatibilityTests
     {
         if (type.IsByRef) return "ref " + FormatType(type.GetElementType()!);
         if (type.IsArray) return FormatType(type.GetElementType()!) + ArraySuffix(type);
+#if NET10_0
+        if (type.IsFunctionPointer) return FormatFunctionPointer(type);
+#endif
         if (!type.IsGenericType) return type.FullName ?? type.Name;
         return FormatGenericTypeName(type, type.GetGenericArguments().Select(FormatType).ToArray());
     }
@@ -2116,6 +2190,9 @@ public sealed class PublicApiCompatibilityTests
     {
         var flag = cursor.Next();
         var isDynamic = dynamicFlags.Next();
+#if NET10_0
+        if (type.IsFunctionPointer) return FormatFunctionPointer(type);
+#endif
         if (type.IsArray)
         {
             var array = FormatAnnotatedType(type.GetElementType()!, cursor, tupleNames, dynamicFlags) + ArraySuffix(type);
@@ -2139,6 +2216,23 @@ public sealed class PublicApiCompatibilityTests
         var result = type == typeof(object) && isDynamic ? "dynamic" : type.FullName ?? type.Name;
         return (!type.IsValueType || type.IsGenericParameter) && flag == 2 ? result + "?" : result;
     }
+
+#if NET10_0
+    private static string FormatFunctionPointer(Type type)
+    {
+        var conventions = type.GetFunctionPointerCallingConventions()
+            .Select(FormatType)
+            .ToArray();
+        var signature = type.GetFunctionPointerParameterTypes()
+            .Select(FormatType)
+            .Append(FormatType(type.GetFunctionPointerReturnType()));
+        return "delegate* "
+            + (conventions.Length == 0
+                ? (type.IsUnmanagedFunctionPointer ? "unmanaged" : "managed")
+                : "unmanaged[" + string.Join(",", conventions) + "]")
+            + "<" + string.Join(",", signature) + ">";
+    }
+#endif
 
     private static string FormatTuple(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames, DynamicCursor dynamicFlags)
     {

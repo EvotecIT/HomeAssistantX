@@ -24,7 +24,7 @@ public sealed class SetHomeAssistantVacuumCommand : HomeAssistantTargetCmdlet
                 : FanSpeed;
         var cleaningAreaIds = CleaningAreaId is null
             ? null
-            : ControlValidation.RequiredValues(CleaningAreaId, nameof(CleaningAreaId), CancelToken);
+            : ControlValidation.RequiredValuesUnchanged(CleaningAreaId, nameof(CleaningAreaId), CancelToken);
         var count = (Action.HasValue ? 1 : 0) + (fanSpeed is not null ? 1 : 0) + (cleaningAreaIds is { Count: > 0 } ? 1 : 0);
         if (count != 1) throw new ArgumentException("Specify exactly one vacuum operation.");
         if (Action.HasValue && !Enum.IsDefined(typeof(HomeAssistantVacuumAction), Action.Value)) throw new ArgumentOutOfRangeException(nameof(Action));

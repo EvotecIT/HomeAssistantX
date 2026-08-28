@@ -245,6 +245,7 @@ internal sealed class DnsDiscoveryAggregate
     private readonly Dictionary<string, List<CachedService>> _services = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<CachedText>> _text = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Dictionary<IPAddress, CachedAddress>> _addresses = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, TimeSpan> _unavailableInstances = new(StringComparer.OrdinalIgnoreCase);
     private int _datagrams;
 
     internal DnsDiscoveryAggregate(
@@ -366,6 +367,7 @@ internal sealed class DnsDiscoveryAggregate
             Prune(now);
             var ptrUpdates = new List<DnsDiscoveryUpdate>();
             var serviceUpdates = new List<DnsDiscoveryUpdate>();
+            var unavailableServiceUpdates = new List<DnsDiscoveryUpdate>();
             var textUpdates = new List<DnsDiscoveryUpdate>();
             var addressUpdates = new List<DnsDiscoveryUpdate>();
             var goodbyeInstances = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -381,6 +383,9 @@ internal sealed class DnsDiscoveryAggregate
                     case DnsDiscoveryRecordKind.Ptr when IsHomeAssistantPtr(update):
                         ptrUpdates.Add(update);
                         if (update.Ttl == 0) goodbyeInstances.Add(update.Target!);
+                        break;
+                    case DnsDiscoveryRecordKind.Srv when IsHomeAssistantInstanceName(update.Name) && update.NoService:
+                        unavailableServiceUpdates.Add(update);
                         break;
                     case DnsDiscoveryRecordKind.Srv when IsHomeAssistantInstanceName(update.Name):
                         serviceUpdates.Add(update);
@@ -404,8 +409,13 @@ internal sealed class DnsDiscoveryAggregate
                 }
             }
 
+            foreach (var update in serviceUpdates.Where(value => value.Ttl > 0))
+                _unavailableInstances.Remove(update.Name);
+            foreach (var update in unavailableServiceUpdates)
+                ApplyUnavailableService(update, now);
+
             var acceptedInstances = new HashSet<string>(_instances.Keys, StringComparer.OrdinalIgnoreCase);
-            foreach (var update in ptrUpdates)
+            foreach (var update in ptrUpdates.Where(value => !_unavailableInstances.ContainsKey(value.Target!)))
             {
                 acceptedInstances.Add(update.Target!);
                 ApplyPtr(update, now);
@@ -547,6 +557,27 @@ internal sealed class DnsDiscoveryAggregate
                 isVerified));
             if (isVerified) PromoteAddresses(update.Host!);
         }
+    }
+
+    private void ApplyUnavailableService(DnsDiscoveryUpdate update, TimeSpan now)
+    {
+        if (update.Ttl == 0)
+        {
+            _unavailableInstances.Remove(update.Name);
+            return;
+        }
+
+        if (!_unavailableInstances.ContainsKey(update.Name)
+            && _unavailableInstances.Count >= _limits.Instances)
+        {
+            return;
+        }
+
+        _unavailableInstances[update.Name] = Expiry(now, update.Ttl);
+        _instances.Remove(update.Name);
+        _services.Remove(update.Name);
+        _text.Remove(update.Name);
+        RemoveUnreferencedAddresses();
     }
 
     private void ApplyText(
@@ -751,6 +782,8 @@ internal sealed class DnsDiscoveryAggregate
 
     private void Prune(TimeSpan now)
     {
+        foreach (var key in _unavailableInstances.Where(value => value.Value <= now).Select(value => value.Key).ToArray())
+            _unavailableInstances.Remove(key);
         foreach (var key in _instances.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) _instances.Remove(key);
         foreach (var owner in _services.Keys.ToArray()) { _services[owner].RemoveAll(value => value.ExpiresAt <= now || value.IsVerified && !_instances.ContainsKey(owner)); if (_services[owner].Count == 0) _services.Remove(owner); }
         foreach (var owner in _text.Keys.ToArray()) { _text[owner].RemoveAll(value => value.ExpiresAt <= now || value.IsVerified && !_instances.ContainsKey(owner)); if (_text[owner].Count == 0) _text.Remove(owner); }
@@ -787,7 +820,8 @@ internal sealed class DnsDiscoveryAggregate
 
         var priority = records.Min(value => value.Priority);
         var candidates = records.Where(value => value.Priority == priority)
-            .OrderBy(value => value.DataKey, StringComparer.Ordinal)
+            .OrderBy(value => value.Weight == 0 ? 0 : 1)
+            .ThenBy(value => value.DataKey, StringComparer.Ordinal)
             .ToArray();
         var totalWeight = candidates.Sum(value => value.Weight);
         if (totalWeight == 0)
@@ -795,15 +829,15 @@ internal sealed class DnsDiscoveryAggregate
             return candidates[_weightedSelector(candidates.Length)];
         }
 
-        var selected = _weightedSelector(totalWeight);
+        var selected = _weightedSelector(checked(totalWeight + 1));
+        var cumulativeWeight = 0;
         foreach (var candidate in candidates)
         {
-            if (selected < candidate.Weight)
+            cumulativeWeight += candidate.Weight;
+            if (cumulativeWeight >= selected)
             {
                 return candidate;
             }
-
-            selected -= candidate.Weight;
         }
 
         return candidates[candidates.Length - 1];
@@ -871,6 +905,7 @@ internal sealed class DnsDiscoveryUpdate
     internal int Port { get; set; }
     internal int Priority { get; set; }
     internal int Weight { get; set; }
+    internal bool NoService { get; set; }
     internal Dictionary<string, string?>? Properties { get; set; }
     internal IPAddress? Address { get; set; }
 }
@@ -951,7 +986,7 @@ internal static class DnsDiscoveryPacket
                         var port = ReadUInt16(packet, ref dataOffset);
                         var host = ReadName(packet, ref dataOffset);
                         if (dataOffset != end) throw new InvalidDataException("Invalid SRV record length.");
-                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Srv, Name = name, Host = host, Port = port, Priority = priority, Weight = weight, DataKey = priority.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + weight.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture), Ttl = ttl, CacheFlush = cacheFlush });
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Srv, Name = name, Host = host, Port = port, Priority = priority, Weight = weight, NoService = host.Length == 0, DataKey = priority.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + weight.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture), Ttl = ttl, CacheFlush = cacheFlush });
                         break;
                     }
                     case 16:
