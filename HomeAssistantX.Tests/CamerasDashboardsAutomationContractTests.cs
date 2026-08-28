@@ -1161,6 +1161,21 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Null(server.LastRequestBody);
     }
 
+    [Fact]
+    public void AutomationConfigurationIdentityScanHonorsCancellationForEmptyDefinitions()
+    {
+        using var definition = JsonDocument.Parse("{}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(
+                "morning-routine",
+                definition.RootElement,
+                "definition",
+                cancellation.Token));
+    }
+
     private static IEnumerable<string> CancelAfterFirstStreamType(CancellationTokenSource cancellation)
     {
         yield return "hls";
