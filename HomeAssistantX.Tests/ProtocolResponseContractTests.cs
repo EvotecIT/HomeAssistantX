@@ -182,7 +182,7 @@ public sealed class ProtocolResponseContractTests
             HomeAssistantJson.SnapshotResponseAsync(
                 document.RootElement,
                 "The response could not be snapshotted.",
-            cancellation.Token));
+                cancellation.Token));
     }
 
     [Fact]
