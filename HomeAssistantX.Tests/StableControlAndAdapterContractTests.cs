@@ -679,6 +679,35 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task DnsSdTransportContinuesSendingWhenAReceivePathDisposesOneAlias()
+    {
+        var allocations = 0;
+        var sends = 0;
+        using var transport = new UdpHomeAssistantDiscoveryTransport(
+            new[] { IPAddress.Loopback, IPAddress.Parse("127.0.0.2") },
+            1,
+            IPAddress.Parse("224.0.0.251"),
+            5353,
+            () =>
+            {
+                allocations++;
+                if (allocations == 3) throw new InvalidOperationException("Listener allocation failed.");
+                return new UdpClient(AddressFamily.InterNetwork);
+            },
+            (_, payload, _) =>
+            {
+                var current = Interlocked.Increment(ref sends);
+                return current == 1
+                    ? Task.FromException<int>(new ObjectDisposedException("receive-side socket"))
+                    : Task.FromResult(payload.Length);
+            });
+
+        await transport.SendAsync(DnsDiscoveryPacket.CreateQuery(), CancellationToken.None);
+
+        Assert.Equal(2, sends);
+    }
+
+    [Fact]
     public void DnsSdRetainsBoundedChildRecordsUntilTheirPtrArrives()
     {
         var now = TimeSpan.Zero;
@@ -701,6 +730,11 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Equal("test-uuid", instance.InstanceId);
         Assert.Equal(IPAddress.Parse("192.0.2.10"), Assert.Single(instance.Addresses));
 
+        now += TimeSpan.FromMilliseconds(5100);
+        instance = Assert.Single(aggregate.Build());
+        Assert.Equal("ha.local", instance.HostName);
+        Assert.Equal("My Home", instance.Name);
+
         var expiring = new DnsDiscoveryAggregate(clock: () => now);
         DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 0, 0, "pending.local", 8123), expiring);
         DnsDiscoveryPacket.ReadInto(CreateTxtOnlyPacket(120, new[] { "location_name=Pending" }), expiring);
@@ -708,6 +742,116 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Empty(expiring.Build());
         Assert.Equal(0, expiring.ServiceCount);
         Assert.Equal(0, expiring.TextOwnerCount);
+    }
+
+    [Fact]
+    public void DnsSdPacketIndexingIsLinearForCacheFlushRecords()
+    {
+        var updates = Enumerable.Range(0, 64)
+            .Select(index => new DnsDiscoveryUpdate
+            {
+                Kind = DnsDiscoveryRecordKind.Srv,
+                Name = "Test._home-assistant._tcp.local",
+                Host = $"host-{index}.local",
+                Port = 8123,
+                DataKey = $"service-{index}",
+                Ttl = 120,
+                CacheFlush = true
+            })
+            .ToArray();
+        var packet = new CountingReadOnlyList<DnsDiscoveryUpdate>(updates, updates.Length + 1);
+        var aggregate = new DnsDiscoveryAggregate();
+
+        aggregate.ApplyPacket(packet);
+
+        Assert.InRange(packet.MoveNextCount, updates.Length, updates.Length + 1);
+    }
+
+    [Fact]
+    public void DnsSdVerifiedRecordsEvictPendingOwnersAtSharedQuotas()
+    {
+        var aggregate = new DnsDiscoveryAggregate(clock: () => TimeSpan.Zero);
+        for (var index = 0; index < 128; index++)
+        {
+            var pendingInstance = $"Pending-{index}._home-assistant._tcp.local";
+            var host = $"pending-{index}.local";
+            aggregate.ApplyPacket(new[]
+            {
+                new DnsDiscoveryUpdate
+                {
+                    Kind = DnsDiscoveryRecordKind.Srv,
+                    Name = pendingInstance,
+                    Host = host,
+                    Port = 8123,
+                    DataKey = $"service-{index}",
+                    Ttl = 120
+                },
+                new DnsDiscoveryUpdate
+                {
+                    Kind = DnsDiscoveryRecordKind.Txt,
+                    Name = pendingInstance,
+                    Properties = new Dictionary<string, string?> { ["location_name"] = $"Pending {index}" },
+                    DataKey = $"text-{index}",
+                    Ttl = 120
+                },
+                new DnsDiscoveryUpdate
+                {
+                    Kind = DnsDiscoveryRecordKind.A,
+                    Name = host,
+                    Address = IPAddress.Parse($"192.0.2.{index % 254 + 1}"),
+                    DataKey = $"address-{index}",
+                    Ttl = 120
+                }
+            });
+        }
+        Assert.Equal(128, aggregate.ServiceCount);
+        Assert.Equal(128, aggregate.TextOwnerCount);
+        Assert.Equal(128, aggregate.AddressHostCount);
+
+        aggregate.ApplyPacket(new[]
+        {
+            new DnsDiscoveryUpdate
+            {
+                Kind = DnsDiscoveryRecordKind.Ptr,
+                Name = "_home-assistant._tcp.local",
+                Target = "Verified._home-assistant._tcp.local",
+                DataKey = "VERIFIED._HOME-ASSISTANT._TCP.LOCAL",
+                Ttl = 120
+            },
+            new DnsDiscoveryUpdate
+            {
+                Kind = DnsDiscoveryRecordKind.Srv,
+                Name = "Verified._home-assistant._tcp.local",
+                Host = "verified.local",
+                Port = 8123,
+                DataKey = "verified-service",
+                Ttl = 120
+            },
+            new DnsDiscoveryUpdate
+            {
+                Kind = DnsDiscoveryRecordKind.Txt,
+                Name = "Verified._home-assistant._tcp.local",
+                Properties = new Dictionary<string, string?> { ["location_name"] = "Verified" },
+                DataKey = "verified-text",
+                Ttl = 120
+            },
+            new DnsDiscoveryUpdate
+            {
+                Kind = DnsDiscoveryRecordKind.A,
+                Name = "verified.local",
+                Address = IPAddress.Parse("198.51.100.10"),
+                DataKey = "verified-address",
+                Ttl = 120
+            }
+        });
+
+        var instance = Assert.Single(aggregate.Build());
+        Assert.Equal("Verified", instance.Name);
+        Assert.Equal("verified.local", instance.HostName);
+        Assert.Equal(IPAddress.Parse("198.51.100.10"), Assert.Single(instance.Addresses));
+        Assert.Equal(128, aggregate.ServiceCount);
+        Assert.Equal(128, aggregate.TextOwnerCount);
+        Assert.Equal(128, aggregate.AddressHostCount);
     }
 
     [Fact]
@@ -1494,6 +1638,35 @@ public sealed class StableControlAndAdapterContractTests
                 if (ReadCount == 1) _cancellation.Cancel();
                 if (ReadCount > 16) throw new InvalidOperationException("Serialization continued after cancellation.");
                 yield return new string('x', 4096);
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CountingReadOnlyList<T> : IReadOnlyList<T>
+    {
+        private readonly IReadOnlyList<T> _values;
+        private readonly int _maximumMoveNextCount;
+
+        internal CountingReadOnlyList(IReadOnlyList<T> values, int maximumMoveNextCount)
+        {
+            _values = values;
+            _maximumMoveNextCount = maximumMoveNextCount;
+        }
+
+        internal int MoveNextCount { get; private set; }
+        public int Count => _values.Count;
+        public T this[int index] => _values[index];
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            foreach (var value in _values)
+            {
+                MoveNextCount++;
+                if (MoveNextCount > _maximumMoveNextCount)
+                    throw new InvalidOperationException("The packet was repeatedly scanned while applying records.");
+                yield return value;
             }
         }
 

@@ -152,6 +152,7 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
     private readonly UdpClient? _multicastClient;
     private readonly IPEndPoint _endpoint;
     private readonly int _interfaceIndex;
+    private readonly Func<UdpClient, byte[], IPEndPoint, Task<int>> _sendAsync;
     private readonly SemaphoreSlim _receiveGate = new(1, 1);
     private readonly Task<byte[]>?[] _queryReceiveTasks;
     private Task<byte[]>? _multicastReceiveTask;
@@ -163,7 +164,8 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
         int interfaceIndex,
         IPAddress multicastAddress,
         int multicastPort,
-        Func<UdpClient>? clientFactory = null)
+        Func<UdpClient>? clientFactory = null,
+        Func<UdpClient, byte[], IPEndPoint, Task<int>>? sendAsync = null)
     {
         if (localAddresses is null) throw new ArgumentNullException(nameof(localAddresses));
         if (localAddresses.Count == 0) throw new ArgumentException("At least one IPv4 local address is required.", nameof(localAddresses));
@@ -215,6 +217,7 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
             _multicastAvailable = multicastClient is not null;
             _endpoint = new IPEndPoint(multicastAddress, multicastPort);
             _interfaceIndex = interfaceIndex;
+            _sendAsync = sendAsync ?? ((client, payload, endpoint) => client.SendAsync(payload, payload.Length, endpoint));
         }
         catch
         {
@@ -267,23 +270,34 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
         using var registration = cancellationToken.Register(state => ((UdpHomeAssistantDiscoveryTransport)state!).Dispose(), this);
         try
         {
-            SocketException? failure = null;
+            Exception? failure = null;
             var sent = false;
-            foreach (var queryClient in _queryClients)
+            for (var index = 0; index < _queryClients.Length; index++)
             {
+                var queryClient = Volatile.Read(ref _queryClients[index]);
                 if (queryClient is null) continue;
                 try
                 {
-                    _ = await queryClient.SendAsync(query, query.Length, _endpoint).ConfigureAwait(false);
+                    _ = await _sendAsync(queryClient, query, _endpoint).ConfigureAwait(false);
                     sent = true;
                 }
                 catch (SocketException ex)
                 {
                     failure ??= ex;
                 }
+                catch (ObjectDisposedException ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    failure ??= ex;
+                    if (ReferenceEquals(Interlocked.CompareExchange(ref _queryClients[index], null, queryClient), queryClient))
+                        queryClient.Dispose();
+                }
             }
 
-            if (!sent) throw failure ?? new SocketException((int)SocketError.NetworkDown);
+            if (!sent)
+            {
+                if (failure is SocketException socketFailure) throw socketFailure;
+                throw new SocketException((int)SocketError.NetworkDown);
+            }
         }
         catch (Exception ex) when ((ex is ObjectDisposedException || ex is SocketException) && cancellationToken.IsCancellationRequested)
         {
@@ -303,9 +317,10 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
             {
                 for (var index = 0; index < _queryClients.Length; index++)
                 {
-                    if (_queryClients[index] is not null && _queryReceiveTasks[index] is null)
+                    var queryClient = Volatile.Read(ref _queryClients[index]);
+                    if (queryClient is not null && _queryReceiveTasks[index] is null)
                     {
-                        _queryReceiveTasks[index] = ReceiveQueryAsync(_queryClients[index]!);
+                        _queryReceiveTasks[index] = ReceiveQueryAsync(queryClient);
                     }
                 }
                 if (_multicastAvailable && _multicastClient is not null) _multicastReceiveTask ??= ReceiveMulticastAsync();
@@ -327,12 +342,14 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
                 {
                     return await completed.ConfigureAwait(false);
                 }
-                catch (SocketException) when (!cancellationToken.IsCancellationRequested && queryIndex >= 0)
+                catch (Exception ex) when ((ex is SocketException || ex is ObjectDisposedException)
+                    && !cancellationToken.IsCancellationRequested
+                    && queryIndex >= 0)
                 {
-                    _queryClients[queryIndex]!.Dispose();
-                    _queryClients[queryIndex] = null;
+                    Interlocked.Exchange(ref _queryClients[queryIndex], null)?.Dispose();
                 }
-                catch (SocketException) when (!cancellationToken.IsCancellationRequested)
+                catch (Exception ex) when ((ex is SocketException || ex is ObjectDisposedException)
+                    && !cancellationToken.IsCancellationRequested)
                 {
                     _multicastAvailable = false;
                     _multicastClient?.Dispose();
@@ -384,7 +401,8 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
-            foreach (var queryClient in _queryClients) queryClient?.Dispose();
+            for (var index = 0; index < _queryClients.Length; index++)
+                Interlocked.Exchange(ref _queryClients[index], null)?.Dispose();
             _multicastClient?.Dispose();
             foreach (var queryTask in _queryReceiveTasks) ObserveFailure(queryTask);
             ObserveFailure(_multicastReceiveTask);
