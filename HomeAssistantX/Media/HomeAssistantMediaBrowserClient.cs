@@ -25,7 +25,7 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
         var payload = OptionalContentId(mediaContentId);
         payload["search_query"] = Require(searchQuery, nameof(searchQuery));
-        AddMediaClasses(payload, mediaClasses);
+        AddMediaClasses(payload, mediaClasses, cancellationToken);
         return RequestSearchAsync("media_source/search_media", payload, cancellationToken);
     }
 
@@ -58,7 +58,7 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
         var payload = PlayerPayload(entityId, mediaContentType, mediaContentId);
         payload["search_query"] = Require(searchQuery, nameof(searchQuery));
-        AddMediaClasses(payload, mediaClasses);
+        AddMediaClasses(payload, mediaClasses, cancellationToken);
         return RequestSearchAsync("media_player/search_media", payload, cancellationToken);
     }
 
@@ -155,11 +155,25 @@ public sealed class HomeAssistantMediaBrowserClient
         return payload;
     }
 
-    private static void AddMediaClasses(IDictionary<string, object?> payload, IReadOnlyCollection<string>? mediaClasses)
+    private static void AddMediaClasses(
+        IDictionary<string, object?> payload,
+        IReadOnlyCollection<string>? mediaClasses,
+        CancellationToken cancellationToken)
     {
         if (mediaClasses is null) return;
-        if (mediaClasses.Count == 0 || mediaClasses.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("Media classes cannot be empty.", nameof(mediaClasses));
-        payload["media_filter_classes"] = mediaClasses.Select(item => item.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var values = new List<string>(mediaClasses.Count);
+        foreach (var mediaClass in mediaClasses)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(mediaClass))
+                throw new ArgumentException("Media classes cannot be empty.", nameof(mediaClasses));
+            var normalized = mediaClass.Trim();
+            if (!values.Contains(normalized, StringComparer.OrdinalIgnoreCase)) values.Add(normalized);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (values.Count == 0) throw new ArgumentException("Media classes cannot be empty.", nameof(mediaClasses));
+        payload["media_filter_classes"] = values.ToArray();
     }
 
     private static string Require(string value, string parameterName)

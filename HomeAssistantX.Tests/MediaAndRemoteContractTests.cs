@@ -1600,6 +1600,39 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task MediaSearchHonorsCancellationDuringClassEnumeration()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var classes = new CancellationProbeStringList(cancellation, "music");
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Media.SearchSourcesResponseAsync(
+                    "dinner",
+                    mediaClasses: classes,
+                    cancellationToken: cancellation.Token));
+            Assert.InRange(classes.ReadCount, 1, 16);
+        }
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var classes = new CancellationProbeStringList(cancellation, "music");
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Media.SearchPlayerResponseAsync(
+                    "media_player.kitchen",
+                    "dinner",
+                    mediaClasses: classes,
+                    cancellationToken: cancellation.Token));
+            Assert.InRange(classes.ReadCount, 1, 16);
+        }
+
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+        Assert.Null(server.GetLastWebSocketCommand("media_player/search_media"));
+    }
+
+    [Fact]
     public async Task MediaSelectorsPreserveProviderDefinedText()
     {
         using var server = new TestHomeAssistantServer();
