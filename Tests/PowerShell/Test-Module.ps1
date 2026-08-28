@@ -127,10 +127,15 @@ try {
 
         $defaultLights = @($connection | Get-HomeAssistantEntity -Area Kitchen -Domain light)
         $secondaryLights = @($secondaryConnection | Get-HomeAssistantEntity -Area Kitchen -Domain light)
-        $confirmationOutput = @($secondaryLights | Set-HomeAssistantLight -Power On -WhatIf 6>&1) | Out-String
+        $confirmationTargetMethod = [HomeAssistantX.PowerShell.HomeAssistantCmdlet].GetMethod(
+            'ConfirmationTarget',
+            [Reflection.BindingFlags]'NonPublic, Static')
+        $confirmationConnection = $secondaryConnection.PSObject.BaseObject
+        $confirmationOutput = $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'light.kitchen'))
+        $null = $secondaryLights | Set-HomeAssistantLight -Power On -WhatIf
         if ($confirmationOutput -match [regex]::Escape($secondaryConnection.Name) -or
             $confirmationOutput -match [regex]::Escape($secondaryConnection.Uri.GetLeftPart([UriPartial]::Authority)) -or
-            $confirmationOutput -notmatch 'Home Assistant connection \[[0-9A-F]{8}\]') {
+            $confirmationOutput -notmatch '^Home Assistant target \[[0-9A-F]{8}\] on Home Assistant connection \[[0-9A-F]{8}\]$') {
             throw 'WhatIf confirmation exposed an explicit connection name or failed to provide a privacy-safe connection tag.'
         }
         $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
