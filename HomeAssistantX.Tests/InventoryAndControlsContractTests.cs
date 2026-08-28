@@ -326,6 +326,19 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task TypedControlsNormalizeCallerTargetsOnlyOnceBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var entityIds = new SingleEnumerationList("light.kitchen");
+
+        await client.Controls.Lights.TurnOnAsync(new HomeAssistantTarget { EntityIds = entityIds });
+
+        Assert.Equal(1, entityIds.EnumerationCount);
+        Assert.NotNull(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task ClimateShapeValidationFailsBeforeAnyServiceCall()
     {
         using var server = new TestHomeAssistantServer();
@@ -457,6 +470,32 @@ public sealed class InventoryAndControlsContractTests
             RgbColor = new[] { 10, 20, 30 },
             ColorTemperatureKelvin = 3000
         });
+    }
+
+    private sealed class SingleEnumerationList : IReadOnlyList<string>
+    {
+        private readonly string[] _values;
+
+        internal SingleEnumerationList(params string[] values)
+        {
+            _values = values;
+        }
+
+        internal int EnumerationCount { get; private set; }
+
+        public int Count => _values.Length;
+
+        public string this[int index] => _values[index];
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            EnumerationCount++;
+            if (EnumerationCount > 1)
+                throw new InvalidOperationException("The target collection was enumerated more than once.");
+            return ((IEnumerable<string>)_values).GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }
 #endif

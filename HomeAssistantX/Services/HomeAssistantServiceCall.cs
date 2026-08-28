@@ -6,6 +6,7 @@ namespace HomeAssistantX.Services;
 public sealed class HomeAssistantServiceCall
 {
     private readonly Dictionary<string, object?> _data = new(StringComparer.Ordinal);
+    private bool _targetIsNormalized;
 
     public HomeAssistantServiceCall(string domain, string service)
     {
@@ -31,6 +32,14 @@ public sealed class HomeAssistantServiceCall
     public HomeAssistantServiceCall ForTarget(HomeAssistantTarget target)
     {
         Target = target ?? throw new ArgumentNullException(nameof(target));
+        _targetIsNormalized = false;
+        return this;
+    }
+
+    internal HomeAssistantServiceCall ForNormalizedTarget(HomeAssistantTarget target)
+    {
+        Target = target ?? throw new ArgumentNullException(nameof(target));
+        _targetIsNormalized = true;
         return this;
     }
 
@@ -38,6 +47,7 @@ public sealed class HomeAssistantServiceCall
     {
         Target ??= HomeAssistantTarget.Create();
         Target.WithEntities(entityIds);
+        _targetIsNormalized = false;
         return this;
     }
 
@@ -45,6 +55,7 @@ public sealed class HomeAssistantServiceCall
     {
         Target ??= HomeAssistantTarget.Create();
         Target.WithDevices(deviceIds);
+        _targetIsNormalized = false;
         return this;
     }
 
@@ -52,6 +63,7 @@ public sealed class HomeAssistantServiceCall
     {
         Target ??= HomeAssistantTarget.Create();
         Target.WithAreas(areaIds);
+        _targetIsNormalized = false;
         return this;
     }
 
@@ -59,6 +71,7 @@ public sealed class HomeAssistantServiceCall
     {
         Target ??= HomeAssistantTarget.Create();
         Target.WithFloors(floorIds);
+        _targetIsNormalized = false;
         return this;
     }
 
@@ -66,6 +79,7 @@ public sealed class HomeAssistantServiceCall
     {
         Target ??= HomeAssistantTarget.Create();
         Target.WithLabels(labelIds);
+        _targetIsNormalized = false;
         return this;
     }
 
@@ -86,10 +100,11 @@ public sealed class HomeAssistantServiceCall
         return this;
     }
 
-    internal Dictionary<string, object?> ToRestPayload()
+    internal Dictionary<string, object?> ToRestPayload(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var payload = new Dictionary<string, object?>(_data, StringComparer.Ordinal);
-        var target = Target?.Normalize();
+        var target = Target is null || _targetIsNormalized ? Target : Target.Normalize(cancellationToken);
         if (target?.EntityIds is { Count: > 0 })
         {
             payload["entity_id"] = target.EntityIds.Count == 1 ? target.EntityIds[0] : target.EntityIds;
@@ -118,8 +133,9 @@ public sealed class HomeAssistantServiceCall
         return payload;
     }
 
-    internal Dictionary<string, object?> ToWebSocketPayload()
+    internal Dictionary<string, object?> ToWebSocketPayload(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["domain"] = Domain,
@@ -132,7 +148,7 @@ public sealed class HomeAssistantServiceCall
 
         if (Target is not null)
         {
-            payload["target"] = Target.Normalize();
+            payload["target"] = _targetIsNormalized ? Target : Target.Normalize(cancellationToken);
         }
 
         if (ReturnResponse)

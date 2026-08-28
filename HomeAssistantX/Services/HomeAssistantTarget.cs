@@ -107,6 +107,30 @@ public sealed class HomeAssistantTarget
         return normalized;
     }
 
+    internal HomeAssistantTarget NormalizeRequiredForDomain(
+        string domain,
+        string parameterName = "target",
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalized = NormalizeForDomain(domain, cancellationToken);
+        if (!normalized.HasAnySelection())
+        {
+            throw new ArgumentException("At least one target selection is required.", parameterName);
+        }
+
+        return normalized;
+    }
+
+    internal bool HasAnySelection()
+    {
+        return EntityIds is { Count: > 0 }
+            || DeviceIds is { Count: > 0 }
+            || AreaIds is { Count: > 0 }
+            || FloorIds is { Count: > 0 }
+            || LabelIds is { Count: > 0 };
+    }
+
     private static IReadOnlyList<string> ValidateIds(string[] ids, string parameterName)
     {
         if (ids is null || ids.Length == 0 || ids.Any(string.IsNullOrWhiteSpace))

@@ -191,12 +191,15 @@ try {
             throw 'Piped entities did not retain their non-default source connection.'
         }
 
-        $null = $secondaryRemotes | Invoke-HomeAssistantRemote -Action TurnOn -Confirm:$false
+        $null = $secondaryRemotes | Invoke-HomeAssistantRemote -Action TurnOn -Activity ' Watch TV ' -Confirm:$false
         $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
         $server.StandardInput.Flush()
         $remoteProvenanceCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
         if ($remoteProvenanceCall.service -ne 'turn_on' -or @($remoteProvenanceCall.target.entity_id)[0] -ne 'remote.living_room') {
             throw 'The remote cmdlet did not bind pipeline connection provenance before reading client options.'
+        }
+        if ($remoteProvenanceCall.service_data.activity -cne ' Watch TV ') {
+            throw 'The remote cmdlet did not preserve integration-defined activity text.'
         }
 
         $server.StandardInput.WriteLine('SET_DEFAULT_STATES')

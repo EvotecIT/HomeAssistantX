@@ -159,9 +159,9 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
 
     private static string RequireSelector(string value, string parameterName)
     {
-        var normalized = value.Trim();
-        if (normalized.Length == 0) throw new ArgumentException("A non-empty selector is required.", parameterName);
-        return normalized;
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("A non-empty selector is required.", parameterName);
+        return value;
     }
 
     private void ValidateShape()

@@ -81,7 +81,7 @@ public sealed class HomeAssistantServiceClient
             throw new ArgumentNullException(nameof(call));
         }
 
-        var result = await _webSocket.RequestAsync("call_service", call.ToWebSocketPayload(), cancellationToken)
+        var result = await _webSocket.RequestAsync("call_service", call.ToWebSocketPayload(cancellationToken), cancellationToken)
             .ConfigureAwait(false);
         var response = new HomeAssistantServiceCallResult();
         if (result.ValueKind != JsonValueKind.Object)

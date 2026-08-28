@@ -22,8 +22,10 @@ public abstract class HomeAssistantControlClientBase
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (target is null) throw new ArgumentNullException(nameof(target));
-        var call = HomeAssistantServiceCall.Create(Domain, action).ForTarget(target.NormalizeForDomain(Domain, cancellationToken));
+        var normalizedTarget = target.NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
+        var call = HomeAssistantServiceCall.Create(Domain, action);
         configure?.Invoke(call);
+        call.ForNormalizedTarget(normalizedTarget);
         return Services.CallControlAsync(call, cancellationToken);
     }
 
@@ -42,8 +44,10 @@ public abstract class HomeAssistantControlClientBase
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (target is null) throw new ArgumentNullException(nameof(target));
-        var call = HomeAssistantServiceCall.Create(Domain, action).ForTarget(target.NormalizeForDomain(Domain, cancellationToken));
+        var normalizedTarget = target.NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
+        var call = HomeAssistantServiceCall.Create(Domain, action);
         configure?.Invoke(call);
+        call.ForNormalizedTarget(normalizedTarget);
         return Services.CallControlAsync(call, transport, cancellationToken);
     }
 }

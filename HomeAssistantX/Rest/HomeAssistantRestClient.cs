@@ -75,7 +75,12 @@ public sealed partial class HomeAssistantRestClient : IDisposable
 
         var path = "api/services/" + EscapePath(call.Domain, cancellationToken) + "/" + EscapePath(call.Service, cancellationToken)
             + (call.ReturnResponse ? "?return_response" : string.Empty);
-        var result = await SendHomeAssistantAsync<JsonElement>(HttpMethod.Post, path, call.ToRestPayload(), cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = await SendHomeAssistantAsync<JsonElement>(
+            HttpMethod.Post,
+            path,
+            call.ToRestPayload(cancellationToken),
+            cancellationToken).ConfigureAwait(false);
 
         if (result.ValueKind == JsonValueKind.Array)
         {

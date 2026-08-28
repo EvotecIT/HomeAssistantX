@@ -891,6 +891,25 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task RemoteActivityAndDeviceSelectorsPreserveIntegrationDefinedText()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("remote.living_room");
+
+        await client.Controls.Remotes.SetPowerAsync(target, HomeAssistantPowerAction.On, " Watch TV ");
+        await client.Controls.Remotes.SendCommandsAsync(
+            target,
+            new[] { "power" },
+            new HomeAssistantRemoteSendOptions { Device = " Living Room TV " });
+
+        using var power = FindCall(server, "turn_on");
+        Assert.Equal(" Watch TV ", power.RootElement.GetProperty("service_data").GetProperty("activity").GetString());
+        using var send = FindCall(server, "send_command");
+        Assert.Equal(" Living Room TV ", send.RootElement.GetProperty("service_data").GetProperty("device").GetString());
+    }
+
+    [Fact]
     public async Task RemoteAndMediaEnumerablesHonorPreCanceledTokens()
     {
         using var server = new TestHomeAssistantServer();
