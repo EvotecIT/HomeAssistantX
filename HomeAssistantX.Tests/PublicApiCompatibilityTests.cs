@@ -284,6 +284,19 @@ public sealed class PublicApiCompatibilityTests
         Assert.Contains("size-const=4", parameters, StringComparison.Ordinal);
         Assert.Contains("size-param-index=1", parameters, StringComparison.Ordinal);
         Assert.StartsWith("marshal-as(type=Bool", FormatReturnType(method), StringComparison.Ordinal);
+
+        var omittedParameter = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(MarshalAsOmittedSizeParameterFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!.GetParameters()[0];
+        var explicitParameter = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(MarshalAsExplicitZeroSizeParameterFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!.GetParameters()[0];
+        Assert.NotEqual(MarshalAsContract(omittedParameter), MarshalAsContract(explicitParameter));
+
+        var fields = typeof(MarshalAsFieldFixture).GetFields(BindingFlags.Public | BindingFlags.Instance);
+        Assert.NotEqual(
+            MarshalAsContract(fields.Single(value => value.Name == nameof(MarshalAsFieldFixture.OmittedSize))),
+            MarshalAsContract(fields.Single(value => value.Name == nameof(MarshalAsFieldFixture.ExplicitZeroSize))));
     }
 
     [Fact]
@@ -764,6 +777,26 @@ public sealed class PublicApiCompatibilityTests
         [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.I4, SizeConst = 4, SizeParamIndex = 1)] int[] values,
         int count)
         => values.Length == count;
+
+    private static void MarshalAsOmittedSizeParameterFixture(
+        [MarshalAs(UnmanagedType.LPArray)] int[] values)
+    {
+    }
+
+    private static void MarshalAsExplicitZeroSizeParameterFixture(
+        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] int[] values)
+    {
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MarshalAsFieldFixture
+    {
+        [MarshalAs(UnmanagedType.LPArray)]
+        public int[] OmittedSize;
+
+        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)]
+        public int[] ExplicitZeroSize;
+    }
 
     [Obsolete("Warning-only compatibility contract")]
     private static void WarningObsoleteFixture()
@@ -1310,6 +1343,7 @@ public sealed class PublicApiCompatibilityTests
         }
 
         return "marshal-as(type=" + attribute.Value
+            + ",descriptor=" + ReadMarshalDescriptor(provider)
             + ",array-subtype=" + attribute.ArraySubType
             + ",size-const=" + attribute.SizeConst.ToString(CultureInfo.InvariantCulture)
             + ",size-param-index=" + attribute.SizeParamIndex.ToString(CultureInfo.InvariantCulture)
@@ -1320,6 +1354,42 @@ public sealed class PublicApiCompatibilityTests
             + ",marshal-cookie=" + FormatDefault(attribute.MarshalCookie)
             + ",safe-array-user-type=" + (attribute.SafeArrayUserDefinedSubType is null ? "null" : FormatDefault(attribute.SafeArrayUserDefinedSubType.FullName))
             + ") ";
+    }
+
+    private static string ReadMarshalDescriptor(ICustomAttributeProvider provider)
+    {
+        Module module;
+        int metadataToken;
+        switch (provider)
+        {
+            case ParameterInfo parameter:
+                module = parameter.Member.Module;
+                metadataToken = parameter.MetadataToken;
+                break;
+            case FieldInfo field:
+                module = field.Module;
+                metadataToken = field.MetadataToken;
+                break;
+            default:
+                return "none";
+        }
+
+        using var stream = File.OpenRead(module.FullyQualifiedName);
+        using var peReader = new PEReader(stream);
+        var reader = peReader.GetMetadataReader();
+        var row = metadataToken & 0x00FFFFFF;
+        var descriptor = (metadataToken & unchecked((int)0xFF000000)) switch
+        {
+            0x04000000 => reader.GetFieldDefinition(MetadataTokens.FieldDefinitionHandle(row)).GetMarshallingDescriptor(),
+            0x08000000 => reader.GetParameter(MetadataTokens.ParameterHandle(row)).GetMarshallingDescriptor(),
+            _ => default(BlobHandle)
+        };
+        if (descriptor.IsNil)
+        {
+            return "none";
+        }
+
+        return string.Concat(reader.GetBlobBytes(descriptor).Select(value => value.ToString("X2", CultureInfo.InvariantCulture)));
     }
 
     private static string OverloadResolutionPriorityContract(ICustomAttributeProvider provider)
