@@ -34,8 +34,7 @@ public sealed class HomeAssistantWeatherClient
             observations.Add(ToObservation(state));
         }
         cancellationToken.ThrowIfCancellationRequested();
-        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
-        observations.Sort((left, right) => comparer.Compare(left.EntityId, right.EntityId));
+        SortObservations(observations, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return observations;
     }
@@ -59,7 +58,9 @@ public sealed class HomeAssistantWeatherClient
                 .WithData("type", TypeName(type))
                 .WithResponse(),
             cancellationToken).ConfigureAwait(false);
-        if (!result.Response.HasValue || result.Response.Value.ValueKind != JsonValueKind.Object)
+        if (!result.Response.HasValue
+            || result.Response.Value.ValueKind != JsonValueKind.Object
+            || HomeAssistantJson.HasDuplicateProperties(result.Response.Value, cancellationToken))
         {
             throw new HomeAssistantProtocolException("The weather forecast response did not contain the requested entity.");
         }
@@ -73,6 +74,8 @@ public sealed class HomeAssistantWeatherClient
         }
 
         var entityResult = entities[0].Value;
+        if (HomeAssistantJson.HasDuplicateProperties(entityResult, cancellationToken))
+            throw new HomeAssistantProtocolException("The weather forecast response contained duplicate JSON properties.");
         if (!entityResult.TryGetProperty("forecast", out var forecast))
         {
             throw new HomeAssistantProtocolException("The weather forecast response did not contain a forecast.");
@@ -157,6 +160,7 @@ public sealed class HomeAssistantWeatherClient
             var update = HomeAssistantSubscriptionProjectionException.Capture(() =>
             {
                 if (value.ValueKind != JsonValueKind.Object
+                    || HomeAssistantJson.HasDuplicateProperties(value, token)
                     || !value.TryGetProperty("type", out var responseType)
                     || responseType.ValueKind != JsonValueKind.String
                     || !string.Equals(responseType.GetString(), TypeName(type), StringComparison.Ordinal)
@@ -166,6 +170,21 @@ public sealed class HomeAssistantWeatherClient
             });
             await handler(update, token).ConfigureAwait(false);
         }, cancellationToken);
+    }
+
+    internal static void SortObservations(
+        List<HomeAssistantWeatherObservation> observations,
+        CancellationToken cancellationToken)
+    {
+        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        try
+        {
+            observations.Sort((left, right) => comparer.Compare(left.EntityId, right.EntityId));
+        }
+        catch (InvalidOperationException ex) when (ex.InnerException is OperationCanceledException canceled)
+        {
+            throw canceled;
+        }
     }
 
     private static HomeAssistantWeatherObservation ToObservation(HomeAssistantState state)

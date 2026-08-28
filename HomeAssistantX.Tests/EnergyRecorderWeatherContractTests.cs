@@ -776,6 +776,21 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Contains("unexpected shape", exception.Message);
     }
 
+    [Theory]
+    [InlineData("{\"type\":\"hourly\",\"type\":\"hourly\",\"forecast\":[]}")]
+    [InlineData("{\"type\":\"hourly\",\"forecast\":[],\"forecast\":[]}")]
+    public async Task WeatherSubscriptionRejectsDuplicateWrapperProperties(string eventJson)
+    {
+        using var server = new TestHomeAssistantServer { WeatherForecastSubscriptionEventJson = eventJson };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Weather.SubscribeForecastAsync(
+            "weather.home",
+            HomeAssistantWeatherForecastType.Hourly,
+            (_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
     [Fact]
     public async Task RecorderStatisticsRejectNullRowsAsProtocolFailures()
     {
@@ -892,6 +907,7 @@ public sealed class EnergyRecorderWeatherContractTests
     [Theory]
     [InlineData("{\"weather.home\":{\"forecast\":[]},\"weather.garden\":{\"forecast\":[]}}")]
     [InlineData("{\"weather.home\":{\"forecast\":[]},\"weather.home\":{\"forecast\":[]}}")]
+    [InlineData("{\"weather.home\":{\"forecast\":[],\"forecast\":[]}}")]
     public async Task WeatherForecastRequiresExactlyOneCanonicalResponseEntity(string response)
     {
         using var server = new TestHomeAssistantServer { WeatherForecastResponseJson = response };
@@ -1369,6 +1385,14 @@ public sealed class EnergyRecorderWeatherContractTests
             cancellation.Token);
 
         Assert.ThrowsAny<OperationCanceledException>(() => comparer.Compare("weather.a", "weather.b"));
+
+        var observations = new List<HomeAssistantWeatherObservation>
+        {
+            new() { EntityId = "weather.b" },
+            new() { EntityId = "weather.a" }
+        };
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantWeatherClient.SortObservations(observations, cancellation.Token));
     }
 
     [Fact]
