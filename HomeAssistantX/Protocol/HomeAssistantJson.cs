@@ -31,6 +31,41 @@ internal static class HomeAssistantJson
         return value.Clone();
     }
 
+    /// <summary>Parses caller-provided JSON without making cancellation wait for synchronous parser completion.</summary>
+    internal static async Task<JsonDocument> ParseDocumentAsync(
+        string value,
+        CancellationToken cancellationToken,
+        Func<string, JsonDocument>? parser = null)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        cancellationToken.ThrowIfCancellationRequested();
+        parser ??= text => JsonDocument.Parse(text);
+        var parseTask = Task.Run(() => parser(value), CancellationToken.None);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        if (await Task.WhenAny(parseTask, canceled.Task).ConfigureAwait(false) != parseTask)
+        {
+            _ = parseTask.ContinueWith(
+                static task =>
+                {
+                    if (task.Status == TaskStatus.RanToCompletion) task.Result.Dispose();
+                    else _ = task.Exception;
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var document = await parseTask.ConfigureAwait(false);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            document.Dispose();
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        return document;
+    }
+
     /// <summary>Snapshots a response DOM with cancellation checks throughout traversal.</summary>
     internal static async Task<JsonElement> SnapshotResponseAsync(
         JsonElement value,
