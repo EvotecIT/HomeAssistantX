@@ -21,6 +21,7 @@ public sealed class HomeAssistantStateClient : IDisposable
     private readonly ConcurrentDictionary<Task, byte> _backgroundTasks = new();
     private readonly Dictionary<string, HomeAssistantState> _states = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
+    private readonly CancellationTokenSource _lifetimeSource = new();
     private readonly object _stateGate = new();
     private IHomeAssistantSubscription? _serverSubscription;
     private Exception? _serverSubscriptionFailure;
@@ -92,7 +93,11 @@ public sealed class HomeAssistantStateClient : IDisposable
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        await _initializationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        using var operationSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            _lifetimeSource.Token);
+        var operationToken = operationSource.Token;
+        await _initializationGate.WaitAsync(operationToken).ConfigureAwait(false);
         try
         {
             if (_initialized)
@@ -110,9 +115,9 @@ public sealed class HomeAssistantStateClient : IDisposable
                     "subscribe_events",
                     new Dictionary<string, object?> { ["event_type"] = "state_changed" },
                     HandleStateEventAsync,
-                    cancellationToken).ConfigureAwait(false);
+                    operationToken).ConfigureAwait(false);
                 TrackBackgroundTask(ObserveServerSubscriptionAsync(_serverSubscription));
-                await ResynchronizeAsync(isReconnect: false, cancellationToken).ConfigureAwait(false);
+                await ResynchronizeAsync(isReconnect: false, operationToken).ConfigureAwait(false);
                 _initialized = true;
                 _wasConnected = true;
             }
@@ -336,7 +341,7 @@ public sealed class HomeAssistantStateClient : IDisposable
 
             await ResynchronizeAsync(
                 isReconnect: true,
-                CancellationToken.None,
+                _lifetimeSource.Token,
                 expectedGeneration: generation).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -586,6 +591,7 @@ public sealed class HomeAssistantStateClient : IDisposable
         {
             _reconciliationGeneration++;
         }
+        _lifetimeSource.Cancel();
         _serverSubscription?.Dispose();
         foreach (var subscriber in _subscribers.Values)
         {
@@ -596,6 +602,7 @@ public sealed class HomeAssistantStateClient : IDisposable
         // Reconnect and subscription observers can still be unwinding after disposal invalidates
         // their generation. SemaphoreSlim has no unmanaged state unless its wait handle is used,
         // so leave this private gate alive until those fire-and-forget observers have exited.
+        // The lifetime source is likewise retained until those observers have released token registrations.
     }
 
     private sealed class LocalStateSubscription : IHomeAssistantSubscription

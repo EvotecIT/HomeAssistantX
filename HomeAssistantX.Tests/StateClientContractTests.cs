@@ -163,10 +163,10 @@ public sealed class StateClientContractTests
 
         await server.DropWebSocketsAsync();
         await WithTimeoutAsync(pausedSnapshot.Received);
-        client.Dispose();
-        pausedSnapshot.Release();
+        states.Dispose();
 
         await WithTimeoutAsync(states.WaitForBackgroundTasksAsync());
+        pausedSnapshot.Release();
     }
 
     [Fact]
