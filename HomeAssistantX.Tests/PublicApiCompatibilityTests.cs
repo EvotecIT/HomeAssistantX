@@ -77,6 +77,7 @@ public sealed class PublicApiCompatibilityTests
         var marshaledLayout = StructLayoutContract(typeof(MarshalAsFieldFixture));
         Assert.Contains("marshal-as(type=LPArray", marshaledLayout, StringComparison.Ordinal);
         Assert.Contains("descriptor=", marshaledLayout, StringComparison.Ordinal);
+        Assert.Contains("layout(Sequential", StructLayoutContract(typeof(SequentialClassLayoutFixture)), StringComparison.Ordinal);
     }
 
 #if NET10_0
@@ -113,9 +114,11 @@ public sealed class PublicApiCompatibilityTests
             nameof(ExperimentalFixture),
             BindingFlags.NonPublic | BindingFlags.Static)!;
         var constructor = typeof(PlatformConstructorFixture).GetConstructors().Single();
+        var guard = typeof(PlatformConstructorFixture).GetProperty(nameof(PlatformConstructorFixture.IsWindows))!;
 
         Assert.Contains("experimental(id=\"HAX001\"", ExperimentalContract(experimental), StringComparison.Ordinal);
         Assert.Contains("windows10.0", PlatformContract(constructor), StringComparison.Ordinal);
+        Assert.Contains("SupportedOSPlatformGuard", PlatformContract(guard), StringComparison.Ordinal);
     }
 #endif
 
@@ -330,6 +333,9 @@ public sealed class PublicApiCompatibilityTests
         Assert.NotEqual(
             MarshalAsContract(fields.Single(value => value.Name == nameof(MarshalAsFieldFixture.OmittedSize))),
             MarshalAsContract(fields.Single(value => value.Name == nameof(MarshalAsFieldFixture.ExplicitZeroSize))));
+
+        var property = typeof(MarshalAsPropertyFixture).GetProperty(nameof(MarshalAsPropertyFixture.Enabled))!;
+        Assert.Contains("marshal-as(type=Bool", FormatProperty(property), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -679,12 +685,16 @@ public sealed class PublicApiCompatibilityTests
 
     private static string StructLayoutContract(Type type)
     {
-        if (!type.IsValueType || type.IsEnum)
+        if (type.IsEnum)
         {
             return string.Empty;
         }
 
-        var layout = type.StructLayoutAttribute!;
+        var layout = type.StructLayoutAttribute;
+        if (layout is null || (!type.IsValueType && layout.Value == LayoutKind.Auto))
+        {
+            return string.Empty;
+        }
         var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
             .OrderBy(field => field.MetadataToken)
             .Select(field =>
@@ -875,6 +885,9 @@ public sealed class PublicApiCompatibilityTests
         public PlatformConstructorFixture()
         {
         }
+
+        [System.Runtime.Versioning.SupportedOSPlatformGuard("windows")]
+        public static bool IsWindows => true;
     }
 #endif
 
@@ -886,6 +899,22 @@ public sealed class PublicApiCompatibilityTests
 
         [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)]
         public int[] ExplicitZeroSize;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private sealed class SequentialClassLayoutFixture
+    {
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool Enabled;
+    }
+
+    private sealed class MarshalAsPropertyFixture
+    {
+        public bool Enabled
+        {
+            [return: MarshalAs(UnmanagedType.Bool)]
+            get => true;
+        }
     }
 
     [Obsolete("Warning-only compatibility contract")]
@@ -1433,7 +1462,9 @@ public sealed class PublicApiCompatibilityTests
             foreach (var attribute in GetCustomAttributes(provider!).Where(value =>
                          value.AttributeType.FullName is "System.Runtime.Versioning.SupportedOSPlatformAttribute"
                              or "System.Runtime.Versioning.UnsupportedOSPlatformAttribute"
-                             or "System.Runtime.Versioning.ObsoletedOSPlatformAttribute"))
+                             or "System.Runtime.Versioning.ObsoletedOSPlatformAttribute"
+                             or "System.Runtime.Versioning.SupportedOSPlatformGuardAttribute"
+                             or "System.Runtime.Versioning.UnsupportedOSPlatformGuardAttribute"))
             {
                 var name = attribute.AttributeType.Name.Replace("Attribute", string.Empty);
                 var arguments = attribute.ConstructorArguments.Select(value => FormatDefault(value.Value));
@@ -1834,7 +1865,8 @@ public sealed class PublicApiCompatibilityTests
                 + FormatAnnotatedType(property.PropertyType.GetElementType()!, parameter);
         }
         var safetyPrefix = HasAttribute(property, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty;
-        return propertyFlow + getterFlow + setterFlow + safetyPrefix + FormatAnnotatedType(property.PropertyType, property);
+        var returnMarshalling = getter is null ? string.Empty : MarshalAsContract(getter.ReturnParameter);
+        return propertyFlow + getterFlow + setterFlow + safetyPrefix + returnMarshalling + FormatAnnotatedType(property.PropertyType, property);
     }
 
     private static string NamedFlowContract(string name, ICustomAttributeProvider provider)
