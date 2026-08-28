@@ -492,6 +492,24 @@ public sealed class LivePlatformDataContractTests
         Assert.Null(server.LastServiceCallBody);
     }
 
+    [Fact]
+    public async Task NotificationTargetNormalizationHonorsPreCancellation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var target = new HomeAssistantTarget
+        {
+            EntityIds = new[] { "notify.mobile", "not-an-entity" }
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Notifications.SendAsync(target, "Message", cancellationToken: cancellation.Token));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
     private static void AssertServiceCall(TestHomeAssistantServer server, string domain, string service, Action<JsonElement> assertData)
     {
         using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
