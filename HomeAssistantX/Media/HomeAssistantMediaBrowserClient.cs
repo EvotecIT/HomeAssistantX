@@ -38,7 +38,10 @@ public sealed class HomeAssistantMediaBrowserClient
             payload["expires"] = (int)Math.Ceiling(expiration.Value.TotalSeconds);
         }
         var value = await _webSocket.RequestAsync("media_source/resolve_media", payload, cancellationToken).ConfigureAwait(false);
-        var result = HomeAssistantJson.DeserializeResponse<HomeAssistantResolvedMedia>(value, "The resolved media response could not be decoded.");
+        var result = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantResolvedMedia>(
+            value,
+            "The resolved media response could not be decoded.",
+            cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (!IsValidResolvedUrl(result.Url))
             throw new HomeAssistantProtocolException("The resolved media response contained an invalid URL.");
@@ -67,7 +70,7 @@ public sealed class HomeAssistantMediaBrowserClient
     private async Task<HomeAssistantMediaItem> RequestItemAsync(string command, IReadOnlyDictionary<string, object?> payload, CancellationToken cancellationToken)
     {
         var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
-        return DecodeItem(value, cancellationToken);
+        return await DecodeItemAsync(value, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<HomeAssistantMediaSearchResponse> RequestSearchAsync(string command, IReadOnlyDictionary<string, object?> payload, CancellationToken cancellationToken)
@@ -76,15 +79,18 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media search response had an unexpected shape.");
-        var response = HomeAssistantJson.DeserializeResponse<HomeAssistantMediaSearchResponse>(value, "The media search response could not be decoded.");
-        if (response.Items is null)
-            throw new HomeAssistantProtocolException("The media search response contained a null result.");
         foreach (var item in result.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
             ValidateItemShape(item, cancellationToken);
         }
 
+        var response = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantMediaSearchResponse>(
+            value,
+            "The media search response could not be decoded.",
+            cancellationToken).ConfigureAwait(false);
+        if (response.Items is null)
+            throw new HomeAssistantProtocolException("The media search response contained a null result.");
         foreach (var item in response.Items)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -97,13 +103,16 @@ public sealed class HomeAssistantMediaBrowserClient
         return response;
     }
 
-    internal static HomeAssistantMediaItem DecodeItem(
+    internal static async Task<HomeAssistantMediaItem> DecodeItemAsync(
         JsonElement value,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateItemShape(value, cancellationToken);
-        var result = HomeAssistantJson.DeserializeResponse<HomeAssistantMediaItem>(value, "The media browse response could not be decoded.");
+        var result = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantMediaItem>(
+            value,
+            "The media browse response could not be decoded.",
+            cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         ValidateItemCollections(result, cancellationToken);
         return result;

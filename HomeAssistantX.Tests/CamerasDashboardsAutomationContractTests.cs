@@ -275,15 +275,15 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
-    public void MediaBrowseValidationHonorsCancellationBeforeTraversingResults()
+    public async Task MediaBrowseValidationHonorsCancellationBeforeTraversingResults()
     {
         using var document = JsonDocument.Parse(
             "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[null]}");
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
-        Assert.ThrowsAny<OperationCanceledException>(() =>
-            HomeAssistantMediaBrowserClient.DecodeItem(document.RootElement, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantMediaBrowserClient.DecodeItemAsync(document.RootElement, cancellation.Token));
     }
 
     [Theory]
