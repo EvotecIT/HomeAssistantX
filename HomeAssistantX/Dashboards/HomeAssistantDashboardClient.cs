@@ -381,6 +381,12 @@ public sealed class HomeAssistantDashboardClient
         {
             throw new HomeAssistantProtocolException("A dashboard contained an unsupported mode.");
         }
+        if (dashboard.Icon is not null
+            && (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(dashboard.Icon, out var normalizedIcon)
+                || !string.Equals(dashboard.Icon, normalizedIcon, StringComparison.Ordinal)))
+        {
+            throw new HomeAssistantProtocolException("A dashboard contained a noncanonical icon.");
+        }
     }
 
     private static void RequireDashboardVisibility(JsonElement value, string failureMessage)
@@ -420,7 +426,9 @@ public sealed class HomeAssistantDashboardClient
     private static void ValidateListedResource(HomeAssistantDashboardResource resource, string? resourceMode = null)
     {
         if (string.IsNullOrWhiteSpace(resource.Url)
-            || string.IsNullOrWhiteSpace(resource.Type))
+            || !string.Equals(resource.Url, resource.Url.Trim(), StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(resource.Type)
+            || !string.Equals(resource.Type, resource.Type.Trim(), StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Lovelace resource did not contain its required fields.");
         if (resourceMode == "storage")
             resource.Id = RequireResponseSelector(resource.Id, "A storage Lovelace resource did not contain a canonical identifier.");

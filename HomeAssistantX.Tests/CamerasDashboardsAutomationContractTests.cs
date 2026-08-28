@@ -208,6 +208,34 @@ public sealed class CamerasDashboardsAutomationContractTests
             new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
     }
 
+    [Fact]
+    public async Task CameraWebSocketResponsesRejectDuplicateProperties()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            CameraCapabilitiesResponseJson = "{\"frontend_stream_types\":[\"mjpeg\"],\"frontend_stream_types\":[\"hls\"]}",
+            CameraStreamResponseJson = "{\"url\":\"/api/hls/other.m3u8\",\"url\":\"/api/hls/stream.m3u8\"}",
+            CameraPreferencesResponseJson = "{\"preload_stream\":false,\"preload_stream\":true,\"orientation\":1}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetCapabilitiesAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetStreamAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetPreferencesAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
+    }
+
+    [Fact]
+    public void CameraStreamTypeValidationObservesCancellationDuringTraversal()
+    {
+        using var cancellation = new CancellationTokenSource();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCameraClient.ValidateStreamTypes(CancelAfterFirstStreamType(cancellation), cancellation.Token));
+    }
+
     [Theory]
     [InlineData("House_Main")]
     [InlineData("House-main")]
@@ -284,6 +312,38 @@ public sealed class CamerasDashboardsAutomationContractTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             HomeAssistantMediaBrowserClient.DecodeItemAsync(document.RootElement, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task TypedMediaResponsesRejectDuplicateProperties()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson =
+                "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"other\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[]}",
+            MediaSearchResponseJson =
+                "{\"result\":[{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\"other\",\"media_content_id\":\"item\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false}]}",
+            ResolvedMediaResponseJson = "{\"url\":\"/api/media/other\",\"url\":\"/api/media/file\",\"mime_type\":\"audio/mpeg\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.SearchSourcesAsync("music"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.ResolveAsync("media-source://media_source/local/file.mp3"));
+    }
+
+    [Fact]
+    public async Task MediaClassFiltersPreserveOrderWhileDeduplicatingCaseInsensitively()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Media.SearchSourcesAsync("music", mediaClasses: new[] { " music ", "Music", "video" });
+
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("media_source/search_media")));
+        Assert.Equal(
+            new[] { "music", "video" },
+            command.RootElement.GetProperty("media_filter_classes").EnumerateArray().Select(value => value.GetString()).ToArray());
     }
 
     [Theory]
@@ -592,6 +652,35 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+    }
+
+    [Fact]
+    public async Task DashboardResponsesRejectNoncanonicalIconsAndResourceFields()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardListResponseJson =
+                "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"icon\":\"home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.DashboardMutationResponseJson =
+            "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"icon\":\"home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { Title = "Updated" }));
+
+        foreach (var response in new[]
+        {
+            "[{\"id\":\"resource-1\",\"url\":\" /local/card.js \",\"type\":\"module\"}]",
+            "[{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\" module \"}]"
+        })
+        {
+            server.DashboardResourceListResponseJson = response;
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
+        }
     }
 
     [Theory]
@@ -946,6 +1035,13 @@ public sealed class CamerasDashboardsAutomationContractTests
             client.Automations.SaveConfigurationAsync("morning-routine", definition.RootElement));
 
         Assert.Null(server.LastRequestBody);
+    }
+
+    private static IEnumerable<string> CancelAfterFirstStreamType(CancellationTokenSource cancellation)
+    {
+        yield return "hls";
+        cancellation.Cancel();
+        yield return "mjpeg";
     }
 }
 #endif

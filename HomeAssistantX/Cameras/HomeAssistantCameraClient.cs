@@ -59,6 +59,7 @@ public sealed class HomeAssistantCameraClient
     {
         ValidateEntityId(entityId);
         var value = await _webSocket.RequestAsync("camera/capabilities", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim() }, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicateProperties(value, "The camera capabilities contained duplicate JSON properties.", cancellationToken);
         if (value.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("frontend_stream_types", out var frontendStreamTypes)
             || frontendStreamTypes.ValueKind != JsonValueKind.Array)
@@ -75,14 +76,7 @@ public sealed class HomeAssistantCameraClient
             result.FrontendStreamTypes,
             "The camera capabilities contained a null stream type.",
             cancellationToken: cancellationToken);
-        var streamTypes = new HashSet<string>(StringComparer.Ordinal);
-        if (result.FrontendStreamTypes.Any(value => string.IsNullOrWhiteSpace(value)
-            || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
-            || !string.Equals(value, value.ToLowerInvariant(), StringComparison.Ordinal)
-            || !streamTypes.Add(value)))
-        {
-            throw new HomeAssistantProtocolException("The camera capabilities contained an invalid stream type.");
-        }
+        ValidateStreamTypes(result.FrontendStreamTypes, cancellationToken);
         return result;
     }
 
@@ -90,6 +84,7 @@ public sealed class HomeAssistantCameraClient
     {
         ValidateEntityId(entityId);
         var value = await _webSocket.RequestAsync("camera/stream", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim(), ["format"] = "hls" }, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicateProperties(value, "The camera stream response contained duplicate JSON properties.", cancellationToken);
         var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraStream>(
             value,
             "The camera stream response could not be decoded.",
@@ -135,6 +130,7 @@ public sealed class HomeAssistantCameraClient
         string failureMessage,
         CancellationToken cancellationToken)
     {
+        RequireNoDuplicateProperties(value, failureMessage, cancellationToken);
         if (value.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("preload_stream", out var preloadStream)
             || preloadStream.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
@@ -152,6 +148,34 @@ public sealed class HomeAssistantCameraClient
         if (!Enum.IsDefined(typeof(HomeAssistantCameraOrientation), preferences.Orientation))
             throw new HomeAssistantProtocolException(failureMessage);
         return preferences;
+    }
+
+    private static void RequireNoDuplicateProperties(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+            throw new HomeAssistantProtocolException(failureMessage);
+    }
+
+    internal static void ValidateStreamTypes(
+        IEnumerable<string> values,
+        CancellationToken cancellationToken)
+    {
+        var streamTypes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var streamType in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(streamType)
+                || !string.Equals(streamType, streamType.Trim(), StringComparison.Ordinal)
+                || !string.Equals(streamType, streamType.ToLowerInvariant(), StringComparison.Ordinal)
+                || !streamTypes.Add(streamType))
+            {
+                throw new HomeAssistantProtocolException("The camera capabilities contained an invalid stream type.");
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public async Task<string> GetSignedImagePathAsync(string entityId, TimeSpan? expiration = null, int? width = null, int? height = null, CancellationToken cancellationToken = default)

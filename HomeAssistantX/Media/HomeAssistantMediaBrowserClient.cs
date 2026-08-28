@@ -38,6 +38,7 @@ public sealed class HomeAssistantMediaBrowserClient
             payload["expires"] = (int)Math.Ceiling(expiration.Value.TotalSeconds);
         }
         var value = await _webSocket.RequestAsync("media_source/resolve_media", payload, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicateProperties(value, "The resolved media response contained duplicate JSON properties.", cancellationToken);
         var result = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantResolvedMedia>(
             value,
             "The resolved media response could not be decoded.",
@@ -77,6 +78,7 @@ public sealed class HomeAssistantMediaBrowserClient
     {
         var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
+        RequireNoDuplicateProperties(value, "The media search response contained duplicate JSON properties.", cancellationToken);
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media search response had an unexpected shape.");
         foreach (var item in result.EnumerateArray())
@@ -108,6 +110,7 @@ public sealed class HomeAssistantMediaBrowserClient
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        RequireNoDuplicateProperties(value, "The media browse response contained duplicate JSON properties.", cancellationToken);
         ValidateItemShape(value, cancellationToken);
         var result = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantMediaItem>(
             value,
@@ -240,18 +243,28 @@ public sealed class HomeAssistantMediaBrowserClient
     {
         if (mediaClasses is null) return;
         var values = new List<string>(mediaClasses.Count);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var mediaClass in mediaClasses)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(mediaClass))
                 throw new ArgumentException("Media classes cannot be empty.", nameof(mediaClasses));
             var normalized = mediaClass.Trim();
-            if (!values.Contains(normalized, StringComparer.OrdinalIgnoreCase)) values.Add(normalized);
+            if (seen.Add(normalized)) values.Add(normalized);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         if (values.Count == 0) throw new ArgumentException("Media classes cannot be empty.", nameof(mediaClasses));
         payload["media_filter_classes"] = values.ToArray();
+    }
+
+    private static void RequireNoDuplicateProperties(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+            throw new HomeAssistantProtocolException(failureMessage);
     }
 
     private static string Require(string value, string parameterName)
