@@ -1,5 +1,4 @@
 using System.Management.Automation;
-using HomeAssistantX.Models;
 using HomeAssistantX.Recorder;
 using HomeAssistantX.Services;
 
@@ -50,9 +49,15 @@ public sealed class InvokeHomeAssistantRecorderMaintenanceCommand : HomeAssistan
             case EntitiesSet:
                 if ((EntityId is null || EntityId.Length == 0) && (Domain is null || Domain.Length == 0) && (EntityGlob is null || EntityGlob.Length == 0))
                     throw new ArgumentException("Specify at least one EntityId, Domain, or EntityGlob.");
-                var entityIds = NormalizeEntityIds(EntityId);
-                var domains = NormalizeDomains(Domain);
-                var entityGlobs = NormalizeEntityGlobs(EntityGlob);
+                var entityIds = EntityId is null
+                    ? null
+                    : HomeAssistantRecorderClient.NormalizePurgeEntityIds(EntityId, nameof(EntityId), CancelToken);
+                var domains = Domain is null
+                    ? null
+                    : HomeAssistantRecorderClient.NormalizePurgeDomains(Domain, nameof(Domain), CancelToken);
+                var entityGlobs = EntityGlob is null
+                    ? null
+                    : HomeAssistantRecorderClient.NormalizePurgeEntityGlobs(EntityGlob, nameof(EntityGlob), CancelToken);
                 if (!ShouldProcess(ConnectionDisplayName, "Purge matching Recorder entities")) return;
                 result = await Client.Recorder.PurgeEntitiesAsync(entityIds, domains, entityGlobs, KeepDays, CancelToken).ConfigureAwait(false);
                 break;
@@ -72,81 +77,4 @@ public sealed class InvokeHomeAssistantRecorderMaintenanceCommand : HomeAssistan
         if (PassThru && result is not null) WriteObject(result);
     }
 
-    private static string[]? NormalizeEntityIds(IEnumerable<string>? values)
-    {
-        if (values is null)
-        {
-            return null;
-        }
-
-        var normalized = new List<string>();
-        foreach (var value in values)
-        {
-            if (!HomeAssistantEntityId.TryNormalize(value, out var entityId))
-            {
-                throw new ArgumentException(
-                    "EntityId must contain lowercase native Home Assistant entity identifiers.",
-                    nameof(EntityId));
-            }
-
-            if (!normalized.Contains(entityId, StringComparer.Ordinal))
-            {
-                normalized.Add(entityId);
-            }
-        }
-
-        return normalized.ToArray();
-    }
-
-    private static string[]? NormalizeDomains(IEnumerable<string>? values)
-    {
-        if (values is null)
-        {
-            return null;
-        }
-
-        var normalized = new List<string>();
-        foreach (var value in values)
-        {
-            if (!HomeAssistantEntityId.TryNormalizeDomain(value, out var domain))
-            {
-                throw new ArgumentException(
-                    "Domain must contain lowercase native Home Assistant domains.",
-                    nameof(Domain));
-            }
-
-            if (!normalized.Contains(domain, StringComparer.Ordinal))
-            {
-                normalized.Add(domain);
-            }
-        }
-
-        return normalized.ToArray();
-    }
-
-    private static string[]? NormalizeEntityGlobs(IEnumerable<string>? values)
-    {
-        if (values is null)
-        {
-            return null;
-        }
-
-        var normalized = new List<string>();
-        foreach (var value in values)
-        {
-            if (!HomeAssistantRecorderEntityGlob.TryNormalize(value, out var entityGlob))
-            {
-                throw new ArgumentException(
-                    "EntityGlob must contain lowercase Home Assistant entity patterns such as 'sensor.*' or 'sensor.kitchen_*'.",
-                    nameof(EntityGlob));
-            }
-
-            if (!normalized.Contains(entityGlob, StringComparer.Ordinal))
-            {
-                normalized.Add(entityGlob);
-            }
-        }
-
-        return normalized.ToArray();
-    }
 }

@@ -1408,6 +1408,38 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public void SharedRecorderPurgeNormalizationObservesCancellationDuringPreflight()
+    {
+        using var cancellation = new CancellationTokenSource();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRecorderClient.NormalizePurgeEntityIds(
+                new CancellingStatisticIds(cancellation),
+                "EntityId",
+                cancellation.Token));
+    }
+
+    [Theory]
+    [InlineData("temperature_unit")]
+    [InlineData("pressure_unit")]
+    [InlineData("visibility_unit")]
+    [InlineData("wind_speed_unit")]
+    [InlineData("precipitation_unit")]
+    public async Task CurrentWeatherRejectsMalformedUnitAttributes(string attributeName)
+    {
+        foreach (var value in new[] { "true", "{}", "[]", "\" \"", "\" °C \"" })
+        {
+            using var server = new TestHomeAssistantServer();
+            server.SetStates(
+                "[{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{\""
+                + attributeName + "\":" + value + "}}]");
+            using var client = TestClientFactory.Create(server);
+
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+        }
+    }
+
+    [Fact]
     public async Task RecorderStatisticsRejectDuplicateNormalizedUnitNamesBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

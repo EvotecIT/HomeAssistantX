@@ -270,9 +270,9 @@ public sealed class HomeAssistantRecorderClient
             throw new ArgumentException("At least one entity, domain, or entity glob is required.");
         if (keepDays.HasValue && keepDays.Value < 0) throw new ArgumentOutOfRangeException(nameof(keepDays));
         var call = new HomeAssistantServiceCall("recorder", "purge_entities");
-        if (entityIds is { Count: > 0 }) call.WithData("entity_id", RequireEntityIds(entityIds, nameof(entityIds), cancellationToken));
-        if (domains is { Count: > 0 }) call.WithData("domains", RequireDomains(domains, nameof(domains), cancellationToken));
-        if (entityGlobs is { Count: > 0 }) call.WithData("entity_globs", RequireEntityGlobs(entityGlobs, nameof(entityGlobs), cancellationToken));
+        if (entityIds is { Count: > 0 }) call.WithData("entity_id", NormalizePurgeEntityIds(entityIds, nameof(entityIds), cancellationToken));
+        if (domains is { Count: > 0 }) call.WithData("domains", NormalizePurgeDomains(domains, nameof(domains), cancellationToken));
+        if (entityGlobs is { Count: > 0 }) call.WithData("entity_globs", NormalizePurgeEntityGlobs(entityGlobs, nameof(entityGlobs), cancellationToken));
         if (keepDays.HasValue) call.WithData("keep_days", keepDays.Value);
         return _services.CallControlAsync(call, cancellationToken);
     }
@@ -470,7 +470,7 @@ public sealed class HomeAssistantRecorderClient
         return values.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static string[] RequireEntityGlobs(
+    internal static string[] NormalizePurgeEntityGlobs(
         IReadOnlyCollection<string> values,
         string name,
         CancellationToken cancellationToken)
@@ -502,7 +502,7 @@ public sealed class HomeAssistantRecorderClient
         return normalized.ToArray();
     }
 
-    private static string[] RequireEntityIds(
+    internal static string[] NormalizePurgeEntityIds(
         IReadOnlyCollection<string> values,
         string name,
         CancellationToken cancellationToken)
@@ -558,7 +558,7 @@ public sealed class HomeAssistantRecorderClient
         return statisticId;
     }
 
-    private static string[] RequireDomains(
+    internal static string[] NormalizePurgeDomains(
         IReadOnlyCollection<string> values,
         string name,
         CancellationToken cancellationToken)

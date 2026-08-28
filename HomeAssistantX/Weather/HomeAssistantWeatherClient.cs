@@ -211,11 +211,11 @@ public sealed class HomeAssistantWeatherClient
             WindSpeed = HomeAssistantAttributeReader.GetDouble(state.Attributes, "wind_speed"),
             WindGustSpeed = HomeAssistantAttributeReader.GetDouble(state.Attributes, "wind_gust_speed"),
             WindBearing = windBearing,
-            TemperatureUnit = HomeAssistantAttributeReader.GetString(state.Attributes, "temperature_unit"),
-            PressureUnit = HomeAssistantAttributeReader.GetString(state.Attributes, "pressure_unit"),
-            VisibilityUnit = HomeAssistantAttributeReader.GetString(state.Attributes, "visibility_unit"),
-            WindSpeedUnit = HomeAssistantAttributeReader.GetString(state.Attributes, "wind_speed_unit"),
-            PrecipitationUnit = HomeAssistantAttributeReader.GetString(state.Attributes, "precipitation_unit"),
+            TemperatureUnit = ReadCurrentUnit(state.Attributes, "temperature_unit"),
+            PressureUnit = ReadCurrentUnit(state.Attributes, "pressure_unit"),
+            VisibilityUnit = ReadCurrentUnit(state.Attributes, "visibility_unit"),
+            WindSpeedUnit = ReadCurrentUnit(state.Attributes, "wind_speed_unit"),
+            PrecipitationUnit = ReadCurrentUnit(state.Attributes, "precipitation_unit"),
             SupportedFeatures = (HomeAssistantWeatherFeature)(HomeAssistantAttributeReader.GetNonNegativeInt32(state.Attributes, "supported_features") ?? 0),
             RawState = state
         };
@@ -236,6 +236,28 @@ public sealed class HomeAssistantWeatherClient
         {
             throw new HomeAssistantProtocolException(
                 "The Home Assistant weather state contained an invalid percentage attribute.");
+        }
+
+        return value;
+    }
+
+    private static string? ReadCurrentUnit(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name)
+    {
+        if (!HomeAssistantAttributeReader.TryGetValue(attributes, name, out var raw)
+            || raw.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (raw.ValueKind != JsonValueKind.String
+            || raw.GetString() is not string value
+            || string.IsNullOrWhiteSpace(value)
+            || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant weather state contained an invalid unit attribute.");
         }
 
         return value;
