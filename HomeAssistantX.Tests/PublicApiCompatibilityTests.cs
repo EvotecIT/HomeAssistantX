@@ -74,6 +74,9 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal(
             "layout(Sequential,pack=2,size=0,charset=Ansi;fields=System.Int32 Zulu|System.Int16 Alpha) ",
             StructLayoutContract(typeof(SequentialStructLayoutFixture)));
+        var marshaledLayout = StructLayoutContract(typeof(MarshalAsFieldFixture));
+        Assert.Contains("marshal-as(type=LPArray", marshaledLayout, StringComparison.Ordinal);
+        Assert.Contains("descriptor=", marshaledLayout, StringComparison.Ordinal);
     }
 
 #if NET10_0
@@ -83,6 +86,36 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal(
             "collection-builder(HomeAssistantX.Tests.PublicApiCompatibilityTests+CollectionBuilderFixtureBuilder,\"Create\") ",
             CollectionBuilderContract(typeof(CollectionBuilderFixture)));
+    }
+
+    [Fact]
+    public void TypeFormatterPreservesInlineArrayLength()
+    {
+        Assert.Equal("inline-array(4) ", InlineArrayContract(typeof(InlineArrayFixture)));
+    }
+
+    [Fact]
+    public void MethodFormatterPreservesUnmanagedCallableMetadata()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(UnmanagedCallableFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var contract = UnmanagedCallersOnlyContract(method);
+        Assert.Contains("entry=\"hax_entry\"", contract, StringComparison.Ordinal);
+        Assert.Contains("CallConvCdecl", contract, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MemberFormatterPreservesExperimentalAndPlatformDiagnostics()
+    {
+        var experimental = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(ExperimentalFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var constructor = typeof(PlatformConstructorFixture).GetConstructors().Single();
+
+        Assert.Contains("experimental(id=\"HAX001\"", ExperimentalContract(experimental), StringComparison.Ordinal);
+        Assert.Contains("windows10.0", PlatformContract(constructor), StringComparison.Ordinal);
     }
 #endif
 
@@ -559,14 +592,14 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + CollectionBuilderContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PlatformContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
                 {
                     var value = Enum.Parse(type, name);
                     var field = type.GetField(name, BindingFlags.Public | BindingFlags.Static)!;
-                    lines.Add("  F " + ObsoleteContract(field) + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type)));
+                    lines.Add("  F " + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type)));
                 }
                 continue;
             }
@@ -590,7 +623,7 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -632,6 +665,18 @@ public sealed class PublicApiCompatibilityTests
         return "collection-builder(" + FormatType(builderType) + "," + FormatDefault(methodName) + ") ";
     }
 
+    private static string InlineArrayContract(Type type)
+    {
+        var attribute = GetCustomAttributes(type).FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Runtime.CompilerServices.InlineArrayAttribute",
+            StringComparison.Ordinal));
+        return attribute?.ConstructorArguments.Count == 1
+            && attribute.ConstructorArguments[0].Value is int length
+                ? "inline-array(" + length.ToString(CultureInfo.InvariantCulture) + ") "
+                : string.Empty;
+    }
+
     private static string StructLayoutContract(Type type)
     {
         if (!type.IsValueType || type.IsEnum)
@@ -645,7 +690,7 @@ public sealed class PublicApiCompatibilityTests
             .Select(field =>
             {
                 var offset = field.GetCustomAttribute<FieldOffsetAttribute>();
-                return FormatType(field.FieldType) + " " + field.Name
+                return MarshalAsContract(field) + FormatType(field.FieldType) + " " + field.Name
                     + (offset is null ? string.Empty : "@" + offset.Value.ToString(CultureInfo.InvariantCulture));
             })
             .ToArray();
@@ -682,7 +727,7 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return ObsoleteContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + UnmanagedCallersOnlyContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static string AttributeUsageContract(Type type)
@@ -720,6 +765,23 @@ public sealed class PublicApiCompatibilityTests
             + ",preserve-sig=" + FormatBoolean(attribute.PreserveSig) + ") ";
     }
 
+    private static string UnmanagedCallersOnlyContract(MethodBase method)
+    {
+        var attribute = GetCustomAttributes(method).FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute",
+            StringComparison.Ordinal));
+        if (attribute is null) return string.Empty;
+
+        var entryPoint = attribute.NamedArguments.FirstOrDefault(value => value.MemberName == "EntryPoint").TypedValue.Value;
+        var callingConventions = attribute.NamedArguments.FirstOrDefault(value => value.MemberName == "CallConvs").TypedValue.Value;
+        var conventions = callingConventions is IEnumerable<CustomAttributeTypedArgument> values
+            ? values.Select(value => value.Value is Type type ? FormatType(type) : FormatDefault(value.Value)).ToArray()
+            : Array.Empty<string>();
+        return "unmanaged-callers-only(entry=" + FormatDefault(entryPoint)
+            + ",call-convs=" + string.Join("|", conventions) + ") ";
+    }
+
     private static MethodImportAttributes ReadMethodImportAttributes(MethodBase method)
     {
         using var stream = File.OpenRead(method.Module.FullyQualifiedName);
@@ -731,6 +793,7 @@ public sealed class PublicApiCompatibilityTests
 
     private static string FormatConstructor(ConstructorInfo constructor)
         => "C " + ConstructorAccess(constructor) + ObsoleteContract(constructor)
+            + ExperimentalContract(constructor) + PlatformContract(constructor)
             + OverloadResolutionPriorityContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
             + FormatType(constructor.DeclaringType!) + "(" + FormatParameters(constructor.GetParameters()) + ")";
 
@@ -743,6 +806,7 @@ public sealed class PublicApiCompatibilityTests
             property,
             getter,
             setter)
+            + ExperimentalContract(property, getter, setter) + PlatformContract(property, getter, setter)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
@@ -787,6 +851,32 @@ public sealed class PublicApiCompatibilityTests
         [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] int[] values)
     {
     }
+
+#if NET10_0
+    [UnmanagedCallersOnly(EntryPoint = "hax_entry", CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static void UnmanagedCallableFixture()
+    {
+    }
+
+    [System.Diagnostics.CodeAnalysis.Experimental("HAX001", UrlFormat = "https://example.invalid/{0}")]
+    private static void ExperimentalFixture()
+    {
+    }
+
+    [InlineArray(4)]
+    private struct InlineArrayFixture
+    {
+        private int _element0;
+    }
+
+    private sealed class PlatformConstructorFixture
+    {
+        [System.Runtime.Versioning.SupportedOSPlatform("windows10.0")]
+        public PlatformConstructorFixture()
+        {
+        }
+    }
+#endif
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MarshalAsFieldFixture
@@ -1312,7 +1402,48 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + RequiredMember(field) + MarshalAsContract(field) + NullableFlowContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + RequiredMember(field) + MarshalAsContract(field) + NullableFlowContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+    }
+
+    private static string ExperimentalContract(params ICustomAttributeProvider?[] providers)
+    {
+        var contracts = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var provider in providers.Where(value => value is not null))
+        {
+            foreach (var attribute in GetCustomAttributes(provider!).Where(value => string.Equals(
+                         value.AttributeType.FullName,
+                         "System.Diagnostics.CodeAnalysis.ExperimentalAttribute",
+                         StringComparison.Ordinal)))
+            {
+                var diagnosticId = attribute.ConstructorArguments.Count == 1
+                    ? attribute.ConstructorArguments[0].Value
+                    : null;
+                var url = attribute.NamedArguments.FirstOrDefault(value => value.MemberName == "UrlFormat").TypedValue.Value;
+                contracts.Add("experimental(id=" + FormatDefault(diagnosticId) + ",url=" + FormatDefault(url) + ")");
+            }
+        }
+        return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
+    }
+
+    private static string PlatformContract(params ICustomAttributeProvider?[] providers)
+    {
+        var contracts = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var provider in providers.Where(value => value is not null))
+        {
+            foreach (var attribute in GetCustomAttributes(provider!).Where(value =>
+                         value.AttributeType.FullName is "System.Runtime.Versioning.SupportedOSPlatformAttribute"
+                             or "System.Runtime.Versioning.UnsupportedOSPlatformAttribute"
+                             or "System.Runtime.Versioning.ObsoletedOSPlatformAttribute"))
+            {
+                var name = attribute.AttributeType.Name.Replace("Attribute", string.Empty);
+                var arguments = attribute.ConstructorArguments.Select(value => FormatDefault(value.Value));
+                var named = attribute.NamedArguments
+                    .OrderBy(value => value.MemberName, StringComparer.Ordinal)
+                    .Select(value => value.MemberName + "=" + FormatDefault(value.TypedValue.Value));
+                contracts.Add("platform(" + name + ":" + string.Join(",", arguments.Concat(named)) + ")");
+            }
+        }
+        return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
     }
 
     private static string ObsoleteContract(params ICustomAttributeProvider?[] providers)

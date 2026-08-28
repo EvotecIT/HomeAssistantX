@@ -17,6 +17,17 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     private readonly int _maximumResponseBytes;
 
     internal HomeAssistantMobileAppWebhookClient(Uri webhookUri, string? secret, IHomeAssistantMobileAppPayloadProtector? protector, TimeSpan requestTimeout, int maximumResponseBytes)
+        : this(webhookUri, secret, protector, requestTimeout, maximumResponseBytes, CreateDefaultHandler())
+    {
+    }
+
+    internal HomeAssistantMobileAppWebhookClient(
+        Uri webhookUri,
+        string? secret,
+        IHomeAssistantMobileAppPayloadProtector? protector,
+        TimeSpan requestTimeout,
+        int maximumResponseBytes,
+        HttpMessageHandler handler)
     {
         if (webhookUri is null || !webhookUri.IsAbsoluteUri || (webhookUri.Scheme != Uri.UriSchemeHttp && webhookUri.Scheme != Uri.UriSchemeHttps))
         {
@@ -42,15 +53,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         _protector = protector;
         _requestTimeout = requestTimeout;
         _maximumResponseBytes = maximumResponseBytes;
-        _httpClient = new HttpClient(new HttpClientHandler
-        {
-            AllowAutoRedirect = false,
-            UseDefaultCredentials = false,
-            Credentials = null,
-            PreAuthenticate = false,
-            UseProxy = false,
-            UseCookies = false
-        }, disposeHandler: true);
+        _httpClient = new HttpClient(handler ?? throw new ArgumentNullException(nameof(handler)), disposeHandler: true);
         _httpClient.Timeout = Timeout.InfiniteTimeSpan;
     }
 
@@ -172,7 +175,24 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
                     throw new HomeAssistantProtocolException("Home Assistant returned an encrypted mobile-app response that cannot be decrypted.");
                 }
 
-                var plaintext = await _protector.UnprotectAsync(encryptedData.GetString()!, _secret!, operationToken).ConfigureAwait(false);
+                byte[] plaintext;
+                try
+                {
+                    plaintext = await _protector.UnprotectAsync(
+                        encryptedData.GetString()!,
+                        _secret!,
+                        operationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new HomeAssistantProtocolException(
+                        "Home Assistant returned an encrypted mobile-app response that could not be decrypted.",
+                        ex);
+                }
                 return await ParseResponseAsync(plaintext, operationToken).ConfigureAwait(false);
             }
 
@@ -275,4 +295,15 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     {
         _httpClient.Dispose();
     }
+
+    private static HttpMessageHandler CreateDefaultHandler()
+        => new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            UseDefaultCredentials = false,
+            Credentials = null,
+            PreAuthenticate = false,
+            UseProxy = false,
+            UseCookies = false
+        };
 }

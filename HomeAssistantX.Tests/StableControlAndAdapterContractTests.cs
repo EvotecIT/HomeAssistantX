@@ -1423,12 +1423,15 @@ public sealed class StableControlAndAdapterContractTests
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
-        var factoryMethod = Assert.Single(
-            typeof(HomeAssistantMobileAppClient).GetMethods(),
-            method => method.Name == nameof(HomeAssistantMobileAppClient.CreateWebhookClient));
+        var factoryMethods = typeof(HomeAssistantMobileAppClient).GetMethods()
+            .Where(method => method.Name == nameof(HomeAssistantMobileAppClient.CreateWebhookClient))
+            .ToArray();
+        var factoryMethod = Assert.Single(factoryMethods, method => method.GetParameters().Length == 2);
         Assert.DoesNotContain(factoryMethod.GetParameters(), parameter =>
             parameter.ParameterType == typeof(HttpClient)
             || typeof(HttpMessageHandler).IsAssignableFrom(parameter.ParameterType));
+        Assert.Contains(factoryMethods, method => method.GetParameters().Any(parameter =>
+            parameter.ParameterType == typeof(Func<HttpMessageHandler>)));
 
         var registration = new HomeAssistantMobileAppRegistration
         {
@@ -1444,6 +1447,22 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Equal(Timeout.InfiniteTimeSpan, ownedTransport.Timeout);
         await webhook.GetConfigurationAsync();
         Assert.True(string.IsNullOrEmpty(server.LastAuthorization));
+
+        var customHandler = new TrackingHttpMessageHandler(new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            UseDefaultCredentials = false,
+            UseCookies = false,
+            UseProxy = false
+        });
+        using (var customizedWebhook = client.MobileApp.CreateWebhookClient(
+                   registration,
+                   protector: null,
+                   () => customHandler))
+        {
+            await customizedWebhook.GetConfigurationAsync();
+        }
+        Assert.Equal(1, customHandler.SendCount);
 
         var credentialed = new HomeAssistantMobileAppRegistration
         {
@@ -1516,6 +1535,25 @@ public sealed class StableControlAndAdapterContractTests
             new TestPayloadProtector());
         await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
             () => invalidEncrypted.GetConfigurationAsync());
+    }
+
+    [Fact]
+    public async Task EncryptedMobileAppWebhookClassifiesDecryptionFailures()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var failure = new FormatException("Invalid protected payload.");
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "test-webhook",
+                Secret = "test-secret"
+            },
+            new ThrowingUnprotectPayloadProtector(failure));
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
+            () => webhook.GetConfigurationAsync());
+        Assert.Same(failure, exception.InnerException);
     }
 
     [Fact]
@@ -1860,6 +1898,40 @@ public sealed class StableControlAndAdapterContractTests
 
         public Task<byte[]> UnprotectAsync(string protectedPayload, string secret, CancellationToken cancellationToken = default)
             => Task.FromException<byte[]>(_exception);
+    }
+
+    private sealed class ThrowingUnprotectPayloadProtector : IHomeAssistantMobileAppPayloadProtector
+    {
+        private readonly Exception _exception;
+
+        internal ThrowingUnprotectPayloadProtector(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public Task<string> ProtectAsync(byte[] plaintextJson, string secret, CancellationToken cancellationToken = default)
+            => Task.FromResult(Convert.ToBase64String(plaintextJson));
+
+        public Task<byte[]> UnprotectAsync(string protectedPayload, string secret, CancellationToken cancellationToken = default)
+            => Task.FromException<byte[]>(_exception);
+    }
+
+    private sealed class TrackingHttpMessageHandler : DelegatingHandler
+    {
+        internal TrackingHttpMessageHandler(HttpMessageHandler innerHandler)
+            : base(innerHandler)
+        {
+        }
+
+        internal int SendCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            SendCount++;
+            return base.SendAsync(request, cancellationToken);
+        }
     }
 
     private sealed class CancelAfterProtectPayloadProtector : IHomeAssistantMobileAppPayloadProtector

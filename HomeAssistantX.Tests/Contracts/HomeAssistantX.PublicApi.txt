@@ -817,6 +817,7 @@ T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppCameraStream
   P instance System.Nullable<System.Boolean> Success {get;set;}
 T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppClient
   M instance HomeAssistantX.MobileApp.HomeAssistantMobileAppWebhookClient CreateWebhookClient(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration registration, HomeAssistantX.MobileApp.IHomeAssistantMobileAppPayloadProtector? protector = null)
+  M instance HomeAssistantX.MobileApp.HomeAssistantMobileAppWebhookClient CreateWebhookClient(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration registration, HomeAssistantX.MobileApp.IHomeAssistantMobileAppPayloadProtector? protector, System.Func<System.Net.Http.HttpMessageHandler> handlerFactory)
   M instance System.Threading.Tasks.Task<HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration> RegisterAsync(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationRequest request, System.Threading.CancellationToken cancellationToken = null)
 T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration
   C HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration()

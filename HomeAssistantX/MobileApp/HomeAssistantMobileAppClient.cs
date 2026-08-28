@@ -61,17 +61,57 @@ public sealed class HomeAssistantMobileAppClient
 
     /// <summary>Creates an unauthenticated webhook client with an isolated, credential-free HTTP transport.</summary>
     public HomeAssistantMobileAppWebhookClient CreateWebhookClient(HomeAssistantMobileAppRegistration registration, IHomeAssistantMobileAppPayloadProtector? protector = null)
+        => CreateWebhookClientCore(registration, protector, handlerFactory: null);
+
+    /// <summary>
+    /// Creates a webhook client with a caller-supplied, per-client HTTP handler. The factory must
+    /// return a credential-free handler that does not follow redirects; the client owns and disposes it.
+    /// </summary>
+    public HomeAssistantMobileAppWebhookClient CreateWebhookClient(
+        HomeAssistantMobileAppRegistration registration,
+        IHomeAssistantMobileAppPayloadProtector? protector,
+        Func<HttpMessageHandler> handlerFactory)
+    {
+        if (handlerFactory is null) throw new ArgumentNullException(nameof(handlerFactory));
+        return CreateWebhookClientCore(registration, protector, handlerFactory);
+    }
+
+    private HomeAssistantMobileAppWebhookClient CreateWebhookClientCore(
+        HomeAssistantMobileAppRegistration registration,
+        IHomeAssistantMobileAppPayloadProtector? protector,
+        Func<HttpMessageHandler>? handlerFactory)
     {
         if (registration is null) throw new ArgumentNullException(nameof(registration));
         if (string.IsNullOrWhiteSpace(registration.WebhookId)) throw new ArgumentException("A webhook identifier is required.", nameof(registration));
         _options.Validate();
         var uri = registration.CloudhookUri ?? new Uri(_options.BaseUri, "api/webhook/" + Uri.EscapeDataString(registration.WebhookId));
-        return new HomeAssistantMobileAppWebhookClient(
-            uri,
-            registration.Secret,
-            protector,
-            _options.RequestTimeout,
-            _options.MaximumRestResponseBytes);
+        if (handlerFactory is null)
+        {
+            return new HomeAssistantMobileAppWebhookClient(
+                uri,
+                registration.Secret,
+                protector,
+                _options.RequestTimeout,
+                _options.MaximumRestResponseBytes);
+        }
+
+        var handler = handlerFactory()
+            ?? throw new InvalidOperationException("The mobile-app webhook handler factory returned null.");
+        try
+        {
+            return new HomeAssistantMobileAppWebhookClient(
+                uri,
+                registration.Secret,
+                protector,
+                _options.RequestTimeout,
+                _options.MaximumRestResponseBytes,
+                handler);
+        }
+        catch
+        {
+            handler.Dispose();
+            throw;
+        }
     }
 
     private static void RequireHttpUri(Uri? value, string name)
