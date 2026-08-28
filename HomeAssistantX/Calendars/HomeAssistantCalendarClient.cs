@@ -149,7 +149,8 @@ public sealed class HomeAssistantCalendarClient
             var update = new HomeAssistantCalendarEventUpdate
             {
                 IsAvailable = value.ValueKind == JsonValueKind.Array,
-                Raw = value.Clone()
+                // WebSocket event payloads are already detached before routing.
+                Raw = value
             };
             if (update.IsAvailable)
             {
