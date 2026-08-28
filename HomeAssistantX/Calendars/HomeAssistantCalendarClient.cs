@@ -27,6 +27,7 @@ public sealed class HomeAssistantCalendarClient
             calendars,
             "The Home Assistant calendar list contained a null item.",
             cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var entityIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var calendar in calendars)
         {
@@ -38,6 +39,8 @@ public sealed class HomeAssistantCalendarClient
                 throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
             }
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         return calendars;
     }
@@ -137,6 +140,7 @@ public sealed class HomeAssistantCalendarClient
         };
         return _webSocket.SubscribeAsync("calendar/event/subscribe", payload, async (value, token) =>
         {
+            token.ThrowIfCancellationRequested();
             if (value.ValueKind != JsonValueKind.Null && value.ValueKind != JsonValueKind.Array)
             {
                 throw new HomeAssistantProtocolException("The Home Assistant calendar subscription had an unexpected shape.");
@@ -156,6 +160,7 @@ public sealed class HomeAssistantCalendarClient
                 ValidateEvents(update.Events, token);
             }
 
+            token.ThrowIfCancellationRequested();
             await handler(update, token).ConfigureAwait(false);
         }, cancellationToken);
     }
@@ -172,6 +177,7 @@ public sealed class HomeAssistantCalendarClient
         IReadOnlyList<HomeAssistantCalendarEvent> events,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         foreach (var item in events)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -189,6 +195,8 @@ public sealed class HomeAssistantCalendarClient
                 throw new HomeAssistantProtocolException("Home Assistant returned a calendar event with an invalid range.");
             }
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static string NormalizeEntityId(string entityId)

@@ -199,6 +199,18 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task PersistentNotificationCreateRejectsBlankIdentifierBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => client.Notifications.CreatePersistentAsync("Window open", notificationId: " "));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task CalendarReadsWritesAndStreamsTimedAndAllDayEvents()
     {
         using var server = new TestHomeAssistantServer();

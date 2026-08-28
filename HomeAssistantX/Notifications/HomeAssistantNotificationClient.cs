@@ -37,6 +37,11 @@ public sealed class HomeAssistantNotificationClient
         string? notificationId = null,
         CancellationToken cancellationToken = default)
     {
+        if (notificationId is not null)
+        {
+            Require(notificationId, nameof(notificationId));
+        }
+
         var data = MessageData(message, title);
         AddOptional(data, "notification_id", notificationId);
         return _services.CallControlAsync(CreateCall("persistent_notification", "create", data), cancellationToken);

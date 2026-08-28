@@ -234,6 +234,10 @@ public sealed class ProtocolResponseContractTests
             HomeAssistantCalendarClient.ValidateEvents(
                 new[] { new HomeAssistantCalendarEvent() },
                 token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCalendarClient.ValidateEvents(
+                Array.Empty<HomeAssistantCalendarEvent>(),
+                token));
     }
 
     [Fact]
