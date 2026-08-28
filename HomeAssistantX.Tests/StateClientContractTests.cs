@@ -103,6 +103,30 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public async Task FailedReconnectReconciliationFaultsSubscribersAndAllowsFreshInitialization()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var failedSubscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+        server.SetStates("[{\"entity_id\":\"light.kitchen\",\"state\":\"off\",\"attributes\":{}},{\"entity_id\":\"light.kitchen\",\"state\":\"on\",\"attributes\":{}}]");
+
+        await server.DropWebSocketsAsync();
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(failedSubscription.Completion));
+
+        server.SetStates("[" + TestHomeAssistantServer.KitchenLightOnStateJson + "]");
+        using var replacement = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+
+        Assert.Equal("on", client.States.Snapshot["light.kitchen"].State);
+        Assert.False(replacement.Completion.IsCompleted);
+    }
+
+    [Fact]
     public async Task BoundedStateSubscriptionFaultsWhenConsumerCannotKeepUp()
     {
         using var server = new TestHomeAssistantServer();

@@ -291,9 +291,43 @@ public sealed class HomeAssistantStateClient : IDisposable
         }
         catch (Exception ex)
         {
-            lock (_stateGate)
+            IHomeAssistantSubscription? failedServerSubscription = null;
+            LocalStateSubscription[] affectedSubscribers = Array.Empty<LocalStateSubscription>();
+            try
             {
-                _snapshotReady = false;
+                await _initializationGate.WaitAsync().ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_initialized)
+                {
+                    _initialized = false;
+                    failedServerSubscription = _serverSubscription;
+                    _serverSubscription = null;
+                    Volatile.Write(ref _serverSubscriptionFailure, ex);
+                    affectedSubscribers = _subscribers.Values.ToArray();
+                }
+
+                lock (_stateGate)
+                {
+                    _snapshotReady = false;
+                    _bufferedChanges.Clear();
+                }
+            }
+            finally
+            {
+                _initializationGate.Release();
+            }
+
+            failedServerSubscription?.Dispose();
+            foreach (var subscriber in affectedSubscribers)
+            {
+                subscriber.Fail(ex);
             }
 
             WriteDiagnostic(
