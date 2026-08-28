@@ -18,8 +18,9 @@ public sealed class InvokeHomeAssistantRecorderMaintenanceCommand : HomeAssistan
     private const string IssuesSet = "RefreshStatisticsIssues";
 
     [Parameter(Mandatory = true, ParameterSetName = PurgeSet)][ValidateSwitchPresent] public SwitchParameter Purge { get; set; }
-    [Parameter(ParameterSetName = PurgeSet)][ValidateRange(0, int.MaxValue)]
-    [Parameter(ParameterSetName = EntitiesSet)] public int? KeepDays { get; set; }
+    [Parameter(ParameterSetName = PurgeSet)]
+    [Parameter(ParameterSetName = EntitiesSet)]
+    [ValidateRange(0, int.MaxValue)] public int? KeepDays { get; set; }
     [Parameter(ParameterSetName = PurgeSet)] public SwitchParameter Repack { get; set; }
     [Parameter(ParameterSetName = PurgeSet)] public SwitchParameter ApplyFilter { get; set; }
 

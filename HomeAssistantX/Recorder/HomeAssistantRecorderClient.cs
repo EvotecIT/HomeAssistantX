@@ -84,16 +84,20 @@ public sealed class HomeAssistantRecorderClient
         CancellationToken cancellationToken = default)
     {
         if (query is null) throw new ArgumentNullException(nameof(query));
-        if (query.EndTime.HasValue && query.EndTime <= query.StartTime)
+        cancellationToken.ThrowIfCancellationRequested();
+        var startTime = query.StartTime;
+        var endTime = query.EndTime;
+        var period = query.Period;
+        if (endTime.HasValue && endTime <= startTime)
             throw new ArgumentOutOfRangeException(nameof(query), "The statistics end must be after the start.");
         var requestedIdSnapshot = RequireStatisticIds(query.StatisticIds, nameof(query), cancellationToken);
         var payload = new Dictionary<string, object?>
         {
-            ["start_time"] = query.StartTime.ToString("O", CultureInfo.InvariantCulture),
+            ["start_time"] = startTime.ToString("O", CultureInfo.InvariantCulture),
             ["statistic_ids"] = requestedIdSnapshot,
-            ["period"] = PeriodName(query.Period)
+            ["period"] = PeriodName(period)
         };
-        if (query.EndTime.HasValue) payload["end_time"] = query.EndTime.Value.ToString("O", CultureInfo.InvariantCulture);
+        if (endTime.HasValue) payload["end_time"] = endTime.Value.ToString("O", CultureInfo.InvariantCulture);
         if (query.Types is not null)
         {
             if (query.Types.Count == 0) throw new ArgumentException("Statistics types cannot be empty.", nameof(query));
@@ -139,8 +143,8 @@ public sealed class HomeAssistantRecorderClient
                 throw new HomeAssistantProtocolException("Recorder statistics contained an unexpected or duplicate statistic identifier.");
             ValidateStatisticRows(
                 property.Value,
-                GetPeriodStart(query.StartTime, query.Period).ToUnixTimeMilliseconds(),
-                query.EndTime?.ToUnixTimeMilliseconds(),
+                GetPeriodStart(startTime, period).ToUnixTimeMilliseconds(),
+                endTime?.ToUnixTimeMilliseconds(),
                 cancellationToken);
             var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(
                 property.Value,

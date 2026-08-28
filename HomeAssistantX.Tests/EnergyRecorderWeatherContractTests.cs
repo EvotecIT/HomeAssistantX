@@ -1,4 +1,5 @@
 #if NET10_0
+using System.Globalization;
 using System.Text.Json;
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Energy;
@@ -11,6 +12,21 @@ namespace HomeAssistantX.Tests;
 
 public sealed class EnergyRecorderWeatherContractTests
 {
+    [Fact]
+    public void FossilEnergySortingPreservesCancellationFromTheComparison()
+    {
+        var periods = new List<HomeAssistantFossilEnergyPeriod>
+        {
+            new() { Start = DateTimeOffset.UtcNow.AddHours(1) },
+            new() { Start = DateTimeOffset.UtcNow }
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantEnergyClient.SortFossilEnergyPeriods(
+                periods,
+                (_, _) => throw new OperationCanceledException()));
+    }
+
     [Fact]
     public async Task EnergyReadsValidationForecastAndFossilDataWithoutLosingProviderFields()
     {
@@ -1217,6 +1233,32 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Equal("sensor.grid_energy", Assert.Single(await request).StatisticId);
         using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/statistics_during_period")));
         Assert.Equal("sensor.grid_energy", command.RootElement.GetProperty("statistic_ids")[0].GetString());
+    }
+
+    [Fact]
+    public async Task RecorderStatisticsEndTimeIsFrozenBeforeTokenResolutionAndResponseValidation()
+    {
+        using var server = new TestHomeAssistantServer();
+        var tokenProvider = new BlockingTokenProvider();
+        using var client = TestClientFactory.Create(server, accessTokenProvider: tokenProvider);
+        var start = DateTimeOffset.FromUnixTimeSeconds(1787731200);
+        var originalEnd = start.AddHours(2);
+        var query = new HomeAssistantStatisticsQuery(
+            start,
+            HomeAssistantStatisticPeriod.Hour,
+            "sensor.grid_energy")
+        {
+            EndTime = originalEnd
+        };
+
+        var request = client.Recorder.GetStatisticsAsync(query);
+        await tokenProvider.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        query.EndTime = start.AddHours(-1);
+        tokenProvider.Release.TrySetResult(TestHomeAssistantServer.AccessToken);
+
+        Assert.Single(await request);
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/statistics_during_period")));
+        Assert.Equal(originalEnd.ToString("O", CultureInfo.InvariantCulture), command.RootElement.GetProperty("end_time").GetString());
     }
 
     [Fact]

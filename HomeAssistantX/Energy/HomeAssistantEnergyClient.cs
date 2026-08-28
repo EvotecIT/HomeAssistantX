@@ -172,13 +172,27 @@ public sealed class HomeAssistantEnergyClient
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        result.Sort((left, right) =>
+        SortFossilEnergyPeriods(result, (left, right) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             return left.Start.CompareTo(right.Start);
         });
         cancellationToken.ThrowIfCancellationRequested();
         return result;
+    }
+
+    internal static void SortFossilEnergyPeriods(
+        List<HomeAssistantFossilEnergyPeriod> periods,
+        Comparison<HomeAssistantFossilEnergyPeriod> comparison)
+    {
+        try
+        {
+            periods.Sort(comparison);
+        }
+        catch (InvalidOperationException ex) when (ex.InnerException is OperationCanceledException cancellation)
+        {
+            throw cancellation;
+        }
     }
 
     private static bool IsWithinRequestedWindow(
