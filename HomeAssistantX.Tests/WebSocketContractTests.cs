@@ -173,6 +173,25 @@ public sealed class WebSocketContractTests
     }
 
     [Theory]
+    [InlineData("test/coalesced_missing_success")]
+    [InlineData("test/coalesced_null_success")]
+    [InlineData("test/coalesced_string_success")]
+    [InlineData("test/standalone_missing_success")]
+    [InlineData("test/standalone_null_success")]
+    [InlineData("test/standalone_string_success")]
+    public async Task ResultMessagesRequireABooleanSuccessFlag(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("Boolean success", protocolFailure.Message);
+    }
+
+    [Theory]
     [InlineData("test/standalone_zero_id")]
     [InlineData("test/standalone_negative_id")]
     public async Task StandaloneRoutedMessagesRejectNonPositiveCommandIdentifiers(string command)

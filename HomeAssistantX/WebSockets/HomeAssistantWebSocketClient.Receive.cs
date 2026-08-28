@@ -128,7 +128,7 @@ public sealed partial class HomeAssistantWebSocketClient
                     "A Home Assistant coalesced WebSocket batch contained duplicate terminal response identifiers.");
             }
 
-            RequireEventPayload(item, type);
+            RequireRoutedPayload(item, type);
         }
 
         foreach (var item in root.EnumerateArray())
@@ -149,7 +149,7 @@ public sealed partial class HomeAssistantWebSocketClient
     private void RouteMessage(JsonElement root)
     {
         var type = GetRequiredString(root, "type");
-        RequireEventPayload(root, type);
+        RequireRoutedPayload(root, type);
         var id = 0;
         var hasCommandId = root.TryGetProperty("id", out var idProperty)
             && idProperty.TryGetInt32(out id)
@@ -215,8 +215,16 @@ public sealed partial class HomeAssistantWebSocketClient
         }
     }
 
-    private static void RequireEventPayload(JsonElement message, string type)
+    private static void RequireRoutedPayload(JsonElement message, string type)
     {
+        if (string.Equals(type, "result", StringComparison.Ordinal)
+            && (!message.TryGetProperty("success", out var successProperty)
+                || successProperty.ValueKind is not (JsonValueKind.True or JsonValueKind.False)))
+        {
+            throw new HomeAssistantProtocolException(
+                "A Home Assistant WebSocket result message omitted its required Boolean success flag.");
+        }
+
         if (string.Equals(type, "event", StringComparison.Ordinal)
             && (!message.TryGetProperty("event", out var eventProperty)
                 || eventProperty.ValueKind == JsonValueKind.Null))

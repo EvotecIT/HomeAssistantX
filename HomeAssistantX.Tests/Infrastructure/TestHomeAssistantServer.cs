@@ -739,6 +739,40 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     },
                     _source.Token).ConfigureAwait(false);
                 return;
+            case "test/coalesced_missing_success":
+            case "test/coalesced_null_success":
+            case "test/coalesced_string_success":
+                var malformedCoalescedResult = new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["type"] = "result",
+                    ["result"] = null
+                };
+                if (!string.Equals(type, "test/coalesced_missing_success", StringComparison.Ordinal))
+                {
+                    malformedCoalescedResult["success"] = string.Equals(type, "test/coalesced_null_success", StringComparison.Ordinal)
+                        ? null
+                        : "true";
+                }
+                await session.SendCoalescedAsync(new object[] { malformedCoalescedResult }, _source.Token).ConfigureAwait(false);
+                return;
+            case "test/standalone_missing_success":
+            case "test/standalone_null_success":
+            case "test/standalone_string_success":
+                var malformedStandaloneResult = new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["type"] = "result",
+                    ["result"] = null
+                };
+                if (!string.Equals(type, "test/standalone_missing_success", StringComparison.Ordinal))
+                {
+                    malformedStandaloneResult["success"] = string.Equals(type, "test/standalone_null_success", StringComparison.Ordinal)
+                        ? null
+                        : "true";
+                }
+                await session.SendAsync(malformedStandaloneResult, _source.Token).ConfigureAwait(false);
+                return;
             case "test/standalone_zero_id":
             case "test/standalone_negative_id":
                 await session.SendAsync(
