@@ -11,7 +11,8 @@ public sealed partial class HomeAssistantWebSocketClient
 {
     private async Task ReceiveLoopAsync(
         ClientWebSocket socket,
-        CancellationTokenSource connectionSource)
+        CancellationTokenSource connectionSource,
+        bool coalescingEnabled)
     {
         var cancellationToken = connectionSource.Token;
         Exception? failure = null;
@@ -20,7 +21,7 @@ public sealed partial class HomeAssistantWebSocketClient
             while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
             {
                 var message = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
-                RouteMessage(message);
+                RouteMessage(message, coalescingEnabled);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -70,7 +71,7 @@ public sealed partial class HomeAssistantWebSocketClient
         }
     }
 
-    private void RouteMessage(string message)
+    private void RouteMessage(string message, bool coalescingEnabled)
     {
         using var document = HomeAssistantJson.ParseResponse(
             message,
@@ -88,6 +89,12 @@ public sealed partial class HomeAssistantWebSocketClient
                 "Home Assistant returned a WebSocket payload that was neither a message nor a coalesced batch.");
         }
 
+        if (!coalescingEnabled)
+        {
+            throw new HomeAssistantProtocolException(
+                "Home Assistant returned a coalesced WebSocket batch without negotiating message coalescing.");
+        }
+
         var messageCount = root.GetArrayLength();
         if (messageCount > _options.MaximumCoalescedWebSocketMessages)
         {
@@ -95,6 +102,7 @@ public sealed partial class HomeAssistantWebSocketClient
                 "A Home Assistant coalesced WebSocket batch exceeded the configured message-count limit.");
         }
 
+        var terminalIdentifiers = new HashSet<int>();
         foreach (var item in root.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object)
@@ -104,11 +112,18 @@ public sealed partial class HomeAssistantWebSocketClient
             }
 
             var type = GetRequiredString(item, "type");
+            var commandId = 0;
             if (RequiresCommandIdentifier(type)
-                && (!item.TryGetProperty("id", out var idProperty) || !idProperty.TryGetInt32(out _)))
+                && (!item.TryGetProperty("id", out var idProperty) || !idProperty.TryGetInt32(out commandId)))
             {
                 throw new HomeAssistantProtocolException(
                     "A Home Assistant coalesced WebSocket batch contained a routed message without a valid command identifier.");
+            }
+
+            if (IsTerminalResponse(type) && !terminalIdentifiers.Add(commandId))
+            {
+                throw new HomeAssistantProtocolException(
+                    "A Home Assistant coalesced WebSocket batch contained duplicate terminal response identifiers.");
             }
 
             RequireEventPayload(item, type);
@@ -123,6 +138,10 @@ public sealed partial class HomeAssistantWebSocketClient
     private static bool RequiresCommandIdentifier(string type)
         => string.Equals(type, "result", StringComparison.Ordinal)
             || string.Equals(type, "event", StringComparison.Ordinal)
+            || string.Equals(type, "pong", StringComparison.Ordinal);
+
+    private static bool IsTerminalResponse(string type)
+        => string.Equals(type, "result", StringComparison.Ordinal)
             || string.Equals(type, "pong", StringComparison.Ordinal);
 
     private void RouteMessage(JsonElement root)
@@ -187,7 +206,8 @@ public sealed partial class HomeAssistantWebSocketClient
     private static void RequireEventPayload(JsonElement message, string type)
     {
         if (string.Equals(type, "event", StringComparison.Ordinal)
-            && !message.TryGetProperty("event", out _))
+            && (!message.TryGetProperty("event", out var eventProperty)
+                || eventProperty.ValueKind == JsonValueKind.Null))
         {
             throw new HomeAssistantProtocolException(
                 "A Home Assistant WebSocket event omitted its required event payload.");
@@ -241,7 +261,7 @@ public sealed partial class HomeAssistantWebSocketClient
                     HomeAssistantDiagnosticLevel.Error,
                     "websocket.reconnect_permanent_failure",
                     "Home Assistant rejected WebSocket negotiation or returned an invalid protocol response; automatic reconnect stopped.",
-                    ex.Failure);
+                    CreateSafeReconnectDiagnosticFailure(ex.Failure));
                 await FailSubscriptionsAsync(ex.Failure).ConfigureAwait(false);
                 return;
             }
@@ -259,6 +279,42 @@ public sealed partial class HomeAssistantWebSocketClient
         var registrations = _subscriptions.Values.ToArray();
         await Task.WhenAll(registrations.Select(registration => registration.FailAndStopAsync(failure)))
             .ConfigureAwait(false);
+    }
+
+    private static HomeAssistantException CreateSafeReconnectDiagnosticFailure(HomeAssistantException failure)
+    {
+        if (failure is HomeAssistantCommandException commandFailure)
+        {
+            var safeCode = IsSafeCommandCode(commandFailure.Code)
+                ? commandFailure.Code
+                : "unknown_error";
+            return new HomeAssistantCommandException(
+                safeCode,
+                "Home Assistant rejected WebSocket feature negotiation.");
+        }
+
+        return new HomeAssistantProtocolException(
+            "Home Assistant returned an invalid WebSocket feature-negotiation response.");
+    }
+
+    private static bool IsSafeCommandCode(string value)
+    {
+        if (value.Length is < 1 or > 64)
+        {
+            return false;
+        }
+
+        foreach (var character in value)
+        {
+            if ((character < 'a' || character > 'z')
+                && (character < '0' || character > '9')
+                && character != '_')
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private async Task<string> ReceiveTextAsync(ClientWebSocket socket, CancellationToken cancellationToken)

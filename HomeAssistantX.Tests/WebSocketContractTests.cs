@@ -157,8 +157,35 @@ public sealed class WebSocketContractTests
         Assert.Contains("command identifier", protocolFailure.Message);
     }
 
+    [Fact]
+    public async Task CoalescedBatchRequiresSuccessfulFeatureNegotiation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, enableWebSocketMessageCoalescing: false);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/forced_coalesced"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("without negotiating", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task CoalescedBatchRejectsDuplicateTerminalIdentifiersBeforeRoutingAnyItem()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/coalesced_duplicate_terminal_id"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("duplicate terminal", protocolFailure.Message);
+    }
+
     [Theory]
     [InlineData("test/coalesced_missing_event")]
+    [InlineData("test/coalesced_null_event")]
     [InlineData("test/missing_event")]
     public async Task EventMessagesRequirePayloadBeforeRouting(string command)
     {
@@ -312,6 +339,29 @@ public sealed class WebSocketContractTests
 
         Assert.Equal(stoppedAt, server.WebSocketConnectionCount);
         Assert.Equal(HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted, client.WebSocket.State);
+    }
+
+    [Fact]
+    public async Task PermanentReconnectDiagnosticsDoNotExposeServerControlledCommandDetails()
+    {
+        const string privateMarker = "private-installation-name";
+        using var server = new TestHomeAssistantServer();
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+
+        server.SupportedFeaturesErrorCode = "invalid_format";
+        server.SupportedFeaturesErrorMessage = privateMarker;
+        await server.DropWebSocketsAsync();
+
+        var upstream = await Assert.ThrowsAsync<HomeAssistantCommandException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(privateMarker, upstream.Message);
+        var diagnostic = Assert.Single(
+            diagnostics.Events,
+            value => value.Name == "websocket.reconnect_permanent_failure");
+        Assert.DoesNotContain(privateMarker, diagnostic.Exception?.Message ?? string.Empty);
+        Assert.Equal("invalid_format", Assert.IsType<HomeAssistantCommandException>(diagnostic.Exception).Code);
     }
 
     [Fact]

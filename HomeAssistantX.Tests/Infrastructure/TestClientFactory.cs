@@ -14,6 +14,7 @@ internal static class TestClientFactory
         int maximumRestResponseBytes = 64 * 1024 * 1024,
         IHomeAssistantAccessTokenProvider? accessTokenProvider = null,
         int maximumCoalescedWebSocketMessages = 4096,
+        bool enableWebSocketMessageCoalescing = true,
         IHomeAssistantDiagnosticsSink? diagnostics = null)
     {
         var options = new HomeAssistantClientOptions(
@@ -27,7 +28,8 @@ internal static class TestClientFactory
             ReconnectMaximumDelay = TimeSpan.FromMilliseconds(50),
             SubscriptionBufferCapacity = subscriptionBufferCapacity,
             MaximumRestResponseBytes = maximumRestResponseBytes,
-            MaximumCoalescedWebSocketMessages = maximumCoalescedWebSocketMessages
+            MaximumCoalescedWebSocketMessages = maximumCoalescedWebSocketMessages,
+            EnableWebSocketMessageCoalescing = enableWebSocketMessageCoalescing
         };
         if (diagnostics is not null)
         {

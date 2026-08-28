@@ -162,6 +162,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? SupportedFeaturesErrorCode { get; set; }
 
+    public string SupportedFeaturesErrorMessage { get; set; } = "Feature negotiation was rejected.";
+
     public bool ReturnMalformedSupportedFeatures { get; set; }
 
     public bool ReturnInvalidUpdateReleaseNotes { get; set; }
@@ -484,7 +486,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 if (SupportedFeaturesErrorCode is string supportedFeaturesErrorCode
                     && !string.IsNullOrWhiteSpace(supportedFeaturesErrorCode))
                 {
-                    await session.SendErrorAsync(id, supportedFeaturesErrorCode, "Feature negotiation was rejected.", supportedFeaturesErrorCode, _source.Token).ConfigureAwait(false);
+                    await session.SendErrorAsync(id, supportedFeaturesErrorCode, SupportedFeaturesErrorMessage, supportedFeaturesErrorCode, _source.Token).ConfigureAwait(false);
                     return;
                 }
 
@@ -732,6 +734,32 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                             ["success"] = true,
                             ["result"] = new Dictionary<string, object?> { ["value"] = "must-not-route" }
                         }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_null_event":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "event", ["event"] = null },
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_duplicate_terminal_id":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null },
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "pong" }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/forced_coalesced":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null }
                     },
                     _source.Token).ConfigureAwait(false);
                 return;

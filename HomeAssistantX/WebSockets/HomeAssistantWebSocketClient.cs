@@ -64,6 +64,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             SetState(reconnecting ? HomeAssistantConnectionState.Reconnecting : HomeAssistantConnectionState.Connecting);
 
             var connectionSource = CancellationTokenSource.CreateLinkedTokenSource(_disposeSource.Token);
+            var coalescingEnabled = false;
             using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeSource.Token);
             connectTimeout.CancelAfter(_options.ConnectTimeout);
             ClientWebSocket? socket = null;
@@ -81,7 +82,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                         connectTimeout.Token).ConfigureAwait(false);
                     if (authenticated)
                     {
-                        await EnableSupportedFeaturesAsync(socket, connectTimeout.Token).ConfigureAwait(false);
+                        coalescingEnabled = await EnableSupportedFeaturesAsync(socket, connectTimeout.Token).ConfigureAwait(false);
                         break;
                     }
 
@@ -129,7 +130,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
 
             _socket = socket;
             _connectionSource = connectionSource;
-            _receiveTask = ReceiveLoopAsync(socket, connectionSource);
+            _receiveTask = ReceiveLoopAsync(socket, connectionSource, coalescingEnabled);
             _serverSubscriptions.Clear();
             try
             {
@@ -399,13 +400,13 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         throw new HomeAssistantProtocolException("Unexpected Home Assistant authentication response: " + responseType + ".");
     }
 
-    private async Task EnableSupportedFeaturesAsync(
+    private async Task<bool> EnableSupportedFeaturesAsync(
         ClientWebSocket socket,
         CancellationToken cancellationToken)
     {
         if (!_options.EnableWebSocketMessageCoalescing)
         {
-            return;
+            return false;
         }
 
         var commandId = NextCommandId();
@@ -446,11 +447,13 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                     HomeAssistantDiagnosticLevel.Information,
                     "websocket.coalescing_unavailable",
                     "Home Assistant does not support WebSocket message coalescing; continuing without it.");
-                return;
+                return false;
             }
 
             throw exception;
         }
+
+        return true;
     }
 
     private async Task ActivateSubscriptionAsync(SubscriptionRegistration registration, CancellationToken cancellationToken)
