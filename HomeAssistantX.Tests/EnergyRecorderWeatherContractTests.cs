@@ -67,6 +67,23 @@ public sealed class EnergyRecorderWeatherContractTests
         }
     }
 
+    [Fact]
+    public async Task EnergyPreferenceUpdateHonorsCancellationBeforeTraversingCallerJson()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var document = JsonDocument.Parse("[{\"type\":\"grid\"}]");
+        var callerOwned = document.RootElement;
+        document.Dispose();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Energy.SavePreferencesAsync(
+            new HomeAssistantEnergyPreferencesUpdate { EnergySources = callerOwned },
+            cancellation.Token));
+        Assert.Null(server.GetLastWebSocketCommand("energy/save_prefs"));
+    }
+
     [Theory]
     [InlineData("{\"energy_sources\":null,\"device_consumption\":[],\"device_consumption_water\":[]}")]
     [InlineData("{\"energy_sources\":[1],\"device_consumption\":[],\"device_consumption_water\":[]}")]

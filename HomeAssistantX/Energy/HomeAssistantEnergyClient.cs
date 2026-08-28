@@ -34,7 +34,8 @@ public sealed class HomeAssistantEnergyClient
         CancellationToken cancellationToken = default)
     {
         if (update is null) throw new ArgumentNullException(nameof(update));
-        var value = await _webSocket.RequestAsync("energy/save_prefs", update.ToPayload(), cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var value = await _webSocket.RequestAsync("energy/save_prefs", update.ToPayload(cancellationToken), cancellationToken).ConfigureAwait(false);
         var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyPreferences>(
             value,
             "The updated Home Assistant Energy preferences could not be decoded.",

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Energy;
 
@@ -28,12 +29,13 @@ public sealed class HomeAssistantEnergyPreferencesUpdate
 
     public JsonElement? DeviceConsumptionWater { get; set; }
 
-    internal Dictionary<string, object?> ToPayload()
+    internal Dictionary<string, object?> ToPayload(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var payload = new Dictionary<string, object?>();
-        AddArray(payload, "energy_sources", EnergySources);
-        AddArray(payload, "device_consumption", DeviceConsumption);
-        AddArray(payload, "device_consumption_water", DeviceConsumptionWater);
+        AddArray(payload, "energy_sources", EnergySources, cancellationToken);
+        AddArray(payload, "device_consumption", DeviceConsumption, cancellationToken);
+        AddArray(payload, "device_consumption_water", DeviceConsumptionWater, cancellationToken);
         if (payload.Count == 0)
         {
             throw new ArgumentException("At least one Energy preference collection must be supplied.");
@@ -42,24 +44,35 @@ public sealed class HomeAssistantEnergyPreferencesUpdate
         return payload;
     }
 
-    private static void AddArray(IDictionary<string, object?> payload, string name, JsonElement? value)
+    private static void AddArray(
+        IDictionary<string, object?> payload,
+        string name,
+        JsonElement? value,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!value.HasValue)
         {
             return;
         }
 
-        if (value.Value.ValueKind != JsonValueKind.Array)
+        var snapshot = HomeAssistantJson.FreezeValue(value.Value, name, name + " preference", cancellationToken);
+        if (snapshot.ValueKind != JsonValueKind.Array)
         {
             throw new ArgumentException($"The {name} preference must be a JSON array.", name);
         }
 
-        if (value.Value.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.Object))
+        foreach (var item in snapshot.EnumerateArray())
         {
-            throw new ArgumentException($"Every {name} preference entry must be a JSON object.", name);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                throw new ArgumentException($"Every {name} preference entry must be a JSON object.", name);
+            }
         }
 
-        payload[name] = value.Value.Clone();
+        cancellationToken.ThrowIfCancellationRequested();
+        payload[name] = snapshot;
     }
 }
 
