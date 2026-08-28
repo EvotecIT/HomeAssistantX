@@ -39,7 +39,9 @@ public sealed class HomeAssistantMediaBrowserClient
         }
         var value = await _webSocket.RequestAsync("media_source/resolve_media", payload, cancellationToken).ConfigureAwait(false);
         var result = HomeAssistantJson.DeserializeResponse<HomeAssistantResolvedMedia>(value, "The resolved media response could not be decoded.");
-        if (string.IsNullOrWhiteSpace(result.Url)) throw new HomeAssistantProtocolException("The resolved media response omitted its URL.");
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsValidResolvedUrl(result.Url))
+            throw new HomeAssistantProtocolException("The resolved media response contained an invalid URL.");
         return result;
     }
 
@@ -65,33 +67,51 @@ public sealed class HomeAssistantMediaBrowserClient
     private async Task<HomeAssistantMediaItem> RequestItemAsync(string command, IReadOnlyDictionary<string, object?> payload, CancellationToken cancellationToken)
     {
         var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
-        return DecodeItem(value);
+        return DecodeItem(value, cancellationToken);
     }
 
     private async Task<HomeAssistantMediaSearchResponse> RequestSearchAsync(string command, IReadOnlyDictionary<string, object?> payload, CancellationToken cancellationToken)
     {
         var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media search response had an unexpected shape.");
         var response = HomeAssistantJson.DeserializeResponse<HomeAssistantMediaSearchResponse>(value, "The media search response could not be decoded.");
         if (response.Items is null)
             throw new HomeAssistantProtocolException("The media search response contained a null result.");
-        foreach (var item in result.EnumerateArray()) ValidateItemShape(item);
-        HomeAssistantJson.RequireNoNullCollectionEntries(response.Items, "The media search response contained a null result.");
-        foreach (var item in response.Items) ValidateItemCollections(item);
+        foreach (var item in result.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateItemShape(item, cancellationToken);
+        }
+
+        foreach (var item in response.Items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (item is null)
+                throw new HomeAssistantProtocolException("The media search response contained a null result.");
+            ValidateItemCollections(item, cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         return response;
     }
 
-    private static HomeAssistantMediaItem DecodeItem(JsonElement value)
+    internal static HomeAssistantMediaItem DecodeItem(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
     {
-        ValidateItemShape(value);
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateItemShape(value, cancellationToken);
         var result = HomeAssistantJson.DeserializeResponse<HomeAssistantMediaItem>(value, "The media browse response could not be decoded.");
-        ValidateItemCollections(result);
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateItemCollections(result, cancellationToken);
         return result;
     }
 
-    private static void ValidateItemShape(JsonElement value)
+    private static void ValidateItemShape(JsonElement value, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("media_class", out var mediaClass)
             || mediaClass.ValueKind != JsonValueKind.String
@@ -114,11 +134,18 @@ public sealed class HomeAssistantMediaBrowserClient
         if (!value.TryGetProperty("children", out var children)) return;
         if (children.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media response contained an invalid children collection.");
-        foreach (var child in children.EnumerateArray()) ValidateItemShape(child);
+        foreach (var child in children.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateItemShape(child, cancellationToken);
+        }
     }
 
-    private static void ValidateItemCollections(HomeAssistantMediaItem item)
+    private static void ValidateItemCollections(
+        HomeAssistantMediaItem item,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(item.Title))
             throw new HomeAssistantProtocolException("The media response omitted an item title.");
         if ((item.CanPlay || item.CanExpand)
@@ -126,10 +153,52 @@ public sealed class HomeAssistantMediaBrowserClient
             throw new HomeAssistantProtocolException("The media response contained an item without a media content identifier or type.");
         if (item.Children is null)
             throw new HomeAssistantProtocolException("The media response contained a null children collection.");
-        HomeAssistantJson.RequireNoNullCollectionEntries(item.Children, "The media response contained a null child.");
         if (item.SearchMediaClasses is not null)
-            HomeAssistantJson.RequireNoNullCollectionEntries(item.SearchMediaClasses, "The media response contained a null search media class.");
-        foreach (var child in item.Children) ValidateItemCollections(child);
+        {
+            foreach (var mediaClass in item.SearchMediaClasses)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (mediaClass is null)
+                    throw new HomeAssistantProtocolException("The media response contained a null search media class.");
+            }
+        }
+
+        foreach (var child in item.Children)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (child is null)
+                throw new HomeAssistantProtocolException("The media response contained a null child.");
+            ValidateItemCollections(child, cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    internal static bool IsValidResolvedUrl(string? value)
+    {
+        if (value is null
+            || value.Length == 0
+            || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
+            || value.Any(char.IsWhiteSpace))
+        {
+            return false;
+        }
+
+        if (value.StartsWith("/", StringComparison.Ordinal))
+        {
+            if (value.StartsWith("//", StringComparison.Ordinal)
+                || value.Contains('\\')
+                || !Uri.TryCreate(value, UriKind.Relative, out _))
+            {
+                return false;
+            }
+
+            var resolved = new Uri(new Uri("https://homeassistant.invalid", UriKind.Absolute), value);
+            return string.Equals(resolved.PathAndQuery + resolved.Fragment, value, StringComparison.Ordinal);
+        }
+
+        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
+            && absolute.IsWellFormedOriginalString();
     }
 
     private static Dictionary<string, object?> PlayerPayload(string entityId, string? mediaContentType, string? mediaContentId)

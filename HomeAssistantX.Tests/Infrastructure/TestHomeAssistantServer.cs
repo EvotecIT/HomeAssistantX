@@ -263,6 +263,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string MediaSearchResponseJson { get; set; } =
         "{\"result\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false}],\"future_search_metadata\":{\"provider\":\"kept\"}}";
 
+    public string ResolvedMediaResponseJson { get; set; } =
+        "{\"url\":\"/api/media_source_proxy/local/dinner.mp3?authSig=signed\",\"mime_type\":\"audio/mpeg\",\"future_resolve\":true}";
+
     public string DashboardListResponseJson { get; set; } =
         "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"icon\":\"mdi:home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\",\"future_dashboard\":true}]";
 
@@ -915,7 +918,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(MediaSearchResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "media_source/resolve_media":
-                await session.SendResultAsync(id, ParseJson("{\"url\":\"/api/media_source_proxy/local/dinner.mp3?authSig=signed\",\"mime_type\":\"audio/mpeg\",\"future_resolve\":true}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(ResolvedMediaResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "lovelace/info":
                 await session.SendResultAsync(id, ParseJson(LovelaceInfoResponseJson), false, _source.Token).ConfigureAwait(false);

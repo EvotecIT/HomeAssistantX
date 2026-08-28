@@ -275,6 +275,50 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void MediaBrowseValidationHonorsCancellationBeforeTraversingResults()
+    {
+        using var document = JsonDocument.Parse(
+            "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[null]}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaBrowserClient.DecodeItem(document.RootElement, cancellation.Token));
+    }
+
+    [Theory]
+    [InlineData(" /api/media/file")]
+    [InlineData("/api/media/../secret")]
+    [InlineData("//other.example/media")]
+    [InlineData("http://[")]
+    [InlineData("relative/media")]
+    public async Task MediaResolveRejectsMalformedOrNoncanonicalUrls(string url)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ResolvedMediaResponseJson = JsonSerializer.Serialize(new { url, mime_type = "audio/mpeg" })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Media.ResolveAsync("media-source://media_source/local/test"));
+    }
+
+    [Theory]
+    [InlineData("/api/media/file?authSig=signed")]
+    [InlineData("https://provider.example/media/file?token=signed")]
+    public async Task MediaResolveAcceptsCanonicalProviderUrls(string url)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ResolvedMediaResponseJson = JsonSerializer.Serialize(new { url, mime_type = "audio/mpeg" })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(url, (await client.Media.ResolveAsync("media-source://media_source/local/test")).Url);
+    }
+
+    [Fact]
     public async Task CameraAndAutomationBulkReadsRejectMalformedServerEntityIds()
     {
         using var server = new TestHomeAssistantServer();
