@@ -224,6 +224,8 @@ public sealed class StateClientContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(
             async () => await WithTimeoutAsync(subscription.Completion));
         Assert.Contains(diagnostics.Events, item => item.Name == "state.server_subscription_failed");
+        Assert.Contains(diagnostics.Events, item => item.Name == "subscription.upstream_failed");
+        Assert.DoesNotContain(diagnostics.Events, item => item.Name == "subscription.handler_failed");
         Assert.DoesNotContain(diagnostics.Events, item => item.Name == "state.subscription_overflow");
         Assert.DoesNotContain(diagnostics.Events, item => item.Name == "state.subscription_handler_failed");
     }

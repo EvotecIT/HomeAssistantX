@@ -34,10 +34,11 @@ public sealed class HomeAssistantEventClient
             payload,
             async (message, token) =>
             {
-                var value = HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(
-                    message,
-                    "A Home Assistant event could not be decoded.",
-                    cancellationToken: token);
+                var value = HomeAssistantSubscriptionProjectionException.Capture(() =>
+                    HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(
+                        message,
+                        "A Home Assistant event could not be decoded.",
+                        cancellationToken: token));
                 await handler(value, token).ConfigureAwait(false);
             },
             cancellationToken);

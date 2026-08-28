@@ -179,13 +179,28 @@ public sealed class HomeAssistantStateClient : IDisposable
 
     private Task HandleStateEventAsync(JsonElement eventMessage, CancellationToken cancellationToken)
     {
+        var change = HomeAssistantSubscriptionProjectionException.Capture(
+            () => ProjectStateEvent(eventMessage, cancellationToken));
+        if (change is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        Publish(change);
+        return Task.CompletedTask;
+    }
+
+    private HomeAssistantStateChange? ProjectStateEvent(
+        JsonElement eventMessage,
+        CancellationToken cancellationToken)
+    {
         var eventValue = HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(
             eventMessage,
             "A Home Assistant state event could not be decoded.",
             cancellationToken: cancellationToken);
         if (!string.Equals(eventValue.EventType, "state_changed", StringComparison.Ordinal))
         {
-            return Task.CompletedTask;
+            return null;
         }
 
         if (!eventValue.Data.TryGetValue("entity_id", out var entityProperty)
@@ -204,14 +219,13 @@ public sealed class HomeAssistantStateClient : IDisposable
             if (!_snapshotReady)
             {
                 _bufferedChanges.Add(change);
-                return Task.CompletedTask;
+                return null;
             }
 
             ApplyChange(change);
         }
 
-        Publish(change);
-        return Task.CompletedTask;
+        return change;
     }
 
     private async Task ResynchronizeAsync(

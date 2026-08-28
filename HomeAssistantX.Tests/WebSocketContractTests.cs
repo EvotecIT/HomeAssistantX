@@ -368,7 +368,8 @@ public sealed class WebSocketContractTests
     public async Task EventSubscriptionRejectsNullRequiredDataDictionary()
     {
         using var server = new TestHomeAssistantServer { PublishNullStateEventData = true };
-        using var client = TestClientFactory.Create(server);
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
         using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
 
         await server.PublishStateChangeAsync(
@@ -378,6 +379,8 @@ public sealed class WebSocketContractTests
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(
             async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(diagnostics.Events, value => value.Name == "subscription.upstream_failed");
+        Assert.DoesNotContain(diagnostics.Events, value => value.Name == "subscription.handler_failed");
     }
 
     [Fact]

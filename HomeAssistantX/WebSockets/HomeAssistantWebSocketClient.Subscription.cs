@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using System.Threading.Channels;
+using System.Runtime.ExceptionServices;
 using System.Net.WebSockets;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Subscriptions;
@@ -130,6 +131,17 @@ public sealed partial class HomeAssistantWebSocketClient
                             await _channel.Reader.Completion.ConfigureAwait(false);
                             RethrowTerminalFailure();
                             return;
+                        }
+                        catch (HomeAssistantSubscriptionProjectionException ex)
+                        {
+                            _diagnostic(
+                                HomeAssistantDiagnosticLevel.Error,
+                                "subscription.upstream_failed",
+                                "A Home Assistant subscription payload could not be decoded.",
+                                ex.Failure);
+                            await EnsureStopStarted(ex.Failure).ConfigureAwait(false);
+                            ExceptionDispatchInfo.Capture(ex.Failure).Throw();
+                            throw;
                         }
                         catch (Exception ex)
                         {
