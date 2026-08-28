@@ -76,12 +76,25 @@ public sealed class HomeAssistantServiceClient
         HomeAssistantServiceCall call,
         CancellationToken cancellationToken = default)
     {
+        var requestTimeout = _options.RequestTimeout;
+        return await CallAsync(call, requestTimeout, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal async Task<HomeAssistantServiceCallResult> CallAsync(
+        HomeAssistantServiceCall call,
+        TimeSpan requestTimeout,
+        CancellationToken cancellationToken)
+    {
         if (call is null)
         {
             throw new ArgumentNullException(nameof(call));
         }
 
-        var result = await _webSocket.RequestAsync("call_service", call.ToWebSocketPayload(cancellationToken), cancellationToken)
+        var result = await _webSocket.RequestAsync(
+                "call_service",
+                call.ToWebSocketPayload(cancellationToken),
+                requestTimeout,
+                cancellationToken)
             .ConfigureAwait(false);
         var response = new HomeAssistantServiceCallResult();
         if (result.ValueKind != JsonValueKind.Object)
@@ -113,7 +126,8 @@ public sealed class HomeAssistantServiceClient
         HomeAssistantServiceCall call,
         CancellationToken cancellationToken = default)
     {
-        return _rest.CallServiceAsync(call, cancellationToken);
+        var requestTimeout = _options.RequestTimeout;
+        return _rest.CallServiceAsync(call, requestTimeout, cancellationToken);
     }
 
     internal Task<HomeAssistantServiceCallResult> CallControlAsync(
@@ -139,10 +153,20 @@ public sealed class HomeAssistantServiceClient
         HomeAssistantServiceCallTransport transport,
         CancellationToken cancellationToken)
     {
+        var requestTimeout = _options.RequestTimeout;
+        return CallControlAsync(call, transport, requestTimeout, cancellationToken);
+    }
+
+    internal Task<HomeAssistantServiceCallResult> CallControlAsync(
+        HomeAssistantServiceCall call,
+        HomeAssistantServiceCallTransport transport,
+        TimeSpan requestTimeout,
+        CancellationToken cancellationToken)
+    {
         return transport switch
         {
-            HomeAssistantServiceCallTransport.WebSocket => CallAsync(call, cancellationToken),
-            HomeAssistantServiceCallTransport.Rest => CallRestAsync(call, cancellationToken),
+            HomeAssistantServiceCallTransport.WebSocket => CallAsync(call, requestTimeout, cancellationToken),
+            HomeAssistantServiceCallTransport.Rest => _rest.CallServiceAsync(call, requestTimeout, cancellationToken),
             _ => throw new InvalidOperationException("The configured typed-control transport is not supported.")
         };
     }

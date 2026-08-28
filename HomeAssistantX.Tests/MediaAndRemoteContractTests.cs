@@ -187,7 +187,21 @@ public sealed class MediaAndRemoteContractTests
             new Uri("https://ha.example.test/api/media/local-artwork"),
             status.ResolveArtworkUri(new Uri("https://ha.example.test/")));
         Assert.Equal(
-            new Uri("https://ha.example.test/home-assistant/api/media/local-artwork"),
+            new Uri("https://ha.example.test/api/media/local-artwork"),
+            status.ResolveArtworkUri(new Uri("https://ha.example.test/home-assistant/")));
+    }
+
+    [Fact]
+    public void MediaStatusPreservesRelativeArtworkUnderAConfiguredBasePath()
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.prefixed\",\"state\":\"idle\",\"attributes\":{" +
+            "\"media_image_url\":\"api/media/relative-artwork\"}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Equal(
+            new Uri("https://ha.example.test/home-assistant/api/media/relative-artwork"),
             status.ResolveArtworkUri(new Uri("https://ha.example.test/home-assistant/")));
     }
 
@@ -1103,6 +1117,37 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task RemoteLearningPinsOneDeadlineAcrossValidationAndDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(2.2));
+        var pause = server.PauseNextServiceCall();
+        var commands = new MutatingStringList(
+            () => client.Options.RequestTimeout = TimeSpan.FromSeconds(10),
+            "power");
+
+        var operation = client.Controls.Remotes.LearnCommandsAsync(
+            HomeAssistantTarget.ForEntity("remote.living_room"),
+            new HomeAssistantRemoteLearnOptions
+            {
+                Timeout = TimeSpan.FromSeconds(1),
+                Commands = commands
+            });
+
+        await pause.Received;
+        try
+        {
+            var winner = await Task.WhenAny(operation, Task.Delay(TimeSpan.FromSeconds(5)));
+            Assert.Same(operation, winner);
+            await Assert.ThrowsAsync<HomeAssistantConnectionException>(async () => await operation);
+        }
+        finally
+        {
+            pause.Release();
+        }
+    }
+
+    [Fact]
     public async Task TypedMediaSubscriptionConvertsStateChangesWithoutPolling()
     {
         using var server = new TestHomeAssistantServer();
@@ -1252,6 +1297,47 @@ public sealed class MediaAndRemoteContractTests
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
             => GetEnumerator();
+    }
+
+    private sealed class MutatingStringList : IReadOnlyList<string>
+    {
+        private readonly Action _onRead;
+        private readonly string _value;
+        private int _read;
+
+        internal MutatingStringList(Action onRead, string value)
+        {
+            _onRead = onRead;
+            _value = value;
+        }
+
+        public int Count => 1;
+
+        public string this[int index]
+        {
+            get
+            {
+                MutateOnce();
+                return _value;
+            }
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            MutateOnce();
+            yield return _value;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+
+        private void MutateOnce()
+        {
+            if (Interlocked.Exchange(ref _read, 1) == 0)
+            {
+                _onRead();
+            }
+        }
     }
 
     private sealed class CancellationProbeStateEnumerable : IEnumerable<HomeAssistantState>

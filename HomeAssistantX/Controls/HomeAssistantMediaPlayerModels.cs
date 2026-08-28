@@ -278,7 +278,7 @@ public sealed class HomeAssistantMediaPlayerStatus
 
             var relativeArtwork = trimmed.StartsWith("//", StringComparison.Ordinal)
                 ? homeAssistantBaseUri.Scheme + ":" + trimmed
-                : trimmed.TrimStart('/');
+                : trimmed;
             if (Uri.TryCreate(homeAssistantBaseUri, relativeArtwork, out var resolved)
                 && IsSupportedArtworkUri(resolved))
             {

@@ -50,4 +50,21 @@ public abstract class HomeAssistantControlClientBase
         call.ForNormalizedTarget(normalizedTarget);
         return Services.CallControlAsync(call, transport, cancellationToken);
     }
+
+    private protected Task<HomeAssistantServiceCallResult> CallAsync(
+        string action,
+        HomeAssistantTarget target,
+        Action<HomeAssistantServiceCall>? configure,
+        HomeAssistantServiceCallTransport transport,
+        TimeSpan requestTimeout,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        var normalizedTarget = target.NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
+        var call = HomeAssistantServiceCall.Create(Domain, action);
+        configure?.Invoke(call);
+        call.ForNormalizedTarget(normalizedTarget);
+        return Services.CallControlAsync(call, transport, requestTimeout, cancellationToken);
+    }
 }

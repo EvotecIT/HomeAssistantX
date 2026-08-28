@@ -146,9 +146,11 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         var commandTypeOption = options?.CommandType;
         var alternative = options?.Alternative;
         var optionCommands = options?.Commands;
+        var transport = CaptureTransport(cancellationToken);
+        var requestTimeout = _options.RequestTimeout;
         var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(
             timeout,
-            _options.RequestTimeout,
+            requestTimeout,
             nameof(options));
 
         string? commandType = null;
@@ -198,6 +200,8 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
 
                 call.WithData("timeout", learningTimeoutSeconds);
             },
+            transport,
+            requestTimeout,
             cancellationToken);
     }
 
