@@ -426,7 +426,7 @@ T sealed class HomeAssistantX.Controls.HomeAssistantRemoteClient : HomeAssistant
 T enum HomeAssistantX.Controls.HomeAssistantRemoteCommandType : System.Int32
   F Ir = 0
   F Rf = 1
-T flags enum HomeAssistantX.Controls.HomeAssistantRemoteFeature : System.Int32
+T flags enum HomeAssistantX.Controls.HomeAssistantRemoteFeature : System.Int64
   F None = 0
   F LearnCommand = 1
   F DeleteCommand = 2
