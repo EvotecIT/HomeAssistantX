@@ -31,7 +31,7 @@ public sealed class HomeAssistantWeatherClient
         foreach (var state in weatherStates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            observations.Add(ToObservation(state));
+            observations.Add(ToObservation(state, cancellationToken));
         }
         cancellationToken.ThrowIfCancellationRequested();
         SortObservations(observations, cancellationToken);
@@ -43,7 +43,9 @@ public sealed class HomeAssistantWeatherClient
     {
         var normalizedEntityId = NormalizeEntityId(entityId);
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
-        return ToObservation(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId));
+        return ToObservation(
+            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId),
+            cancellationToken);
     }
 
     public async Task<HomeAssistantWeatherForecastUpdate> GetForecastAsync(
@@ -187,12 +189,19 @@ public sealed class HomeAssistantWeatherClient
         }
     }
 
-    private static HomeAssistantWeatherObservation ToObservation(HomeAssistantState state)
+    private static HomeAssistantWeatherObservation ToObservation(
+        HomeAssistantState state,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!string.Equals(state.Domain, "weather", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("The entity is not a weather entity.", nameof(state));
         if (string.IsNullOrWhiteSpace(state.State))
             throw new HomeAssistantProtocolException("The Home Assistant weather state omitted its required state value.");
+        var humidity = ReadCurrentPercentage(state.Attributes, "humidity");
+        var cloudCoverage = ReadCurrentPercentage(state.Attributes, "cloud_coverage");
+        var windBearing = ReadCurrentWindBearing(state.Attributes);
+        cancellationToken.ThrowIfCancellationRequested();
         return new HomeAssistantWeatherObservation
         {
             EntityId = state.EntityId,
@@ -202,13 +211,13 @@ public sealed class HomeAssistantWeatherClient
             ApparentTemperature = HomeAssistantAttributeReader.GetDouble(state.Attributes, "apparent_temperature"),
             DewPoint = HomeAssistantAttributeReader.GetDouble(state.Attributes, "dew_point"),
             Pressure = HomeAssistantAttributeReader.GetDouble(state.Attributes, "pressure"),
-            Humidity = HomeAssistantAttributeReader.GetDouble(state.Attributes, "humidity"),
-            CloudCoverage = HomeAssistantAttributeReader.GetDouble(state.Attributes, "cloud_coverage"),
+            Humidity = humidity,
+            CloudCoverage = cloudCoverage,
             UvIndex = HomeAssistantAttributeReader.GetDouble(state.Attributes, "uv_index"),
             Visibility = HomeAssistantAttributeReader.GetDouble(state.Attributes, "visibility"),
             WindSpeed = HomeAssistantAttributeReader.GetDouble(state.Attributes, "wind_speed"),
             WindGustSpeed = HomeAssistantAttributeReader.GetDouble(state.Attributes, "wind_gust_speed"),
-            WindBearing = HomeAssistantAttributeReader.GetString(state.Attributes, "wind_bearing"),
+            WindBearing = windBearing,
             TemperatureUnit = HomeAssistantAttributeReader.GetString(state.Attributes, "temperature_unit"),
             PressureUnit = HomeAssistantAttributeReader.GetString(state.Attributes, "pressure_unit"),
             VisibilityUnit = HomeAssistantAttributeReader.GetString(state.Attributes, "visibility_unit"),
@@ -217,6 +226,53 @@ public sealed class HomeAssistantWeatherClient
             SupportedFeatures = (HomeAssistantWeatherFeature)(HomeAssistantAttributeReader.GetNonNegativeInt32(state.Attributes, "supported_features") ?? 0),
             RawState = state
         };
+    }
+
+    private static double? ReadCurrentPercentage(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name)
+    {
+        if (!HomeAssistantAttributeReader.TryGetValue(attributes, name, out var raw)
+            || raw.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        var value = HomeAssistantAttributeReader.GetDouble(attributes, name);
+        if (!value.HasValue || value.Value < 0d || value.Value > 100d)
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant weather state contained an invalid percentage attribute.");
+        }
+
+        return value;
+    }
+
+    private static string? ReadCurrentWindBearing(IReadOnlyDictionary<string, JsonElement> attributes)
+    {
+        if (!HomeAssistantAttributeReader.TryGetValue(attributes, "wind_bearing", out var raw)
+            || raw.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (raw.ValueKind == JsonValueKind.String
+            && raw.GetString() is string text
+            && !string.IsNullOrWhiteSpace(text))
+        {
+            return text;
+        }
+
+        if (raw.ValueKind == JsonValueKind.Number
+            && raw.TryGetDouble(out var number)
+            && !double.IsNaN(number)
+            && !double.IsInfinity(number))
+        {
+            return raw.GetRawText();
+        }
+
+        throw new HomeAssistantProtocolException(
+            "The Home Assistant weather state contained an invalid wind-bearing attribute.");
     }
 
     private static HomeAssistantWeatherForecastUpdate ParseUpdate(

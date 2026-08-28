@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HomeAssistantX.Protocol;
+using HomeAssistantX.Recorder;
 
 namespace HomeAssistantX.Energy;
 
@@ -74,10 +75,37 @@ public sealed class HomeAssistantEnergyPreferencesUpdate
             {
                 throw new ArgumentException($"Every {name} preference entry must use each JSON property name only once.", name);
             }
+
+            if (!HasRequiredIdentity(item, name))
+            {
+                throw new ArgumentException($"Every {name} preference entry must contain its canonical required identity field.", name);
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         payload[name] = snapshot;
+    }
+
+    internal static bool HasRequiredIdentity(JsonElement item, string collectionName)
+    {
+        if (string.Equals(collectionName, "energy_sources", StringComparison.Ordinal))
+        {
+            return item.TryGetProperty("type", out var type)
+                && type.ValueKind == JsonValueKind.String
+                && type.GetString() is string value
+                && !string.IsNullOrWhiteSpace(value)
+                && string.Equals(value, value.Trim(), StringComparison.Ordinal);
+        }
+
+        if (!item.TryGetProperty("stat_consumption", out var statistic)
+            || statistic.ValueKind != JsonValueKind.String
+            || statistic.GetString() is not string statisticId
+            || !HomeAssistantStatisticIdentifier.TryNormalize(statisticId, out var normalized))
+        {
+            return false;
+        }
+
+        return string.Equals(statisticId, normalized, StringComparison.Ordinal);
     }
 }
 

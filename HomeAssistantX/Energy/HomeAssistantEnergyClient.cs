@@ -268,6 +268,12 @@ public sealed class HomeAssistantEnergyClient
             {
                 throw new HomeAssistantProtocolException($"The Home Assistant {name} preference collection was malformed.");
             }
+
+            if (!HomeAssistantEnergyPreferencesUpdate.HasRequiredIdentity(item, name))
+            {
+                throw new HomeAssistantProtocolException(
+                    $"The Home Assistant {name} preference collection omitted a required canonical identity field.");
+            }
         }
     }
 

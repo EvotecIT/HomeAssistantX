@@ -67,6 +67,29 @@ public sealed class EnergyRecorderWeatherContractTests
         }
     }
 
+    [Theory]
+    [InlineData("energy", "[{}]")]
+    [InlineData("energy", "[{\"type\":\" \"}]")]
+    [InlineData("energy", "[{\"type\":\" solar \"}]")]
+    [InlineData("consumption", "[{}]")]
+    [InlineData("consumption", "[{\"stat_consumption\":\" sensor.ev_energy \"}]")]
+    [InlineData("consumption", "[{\"stat_consumption\":true}]")]
+    public async Task EnergyPreferenceUpdateRequiresCanonicalEntryIdentitiesBeforeDispatch(
+        string collection,
+        string json)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var document = JsonDocument.Parse(json);
+        var update = new HomeAssistantEnergyPreferencesUpdate();
+        if (collection == "energy") update.EnergySources = document.RootElement.Clone();
+        else update.DeviceConsumption = document.RootElement.Clone();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Energy.SavePreferencesAsync(update));
+
+        Assert.Null(server.GetLastWebSocketCommand("energy/save_prefs"));
+    }
+
     [Fact]
     public async Task EnergyPreferenceUpdateHonorsCancellationBeforeTraversingCallerJson()
     {
@@ -113,6 +136,17 @@ public sealed class EnergyRecorderWeatherContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetPreferencesAsync());
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.SavePreferencesAsync(
             new HomeAssistantEnergyPreferencesUpdate { EnergySources = update.RootElement.Clone() }));
+    }
+
+    [Theory]
+    [InlineData("{\"energy_sources\":[{}],\"device_consumption\":[]}")]
+    [InlineData("{\"energy_sources\":[],\"device_consumption\":[{\"stat_consumption\":\" sensor.ev_energy \"}]}")]
+    public async Task EnergyPreferenceResponsesRequireCanonicalEntryIdentities(string response)
+    {
+        using var server = new TestHomeAssistantServer { EnergyPreferencesResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetPreferencesAsync());
     }
 
     [Fact]
@@ -704,6 +738,24 @@ public sealed class EnergyRecorderWeatherContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+    }
+
+    [Theory]
+    [InlineData("\"humidity\":-1")]
+    [InlineData("\"humidity\":101")]
+    [InlineData("\"cloud_coverage\":101")]
+    [InlineData("\"wind_bearing\":true")]
+    [InlineData("\"wind_bearing\":{}")]
+    [InlineData("\"wind_bearing\":1e400")]
+    public async Task WeatherCurrentReadsRejectImpossiblePercentagesAndWindBearingShapes(string attribute)
+    {
+        var state = "{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{" + attribute + "}}";
+        using var server = new TestHomeAssistantServer { ExactStateResponseJson = state };
+        server.SetStates("[" + state + "]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync("weather.home"));
     }
 
     [Fact]
