@@ -157,6 +157,36 @@ public sealed class WebSocketContractTests
         Assert.Contains("command identifier", protocolFailure.Message);
     }
 
+    [Theory]
+    [InlineData("test/coalesced_zero_id")]
+    [InlineData("test/coalesced_negative_id")]
+    public async Task CoalescedBatchRejectsNonPositiveCommandIdentifiersBeforeRoutingAnyItem(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("command identifier", protocolFailure.Message);
+    }
+
+    [Theory]
+    [InlineData("test/standalone_zero_id")]
+    [InlineData("test/standalone_negative_id")]
+    public async Task StandaloneRoutedMessagesRejectNonPositiveCommandIdentifiers(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("command identifier", protocolFailure.Message);
+    }
+
     [Fact]
     public async Task CoalescedBatchRequiresSuccessfulFeatureNegotiation()
     {

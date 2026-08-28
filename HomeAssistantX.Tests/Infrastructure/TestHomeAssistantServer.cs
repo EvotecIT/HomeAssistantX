@@ -724,6 +724,33 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     },
                     _source.Token).ConfigureAwait(false);
                 return;
+            case "test/coalesced_zero_id":
+            case "test/coalesced_negative_id":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = string.Equals(type, "test/coalesced_zero_id", StringComparison.Ordinal) ? 0 : -1,
+                            ["type"] = "result",
+                            ["success"] = true,
+                            ["result"] = null
+                        }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/standalone_zero_id":
+            case "test/standalone_negative_id":
+                await session.SendAsync(
+                    new Dictionary<string, object?>
+                    {
+                        ["id"] = string.Equals(type, "test/standalone_zero_id", StringComparison.Ordinal) ? 0 : -1,
+                        ["type"] = "result",
+                        ["success"] = true,
+                        ["result"] = null
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
             case "test/coalesced_missing_event":
                 await session.SendCoalescedAsync(
                     new object[]

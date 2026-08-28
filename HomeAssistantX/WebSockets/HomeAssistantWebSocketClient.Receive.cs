@@ -114,7 +114,9 @@ public sealed partial class HomeAssistantWebSocketClient
             var type = GetRequiredString(item, "type");
             var commandId = 0;
             if (RequiresCommandIdentifier(type)
-                && (!item.TryGetProperty("id", out var idProperty) || !idProperty.TryGetInt32(out commandId)))
+                && (!item.TryGetProperty("id", out var idProperty)
+                    || !idProperty.TryGetInt32(out commandId)
+                    || commandId <= 0))
             {
                 throw new HomeAssistantProtocolException(
                     "A Home Assistant coalesced WebSocket batch contained a routed message without a valid command identifier.");
@@ -148,7 +150,17 @@ public sealed partial class HomeAssistantWebSocketClient
     {
         var type = GetRequiredString(root, "type");
         RequireEventPayload(root, type);
-        if (!root.TryGetProperty("id", out var idProperty) || !idProperty.TryGetInt32(out var id))
+        var id = 0;
+        var hasCommandId = root.TryGetProperty("id", out var idProperty)
+            && idProperty.TryGetInt32(out id)
+            && id > 0;
+        if (RequiresCommandIdentifier(type) && !hasCommandId)
+        {
+            throw new HomeAssistantProtocolException(
+                "A Home Assistant WebSocket routed message omitted a valid positive command identifier.");
+        }
+
+        if (!hasCommandId)
         {
             if (!string.Equals(type, "pong", StringComparison.Ordinal))
             {
