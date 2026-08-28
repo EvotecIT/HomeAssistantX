@@ -22,6 +22,11 @@ public sealed class RemoveHomeAssistantNotificationCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        if (ParameterSetName == "Id" && string.IsNullOrWhiteSpace(NotificationId))
+        {
+            throw new ArgumentException("A non-empty notification ID is required.", nameof(NotificationId));
+        }
+
         var target = ParameterSetName == "All" ? "all persistent notifications" : NotificationId;
         if (!ShouldProcess(target, "Dismiss Home Assistant notification"))
         {

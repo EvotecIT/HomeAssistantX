@@ -33,6 +33,12 @@ public sealed class SendHomeAssistantNotificationCommand : HomeAssistantTargetCm
 
     protected override async Task ProcessTargetRecordAsync()
     {
+        RequireNonBlank(Message, nameof(Message));
+        if (NotificationId is not null)
+        {
+            RequireNonBlank(NotificationId, nameof(NotificationId));
+        }
+
         if (ParameterSetName == PersistentParameterSet)
         {
             if (ShouldProcess(NotificationId ?? "new persistent notification", "Send Home Assistant persistent notification"))
@@ -47,6 +53,14 @@ public sealed class SendHomeAssistantNotificationCommand : HomeAssistantTargetCm
         if (ShouldProcess(target.Description, "Send Home Assistant notification"))
         {
             WriteObject(await Client.Notifications.SendAsync(target.Target, Message, Title, CancelToken).ConfigureAwait(false));
+        }
+    }
+
+    private static void RequireNonBlank(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("A non-empty value is required.", parameterName);
         }
     }
 }

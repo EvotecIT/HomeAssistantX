@@ -391,6 +391,17 @@ try {
         if ($server.StandardOutput.ReadLine() -ne 'LABEL_REGISTRY_AVAILABLE') { throw 'The label-registry availability fixture did not reset.' }
     }
 
+    $server.StandardInput.WriteLine('SET_CASE_DISTINCT_LABELS')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'CASE_DISTINCT_LABELS_SET') { throw 'The case-distinct label fixture did not activate.' }
+    try {
+        $null = Set-HomeAssistantLight -Label security -Power On -WhatIf -ErrorAction Stop
+    } finally {
+        $server.StandardInput.WriteLine('SET_DEFAULT_LABELS')
+        $server.StandardInput.Flush()
+        if ($server.StandardOutput.ReadLine() -ne 'DEFAULT_LABELS_SET') { throw 'The default label fixture did not reset.' }
+    }
+
     $diagnosticPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')
     try {
         [IO.File]::WriteAllText($diagnosticPath, 'existing diagnostic')
@@ -414,6 +425,25 @@ try {
     if ($serviceBaseline -ne 'SERVICE_CALL_CLEARED') {
         throw "Could not establish the action-call baseline. Received: $serviceBaseline"
     }
+
+    $server.StandardInput.WriteLine('CLEAR_LAST_LABEL_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'LABEL_LIST_CLEARED') { throw 'The notification preflight fixture did not clear label discovery.' }
+    foreach ($invalidNotification in @(
+        { Send-HomeAssistantNotification -Label security -Message ' ' -WhatIf -ErrorAction Stop },
+        { Send-HomeAssistantNotification -Persistent -Message Valid -NotificationId ' ' -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantNotification -NotificationId ' ' -WhatIf -ErrorAction Stop }
+    )) {
+        $rejected = $false
+        try { & $invalidNotification } catch { $rejected = $true }
+        if (-not $rejected) { throw 'A whitespace-only notification value was accepted before confirmation.' }
+    }
+    $server.StandardInput.WriteLine('GET_LAST_LABEL_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'LABEL_LIST_NONE') { throw 'A whitespace-only notification message dispatched inventory discovery.' }
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') { throw 'A whitespace-only notification value dispatched an action.' }
 
     $null = Send-HomeAssistantNotification -Persistent -Message 'Garage is open' -Title Security -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')

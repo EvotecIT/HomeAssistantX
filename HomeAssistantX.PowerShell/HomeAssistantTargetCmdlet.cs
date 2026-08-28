@@ -207,6 +207,13 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         string value)
     {
         var materialized = labels.ToArray();
+        var exactNativeMatch = materialized
+            .FirstOrDefault(label => string.Equals(label.LabelId, value, StringComparison.Ordinal));
+        if (exactNativeMatch is not null)
+        {
+            return exactNativeMatch;
+        }
+
         var nativeMatches = materialized
             .Where(label => string.Equals(label.LabelId, value, StringComparison.OrdinalIgnoreCase))
             .ToArray();
@@ -233,11 +240,19 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
 
     private static string ResolveAssignedLabelId(HomeAssistantInventorySnapshot snapshot, string value)
     {
-        var matches = snapshot.Entities.SelectMany(entity => entity.RegistryEntry?.Labels ?? Array.Empty<string>())
+        var assigned = snapshot.Entities.SelectMany(entity => entity.RegistryEntry?.Labels ?? Array.Empty<string>())
             .Concat(snapshot.Devices.SelectMany(device => device.Raw.Labels))
             .Concat(snapshot.Areas.SelectMany(area => area.Raw.Labels))
-            .Where(labelId => string.Equals(labelId, value, StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var exactMatch = assigned.FirstOrDefault(labelId => string.Equals(labelId, value, StringComparison.Ordinal));
+        if (exactMatch is not null)
+        {
+            return exactMatch;
+        }
+
+        var matches = assigned
+            .Where(labelId => string.Equals(labelId, value, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         return matches.Length switch
         {

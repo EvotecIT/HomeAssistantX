@@ -26,6 +26,14 @@ while (await Console.In.ReadLineAsync() is { } command)
             server.LabelRegistryErrorCode = null;
             Console.WriteLine("LABEL_REGISTRY_AVAILABLE");
             break;
+        case "SET_CASE_DISTINCT_LABELS":
+            server.LabelRegistryResponseJson = "[{\"label_id\":\"security\",\"name\":\"Lower security\"},{\"label_id\":\"Security\",\"name\":\"Upper security\"}]";
+            Console.WriteLine("CASE_DISTINCT_LABELS_SET");
+            break;
+        case "SET_DEFAULT_LABELS":
+            server.LabelRegistryResponseJson = "[{\"label_id\":\"security\",\"name\":\"Safety\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300},{\"label_id\":\"security-name\",\"name\":\"Security\",\"color\":null,\"description\":\"Identifier collision fixture\",\"icon\":null,\"created_at\":1787731200,\"modified_at\":1787731300}]";
+            Console.WriteLine("DEFAULT_LABELS_SET");
+            break;
         case "DROP":
             await server.DropWebSocketsAsync();
             Console.WriteLine("DROPPED");
