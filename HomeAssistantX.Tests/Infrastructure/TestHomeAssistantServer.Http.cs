@@ -20,7 +20,6 @@ internal sealed partial class TestHomeAssistantServer
             ? authorization
             : null;
         LastAuthorization = currentAuthorization;
-        LastAuthorization = headers.TryGetValue("Authorization", out var requestAuthorization) ? requestAuthorization : null;
 
         if (method == "POST" && pathWithoutQuery == "/auth/token")
         {
