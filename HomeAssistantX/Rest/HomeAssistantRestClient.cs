@@ -234,12 +234,15 @@ public sealed partial class HomeAssistantRestClient : IDisposable
                     operationToken).ConfigureAwait(false);
                 operationToken.ThrowIfCancellationRequested();
                 using var stream = new MemoryStream(bytes, writable: false);
+                var effectiveSerializerOptions = validateHomeAssistantResponse
+                    ? HomeAssistantJson.CreateCancellationAwareResponseOptions(operationToken)
+                    : serializerOptions;
                 T? value;
                 using (HomeAssistantAttributeDictionaryConverter.UseCancellationToken(operationToken))
                 {
                     value = await JsonSerializer.DeserializeAsync<T>(
                         stream,
-                        serializerOptions,
+                        effectiveSerializerOptions,
                         operationToken).ConfigureAwait(false);
                 }
                 operationToken.ThrowIfCancellationRequested();

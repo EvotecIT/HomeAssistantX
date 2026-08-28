@@ -114,8 +114,21 @@ public sealed class HomeAssistantCalendarEvent
 
 internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter<HomeAssistantCalendarBoundary>
 {
+    private readonly CancellationToken _cancellationToken;
+
+    public HomeAssistantCalendarBoundaryJsonConverter()
+        : this(default)
+    {
+    }
+
+    internal HomeAssistantCalendarBoundaryJsonConverter(CancellationToken cancellationToken)
+    {
+        _cancellationToken = cancellationToken;
+    }
+
     public override HomeAssistantCalendarBoundary? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        _cancellationToken.ThrowIfCancellationRequested();
         if (reader.TokenType == JsonTokenType.String)
         {
             var value = reader.GetString();
@@ -189,13 +202,29 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             parsedDateTime = dateTime;
         }
 
+        var additionalData = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in root.EnumerateObject())
+        {
+            _cancellationToken.ThrowIfCancellationRequested();
+            if (property.Name == "date" || property.Name == "dateTime")
+            {
+                continue;
+            }
+
+            if (additionalData.ContainsKey(property.Name))
+            {
+                throw new JsonException("A Home Assistant calendar boundary contained a duplicate extension field.");
+            }
+
+            additionalData.Add(property.Name, property.Value.Clone());
+        }
+
+        _cancellationToken.ThrowIfCancellationRequested();
         return new HomeAssistantCalendarBoundary
         {
             Date = dateValue,
             DateTime = parsedDateTime,
-            AdditionalData = root.EnumerateObject()
-                .Where(property => property.Name != "date" && property.Name != "dateTime")
-                .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.Ordinal)
+            AdditionalData = additionalData
         };
     }
 

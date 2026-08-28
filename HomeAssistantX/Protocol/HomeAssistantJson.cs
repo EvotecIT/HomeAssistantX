@@ -216,11 +216,19 @@ internal static class HomeAssistantJson
             .GetResult();
     }
 
-    private static JsonSerializerOptions CreateCancellationAwareOptions(CancellationToken cancellationToken)
+    internal static JsonSerializerOptions CreateCancellationAwareOptions(CancellationToken cancellationToken)
     {
         var options = new JsonSerializerOptions(SerializerOptions);
         options.Converters.Insert(0, new CancellationAwareJsonDocumentConverter(cancellationToken));
         options.Converters.Insert(0, new CancellationAwareJsonElementConverter(cancellationToken));
+        options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarBoundaryJsonConverter(cancellationToken));
+        return options;
+    }
+
+    internal static JsonSerializerOptions CreateCancellationAwareResponseOptions(CancellationToken cancellationToken)
+    {
+        var options = new JsonSerializerOptions(SerializerOptions);
+        options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarBoundaryJsonConverter(cancellationToken));
         return options;
     }
 
@@ -375,9 +383,10 @@ internal static class HomeAssistantJson
             T result;
             using (HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellationToken))
             {
+                var options = CreateCancellationAwareResponseOptions(cancellationToken);
                 result = await JsonSerializer.DeserializeAsync<T>(
                     stream,
-                    SerializerOptions,
+                    options,
                     cancellationToken).ConfigureAwait(false)
                     ?? throw new HomeAssistantProtocolException(failureMessage);
             }
