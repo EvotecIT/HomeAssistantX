@@ -277,6 +277,24 @@ public sealed class RestClientContractTests
     }
 
     [Fact]
+    public async Task BuiltInResponseValidationHonorsRequestTimeout()
+    {
+        using var httpClient = new HttpClient(new ImmediateJsonHandler("{\"values\":[]}"));
+        var options = new HomeAssistantX.Configuration.HomeAssistantClientOptions(
+            new Uri("https://home.example.net/"),
+            new StaticAccessTokenProvider("test-token"))
+        {
+            RequestTimeout = TimeSpan.FromMilliseconds(75)
+        };
+        using var client = new HomeAssistantX.Rest.HomeAssistantRestClient(options, httpClient);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(() =>
+            client.SendHomeAssistantAsync<SlowValidationResponse>(HttpMethod.Get, "api/test"));
+
+        Assert.IsType<TimeoutException>(exception.InnerException);
+    }
+
+    [Fact]
     public async Task BinaryBodyRejectsDeclaredResponseAboveConfiguredLimit()
     {
         using var server = new TestHomeAssistantServer();
@@ -397,6 +415,42 @@ public sealed class RestClientContractTests
             {
                 Content = new StringContent("{\"ok\":true}")
             };
+        }
+    }
+
+    private sealed class ImmediateJsonHandler : HttpMessageHandler
+    {
+        private readonly string _json;
+
+        public ImmediateJsonHandler(string json)
+        {
+            _json = json;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(_json)
+            });
+        }
+    }
+
+    private sealed class SlowValidationResponse
+    {
+        private IReadOnlyList<string>? _values;
+
+        public IReadOnlyList<string>? Values
+        {
+            get
+            {
+                Thread.Sleep(150);
+                return _values;
+            }
+            set => _values = value;
         }
     }
 

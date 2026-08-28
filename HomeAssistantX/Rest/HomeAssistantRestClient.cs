@@ -128,21 +128,28 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         object? body = null,
         CancellationToken cancellationToken = default)
     {
-        return SendTypedAsync<T>(method, pathOrAbsoluteUri, body, HomeAssistantJson.RawSerializerOptions, cancellationToken);
+        return SendTypedAsync<T>(
+            method,
+            pathOrAbsoluteUri,
+            body,
+            HomeAssistantJson.RawSerializerOptions,
+            validateHomeAssistantResponse: false,
+            cancellationToken);
     }
 
-    internal async Task<T> SendHomeAssistantAsync<T>(
+    internal Task<T> SendHomeAssistantAsync<T>(
         HttpMethod method,
         string pathOrAbsoluteUri,
         object? body = null,
         CancellationToken cancellationToken = default)
     {
-        var value = await SendTypedAsync<T>(method, pathOrAbsoluteUri, body, HomeAssistantJson.SerializerOptions, cancellationToken)
-            .ConfigureAwait(false);
-        return HomeAssistantJson.RequireNoNullCollectionEntries(
-            value,
-            "The Home Assistant response contained a null collection entry.",
-            cancellationToken: cancellationToken);
+        return SendTypedAsync<T>(
+            method,
+            pathOrAbsoluteUri,
+            body,
+            HomeAssistantJson.SerializerOptions,
+            validateHomeAssistantResponse: true,
+            cancellationToken);
     }
 
     /// <summary>Sends an authenticated request and returns its bounded response body as text.</summary>
@@ -160,6 +167,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         string pathOrAbsoluteUri,
         object? body,
         JsonSerializerOptions serializerOptions,
+        bool validateHomeAssistantResponse,
         CancellationToken cancellationToken)
     {
         return await ExecuteWithTimeoutAsync(
@@ -181,7 +189,13 @@ public sealed partial class HomeAssistantRestClient : IDisposable
                     serializerOptions,
                     operationToken).ConfigureAwait(false);
                 operationToken.ThrowIfCancellationRequested();
-                return value ?? throw new HomeAssistantProtocolException("Home Assistant returned an empty JSON response.");
+                var result = value ?? throw new HomeAssistantProtocolException("Home Assistant returned an empty JSON response.");
+                return validateHomeAssistantResponse
+                    ? HomeAssistantJson.RequireNoNullCollectionEntries(
+                        result,
+                        "The Home Assistant response contained a null collection entry.",
+                        cancellationToken: operationToken)
+                    : result;
             },
             cancellationToken).ConfigureAwait(false);
     }
