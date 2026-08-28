@@ -26,7 +26,7 @@ public sealed class HomeAssistantWeatherClient
     public async Task<IReadOnlyList<HomeAssistantWeatherObservation>> GetAsync(CancellationToken cancellationToken = default)
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        var weatherStates = HomeAssistantEntityId.RequireResponseDomainStates(states, "weather").ToArray();
+        var weatherStates = HomeAssistantEntityId.RequireResponseDomainStates(states, "weather", cancellationToken).ToArray();
         if (weatherStates.Select(state => state.EntityId).Distinct(StringComparer.Ordinal).Count() != weatherStates.Length)
             throw new HomeAssistantProtocolException("The Home Assistant weather response contained duplicate entities.");
         return weatherStates
@@ -72,7 +72,7 @@ public sealed class HomeAssistantWeatherClient
             throw new HomeAssistantProtocolException("The weather forecast response did not contain a forecast.");
         }
 
-        return ParseUpdate(normalizedEntityId, type, forecast, entityResult);
+        return ParseUpdate(normalizedEntityId, type, forecast, entityResult, cancellationToken);
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetConvertibleUnitsAsync(CancellationToken cancellationToken = default)
@@ -119,7 +119,7 @@ public sealed class HomeAssistantWeatherClient
                 || !string.Equals(responseType.GetString(), TypeName(type), StringComparison.Ordinal)
                 || !value.TryGetProperty("forecast", out var forecast))
                 throw new HomeAssistantProtocolException("The weather forecast subscription had an unexpected shape.");
-            await handler(ParseUpdate(normalizedEntityId, type, forecast, value), token).ConfigureAwait(false);
+            await handler(ParseUpdate(normalizedEntityId, type, forecast, value, token), token).ConfigureAwait(false);
         }, cancellationToken);
     }
 
@@ -155,7 +155,12 @@ public sealed class HomeAssistantWeatherClient
         };
     }
 
-    private static HomeAssistantWeatherForecastUpdate ParseUpdate(string entityId, HomeAssistantWeatherForecastType type, JsonElement forecast, JsonElement raw)
+    private static HomeAssistantWeatherForecastUpdate ParseUpdate(
+        string entityId,
+        HomeAssistantWeatherForecastType type,
+        JsonElement forecast,
+        JsonElement raw,
+        CancellationToken cancellationToken)
     {
         if (forecast.ValueKind == JsonValueKind.Null)
             return new HomeAssistantWeatherForecastUpdate { EntityId = entityId, Type = type, IsAvailable = false, Raw = raw.Clone() };
@@ -163,6 +168,7 @@ public sealed class HomeAssistantWeatherClient
             throw new HomeAssistantProtocolException("The weather forecast was not an array.");
         foreach (var value in forecast.EnumerateArray())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (value.ValueKind != JsonValueKind.Object
                 || !value.TryGetProperty("datetime", out var timestamp)
                 || timestamp.ValueKind != JsonValueKind.String
@@ -172,10 +178,14 @@ public sealed class HomeAssistantWeatherClient
                 throw new HomeAssistantProtocolException("The weather forecast contained an invalid period value.");
             }
         }
-        var items = HomeAssistantJson.DeserializeResponse<HomeAssistantWeatherForecast[]>(forecast, "The weather forecast could not be decoded.");
+        var items = HomeAssistantJson.DeserializeResponse<HomeAssistantWeatherForecast[]>(
+            forecast,
+            "The weather forecast could not be decoded.",
+            cancellationToken: cancellationToken);
         DateTimeOffset? previous = null;
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (item is null || item.DateTime == default
                 || (type == HomeAssistantWeatherForecastType.TwiceDaily && !item.IsDaytime.HasValue))
                 throw new HomeAssistantProtocolException("The weather forecast omitted a required period field.");

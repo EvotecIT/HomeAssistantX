@@ -847,6 +847,27 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("mean")]
+    [InlineData("min")]
+    [InlineData("max")]
+    [InlineData("state")]
+    [InlineData("sum")]
+    [InlineData("change")]
+    public async Task RecorderStatisticsRejectNonFiniteNumericValues(string propertyName)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":1,\"end\":2,\""
+                + propertyName
+                + "\":1e400}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, "sensor.energy")));
+    }
+
+    [Theory]
     [InlineData("{\"sensor.other\":[{\"start\":1,\"end\":2}]}")]
     [InlineData("{\"sensor.energy\":[{\"start\":2,\"end\":2}]}")]
     [InlineData("{\"sensor.energy\":[{\"start\":3,\"end\":2}]}")]

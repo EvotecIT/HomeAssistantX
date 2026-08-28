@@ -27,7 +27,7 @@ public sealed class HomeAssistantRecorderClient
         var requestedIdSnapshot = statisticIds is null ? null : RequireStatisticIds(statisticIds, nameof(statisticIds));
         var payload = requestedIdSnapshot is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = requestedIdSnapshot };
         var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
-        var metadata = DecodeMetadata(value, "Recorder statistics metadata could not be decoded.");
+        var metadata = DecodeMetadata(value, "Recorder statistics metadata could not be decoded.", cancellationToken);
         var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (metadata.Any(item => !responseIds.Add(item.StatisticId)))
             throw new HomeAssistantProtocolException("Recorder statistics metadata contained a duplicate statistic identifier.");
@@ -50,7 +50,7 @@ public sealed class HomeAssistantRecorderClient
             ["statistic_type"] = kind == HomeAssistantStatisticKind.Mean ? "mean" : kind == HomeAssistantStatisticKind.Sum ? "sum" : throw new ArgumentOutOfRangeException(nameof(kind))
         };
         var value = await _webSocket.RequestAsync("recorder/list_statistic_ids", payload, cancellationToken).ConfigureAwait(false);
-        var metadata = DecodeMetadata(value, "Recorder statistic identifiers could not be decoded.");
+        var metadata = DecodeMetadata(value, "Recorder statistic identifiers could not be decoded.", cancellationToken);
         var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (metadata.Any(item => !responseIds.Add(item.StatisticId)))
         {
@@ -116,8 +116,11 @@ public sealed class HomeAssistantRecorderClient
                 || !requestedIds.Contains(normalizedStatisticId)
                 || !responseIds.Add(normalizedStatisticId))
                 throw new HomeAssistantProtocolException("Recorder statistics contained an unexpected or duplicate statistic identifier.");
-            ValidateStatisticRows(property.Value);
-            var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(property.Value, "A Recorder statistics series could not be decoded.");
+            ValidateStatisticRows(property.Value, cancellationToken);
+            var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(
+                property.Value,
+                "A Recorder statistics series could not be decoded.",
+                cancellationToken: cancellationToken);
             series.Add(new HomeAssistantStatisticSeries { StatisticId = normalizedStatisticId, Rows = rows });
         }
         return series.OrderBy(item => item.StatisticId, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -223,12 +226,16 @@ public sealed class HomeAssistantRecorderClient
     public Task<HomeAssistantServiceCallResult> SetEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
         => _services.CallControlAsync(new HomeAssistantServiceCall("recorder", enabled ? "enable" : "disable"), cancellationToken);
 
-    private static IReadOnlyList<HomeAssistantStatisticMetadata> DecodeMetadata(JsonElement value, string failureMessage)
+    private static IReadOnlyList<HomeAssistantStatisticMetadata> DecodeMetadata(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException(failureMessage);
         foreach (var item in value.EnumerateArray())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind != JsonValueKind.Object
                 || !item.TryGetProperty("statistic_id", out var statisticId)
                 || statisticId.ValueKind != JsonValueKind.String
@@ -255,7 +262,10 @@ public sealed class HomeAssistantRecorderClient
             }
         }
 
-        var metadata = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(value, failureMessage);
+        var metadata = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(
+            value,
+            failureMessage,
+            cancellationToken: cancellationToken);
         if (metadata.Any(item => item.MeanType.HasValue
                 && (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)
                     || item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic))
@@ -280,7 +290,7 @@ public sealed class HomeAssistantRecorderClient
             && string.Equals(text, text.Trim(), StringComparison.Ordinal);
     }
 
-    private static void ValidateStatisticRows(JsonElement value)
+    private static void ValidateStatisticRows(JsonElement value, CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("A Recorder statistics series could not be decoded.");
@@ -288,12 +298,17 @@ public sealed class HomeAssistantRecorderClient
         long? previousEnd = null;
         foreach (var row in value.EnumerateArray())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (row.ValueKind != JsonValueKind.Object
                 || !TryGetUnixMilliseconds(row, "start", required: true, out var start)
                 || !TryGetUnixMilliseconds(row, "end", required: true, out var end)
                 || !TryGetUnixMilliseconds(row, "last_reset", required: false, out _)
+                || !TryGetFiniteDouble(row, "mean", out _)
                 || !TryGetFiniteDouble(row, "min", out var minimum)
-                || !TryGetFiniteDouble(row, "max", out var maximum))
+                || !TryGetFiniteDouble(row, "max", out var maximum)
+                || !TryGetFiniteDouble(row, "state", out _)
+                || !TryGetFiniteDouble(row, "sum", out _)
+                || !TryGetFiniteDouble(row, "change", out _))
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained an invalid timestamp.");
             }

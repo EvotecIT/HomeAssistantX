@@ -21,7 +21,10 @@ public sealed class HomeAssistantEnergyClient
     public async Task<HomeAssistantEnergyPreferences> GetPreferencesAsync(CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("energy/get_prefs", null, cancellationToken).ConfigureAwait(false);
-        var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyPreferences>(value, "The Home Assistant Energy preferences could not be decoded.");
+        var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyPreferences>(
+            value,
+            "The Home Assistant Energy preferences could not be decoded.",
+            cancellationToken: cancellationToken);
         ValidatePreferences(preferences);
         return preferences;
     }
@@ -32,7 +35,10 @@ public sealed class HomeAssistantEnergyClient
     {
         if (update is null) throw new ArgumentNullException(nameof(update));
         var value = await _webSocket.RequestAsync("energy/save_prefs", update.ToPayload(), cancellationToken).ConfigureAwait(false);
-        var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyPreferences>(value, "The updated Home Assistant Energy preferences could not be decoded.");
+        var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyPreferences>(
+            value,
+            "The updated Home Assistant Energy preferences could not be decoded.",
+            cancellationToken: cancellationToken);
         ValidatePreferences(preferences);
         return preferences;
     }
@@ -50,7 +56,10 @@ public sealed class HomeAssistantEnergyClient
             throw new HomeAssistantProtocolException("The Home Assistant Energy information was malformed.");
         }
 
-        var result = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyInfo>(value, "The Home Assistant Energy information could not be decoded.");
+        var result = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyInfo>(
+            value,
+            "The Home Assistant Energy information could not be decoded.",
+            cancellationToken: cancellationToken);
         return result;
     }
 
