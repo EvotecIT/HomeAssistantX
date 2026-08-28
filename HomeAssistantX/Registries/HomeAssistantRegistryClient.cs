@@ -214,7 +214,7 @@ public sealed class HomeAssistantRegistryClient
         }
     }
 
-    private static IReadOnlyList<HomeAssistantEntityRegistryEntry> DeserializeExtendedEntities(
+    internal static IReadOnlyList<HomeAssistantEntityRegistryEntry> DeserializeExtendedEntities(
         JsonElement value,
         IReadOnlyList<HomeAssistantEntityRegistryEntry> partialEntries,
         CancellationToken cancellationToken)

@@ -2,6 +2,9 @@ using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
+using HomeAssistantX.Calendars;
+using HomeAssistantX.Registries;
+using HomeAssistantX.States;
 using HomeAssistantX.Rest;
 
 namespace HomeAssistantX.Tests;
@@ -208,6 +211,29 @@ public sealed class ProtocolResponseContractTests
                 document.RootElement,
                 "State response failed.",
                 cancellationToken: cancellation.Token));
+    }
+
+    [Fact]
+    public void BuiltInResponseSemanticTransformsHonorCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var token = cancellation.Token;
+        using var extendedRegistry = JsonDocument.Parse("{}");
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantStateClient.ValidateSnapshotStates(
+                new[] { new HomeAssistantState { EntityId = "light.kitchen", State = "on" } },
+                token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRegistryClient.DeserializeExtendedEntities(
+                extendedRegistry.RootElement,
+                new[] { new HomeAssistantEntityRegistryEntry { EntityId = "light.kitchen" } },
+                token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCalendarClient.ValidateEvents(
+                new[] { new HomeAssistantCalendarEvent() },
+                token));
     }
 
     [Fact]

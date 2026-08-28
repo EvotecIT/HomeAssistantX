@@ -168,7 +168,7 @@ public sealed class HomeAssistantCalendarClient
         }
     }
 
-    private static void ValidateEvents(
+    internal static void ValidateEvents(
         IReadOnlyList<HomeAssistantCalendarEvent> events,
         CancellationToken cancellationToken = default)
     {
