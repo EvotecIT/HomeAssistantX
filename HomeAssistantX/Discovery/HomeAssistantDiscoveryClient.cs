@@ -238,6 +238,8 @@ internal sealed class DnsDiscoveryAggregate
     private const int MaximumTransitionalAddressesPerHost = 32;
     private readonly DnsDiscoveryLimits _limits;
     private readonly Func<TimeSpan> _clock;
+    private readonly Func<int, int> _weightedSelector;
+    private static readonly Random WeightedRandom = new();
     private readonly object _gate = new();
     private readonly Dictionary<string, CachedPtr> _instances = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<CachedService>> _services = new(StringComparer.OrdinalIgnoreCase);
@@ -245,10 +247,14 @@ internal sealed class DnsDiscoveryAggregate
     private readonly Dictionary<string, Dictionary<IPAddress, CachedAddress>> _addresses = new(StringComparer.OrdinalIgnoreCase);
     private int _datagrams;
 
-    internal DnsDiscoveryAggregate(DnsDiscoveryLimits? limits = null, Func<TimeSpan>? clock = null)
+    internal DnsDiscoveryAggregate(
+        DnsDiscoveryLimits? limits = null,
+        Func<TimeSpan>? clock = null,
+        Func<int, int>? weightedSelector = null)
     {
         _limits = limits ?? DnsDiscoveryLimits.Default;
         _clock = clock ?? MonotonicNow;
+        _weightedSelector = weightedSelector ?? NextWeightedSelection;
     }
 
     internal int InstanceCount { get { lock (_gate) { Prune(_clock()); return _instances.Count; } } }
@@ -292,7 +298,7 @@ internal sealed class DnsDiscoveryAggregate
             }
             services.RemoveAll(value => string.Equals(value.DataKey, ServiceKey(host, port), StringComparison.Ordinal));
             var expiresAt = Expiry(now, 120);
-            services.Add(new CachedService(host, port, ServiceKey(host, port), now, expiresAt, expiresAt, true));
+            services.Add(new CachedService(host, port, 0, 0, ServiceKey(host, port), now, expiresAt, expiresAt, true));
         }
     }
 
@@ -446,7 +452,7 @@ internal sealed class DnsDiscoveryAggregate
             return _instances.Keys.Select(instance =>
             {
                 _services.TryGetValue(instance, out var serviceRecords);
-                var service = serviceRecords?.OrderByDescending(value => value.ReceivedAt).FirstOrDefault();
+                var service = SelectService(serviceRecords);
                 _text.TryGetValue(instance, out var textRecords);
                 var cachedText = textRecords?.OrderByDescending(value => value.ReceivedAt).FirstOrDefault();
                 var properties = cachedText?.Properties ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
@@ -532,6 +538,8 @@ internal sealed class DnsDiscoveryAggregate
             records.Add(new CachedService(
                 update.Host!,
                 update.Port,
+                update.Priority,
+                update.Weight,
                 update.DataKey,
                 now,
                 advertisedExpiry,
@@ -770,6 +778,45 @@ internal sealed class DnsDiscoveryAggregate
     private static TimeSpan Earlier(TimeSpan left, TimeSpan right) => left <= right ? left : right;
     private static TimeSpan MonotonicNow() => TimeSpan.FromSeconds((double)System.Diagnostics.Stopwatch.GetTimestamp() / System.Diagnostics.Stopwatch.Frequency);
 
+    private CachedService? SelectService(IReadOnlyList<CachedService>? records)
+    {
+        if (records is null || records.Count == 0)
+        {
+            return null;
+        }
+
+        var priority = records.Min(value => value.Priority);
+        var candidates = records.Where(value => value.Priority == priority)
+            .OrderBy(value => value.DataKey, StringComparer.Ordinal)
+            .ToArray();
+        var totalWeight = candidates.Sum(value => value.Weight);
+        if (totalWeight == 0)
+        {
+            return candidates[_weightedSelector(candidates.Length)];
+        }
+
+        var selected = _weightedSelector(totalWeight);
+        foreach (var candidate in candidates)
+        {
+            if (selected < candidate.Weight)
+            {
+                return candidate;
+            }
+
+            selected -= candidate.Weight;
+        }
+
+        return candidates[candidates.Length - 1];
+    }
+
+    private static int NextWeightedSelection(int exclusiveMaximum)
+    {
+        lock (WeightedRandom)
+        {
+            return WeightedRandom.Next(exclusiveMaximum);
+        }
+    }
+
     private abstract class CachedRecord
     {
         protected CachedRecord(string dataKey, TimeSpan receivedAt, TimeSpan expiresAt) { DataKey = dataKey; ReceivedAt = receivedAt; ExpiresAt = expiresAt; }
@@ -778,7 +825,7 @@ internal sealed class DnsDiscoveryAggregate
         internal TimeSpan ExpiresAt { get; set; }
     }
     private sealed class CachedPtr : CachedRecord { internal CachedPtr(string key, TimeSpan receivedAt, TimeSpan expiresAt) : base(key, receivedAt, expiresAt) { } }
-    private sealed class CachedService : CachedRecord { internal CachedService(string host, int port, string key, TimeSpan receivedAt, TimeSpan advertisedExpiresAt, TimeSpan expiresAt, bool isVerified) : base(key, receivedAt, expiresAt) { Host = host; Port = port; AdvertisedExpiresAt = advertisedExpiresAt; IsVerified = isVerified; } internal string Host { get; } internal int Port { get; } internal TimeSpan AdvertisedExpiresAt { get; set; } internal bool IsVerified { get; set; } }
+    private sealed class CachedService : CachedRecord { internal CachedService(string host, int port, int priority, int weight, string key, TimeSpan receivedAt, TimeSpan advertisedExpiresAt, TimeSpan expiresAt, bool isVerified) : base(key, receivedAt, expiresAt) { Host = host; Port = port; Priority = priority; Weight = weight; AdvertisedExpiresAt = advertisedExpiresAt; IsVerified = isVerified; } internal string Host { get; } internal int Port { get; } internal int Priority { get; } internal int Weight { get; } internal TimeSpan AdvertisedExpiresAt { get; set; } internal bool IsVerified { get; set; } }
     private sealed class CachedText : CachedRecord { internal CachedText(Dictionary<string, string?> properties, string key, TimeSpan receivedAt, TimeSpan advertisedExpiresAt, TimeSpan expiresAt, bool isVerified) : base(key, receivedAt, expiresAt) { Properties = properties; AdvertisedExpiresAt = advertisedExpiresAt; IsVerified = isVerified; } internal Dictionary<string, string?> Properties { get; } internal TimeSpan AdvertisedExpiresAt { get; set; } internal bool IsVerified { get; set; } }
     private sealed class CachedAddress
     {
@@ -822,6 +869,8 @@ internal sealed class DnsDiscoveryUpdate
     internal string? Target { get; set; }
     internal string? Host { get; set; }
     internal int Port { get; set; }
+    internal int Priority { get; set; }
+    internal int Weight { get; set; }
     internal Dictionary<string, string?>? Properties { get; set; }
     internal IPAddress? Address { get; set; }
 }
@@ -902,7 +951,7 @@ internal static class DnsDiscoveryPacket
                         var port = ReadUInt16(packet, ref dataOffset);
                         var host = ReadName(packet, ref dataOffset);
                         if (dataOffset != end) throw new InvalidDataException("Invalid SRV record length.");
-                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Srv, Name = name, Host = host, Port = port, DataKey = priority.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + weight.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture), Ttl = ttl, CacheFlush = cacheFlush });
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Srv, Name = name, Host = host, Port = port, Priority = priority, Weight = weight, DataKey = priority.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + weight.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture), Ttl = ttl, CacheFlush = cacheFlush });
                         break;
                     }
                     case 16:

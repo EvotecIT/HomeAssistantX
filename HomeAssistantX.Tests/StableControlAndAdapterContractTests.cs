@@ -383,6 +383,20 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdSelectsLowestPriorityAndUsesWeightWithinThatPriority()
+    {
+        var aggregate = new DnsDiscoveryAggregate(weightedSelector: maximum => maximum - 1);
+        aggregate.AddInstance("Test._home-assistant._tcp.local");
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 10, 100, "fallback.local", 8123), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 1, "primary-a.local", 8123), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 9, "primary-b.local", 8123), aggregate);
+
+        var instance = Assert.Single(aggregate.Build());
+
+        Assert.Equal("primary-b.local", instance.HostName);
+    }
+
+    [Fact]
     public void DnsSdParserAppliesOnlyCompleteValidResponseDatagrams()
     {
         var now = TimeSpan.Zero;

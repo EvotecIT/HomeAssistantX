@@ -265,6 +265,25 @@ public sealed class PublicApiCompatibilityTests
                 IsExternallyAccessibleMethod(implementationOnlySetter.SetMethod) ? implementationOnlySetter.SetMethod : null));
         var eventInfo = typeof(CompileBlockingObsoleteAccessorFixture).GetEvent("Changed")!;
         Assert.Equal("error obsolete ", ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod));
+        var warning = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(WarningObsoleteFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.StartsWith("obsolete ", FormatMethod(warning), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ParameterFormatterPreservesMarshalAsContracts()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(MarshalAsFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var parameters = FormatParameters(method.GetParameters());
+        Assert.Contains("marshal-as(type=LPArray", parameters, StringComparison.Ordinal);
+        Assert.Contains("array-subtype=I4", parameters, StringComparison.Ordinal);
+        Assert.Contains("size-const=4", parameters, StringComparison.Ordinal);
+        Assert.Contains("size-param-index=1", parameters, StringComparison.Ordinal);
+        Assert.StartsWith("marshal-as(type=Bool", FormatReturnType(method), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -739,6 +758,17 @@ public sealed class PublicApiCompatibilityTests
         dynamic value,
         IReadOnlyDictionary<string, dynamic[]> nested)
         => value;
+
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static bool MarshalAsFixture(
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.I4, SizeConst = 4, SizeParamIndex = 1)] int[] values,
+        int count)
+        => values.Length == count;
+
+    [Obsolete("Warning-only compatibility contract")]
+    private static void WarningObsoleteFixture()
+    {
+    }
 
     [DllImport(
         "native-test",
@@ -1249,22 +1279,47 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + RequiredMember(field) + NullableFlowContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + RequiredMember(field) + MarshalAsContract(field) + NullableFlowContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
     private static string ObsoleteContract(params ICustomAttributeProvider?[] providers)
     {
+        var found = false;
         foreach (var provider in providers.Where(value => value is not null))
         {
             var attribute = GetCustomAttributes(provider!).FirstOrDefault(value =>
                 string.Equals(value.AttributeType.FullName, typeof(ObsoleteAttribute).FullName, StringComparison.Ordinal));
+            found |= attribute is not null;
             var isError = attribute is not null
                 && attribute.ConstructorArguments.Count > 1
                 && attribute.ConstructorArguments[1].Value is bool value
                 && value;
             if (isError) return "error obsolete ";
         }
-        return string.Empty;
+        return found ? "obsolete " : string.Empty;
+    }
+
+    private static string MarshalAsContract(ICustomAttributeProvider provider)
+    {
+        var attribute = provider.GetCustomAttributes(typeof(MarshalAsAttribute), inherit: false)
+            .OfType<MarshalAsAttribute>()
+            .SingleOrDefault();
+        if (attribute is null)
+        {
+            return string.Empty;
+        }
+
+        return "marshal-as(type=" + attribute.Value
+            + ",array-subtype=" + attribute.ArraySubType
+            + ",size-const=" + attribute.SizeConst.ToString(CultureInfo.InvariantCulture)
+            + ",size-param-index=" + attribute.SizeParamIndex.ToString(CultureInfo.InvariantCulture)
+            + ",safe-array-subtype=" + attribute.SafeArraySubType
+            + ",iid-param-index=" + attribute.IidParameterIndex.ToString(CultureInfo.InvariantCulture)
+            + ",marshal-type=" + FormatDefault(attribute.MarshalType)
+            + ",marshal-type-ref=" + (attribute.MarshalTypeRef is null ? "null" : FormatDefault(attribute.MarshalTypeRef.FullName))
+            + ",marshal-cookie=" + FormatDefault(attribute.MarshalCookie)
+            + ",safe-array-user-type=" + (attribute.SafeArrayUserDefinedSubType is null ? "null" : FormatDefault(attribute.SafeArrayUserDefinedSubType.FullName))
+            + ") ";
     }
 
     private static string OverloadResolutionPriorityContract(ICustomAttributeProvider provider)
@@ -1381,7 +1436,7 @@ public sealed class PublicApiCompatibilityTests
         var suffix = parameter.HasDefaultValue
             ? " = " + FormatDefault(parameter.DefaultValue)
             : parameter.IsOptional ? " [optional]" : string.Empty;
-        return NullableFlowContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
+        return MarshalAsContract(parameter) + NullableFlowContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
     }));
 
     private static string FormatParameterType(ParameterInfo parameter)
@@ -1451,7 +1506,7 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatReturnType(MethodInfo method, ICustomAttributeProvider owner)
     {
         var parameter = method.ReturnParameter;
-        var safetyPrefix = NullableFlowContract(parameter) + RefSafetyPrefix(parameter)
+        var safetyPrefix = MarshalAsContract(parameter) + NullableFlowContract(parameter) + RefSafetyPrefix(parameter)
             + (HasAttribute(owner, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")
                 || HasAttribute(method, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
         if (!method.ReturnType.IsByRef)
