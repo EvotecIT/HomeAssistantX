@@ -15,6 +15,22 @@ namespace HomeAssistantX.Tests;
 
 public sealed class CamerasDashboardsAutomationContractTests
 {
+    [Fact]
+    public void FrontendPanelSortingHonorsCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantDashboardClient.SortPanels(
+                new List<HomeAssistantPanel>
+                {
+                    new() { UrlPath = "settings" },
+                    new() { UrlPath = "energy" }
+                },
+                cancellation.Token));
+    }
+
     [Theory]
     [InlineData(":")]
     [InlineData("mdi:")]

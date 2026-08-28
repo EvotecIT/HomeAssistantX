@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.WebSockets;
 
@@ -58,7 +59,18 @@ public sealed class HomeAssistantDashboardClient
                 throw new HomeAssistantProtocolException("A frontend panel contained a noncanonical icon.");
             result.Add(panel);
         }
-        return result.OrderBy(item => item.UrlPath, StringComparer.OrdinalIgnoreCase).ToArray();
+        return SortPanels(result, cancellationToken);
+    }
+
+    internal static IReadOnlyList<HomeAssistantPanel> SortPanels(
+        List<HomeAssistantPanel> panels,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        panels.Sort((left, right) => comparer.Compare(left.UrlPath, right.UrlPath));
+        cancellationToken.ThrowIfCancellationRequested();
+        return panels;
     }
 
     public async Task<HomeAssistantLovelaceInfo> GetInfoAsync(CancellationToken cancellationToken = default)
