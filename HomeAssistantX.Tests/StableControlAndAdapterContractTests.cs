@@ -855,6 +855,75 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdVerifiedHostsEvictPendingAddressesWhenServiceOwnersAreNotFull()
+    {
+        var aggregate = new DnsDiscoveryAggregate(clock: () => TimeSpan.Zero);
+        for (var owner = 0; owner < 16; owner++)
+        {
+            var updates = new List<DnsDiscoveryUpdate>();
+            for (var record = 0; record < 8; record++)
+            {
+                var host = $"pending-{owner}-{record}.local";
+                updates.Add(new DnsDiscoveryUpdate
+                {
+                    Kind = DnsDiscoveryRecordKind.Srv,
+                    Name = $"Pending-{owner}._home-assistant._tcp.local",
+                    Host = host,
+                    Port = 8123,
+                    DataKey = $"service-{owner}-{record}",
+                    Ttl = 120
+                });
+                updates.Add(new DnsDiscoveryUpdate
+                {
+                    Kind = DnsDiscoveryRecordKind.A,
+                    Name = host,
+                    Address = IPAddress.Parse($"192.0.{owner}.{record + 1}"),
+                    DataKey = $"address-{owner}-{record}",
+                    Ttl = 120
+                });
+            }
+            aggregate.ApplyPacket(updates);
+        }
+        Assert.Equal(16, aggregate.ServiceCount);
+        Assert.Equal(128, aggregate.AddressHostCount);
+
+        aggregate.ApplyPacket(new[]
+        {
+            new DnsDiscoveryUpdate
+            {
+                Kind = DnsDiscoveryRecordKind.Ptr,
+                Name = "_home-assistant._tcp.local",
+                Target = "Verified._home-assistant._tcp.local",
+                DataKey = "VERIFIED._HOME-ASSISTANT._TCP.LOCAL",
+                Ttl = 120
+            },
+            new DnsDiscoveryUpdate
+            {
+                Kind = DnsDiscoveryRecordKind.Srv,
+                Name = "Verified._home-assistant._tcp.local",
+                Host = "verified.local",
+                Port = 8123,
+                DataKey = "verified-service",
+                Ttl = 120
+            },
+            new DnsDiscoveryUpdate
+            {
+                Kind = DnsDiscoveryRecordKind.A,
+                Name = "verified.local",
+                Address = IPAddress.Parse("198.51.100.20"),
+                DataKey = "verified-address",
+                Ttl = 120
+            }
+        });
+
+        var instance = Assert.Single(aggregate.Build());
+        Assert.Equal("verified.local", instance.HostName);
+        Assert.Equal(IPAddress.Parse("198.51.100.20"), Assert.Single(instance.Addresses));
+        Assert.Equal(17, aggregate.ServiceCount);
+        Assert.Equal(128, aggregate.AddressHostCount);
+    }
+
+    [Fact]
     public async Task DnsSdDiscoveryNormalizesSendTimeoutAndPreservesCallerCancellation()
     {
         var address = IPAddress.Parse("192.0.2.10");

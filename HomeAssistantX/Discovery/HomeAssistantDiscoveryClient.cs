@@ -396,10 +396,14 @@ internal sealed class DnsDiscoveryAggregate
             var acceptedHosts = new HashSet<string>(
                 _services.SelectMany(value => value.Value).Select(value => value.Host),
                 StringComparer.OrdinalIgnoreCase);
+            var verifiedHosts = new HashSet<string>(
+                _services.Values.SelectMany(value => value).Where(value => value.IsVerified).Select(value => value.Host),
+                StringComparer.OrdinalIgnoreCase);
             foreach (var update in addressUpdates.Where(value => acceptedHosts.Contains(value.Name)))
                 ApplyAddress(update, now, update.Kind == DnsDiscoveryRecordKind.A
                     ? AddressAnnouncement(announcedIpv4, update)
-                    : AddressAnnouncement(announcedIpv6, update));
+                    : AddressAnnouncement(announcedIpv6, update),
+                    verifiedHosts.Contains(update.Name));
         }
     }
 
@@ -540,11 +544,15 @@ internal sealed class DnsDiscoveryAggregate
         }
     }
 
-    private void ApplyAddress(DnsDiscoveryUpdate update, TimeSpan now, HashSet<IPAddress>? announced)
+    private void ApplyAddress(
+        DnsDiscoveryUpdate update,
+        TimeSpan now,
+        HashSet<IPAddress>? announced,
+        bool isVerifiedHost)
     {
         if (!_addresses.TryGetValue(update.Name, out var addresses))
         {
-            if (update.Ttl == 0 || _addresses.Count >= _limits.AddressHosts) return;
+            if (update.Ttl == 0 || !EnsureAddressHostCapacity(isVerifiedHost)) return;
             _addresses[update.Name] = addresses = new Dictionary<IPAddress, CachedAddress>();
         }
         var address = update.Address!;
@@ -595,6 +603,25 @@ internal sealed class DnsDiscoveryAggregate
             .FirstOrDefault();
         if (pendingOwner is null) return false;
         _text.Remove(pendingOwner);
+        return true;
+    }
+
+    private bool EnsureAddressHostCapacity(bool isVerifiedHost)
+    {
+        if (_addresses.Count < _limits.AddressHosts) return true;
+        if (!isVerifiedHost) return false;
+        var verifiedHosts = new HashSet<string>(
+            _services.Values.SelectMany(value => value).Where(value => value.IsVerified).Select(value => value.Host),
+            StringComparer.OrdinalIgnoreCase);
+        var pendingHost = _addresses
+            .Where(pair => pair.Value.Count > 0 && !verifiedHosts.Contains(pair.Key))
+            .OrderBy(pair => pair.Value.Min(record => record.Value.ReceivedAt))
+            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair => pair.Key)
+            .FirstOrDefault();
+        if (pendingHost is null) return false;
+        _addresses.Remove(pendingHost);
         return true;
     }
 
