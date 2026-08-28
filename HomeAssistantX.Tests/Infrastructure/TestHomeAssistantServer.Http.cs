@@ -54,8 +54,11 @@ internal sealed partial class TestHomeAssistantServer
             return;
         }
 
-        LastAuthorization = headers.TryGetValue("Authorization", out var authorization) ? authorization : null;
-        if (!string.Equals(LastAuthorization, "Bearer " + RequiredAccessToken, StringComparison.Ordinal))
+        var currentAuthorization = headers.TryGetValue("Authorization", out var authorization)
+            ? authorization
+            : null;
+        LastAuthorization = currentAuthorization;
+        if (!string.Equals(currentAuthorization, "Bearer " + RequiredAccessToken, StringComparison.Ordinal))
         {
             Interlocked.Increment(ref _unauthorizedRequestCount);
             await WriteHttpResponseAsync(stream, 401, "{\"message\":\"Unauthorized\"}").ConfigureAwait(false);
