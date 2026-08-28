@@ -110,6 +110,8 @@ public sealed partial class HomeAssistantWebSocketClient
                 throw new HomeAssistantProtocolException(
                     "A Home Assistant coalesced WebSocket batch contained a routed message without a valid command identifier.");
             }
+
+            RequireEventPayload(item, type);
         }
 
         foreach (var item in root.EnumerateArray())
@@ -126,6 +128,7 @@ public sealed partial class HomeAssistantWebSocketClient
     private void RouteMessage(JsonElement root)
     {
         var type = GetRequiredString(root, "type");
+        RequireEventPayload(root, type);
         if (!root.TryGetProperty("id", out var idProperty) || !idProperty.TryGetInt32(out var id))
         {
             if (!string.Equals(type, "pong", StringComparison.Ordinal))
@@ -178,6 +181,16 @@ public sealed partial class HomeAssistantWebSocketClient
                 _ = registration.FailAndStopAsync(new HomeAssistantProtocolException(
                     "The subscription consumer could not keep up with Home Assistant events."));
             }
+        }
+    }
+
+    private static void RequireEventPayload(JsonElement message, string type)
+    {
+        if (string.Equals(type, "event", StringComparison.Ordinal)
+            && !message.TryGetProperty("event", out _))
+        {
+            throw new HomeAssistantProtocolException(
+                "A Home Assistant WebSocket event omitted its required event payload.");
         }
     }
 

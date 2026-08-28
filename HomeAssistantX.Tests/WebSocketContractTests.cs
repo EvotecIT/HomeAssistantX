@@ -157,6 +157,21 @@ public sealed class WebSocketContractTests
         Assert.Contains("command identifier", protocolFailure.Message);
     }
 
+    [Theory]
+    [InlineData("test/coalesced_missing_event")]
+    [InlineData("test/missing_event")]
+    public async Task EventMessagesRequirePayloadBeforeRouting(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("event payload", protocolFailure.Message);
+    }
+
     [Fact]
     public async Task RejectedOAuthTokenRefreshesBeforeOpeningAFreshWebSocketSession()
     {
