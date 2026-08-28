@@ -2833,6 +2833,21 @@ public sealed class CamerasDashboardsAutomationContractTests
         await client.Automations.DeleteConfigurationAsync("morning-routine");
     }
 
+    [Fact]
+    public void AutomationDefinitionIdTraversalHonorsPreCanceledTokensBeforeJsonAccess()
+    {
+        JsonElement definition;
+        using (var document = JsonDocument.Parse("{\"id\":\"morning-routine\"}"))
+        {
+            definition = document.RootElement;
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationIdentifier.GetDefinitionIds(definition, cancellation.Token));
+    }
+
     [Theory]
     [InlineData("on", true)]
     [InlineData("off", false)]

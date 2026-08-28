@@ -939,6 +939,12 @@ public sealed class WebSocketContractTests
         target.EntityIds = new[] { " " };
         await Assert.ThrowsAsync<ArgumentException>(() => client.System.ExtractFromTargetAsync(target));
         await Assert.ThrowsAsync<ArgumentException>(() => client.System.GetTriggersForTargetAsync(target));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.System.ExtractFromTargetAsync(target, cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.System.GetServicesForTargetAsync(target, cancellationToken: cancellation.Token));
     }
 
     [Fact]

@@ -66,28 +66,13 @@ public static class HomeAssistantAutomationIdentifier
         if (HomeAssistantJson.HasDuplicatePropertiesInline(definition, cancellationToken))
             throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", parameterName);
 
-        JsonElement? definitionId = null;
-        foreach (var property in definition.EnumerateObject())
+        var definitionIds = GetDefinitionIds(definition, cancellationToken);
+        if (definitionIds.Count > 1)
+            throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", parameterName);
+        if (definitionIds.Count == 1)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!property.NameEquals("id"))
-            {
-                continue;
-            }
-
-            if (definitionId.HasValue)
-            {
-                throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", parameterName);
-            }
-
-            definitionId = property.Value;
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        if (definitionId.HasValue)
-        {
-            var definitionIdValue = definitionId.Value.ValueKind == JsonValueKind.String
-                ? HomeAssistantJson.GetString(definitionId.Value, cancellationToken)
+            var definitionIdValue = definitionIds[0].ValueKind == JsonValueKind.String
+                ? HomeAssistantJson.GetString(definitionIds[0], cancellationToken)
                 : null;
             if (definitionIdValue is null
                 || !CancellationAwareString.EqualsOrdinal(definitionIdValue, automationId, cancellationToken))

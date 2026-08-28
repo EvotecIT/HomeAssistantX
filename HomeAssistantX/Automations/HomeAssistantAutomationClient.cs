@@ -73,6 +73,7 @@ public sealed class HomeAssistantAutomationClient
     {
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
         var value = await _rest.SendAsync<JsonElement>(HttpMethod.Get, ConfigurationPath(id, cancellationToken), null, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Home Assistant returned a non-object automation definition.");
         if (HomeAssistantAutomationIdentifier.HasDuplicateProperties(value, cancellationToken)) throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with duplicate JSON properties.");
         var responseIds = HomeAssistantAutomationIdentifier.GetDefinitionIds(value, cancellationToken);
