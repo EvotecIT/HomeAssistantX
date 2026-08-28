@@ -192,74 +192,38 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             return;
         }
 
-        var results = new List<HomeAssistantServiceCallResult>();
-        if (HasSettings())
-        {
-            results.AddRange(await Client.Controls.MediaPlayers.SetAsync(
-                target.Target,
-                new HomeAssistantMediaPlayerOptions
-                {
-                    Power = Power,
-                    VolumePercent = VolumePercent,
-                    Muted = Muted,
-                    Source = Source,
-                    SoundMode = SoundMode,
-                    Shuffle = Shuffle,
-                    Repeat = Repeat
-                },
-                CancelToken).ConfigureAwait(false));
-        }
-
-        if (VolumeStep.HasValue)
-        {
-            results.Add(await Client.Controls.MediaPlayers.StepVolumeAsync(target.Target, VolumeStep.Value, CancelToken).ConfigureAwait(false));
-        }
-
-        if (ClearPlaylist.IsPresent)
-        {
-            results.Add(await Client.Controls.MediaPlayers.ClearPlaylistAsync(target.Target, CancelToken).ConfigureAwait(false));
-        }
-
-        if (joinMembers is not null)
-        {
-            results.Add(await Client.Controls.MediaPlayers.JoinAsync(target.Target, joinMembers, CancelToken).ConfigureAwait(false));
-        }
-
-        if (Unjoin.IsPresent)
-        {
-            results.Add(await Client.Controls.MediaPlayers.UnjoinAsync(target.Target, CancelToken).ConfigureAwait(false));
-        }
-
-        if (hasContent)
-        {
-            results.Add(await Client.Controls.MediaPlayers.PlayMediaAsync(
-                target.Target,
-                MediaContentId!,
-                MediaContentType!,
-                new HomeAssistantPlayMediaOptions
+        var settings = HasSettings()
+            ? new HomeAssistantMediaPlayerOptions
+            {
+                Power = Power,
+                VolumePercent = VolumePercent,
+                Muted = Muted,
+                Source = Source,
+                SoundMode = SoundMode,
+                Shuffle = Shuffle,
+                Repeat = Repeat
+            }
+            : null;
+        var results = await Client.Controls.MediaPlayers.ExecuteSequenceAsync(
+            target.Target,
+            settings,
+            VolumeStep,
+            ClearPlaylist.IsPresent,
+            joinMembers,
+            Unjoin.IsPresent,
+            hasContent ? MediaContentId : null,
+            hasContent ? MediaContentType : null,
+            hasContent
+                ? new HomeAssistantPlayMediaOptions
                 {
                     Enqueue = Enqueue,
                     Announce = Announce.IsPresent ? true : null,
                     Extra = mediaExtra
-                },
-                CancelToken).ConfigureAwait(false));
-        }
-
-        if (seekPosition.HasValue)
-        {
-            results.Add(await Client.Controls.MediaPlayers.SeekAsync(
-                target.Target,
-                seekPosition.Value,
-                CancelToken).ConfigureAwait(false));
-        }
-
-        if (Playback.HasValue)
-        {
-            results.AddRange(await Client.Controls.MediaPlayers.SetAsync(
-                target.Target,
-                new HomeAssistantMediaPlayerOptions { Playback = Playback },
-                CancelToken).ConfigureAwait(false));
-        }
+                }
+                : null,
+            seekPosition,
+            Playback,
+            CancelToken).ConfigureAwait(false);
 
         WriteObject(results, true);
     }

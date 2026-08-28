@@ -476,6 +476,40 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task MediaSequencesCaptureOneTransportAcrossEveryStep()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var pause = server.PauseNextServiceCall();
+
+        var operation = client.Controls.MediaPlayers.ExecuteSequenceAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions { VolumePercent = 35 },
+            HomeAssistantMediaVolumeStepAction.Up,
+            clearPlaylist: true,
+            groupMembers: null,
+            unjoin: false,
+            mediaContentId: null,
+            mediaContentType: null,
+            playMediaOptions: null,
+            seekPosition: null,
+            playback: HomeAssistantMediaPlaybackAction.Play,
+            CancellationToken.None);
+
+        await pause.Received.WaitAsync(TimeSpan.FromSeconds(2));
+        client.Options.ControlServiceCallTransport = HomeAssistantServiceCallTransport.Rest;
+        pause.Release();
+        await operation;
+
+        Assert.Equal(4, server.ServiceCallBodies.Count);
+        Assert.All(server.ServiceCallBodies, body =>
+        {
+            using var call = JsonDocument.Parse(body);
+            Assert.Equal("call_service", call.RootElement.GetProperty("type").GetString());
+        });
+    }
+
+    [Fact]
     public async Task MediaSeekGroupingPlaylistAndPlayMediaUseExactHomeAssistantFields()
     {
         using var server = new TestHomeAssistantServer();

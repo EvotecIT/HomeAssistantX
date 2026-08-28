@@ -71,6 +71,16 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         HomeAssistantMediaPlayerOptions options,
         CancellationToken cancellationToken = default)
     {
+        var transport = CaptureTransport(cancellationToken);
+        return await SetAsync(target, options, transport, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<HomeAssistantServiceCallResult>> SetAsync(
+        HomeAssistantTarget target,
+        HomeAssistantMediaPlayerOptions options,
+        HomeAssistantServiceCallTransport transport,
+        CancellationToken cancellationToken)
+    {
         if (options is null)
         {
             throw new ArgumentNullException(nameof(options));
@@ -137,7 +147,6 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentException("At least one media-player value or action is required.", nameof(options));
         }
 
-        var transport = CaptureTransport(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (powerAction is not null)
         {
@@ -377,6 +386,123 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 }
             },
             cancellationToken);
+    }
+
+    internal async Task<IReadOnlyList<HomeAssistantServiceCallResult>> ExecuteSequenceAsync(
+        HomeAssistantTarget target,
+        HomeAssistantMediaPlayerOptions? settings,
+        HomeAssistantMediaVolumeStepAction? volumeStep,
+        bool clearPlaylist,
+        IReadOnlyList<string>? groupMembers,
+        bool unjoin,
+        string? mediaContentId,
+        string? mediaContentType,
+        HomeAssistantPlayMediaOptions? playMediaOptions,
+        TimeSpan? seekPosition,
+        HomeAssistantMediaPlaybackAction? playback,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var transport = CaptureTransport(cancellationToken);
+        var results = new List<HomeAssistantServiceCallResult>();
+        if (settings is not null)
+        {
+            results.AddRange(await SetAsync(target, settings, transport, cancellationToken).ConfigureAwait(false));
+        }
+
+        if (volumeStep.HasValue)
+        {
+            var service = volumeStep.Value switch
+            {
+                HomeAssistantMediaVolumeStepAction.Up => "volume_up",
+                HomeAssistantMediaVolumeStepAction.Down => "volume_down",
+                _ => throw new ArgumentOutOfRangeException(nameof(volumeStep), volumeStep, "Unsupported volume-step action.")
+            };
+            results.Add(await CallAsync(service, target, null, transport, cancellationToken).ConfigureAwait(false));
+        }
+
+        if (clearPlaylist)
+        {
+            results.Add(await CallAsync("clear_playlist", target, null, transport, cancellationToken).ConfigureAwait(false));
+        }
+
+        if (groupMembers is not null)
+        {
+            var members = NormalizeEntityIds(groupMembers, nameof(groupMembers), cancellationToken);
+            results.Add(await CallAsync(
+                "join",
+                target,
+                call => call.WithData("group_members", members),
+                transport,
+                cancellationToken).ConfigureAwait(false));
+        }
+
+        if (unjoin)
+        {
+            results.Add(await CallAsync("unjoin", target, null, transport, cancellationToken).ConfigureAwait(false));
+        }
+
+        if (mediaContentId is not null || mediaContentType is not null)
+        {
+            mediaContentId = ControlValidation.Required(mediaContentId!, nameof(mediaContentId));
+            mediaContentType = ControlValidation.Required(mediaContentType!, nameof(mediaContentType));
+            var enqueueOption = playMediaOptions?.Enqueue;
+            var announce = playMediaOptions?.Announce;
+            if (enqueueOption.HasValue && announce == true)
+            {
+                throw new ArgumentException("Enqueue and Announce cannot be combined by Home Assistant.", nameof(playMediaOptions));
+            }
+
+            var enqueue = enqueueOption.HasValue ? EnqueueMode(enqueueOption.Value) : null;
+            var frozenExtra = FreezeMediaExtra(playMediaOptions?.Extra, nameof(playMediaOptions), cancellationToken);
+            results.Add(await CallAsync(
+                "play_media",
+                target,
+                call =>
+                {
+                    call.WithData("media_content_id", mediaContentId)
+                        .WithData("media_content_type", mediaContentType);
+                    if (enqueue is not null)
+                    {
+                        call.WithData("enqueue", enqueue);
+                    }
+
+                    if (announce.HasValue)
+                    {
+                        call.WithData("announce", announce.Value);
+                    }
+
+                    if (frozenExtra is not null)
+                    {
+                        call.WithData("extra", frozenExtra);
+                    }
+                },
+                transport,
+                cancellationToken).ConfigureAwait(false));
+        }
+
+        if (seekPosition.HasValue)
+        {
+            var position = ControlValidation.Duration(seekPosition.Value, nameof(seekPosition))!.Value;
+            results.Add(await CallAsync(
+                "media_seek",
+                target,
+                call => call.WithData("seek_position", position.TotalSeconds),
+                transport,
+                cancellationToken).ConfigureAwait(false));
+        }
+
+        if (playback.HasValue)
+        {
+            results.Add(await CallAsync(
+                PlaybackAction(playback.Value),
+                target,
+                null,
+                transport,
+                cancellationToken).ConfigureAwait(false));
+        }
+
+        return results;
     }
 
     internal static IReadOnlyDictionary<string, object?>? FreezeMediaExtra(
