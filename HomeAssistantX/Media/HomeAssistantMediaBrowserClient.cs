@@ -152,7 +152,7 @@ public sealed class HomeAssistantMediaBrowserClient
                 || !IsCanonicalMediaClass(childrenMediaClass.GetString())))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
 
-        if ((canPlay.GetBoolean() || canExpand.GetBoolean())
+        if ((canPlay.GetBoolean() || canExpand.GetBoolean() || canSearch.GetBoolean())
             && (!IsCanonicalActionableSelector(mediaContentId.GetString())
                 || !IsCanonicalActionableSelector(mediaContentType.GetString())))
             throw new HomeAssistantProtocolException("An actionable media response contained a noncanonical selector.");
@@ -178,8 +178,9 @@ public sealed class HomeAssistantMediaBrowserClient
             throw new HomeAssistantProtocolException("The media response contained a noncanonical media class.");
         if (item.ChildrenMediaClass is not null && !IsCanonicalMediaClass(item.ChildrenMediaClass))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
-        if ((item.CanPlay || item.CanExpand)
-            && (string.IsNullOrWhiteSpace(item.MediaContentId) || string.IsNullOrWhiteSpace(item.MediaContentType)))
+        if ((item.CanPlay || item.CanExpand || item.CanSearch)
+            && (!IsCanonicalActionableSelector(item.MediaContentId)
+                || !IsCanonicalActionableSelector(item.MediaContentType)))
             throw new HomeAssistantProtocolException("The media response contained an item without a media content identifier or type.");
         if (item.Children is null)
             throw new HomeAssistantProtocolException("The media response contained a null children collection.");

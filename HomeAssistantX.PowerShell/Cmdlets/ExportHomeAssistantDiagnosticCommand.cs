@@ -77,20 +77,7 @@ public sealed class ExportHomeAssistantDiagnosticCommand : HomeAssistantCmdlet
                 await stream.FlushAsync(CancelToken).ConfigureAwait(false);
             }
 
-            if (File.Exists(_resolvedPath))
-            {
-                if (!Force)
-                {
-                    throw new IOException("The destination file already exists. Use -Force to overwrite it.");
-                }
-
-                HomeAssistantAtomicFile.PreserveDestinationPermissions(_resolvedPath, temporaryPath);
-                File.Replace(temporaryPath, _resolvedPath, null);
-            }
-            else
-            {
-                File.Move(temporaryPath, _resolvedPath);
-            }
+            HomeAssistantAtomicFile.CommitTemporaryFile(temporaryPath, _resolvedPath, Force, CancelToken);
         }
         finally
         {

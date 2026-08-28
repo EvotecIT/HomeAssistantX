@@ -275,6 +275,8 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"can_expand\":true,\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"can_play\":true,\"children\":[]}]}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\" track-1 \",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":[]}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\"track-1\",\"media_content_type\":\" audio/mpeg \",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\" search-root \",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":true,\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"search-root\",\"media_content_type\":\" library \",\"can_play\":false,\"can_expand\":false,\"can_search\":true,\"children\":[]}")]
     public async Task MediaBrowseRejectsInvalidActionableContentIdentity(string response)
     {
         using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
