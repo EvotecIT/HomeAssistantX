@@ -149,13 +149,13 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
 {
     private const int MaximumDatagramBytes = 65535;
     private readonly UdpClient?[] _queryClients;
-    private readonly UdpClient _multicastClient;
+    private readonly UdpClient? _multicastClient;
     private readonly IPEndPoint _endpoint;
     private readonly int _interfaceIndex;
     private readonly SemaphoreSlim _receiveGate = new(1, 1);
     private readonly Task<byte[]>?[] _queryReceiveTasks;
     private Task<byte[]>? _multicastReceiveTask;
-    private bool _multicastAvailable = true;
+    private bool _multicastAvailable;
     private int _disposed;
 
     internal UdpHomeAssistantDiscoveryTransport(
@@ -195,15 +195,24 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
             if (queryClients.Count == 0)
                 throw new SocketException((int)SocketError.AddressNotAvailable);
 
-            multicastClient = createClient();
-            multicastClient.Client.ExclusiveAddressUse = false;
-            multicastClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            multicastClient.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
-            multicastClient.Client.Bind(CreateMulticastListenerEndpoint(queryAddresses[0], multicastPort));
-            multicastClient.JoinMulticastGroup(multicastAddress, queryAddresses[0]);
+            try
+            {
+                multicastClient = createClient();
+                multicastClient.Client.ExclusiveAddressUse = false;
+                multicastClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                multicastClient.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
+                multicastClient.Client.Bind(CreateMulticastListenerEndpoint(queryAddresses[0], multicastPort));
+                multicastClient.JoinMulticastGroup(multicastAddress, queryAddresses[0]);
+            }
+            catch (Exception ex) when (IsOptionalMulticastListenerFailure(ex))
+            {
+                multicastClient?.Dispose();
+                multicastClient = null;
+            }
             _queryClients = queryClients.Cast<UdpClient?>().ToArray();
             _queryReceiveTasks = new Task<byte[]>?[_queryClients.Length];
             _multicastClient = multicastClient;
+            _multicastAvailable = multicastClient is not null;
             _endpoint = new IPEndPoint(multicastAddress, multicastPort);
             _interfaceIndex = interfaceIndex;
         }
@@ -242,6 +251,15 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
 
     internal static bool IsExpectedInterface(int expectedInterfaceIndex, int receivedInterfaceIndex)
         => expectedInterfaceIndex > 0 && receivedInterfaceIndex == expectedInterfaceIndex;
+
+    internal bool IsMulticastAvailable => _multicastAvailable;
+
+    private static bool IsOptionalMulticastListenerFailure(Exception exception)
+        => exception is SocketException
+            || exception is ObjectDisposedException
+            || exception is PlatformNotSupportedException
+            || exception is NotSupportedException
+            || exception is InvalidOperationException;
 
     public async Task SendAsync(byte[] query, CancellationToken cancellationToken)
     {
@@ -290,7 +308,7 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
                         _queryReceiveTasks[index] = ReceiveQueryAsync(_queryClients[index]!);
                     }
                 }
-                if (_multicastAvailable) _multicastReceiveTask ??= ReceiveMulticastAsync();
+                if (_multicastAvailable && _multicastClient is not null) _multicastReceiveTask ??= ReceiveMulticastAsync();
                 var active = _queryReceiveTasks.Where(task => task is not null).Cast<Task<byte[]>>().ToList();
                 if (_multicastReceiveTask is not null) active.Add(_multicastReceiveTask);
                 if (active.Count == 0) throw new SocketException((int)SocketError.NetworkDown);
@@ -317,7 +335,7 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
                 catch (SocketException) when (!cancellationToken.IsCancellationRequested)
                 {
                     _multicastAvailable = false;
-                    _multicastClient.Dispose();
+                    _multicastClient?.Dispose();
                 }
             }
         }
@@ -336,11 +354,12 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
 
     private async Task<byte[]> ReceiveMulticastAsync()
     {
+        var multicastClient = _multicastClient ?? throw new SocketException((int)SocketError.NetworkDown);
         var buffer = new byte[MaximumDatagramBytes];
         while (true)
         {
             EndPoint remote = new IPEndPoint(IPAddress.Any, 0);
-            var result = await _multicastClient.Client.ReceiveMessageFromAsync(
+            var result = await multicastClient.Client.ReceiveMessageFromAsync(
                 new ArraySegment<byte>(buffer),
                 SocketFlags.None,
                 remote).ConfigureAwait(false);
@@ -366,7 +385,7 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
             foreach (var queryClient in _queryClients) queryClient?.Dispose();
-            _multicastClient.Dispose();
+            _multicastClient?.Dispose();
             foreach (var queryTask in _queryReceiveTasks) ObserveFailure(queryTask);
             ObserveFailure(_multicastReceiveTask);
         }

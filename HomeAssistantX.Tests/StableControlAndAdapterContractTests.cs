@@ -649,13 +649,13 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
-    public void DnsSdTransportDisposesQuerySocketsWhenListenerAllocationFails()
+    public void DnsSdTransportRetainsQuerySocketsWhenListenerAllocationFails()
     {
         UdpClient? queryClient = null;
         Socket? querySocket = null;
         var allocations = 0;
 
-        Assert.Throws<InvalidOperationException>(() => new UdpHomeAssistantDiscoveryTransport(
+        using (var transport = new UdpHomeAssistantDiscoveryTransport(
             new[] { IPAddress.Loopback },
             1,
             IPAddress.Parse("224.0.0.251"),
@@ -667,11 +667,47 @@ public sealed class StableControlAndAdapterContractTests
                 queryClient = new UdpClient(AddressFamily.InterNetwork);
                 querySocket = queryClient.Client;
                 return queryClient;
-            }));
+            }))
+        {
+            Assert.False(transport.IsMulticastAvailable);
+            Assert.NotNull(queryClient);
+            Assert.NotNull(querySocket);
+            Assert.False(querySocket.SafeHandle.IsClosed);
+        }
 
-        Assert.NotNull(queryClient);
-        Assert.NotNull(querySocket);
-        Assert.True(querySocket.SafeHandle.IsClosed);
+        Assert.True(querySocket!.SafeHandle.IsClosed);
+    }
+
+    [Fact]
+    public void DnsSdRetainsBoundedChildRecordsUntilTheirPtrArrives()
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 0, 0, "ha.local", 8123), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateTxtOnlyPacket(120, new[] { "location_name=My Home", "uuid=test-uuid" }), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateAddressOnlyPacket(120, IPAddress.Parse("192.0.2.10")), aggregate);
+
+        Assert.Empty(aggregate.Build());
+        Assert.Equal(1, aggregate.ServiceCount);
+        Assert.Equal(1, aggregate.TextOwnerCount);
+        Assert.Equal(1, aggregate.AddressHostCount);
+
+        DnsDiscoveryPacket.ReadInto(CreatePtrOnlyPacket(120), aggregate);
+
+        var instance = Assert.Single(aggregate.Build());
+        Assert.Equal("ha.local", instance.HostName);
+        Assert.Equal(8123, instance.Port);
+        Assert.Equal("My Home", instance.Name);
+        Assert.Equal("test-uuid", instance.InstanceId);
+        Assert.Equal(IPAddress.Parse("192.0.2.10"), Assert.Single(instance.Addresses));
+
+        var expiring = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 0, 0, "pending.local", 8123), expiring);
+        DnsDiscoveryPacket.ReadInto(CreateTxtOnlyPacket(120, new[] { "location_name=Pending" }), expiring);
+        now += TimeSpan.FromMilliseconds(5100);
+        Assert.Empty(expiring.Build());
+        Assert.Equal(0, expiring.ServiceCount);
+        Assert.Equal(0, expiring.TextOwnerCount);
     }
 
     [Fact]
@@ -1330,6 +1366,17 @@ public sealed class StableControlAndAdapterContractTests
         Name(stream, "Test._home-assistant._tcp.local"); U16(stream, 33); U16(stream, cacheFlush ? 0x8001 : 1); U32(stream, ttl);
         using var data = new MemoryStream();
         U16(data, priority); U16(data, weight); U16(data, port); Name(data, host); WriteData(stream, data.ToArray());
+        return stream.ToArray();
+    }
+
+    private static byte[] CreatePtrOnlyPacket(uint ttl)
+    {
+        using var stream = new MemoryStream();
+        U16(stream, 0); U16(stream, 0x8400); U16(stream, 0); U16(stream, 1); U16(stream, 0); U16(stream, 0);
+        Name(stream, "_home-assistant._tcp.local"); U16(stream, 12); U16(stream, 1); U32(stream, ttl);
+        using var data = new MemoryStream();
+        Name(data, "Test._home-assistant._tcp.local");
+        WriteData(stream, data.ToArray());
         return stream.ToArray();
     }
 

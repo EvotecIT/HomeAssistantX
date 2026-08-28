@@ -230,6 +230,7 @@ internal sealed class DnsDiscoveryLimits
 internal sealed class DnsDiscoveryAggregate
 {
     private const string ServiceName = "_home-assistant._tcp.local";
+    private static readonly TimeSpan PendingRecordLifetime = TimeSpan.FromSeconds(5);
     private const int MaximumPropertiesPerOwner = 64;
     private const int MaximumRecordsPerOwner = 8;
     private const int MaximumTransitionalRecordsPerOwner = 16;
@@ -283,13 +284,14 @@ internal sealed class DnsDiscoveryAggregate
         {
             var now = _clock();
             Prune(now);
+            if (!_instances.ContainsKey(instance)) return;
             if (!_services.TryGetValue(instance, out var services))
             {
                 if (_services.Count >= _limits.Services) return;
                 _services[instance] = services = new List<CachedService>();
             }
             services.RemoveAll(value => string.Equals(value.DataKey, ServiceKey(host, port), StringComparison.Ordinal));
-            services.Add(new CachedService(host, port, ServiceKey(host, port), now, Expiry(now, 120)));
+            services.Add(new CachedService(host, port, ServiceKey(host, port), now, Expiry(now, 120), true));
         }
     }
 
@@ -299,6 +301,7 @@ internal sealed class DnsDiscoveryAggregate
         {
             var now = _clock();
             Prune(now);
+            if (!_instances.ContainsKey(instance)) return;
             if (!_text.TryGetValue(instance, out var records))
             {
                 if (_text.Count >= _limits.TextOwners) return;
@@ -307,7 +310,7 @@ internal sealed class DnsDiscoveryAggregate
             var cached = records.OrderByDescending(value => value.ReceivedAt).FirstOrDefault();
             if (cached is null)
             {
-                cached = new CachedText(new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), string.Empty, now, Expiry(now, 120));
+                cached = new CachedText(new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), string.Empty, now, Expiry(now, 120), true);
                 records.Add(cached);
             }
 
@@ -347,11 +350,20 @@ internal sealed class DnsDiscoveryAggregate
             }
 
             acceptedInstances.IntersectWith(_instances.Keys);
-            foreach (var update in updates.Where(value => value.Kind == DnsDiscoveryRecordKind.Srv && acceptedInstances.Contains(value.Name))) ApplyService(update, now, updates);
-            foreach (var update in updates.Where(value => value.Kind == DnsDiscoveryRecordKind.Txt && acceptedInstances.Contains(value.Name))) ApplyText(update, now, updates);
+            var goodbyeInstances = new HashSet<string>(
+                updates.Where(value => value.Kind == DnsDiscoveryRecordKind.Ptr && value.Ttl == 0 && IsHomeAssistantPtr(value)).Select(value => value.Target!),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var update in updates.Where(value => value.Kind == DnsDiscoveryRecordKind.Srv
+                && IsHomeAssistantInstanceName(value.Name)
+                && (!goodbyeInstances.Contains(value.Name) || acceptedInstances.Contains(value.Name))))
+                ApplyService(update, now, updates, acceptedInstances.Contains(update.Name));
+            foreach (var update in updates.Where(value => value.Kind == DnsDiscoveryRecordKind.Txt
+                && IsHomeAssistantInstanceName(value.Name)
+                && (!goodbyeInstances.Contains(value.Name) || acceptedInstances.Contains(value.Name))))
+                ApplyText(update, now, updates, acceptedInstances.Contains(update.Name));
 
             var acceptedHosts = new HashSet<string>(
-                _services.Where(value => acceptedInstances.Contains(value.Key)).SelectMany(value => value.Value).Select(value => value.Host),
+                _services.SelectMany(value => value.Value).Select(value => value.Host),
                 StringComparer.OrdinalIgnoreCase);
             foreach (var update in updates.Where(value => (value.Kind == DnsDiscoveryRecordKind.A || value.Kind == DnsDiscoveryRecordKind.Aaaa) && acceptedHosts.Contains(value.Name)))
                 ApplyAddress(update, now, updates);
@@ -405,10 +417,20 @@ internal sealed class DnsDiscoveryAggregate
             return;
         }
         if (_instances.ContainsKey(instance) || _instances.Count < _limits.Instances)
+        {
             _instances[instance] = new CachedPtr(update.DataKey, now, Expiry(now, update.Ttl));
+            if (_services.TryGetValue(instance, out var services))
+                foreach (var service in services) service.IsVerified = true;
+            if (_text.TryGetValue(instance, out var textRecords))
+                foreach (var text in textRecords) text.IsVerified = true;
+        }
     }
 
-    private void ApplyService(DnsDiscoveryUpdate update, TimeSpan now, IReadOnlyList<DnsDiscoveryUpdate> packet)
+    private void ApplyService(
+        DnsDiscoveryUpdate update,
+        TimeSpan now,
+        IReadOnlyList<DnsDiscoveryUpdate> packet,
+        bool isVerified)
     {
         if (!_services.TryGetValue(update.Name, out var records))
         {
@@ -430,10 +452,20 @@ internal sealed class DnsDiscoveryAggregate
         }
         var replaced = records.RemoveAll(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal)) > 0;
         if (replaced || records.Count < MaximumRecordsPerOwner || (announced is not null && records.Count < MaximumTransitionalRecordsPerOwner))
-            records.Add(new CachedService(update.Host!, update.Port, update.DataKey, now, Expiry(now, update.Ttl)));
+            records.Add(new CachedService(
+                update.Host!,
+                update.Port,
+                update.DataKey,
+                now,
+                RecordExpiry(now, update.Ttl, isVerified),
+                isVerified));
     }
 
-    private void ApplyText(DnsDiscoveryUpdate update, TimeSpan now, IReadOnlyList<DnsDiscoveryUpdate> packet)
+    private void ApplyText(
+        DnsDiscoveryUpdate update,
+        TimeSpan now,
+        IReadOnlyList<DnsDiscoveryUpdate> packet,
+        bool isVerified)
     {
         if (!_text.TryGetValue(update.Name, out var records))
         {
@@ -455,7 +487,12 @@ internal sealed class DnsDiscoveryAggregate
         }
         var replaced = records.RemoveAll(value => string.Equals(value.DataKey, update.DataKey, StringComparison.Ordinal)) > 0;
         if (replaced || records.Count < MaximumRecordsPerOwner || (announced is not null && records.Count < MaximumTransitionalRecordsPerOwner))
-            records.Add(new CachedText(update.Properties!, update.DataKey, now, Expiry(now, update.Ttl)));
+            records.Add(new CachedText(
+                update.Properties!,
+                update.DataKey,
+                now,
+                RecordExpiry(now, update.Ttl, isVerified),
+                isVerified));
     }
 
     private void ApplyAddress(DnsDiscoveryUpdate update, TimeSpan now, IReadOnlyList<DnsDiscoveryUpdate> packet)
@@ -488,8 +525,8 @@ internal sealed class DnsDiscoveryAggregate
     private void Prune(TimeSpan now)
     {
         foreach (var key in _instances.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) _instances.Remove(key);
-        foreach (var owner in _services.Keys.ToArray()) { _services[owner].RemoveAll(value => value.ExpiresAt <= now); if (_services[owner].Count == 0 || !_instances.ContainsKey(owner)) _services.Remove(owner); }
-        foreach (var owner in _text.Keys.ToArray()) { _text[owner].RemoveAll(value => value.ExpiresAt <= now); if (_text[owner].Count == 0 || !_instances.ContainsKey(owner)) _text.Remove(owner); }
+        foreach (var owner in _services.Keys.ToArray()) { _services[owner].RemoveAll(value => value.ExpiresAt <= now || value.IsVerified && !_instances.ContainsKey(owner)); if (_services[owner].Count == 0) _services.Remove(owner); }
+        foreach (var owner in _text.Keys.ToArray()) { _text[owner].RemoveAll(value => value.ExpiresAt <= now || value.IsVerified && !_instances.ContainsKey(owner)); if (_text[owner].Count == 0) _text.Remove(owner); }
         var retainedHosts = new HashSet<string>(_services.Values.SelectMany(value => value).Select(value => value.Host), StringComparer.OrdinalIgnoreCase);
         foreach (var owner in _addresses.Keys.ToArray())
         {
@@ -502,10 +539,14 @@ internal sealed class DnsDiscoveryAggregate
     private static bool IsHomeAssistantPtr(DnsDiscoveryUpdate update)
         => string.Equals(update.Name, ServiceName, StringComparison.OrdinalIgnoreCase)
             && update.Target is not null
-            && update.Target.Length > ServiceName.Length + 1
-            && update.Target.EndsWith("." + ServiceName, StringComparison.OrdinalIgnoreCase);
+            && IsHomeAssistantInstanceName(update.Target);
+    private static bool IsHomeAssistantInstanceName(string value)
+        => value.Length > ServiceName.Length + 1
+            && value.EndsWith("." + ServiceName, StringComparison.OrdinalIgnoreCase);
     private static string ServiceKey(string host, int port) => host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture);
     private static TimeSpan Expiry(TimeSpan now, uint ttl) => now + TimeSpan.FromSeconds(ttl == 0 ? 1 : ttl);
+    private static TimeSpan RecordExpiry(TimeSpan now, uint ttl, bool isVerified)
+        => isVerified ? Expiry(now, ttl) : Earlier(Expiry(now, ttl), now + PendingRecordLifetime);
     private static TimeSpan Earlier(TimeSpan left, TimeSpan right) => left <= right ? left : right;
     private static TimeSpan MonotonicNow() => TimeSpan.FromSeconds((double)System.Diagnostics.Stopwatch.GetTimestamp() / System.Diagnostics.Stopwatch.Frequency);
 
@@ -517,8 +558,8 @@ internal sealed class DnsDiscoveryAggregate
         internal TimeSpan ExpiresAt { get; set; }
     }
     private sealed class CachedPtr : CachedRecord { internal CachedPtr(string key, TimeSpan receivedAt, TimeSpan expiresAt) : base(key, receivedAt, expiresAt) { } }
-    private sealed class CachedService : CachedRecord { internal CachedService(string host, int port, string key, TimeSpan receivedAt, TimeSpan expiresAt) : base(key, receivedAt, expiresAt) { Host = host; Port = port; } internal string Host { get; } internal int Port { get; } }
-    private sealed class CachedText : CachedRecord { internal CachedText(Dictionary<string, string?> properties, string key, TimeSpan receivedAt, TimeSpan expiresAt) : base(key, receivedAt, expiresAt) { Properties = properties; } internal Dictionary<string, string?> Properties { get; } }
+    private sealed class CachedService : CachedRecord { internal CachedService(string host, int port, string key, TimeSpan receivedAt, TimeSpan expiresAt, bool isVerified) : base(key, receivedAt, expiresAt) { Host = host; Port = port; IsVerified = isVerified; } internal string Host { get; } internal int Port { get; } internal bool IsVerified { get; set; } }
+    private sealed class CachedText : CachedRecord { internal CachedText(Dictionary<string, string?> properties, string key, TimeSpan receivedAt, TimeSpan expiresAt, bool isVerified) : base(key, receivedAt, expiresAt) { Properties = properties; IsVerified = isVerified; } internal Dictionary<string, string?> Properties { get; } internal bool IsVerified { get; set; } }
     private sealed class CachedAddress { internal CachedAddress(TimeSpan receivedAt, TimeSpan expiresAt) { ReceivedAt = receivedAt; ExpiresAt = expiresAt; } internal TimeSpan ReceivedAt { get; } internal TimeSpan ExpiresAt { get; set; } }
 
     private static string FriendlyInstanceName(string instance)
