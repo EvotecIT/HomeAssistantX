@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using HomeAssistantX.Registries;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -14,9 +15,10 @@ public sealed class RemoveHomeAssistantLabelCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        if (ShouldProcess(LabelId, "Delete Home Assistant label"))
+        var labelId = HomeAssistantRegistryValidation.Require(LabelId, nameof(LabelId));
+        if (ShouldProcess(labelId, "Delete Home Assistant label"))
         {
-            await Client.Registries.DeleteLabelAsync(LabelId, CancelToken).ConfigureAwait(false);
+            await Client.Registries.DeleteLabelAsync(labelId, CancelToken).ConfigureAwait(false);
         }
     }
 }

@@ -60,7 +60,7 @@ public sealed class SetHomeAssistantLabelCommand : HomeAssistantCmdlet
         if (ParameterSetName == "Create")
         {
             var create = new HomeAssistantLabelCreate(Name!) { Color = Color, Description = Description, Icon = Icon };
-            if (ShouldProcess(Name!, "Create Home Assistant label"))
+            if (ShouldProcess(create.Name, "Create Home Assistant label"))
             {
                 WriteObject(await Client.Registries.CreateLabelAsync(create, CancelToken).ConfigureAwait(false));
             }
@@ -68,6 +68,7 @@ public sealed class SetHomeAssistantLabelCommand : HomeAssistantCmdlet
             return;
         }
 
+        var labelId = HomeAssistantRegistryValidation.Require(LabelId, nameof(LabelId));
         var update = new HomeAssistantLabelUpdate();
         var hasName = MyInvocation.BoundParameters.ContainsKey(nameof(Name));
         var hasColor = MyInvocation.BoundParameters.ContainsKey(nameof(Color)) || ClearColor;
@@ -82,9 +83,9 @@ public sealed class SetHomeAssistantLabelCommand : HomeAssistantCmdlet
         if (hasColor) update.WithColor(ClearColor ? null : Color);
         if (hasDescription) update.WithDescription(ClearDescription ? null : Description);
         if (hasIcon) update.WithIcon(ClearIcon ? null : Icon);
-        if (ShouldProcess(LabelId, "Update Home Assistant label"))
+        if (ShouldProcess(labelId, "Update Home Assistant label"))
         {
-            WriteObject(await Client.Registries.UpdateLabelAsync(LabelId, update, CancelToken).ConfigureAwait(false));
+            WriteObject(await Client.Registries.UpdateLabelAsync(labelId, update, CancelToken).ConfigureAwait(false));
         }
     }
 

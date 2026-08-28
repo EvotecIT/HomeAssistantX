@@ -37,6 +37,7 @@ public sealed class SetHomeAssistantCategoryCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        var scope = HomeAssistantRegistryValidation.Require(Scope, nameof(Scope));
         if (Icon is not null && ClearIcon)
         {
             throw new ArgumentException("-Icon cannot be combined with -ClearIcon.");
@@ -50,14 +51,15 @@ public sealed class SetHomeAssistantCategoryCommand : HomeAssistantCmdlet
         if (ParameterSetName == "Create")
         {
             var create = new HomeAssistantCategoryCreate(Name!) { Icon = Icon };
-            if (ShouldProcess(Scope + "/" + Name, "Create Home Assistant category"))
+            if (ShouldProcess(scope + "/" + create.Name, "Create Home Assistant category"))
             {
-                WriteObject(await Client.Registries.CreateCategoryAsync(Scope, create, CancelToken).ConfigureAwait(false));
+                WriteObject(await Client.Registries.CreateCategoryAsync(scope, create, CancelToken).ConfigureAwait(false));
             }
 
             return;
         }
 
+        var categoryId = HomeAssistantRegistryValidation.Require(CategoryId, nameof(CategoryId));
         var update = new HomeAssistantCategoryUpdate();
         var hasName = MyInvocation.BoundParameters.ContainsKey(nameof(Name));
         var hasIcon = MyInvocation.BoundParameters.ContainsKey(nameof(Icon)) || ClearIcon;
@@ -68,9 +70,9 @@ public sealed class SetHomeAssistantCategoryCommand : HomeAssistantCmdlet
 
         if (hasName) update.WithName(Name!);
         if (hasIcon) update.WithIcon(ClearIcon ? null : Icon);
-        if (ShouldProcess(Scope + "/" + CategoryId, "Update Home Assistant category"))
+        if (ShouldProcess(scope + "/" + categoryId, "Update Home Assistant category"))
         {
-            WriteObject(await Client.Registries.UpdateCategoryAsync(Scope, CategoryId, update, CancelToken).ConfigureAwait(false));
+            WriteObject(await Client.Registries.UpdateCategoryAsync(scope, categoryId, update, CancelToken).ConfigureAwait(false));
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using HomeAssistantX.Registries;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -19,9 +20,11 @@ public sealed class RemoveHomeAssistantCategoryCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        if (ShouldProcess(Scope + "/" + CategoryId, "Delete Home Assistant category"))
+        var scope = HomeAssistantRegistryValidation.Require(Scope, nameof(Scope));
+        var categoryId = HomeAssistantRegistryValidation.Require(CategoryId, nameof(CategoryId));
+        if (ShouldProcess(scope + "/" + categoryId, "Delete Home Assistant category"))
         {
-            await Client.Registries.DeleteCategoryAsync(Scope, CategoryId, CancelToken).ConfigureAwait(false);
+            await Client.Registries.DeleteCategoryAsync(scope, categoryId, CancelToken).ConfigureAwait(false);
         }
     }
 }

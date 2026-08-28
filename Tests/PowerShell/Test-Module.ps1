@@ -430,9 +430,9 @@ try {
         throw 'The notification cmdlet produced the wrong action payload.'
     }
 
-    $updatedLabel = Set-HomeAssistantLabel -LabelId security -ClearColor -Description 'Safety devices' -Confirm:$false
+    $updatedLabel = Set-HomeAssistantLabel -LabelId ' security ' -ClearColor -Description 'Safety devices' -Confirm:$false
     if ($updatedLabel.LabelId -ne 'security' -or $null -ne $updatedLabel.Color) { throw 'The label update contract was not returned.' }
-    $updatedCategory = Set-HomeAssistantCategory -Scope automation -CategoryId comfort -ClearIcon -Confirm:$false
+    $updatedCategory = Set-HomeAssistantCategory -Scope ' automation ' -CategoryId ' comfort ' -ClearIcon -Confirm:$false
     if ($updatedCategory.CategoryId -ne 'comfort' -or $null -ne $updatedCategory.Icon) { throw 'The category update contract was not returned.' }
     $null = Set-HomeAssistantCategory -Scope automation -Name Comfort -ClearIcon:$false -WhatIf
     $null = Set-HomeAssistantLabel -Name Security -ClearColor:$false -ClearDescription:$false -ClearIcon:$false -WhatIf
@@ -441,6 +441,12 @@ try {
     foreach ($invalidPlatformData in @(
         { Set-HomeAssistantLabel -LabelId security -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCategory -Scope automation -CategoryId comfort -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantLabel -LabelId ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLabel -LabelId ' ' -Description test -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantCategory -Scope ' ' -CategoryId comfort -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantCategory -Scope automation -CategoryId ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCategory -Scope ' ' -Name Comfort -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantCategory -Scope automation -CategoryId ' ' -Icon mdi:test -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantLabel -Name Security -ClearColor -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCategory -Scope automation -Name Comfort -ClearIcon -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-27 -WhatIf -ErrorAction Stop },
