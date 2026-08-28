@@ -29,6 +29,7 @@ public sealed class HomeAssistantRegistryClient
             await partialEntitiesTask.ConfigureAwait(false),
             "entity registry",
             cancellationToken);
+        ValidateAssignmentCollections(partialEntities, cancellationToken);
         var entities = partialEntities;
         if (partialEntities.Count > 0)
         {
@@ -40,14 +41,21 @@ public sealed class HomeAssistantRegistryClient
                 },
                 cancellationToken).ConfigureAwait(false);
             entities = DeserializeExtendedEntities(extendedEntities, partialEntities, cancellationToken);
+            ValidateAssignmentCollections(entities, cancellationToken);
         }
 
         var configEntries = await configEntriesTask.ConfigureAwait(false);
+        var areas = DeserializeArray<HomeAssistantArea>(await areasTask.ConfigureAwait(false), "area registry", cancellationToken);
+        var floors = DeserializeArray<HomeAssistantFloor>(await floorsTask.ConfigureAwait(false), "floor registry", cancellationToken);
+        var devices = DeserializeArray<HomeAssistantDeviceRegistryEntry>(await devicesTask.ConfigureAwait(false), "device registry", cancellationToken);
+        ValidateAssignmentCollections(areas, cancellationToken);
+        ValidateAssignmentCollections(floors, cancellationToken);
+        ValidateAssignmentCollections(devices, cancellationToken);
         return new HomeAssistantRegistrySnapshot
         {
-            Areas = DeserializeArray<HomeAssistantArea>(await areasTask.ConfigureAwait(false), "area registry", cancellationToken),
-            Floors = DeserializeArray<HomeAssistantFloor>(await floorsTask.ConfigureAwait(false), "floor registry", cancellationToken),
-            Devices = DeserializeArray<HomeAssistantDeviceRegistryEntry>(await devicesTask.ConfigureAwait(false), "device registry", cancellationToken),
+            Areas = areas,
+            Floors = floors,
+            Devices = devices,
             Entities = entities,
             ConfigEntries = configEntries.Entries,
             Labels = (await labelsTask.ConfigureAwait(false)).Entries,
@@ -262,6 +270,77 @@ public sealed class HomeAssistantRegistryClient
             value,
             "The Home Assistant " + name + " response could not be decoded.",
             cancellationToken: cancellationToken);
+    }
+
+    internal static void ValidateAssignmentCollections(
+        IEnumerable<HomeAssistantArea> entries,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequireAssignmentCollection(entry.Aliases, "area aliases", cancellationToken);
+            RequireAssignmentCollection(entry.Labels, "area labels", cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    internal static void ValidateAssignmentCollections(
+        IEnumerable<HomeAssistantFloor> entries,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequireAssignmentCollection(entry.Aliases, "floor aliases", cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    internal static void ValidateAssignmentCollections(
+        IEnumerable<HomeAssistantDeviceRegistryEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequireAssignmentCollection(entry.ConfigEntries, "device configuration-entry assignments", cancellationToken);
+            RequireAssignmentCollection(entry.Labels, "device label assignments", cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    internal static void ValidateAssignmentCollections(
+        IEnumerable<HomeAssistantEntityRegistryEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequireAssignmentCollection(entry.Aliases, "entity aliases", cancellationToken, allowNullEntries: true);
+            RequireAssignmentCollection(entry.Labels, "entity label assignments", cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void RequireAssignmentCollection<T>(
+        IEnumerable<T>? values,
+        string responseName,
+        CancellationToken cancellationToken,
+        bool allowNullEntries = false)
+    {
+        if (values is null)
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant " + responseName + " were null.");
+        }
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!allowNullEntries && value is null)
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant " + responseName + " contained a null value.");
+            }
+        }
     }
 
     private static T DeserializeObject<T>(

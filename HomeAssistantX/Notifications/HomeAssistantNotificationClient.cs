@@ -100,45 +100,58 @@ public sealed class HomeAssistantNotificationClient
 
             var rawType = typeValue.GetString() ?? string.Empty;
             var notificationKeys = new HashSet<string>(StringComparer.Ordinal);
-            if (notificationsValue.EnumerateObject().Any(item => !notificationKeys.Add(item.Name)))
+            foreach (var item in notificationsValue.EnumerateObject())
             {
-                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notification identifier.");
+                token.ThrowIfCancellationRequested();
+                if (!notificationKeys.Add(item.Name))
+                {
+                    throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notification identifier.");
+                }
             }
             var notifications = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantPersistentNotification>>(
                 notificationsValue,
                 "The Home Assistant persistent-notification update could not be decoded.",
                 cancellationToken: token);
             ValidateNotifications(notifications.Values, "The Home Assistant persistent-notification update", token);
-            if (notifications.Any(item => !string.Equals(item.Key, item.Value.NotificationId, StringComparison.Ordinal)))
+            foreach (var item in notifications)
             {
-                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a mismatched notification identifier.");
+                token.ThrowIfCancellationRequested();
+                if (!string.Equals(item.Key, item.Value.NotificationId, StringComparison.Ordinal))
+                {
+                    throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a mismatched notification identifier.");
+                }
             }
+            var raw = await HomeAssistantJson.SnapshotResponseAsync(
+                value,
+                "The Home Assistant persistent-notification update could not be snapshotted.",
+                token).ConfigureAwait(false);
             await handler(new HomeAssistantPersistentNotificationUpdate
             {
                 RawType = rawType,
                 Type = ParseType(rawType),
-                Notifications = new Dictionary<string, HomeAssistantPersistentNotification>(notifications, StringComparer.Ordinal),
-                Raw = value.Clone()
+                Notifications = notifications,
+                Raw = raw
             }, token).ConfigureAwait(false);
         }, cancellationToken);
     }
 
-    private static void ValidateNotifications(
+    internal static void ValidateNotifications(
         IEnumerable<HomeAssistantPersistentNotification> notifications,
         string responseName,
         CancellationToken cancellationToken)
     {
-        HomeAssistantJson.RequireNoNullCollectionEntries(
-            notifications,
-            responseName + " contained a null item.",
-            cancellationToken: cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (notifications.Any(item => string.IsNullOrWhiteSpace(item.NotificationId) || string.IsNullOrWhiteSpace(item.Message)))
-            throw new HomeAssistantProtocolException(responseName + " contained an incomplete item.");
-        cancellationToken.ThrowIfCancellationRequested();
         var identifiers = new HashSet<string>(StringComparer.Ordinal);
-        if (notifications.Any(item => !identifiers.Add(item.NotificationId)))
-            throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification identifier.");
+        foreach (var item in notifications)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (item is null)
+                throw new HomeAssistantProtocolException(responseName + " contained a null item.");
+            if (string.IsNullOrWhiteSpace(item.NotificationId) || string.IsNullOrWhiteSpace(item.Message))
+                throw new HomeAssistantProtocolException(responseName + " contained an incomplete item.");
+            if (!identifiers.Add(item.NotificationId))
+                throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification identifier.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static Dictionary<string, object?> MessageData(string message, string? title)

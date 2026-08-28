@@ -115,6 +115,22 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public void PersistentNotificationValidationStopsWhenCancellationArrivesDuringTraversal()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var notifications = new CancellingRegistryEnumerable<HomeAssistantPersistentNotification>(
+            cancellation,
+            () => new HomeAssistantPersistentNotification { NotificationId = "notice", Message = "Message" });
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantNotificationClient.ValidateNotifications(
+                notifications,
+                "The test notification response",
+                cancellation.Token));
+        Assert.InRange(notifications.ReadCount, 1, 2);
+    }
+
+    [Fact]
     public async Task RegistrySnapshotTreatsUnsupportedOrUnauthorizedLabelsAsOptionalEnrichment()
     {
         foreach (var errorCode in new[] { "unknown_command", "unauthorized" })
@@ -371,6 +387,25 @@ public sealed class LivePlatformDataContractTests
             Assert.Equal(JsonValueKind.Null, categoryUpdate.RootElement.GetProperty("icon").ValueKind);
         }
         await client.Registries.DeleteCategoryAsync("automation", "comfort");
+    }
+
+    [Fact]
+    public void RegistrySnapshotValidationRejectsNullAssignmentCollections()
+    {
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantArea { Aliases = null! } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantArea { Labels = null! } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantFloor { Aliases = null! } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantDeviceRegistryEntry { ConfigEntries = null! } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantDeviceRegistryEntry { Labels = null! } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantEntityRegistryEntry { Aliases = null! } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantEntityRegistryEntry { Labels = null! } }, CancellationToken.None));
     }
 
     [Fact]
