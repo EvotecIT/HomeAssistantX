@@ -84,13 +84,24 @@ public sealed partial class HomeAssistantRestClient
             AppendQuery(path, parameters),
             null,
             cancellationToken).ConfigureAwait(false);
-        if (entries.Any(entry => entry is null || !entry.When.HasValue))
-        {
-            throw new HomeAssistantProtocolException(
-                "The Home Assistant logbook response contained an entry without a timestamp.");
-        }
-
+        ValidateLogbookEntries(entries, cancellationToken);
         return entries;
+    }
+
+    internal static void ValidateLogbookEntries(
+        IEnumerable<HomeAssistantLogbookEntry?> entries,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (entry is null || !entry.When.HasValue)
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant logbook response contained an entry without a timestamp.");
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     /// <summary>Gets the current Home Assistant error log as plaintext.</summary>

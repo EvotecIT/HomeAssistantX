@@ -268,4 +268,37 @@ public sealed class CoreRestApiContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
             new HomeAssistantLogbookQuery { StartTime = start }));
     }
+
+    [Fact]
+    public void LogbookValidationObservesCancellationDuringProjection()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var entries = new CancellingLogbookEntries(cancellation);
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRestClient.ValidateLogbookEntries(entries, cancellation.Token));
+        Assert.InRange(entries.ReadCount, 1, 2);
+    }
+
+    private sealed class CancellingLogbookEntries : IEnumerable<HomeAssistantLogbookEntry?>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancellingLogbookEntries(CancellationTokenSource cancellation) => _cancellation = cancellation;
+
+        internal int ReadCount { get; private set; }
+
+        public IEnumerator<HomeAssistantLogbookEntry?> GetEnumerator()
+        {
+            for (var index = 0; index < 1000; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 2) throw new InvalidOperationException("Logbook validation continued after cancellation.");
+                yield return new HomeAssistantLogbookEntry { When = DateTimeOffset.UtcNow };
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
 }

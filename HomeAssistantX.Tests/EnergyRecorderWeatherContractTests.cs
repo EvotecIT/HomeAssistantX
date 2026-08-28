@@ -113,6 +113,20 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("{\"energy_sources\":[],\"energy_sources\":[{}],\"device_consumption\":[]}")]
+    [InlineData("{\"energy_sources\":[],\"device_consumption\":[],\"device_consumption\":[]}")]
+    public async Task EnergyPreferenceResponsesRejectDuplicateCollectionProperties(string response)
+    {
+        using var server = new TestHomeAssistantServer { EnergyPreferencesResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+        using var update = JsonDocument.Parse("[]");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetPreferencesAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.SavePreferencesAsync(
+            new HomeAssistantEnergyPreferencesUpdate { EnergySources = update.RootElement.Clone() }));
+    }
+
+    [Theory]
     [InlineData("{}")]
     [InlineData("{\"cost_sensors\":{},\"solar_forecast_domains\":null}")]
     [InlineData("{\"cost_sensors\":null,\"solar_forecast_domains\":[]}")]
@@ -552,6 +566,9 @@ public sealed class EnergyRecorderWeatherContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "Sensor.*" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor*" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor.[bad" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor__bad.*" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor_.kitchen" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor._kitchen" }));
         Assert.Null(server.GetLastWebSocketCommand("recorder/clear_statistics"));
         Assert.Null(server.LastServiceCallBody);
     }
@@ -689,6 +706,17 @@ public sealed class EnergyRecorderWeatherContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetConvertibleUnitsAsync());
+    }
+
+    [Fact]
+    public void WeatherConvertibleUnitProjectionObservesCancellation()
+    {
+        using var document = JsonDocument.Parse("{\"temperature_unit\":[\"°C\",\"°F\"]}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantWeatherClient.ParseConvertibleUnits(document.RootElement, cancellation.Token));
     }
 
     [Theory]
@@ -887,6 +915,7 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true,\"mean_type\":1}]")]
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":true,\"has_sum\":true,\"mean_type\":0}]")]
     [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":true,\"has_sum\":true,\"mean_type\":2}]")]
+    [InlineData("[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":false}]")]
     public async Task RecorderMetadataRequiresIdentityAndCapabilityFields(string response)
     {
         using var server = new TestHomeAssistantServer { RecorderMetadataResponseJson = response };
@@ -1195,6 +1224,35 @@ public sealed class EnergyRecorderWeatherContractTests
             client.Weather.GetForecastAsync("weather.home", HomeAssistantWeatherForecastType.Daily));
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("true")]
+    [InlineData("false")]
+    public async Task WeatherForecastRejectsUnsupportedWindBearingShapes(string value)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            WeatherForecastResponseJson = "{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-28T10:00:00+00:00\",\"wind_bearing\":" + value + "}]}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Weather.GetForecastAsync("weather.home", HomeAssistantWeatherForecastType.Daily));
+    }
+
+    [Fact]
+    public void WeatherSortComparerObservesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var comparer = new HomeAssistantX.Protocol.CancellationAwareStringComparer(
+            StringComparer.OrdinalIgnoreCase,
+            cancellation.Token);
+
+        Assert.ThrowsAny<OperationCanceledException>(() => comparer.Compare("weather.a", "weather.b"));
+    }
+
     [Fact]
     public async Task RecorderUnitChangesRejectIdenticalEndpointsBeforeDispatch()
     {
@@ -1226,6 +1284,71 @@ public sealed class EnergyRecorderWeatherContractTests
             new[] { "sensor.energy" },
             "sensor.co2",
             HomeAssistantEnergyPeriod.Hour));
+    }
+
+    [Theory]
+    [InlineData("2026-08-26T07:59:59+00:00")]
+    [InlineData("2026-08-26T12:00:00+00:00")]
+    public async Task FossilEnergyRejectsPeriodsOutsideTheRequestedWindow(string timestamp)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FossilEnergyResponseJson = "{\"" + timestamp + "\":0.42}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            new DateTimeOffset(2026, 8, 26, 9, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero),
+            new[] { "sensor.energy" },
+            "sensor.co2",
+            HomeAssistantEnergyPeriod.Hour));
+    }
+
+    [Theory]
+    [InlineData(HomeAssistantEnergyPeriod.FiveMinute, "2026-10-01T00:00:00+02:00")]
+    [InlineData(HomeAssistantEnergyPeriod.Day, "2026-10-24T23:00:00+00:00")]
+    [InlineData(HomeAssistantEnergyPeriod.Month, "2026-10-01T00:00:00+02:00")]
+    public async Task FossilEnergyAcceptsHomeAssistantCalendarBucketStarts(
+        HomeAssistantEnergyPeriod period,
+        string timestamp)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FossilEnergyResponseJson = "{\"" + timestamp + "\":0.42}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var result = await client.Energy.GetFossilEnergyConsumptionAsync(
+            new DateTimeOffset(2026, 10, 26, 1, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 10, 26, 3, 30, 0, TimeSpan.Zero),
+            new[] { "sensor.energy" },
+            "sensor.co2",
+            period);
+
+        Assert.Single(result);
+    }
+
+    [Theory]
+    [InlineData(HomeAssistantEnergyPeriod.FiveMinute, "2026-09-22T00:00:00+00:00")]
+    [InlineData(HomeAssistantEnergyPeriod.Day, "2026-10-24T21:00:00+00:00")]
+    [InlineData(HomeAssistantEnergyPeriod.Month, "2026-09-22T00:00:00+00:00")]
+    public async Task FossilEnergyRejectsCalendarBucketsBeyondTheCorrelationMargin(
+        HomeAssistantEnergyPeriod period,
+        string timestamp)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FossilEnergyResponseJson = "{\"" + timestamp + "\":0.42}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            new DateTimeOffset(2026, 10, 26, 1, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 10, 26, 3, 30, 0, TimeSpan.Zero),
+            new[] { "sensor.energy" },
+            "sensor.co2",
+            period));
     }
 
     [Theory]
@@ -1307,8 +1430,8 @@ public sealed class EnergyRecorderWeatherContractTests
         using var client = TestClientFactory.Create(server);
 
         await client.Energy.GetFossilEnergyConsumptionAsync(
-            DateTimeOffset.UtcNow.AddHours(-1),
-            DateTimeOffset.UtcNow,
+            new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero),
             new[] { " sensor.energy ", " source:grid_energy " },
             " sensor.co2 ",
             HomeAssistantEnergyPeriod.Hour);

@@ -27,11 +27,17 @@ public sealed class HomeAssistantWeatherClient
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
         var weatherStates = HomeAssistantEntityId.RequireResponseDomainStates(states, "weather", cancellationToken).ToArray();
-        if (weatherStates.Select(state => state.EntityId).Distinct(StringComparer.Ordinal).Count() != weatherStates.Length)
-            throw new HomeAssistantProtocolException("The Home Assistant weather response contained duplicate entities.");
-        return weatherStates
-            .Select(ToObservation)
-            .OrderBy(item => item.EntityId, StringComparer.OrdinalIgnoreCase).ToArray();
+        var observations = new List<HomeAssistantWeatherObservation>(weatherStates.Length);
+        foreach (var state in weatherStates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            observations.Add(ToObservation(state));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        observations.Sort((left, right) => comparer.Compare(left.EntityId, right.EntityId));
+        cancellationToken.ThrowIfCancellationRequested();
+        return observations;
     }
 
     public async Task<HomeAssistantWeatherObservation> GetAsync(string entityId, CancellationToken cancellationToken = default)
@@ -80,25 +86,40 @@ public sealed class HomeAssistantWeatherClient
         var value = await _webSocket.RequestAsync("weather/convertible_units", null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("units", out var units) || units.ValueKind != JsonValueKind.Object)
             throw new HomeAssistantProtocolException("The weather convertible-unit response had an unexpected shape.");
+        return ParseConvertibleUnits(units, cancellationToken);
+    }
+
+    internal static IReadOnlyDictionary<string, IReadOnlyList<string>> ParseConvertibleUnits(
+        JsonElement units,
+        CancellationToken cancellationToken)
+    {
         var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in units.EnumerateObject())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantEntityId.TryNormalizeDomain(property.Name, out var normalizedCategory)
                 || !string.Equals(property.Name, normalizedCategory, StringComparison.Ordinal)
                 || result.ContainsKey(property.Name))
                 throw new HomeAssistantProtocolException("The weather convertible-unit response contained a noncanonical or duplicate unit category.");
             if (property.Value.ValueKind != JsonValueKind.Array)
                 throw new HomeAssistantProtocolException("A weather convertible-unit list was not an array.");
-            var values = property.Value.EnumerateArray().ToArray();
-            if (values.Any(item => item.ValueKind != JsonValueKind.String
-                || string.IsNullOrWhiteSpace(item.GetString())
-                || !string.Equals(item.GetString(), item.GetString()!.Trim(), StringComparison.Ordinal)))
-                throw new HomeAssistantProtocolException("A weather convertible-unit list contained a noncanonical value.");
-            var names = values.Select(item => item.GetString()!).ToArray();
-            if (names.Distinct(StringComparer.Ordinal).Count() != names.Length)
-                throw new HomeAssistantProtocolException("A weather convertible-unit list contained a duplicate value.");
+            var names = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in property.Value.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (item.ValueKind != JsonValueKind.String
+                    || item.GetString() is not string name
+                    || string.IsNullOrWhiteSpace(name)
+                    || !string.Equals(name, name.Trim(), StringComparison.Ordinal))
+                    throw new HomeAssistantProtocolException("A weather convertible-unit list contained a noncanonical value.");
+                if (!seen.Add(name))
+                    throw new HomeAssistantProtocolException("A weather convertible-unit list contained a duplicate value.");
+                names.Add(name);
+            }
             result[property.Name] = names;
         }
+        cancellationToken.ThrowIfCancellationRequested();
         return result;
     }
 
@@ -228,13 +249,23 @@ public sealed class HomeAssistantWeatherClient
         }
 
         if (value.TryGetProperty("wind_bearing", out var windBearing)
-            && windBearing.ValueKind == JsonValueKind.Number
-            && (!windBearing.TryGetDouble(out var bearing) || double.IsNaN(bearing) || double.IsInfinity(bearing)))
+            && !IsValidWindBearing(windBearing))
         {
             return false;
         }
 
         return true;
+    }
+
+    private static bool IsValidWindBearing(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Null) return true;
+        if (value.ValueKind == JsonValueKind.String)
+            return !string.IsNullOrWhiteSpace(value.GetString());
+        return value.ValueKind == JsonValueKind.Number
+            && value.TryGetDouble(out var bearing)
+            && !double.IsNaN(bearing)
+            && !double.IsInfinity(bearing);
     }
 
     private static bool HasFiniteOptionalNumber(JsonElement value, string propertyName)

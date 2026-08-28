@@ -13,17 +13,23 @@ internal static class HomeAssistantRecorderEntityGlob
 
         var separator = candidate.IndexOf('.');
         if (separator <= 0 || separator != candidate.LastIndexOf('.') || separator == candidate.Length - 1) return false;
-        if (!IsPatternSegment(candidate, 0, separator) || !IsPatternSegment(candidate, separator + 1, candidate.Length)) return false;
+        if (!IsPatternSegment(candidate, 0, separator, disallowDoubleUnderscore: true)
+            || !IsPatternSegment(candidate, separator + 1, candidate.Length, disallowDoubleUnderscore: false)) return false;
 
         normalized = candidate;
         return true;
     }
 
-    private static bool IsPatternSegment(string value, int start, int end)
+    private static bool IsPatternSegment(string value, int start, int end, bool disallowDoubleUnderscore)
     {
+        if (value[start] == '_' || value[end - 1] == '_') return false;
         for (var index = start; index < end; index++)
         {
             var character = value[index];
+            if (disallowDoubleUnderscore
+                && character == '_'
+                && index + 1 < end
+                && value[index + 1] == '_') return false;
             if (IsSlugCharacter(character) || character is '*' or '?') continue;
             if (character != '[') return false;
 

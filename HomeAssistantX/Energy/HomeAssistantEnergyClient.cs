@@ -21,6 +21,7 @@ public sealed class HomeAssistantEnergyClient
     public async Task<HomeAssistantEnergyPreferences> GetPreferencesAsync(CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("energy/get_prefs", null, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicatePreferenceProperties(value, cancellationToken);
         var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyPreferences>(
             value,
             "The Home Assistant Energy preferences could not be decoded.",
@@ -36,6 +37,7 @@ public sealed class HomeAssistantEnergyClient
         if (update is null) throw new ArgumentNullException(nameof(update));
         cancellationToken.ThrowIfCancellationRequested();
         var value = await _webSocket.RequestAsync("energy/save_prefs", update.ToPayload(cancellationToken), cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicatePreferenceProperties(value, cancellationToken);
         var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantEnergyPreferences>(
             value,
             "The updated Home Assistant Energy preferences could not be decoded.",
@@ -151,6 +153,7 @@ public sealed class HomeAssistantEnergyClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantTimestamp.TryParse(property.Name, out var timestamp)
+                || !IsWithinRequestedWindow(timestamp, start, end, period)
                 || property.Value.ValueKind != JsonValueKind.Number
                 || !property.Value.TryGetDouble(out var amount)
                 || double.IsNaN(amount)
@@ -168,7 +171,32 @@ public sealed class HomeAssistantEnergyClient
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return result.OrderBy(item => item.Start).ToArray();
+        result.Sort((left, right) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return left.Start.CompareTo(right.Start);
+        });
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
+
+    private static bool IsWithinRequestedWindow(
+        DateTimeOffset timestamp,
+        DateTimeOffset start,
+        DateTimeOffset end,
+        HomeAssistantEnergyPeriod period)
+    {
+        var earliest = period switch
+        {
+            // Home Assistant 2026.8 accepts `5minute` but currently reduces every
+            // period other than hour/day into calendar-month buckets.
+            HomeAssistantEnergyPeriod.FiveMinute => start.AddDays(-33),
+            HomeAssistantEnergyPeriod.Hour => start.AddHours(-1),
+            HomeAssistantEnergyPeriod.Day => start.AddHours(-27),
+            HomeAssistantEnergyPeriod.Month => start.AddDays(-33),
+            _ => throw new ArgumentOutOfRangeException(nameof(period))
+        };
+        return timestamp >= earliest && timestamp < end;
     }
 
     private static string[] RequireIds(
@@ -206,6 +234,14 @@ public sealed class HomeAssistantEnergyClient
         RequireObjectArray(preferences.EnergySources, "energy_sources", cancellationToken);
         RequireObjectArray(preferences.DeviceConsumption, "device_consumption", cancellationToken);
         RequireObjectArray(preferences.DeviceConsumptionWater, "device_consumption_water", cancellationToken, required: false);
+    }
+
+    private static void RequireNoDuplicatePreferenceProperties(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+            throw new HomeAssistantProtocolException("The Home Assistant Energy preferences contained duplicate JSON properties.");
     }
 
     private static void RequireObjectArray(

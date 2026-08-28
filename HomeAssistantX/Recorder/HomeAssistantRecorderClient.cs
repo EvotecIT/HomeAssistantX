@@ -281,11 +281,17 @@ public sealed class HomeAssistantRecorderClient
             value,
             failureMessage,
             cancellationToken: cancellationToken);
-        if (metadata.Any(item => item.MeanType.HasValue
-                && (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)
-                    || item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic))
-            || item.UnitClass is not null && !HomeAssistantStatisticIdentifier.IsSlug(item.UnitClass)))
-            throw new HomeAssistantProtocolException(failureMessage);
+        foreach (var item in metadata)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (item.MeanType.HasValue
+                    && (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)
+                        || item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic))
+                || !item.HasMean && !item.HasSum && item.MeanType != HomeAssistantStatisticMeanType.Circular
+                || item.UnitClass is not null && !HomeAssistantStatisticIdentifier.IsSlug(item.UnitClass))
+                throw new HomeAssistantProtocolException(failureMessage);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
         return metadata;
     }
 
