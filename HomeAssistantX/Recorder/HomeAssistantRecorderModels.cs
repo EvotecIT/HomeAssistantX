@@ -170,7 +170,12 @@ public sealed class HomeAssistantStatisticImportMetadata
 
     /// <summary>Validates metadata and rows as one Recorder import before dispatch.</summary>
     public void ValidateRows(IReadOnlyCollection<HomeAssistantStatisticImportRow> rows)
+        => ValidateRows(rows, CancellationToken.None);
+
+    /// <summary>Validates metadata and rows as one Recorder import before dispatch while observing cancellation.</summary>
+    public void ValidateRows(IReadOnlyCollection<HomeAssistantStatisticImportRow> rows, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(StatisticId)) throw new ArgumentException("Import metadata requires StatisticId.", nameof(StatisticId));
         if (string.IsNullOrWhiteSpace(Source)) throw new ArgumentException("Import metadata requires Source.", nameof(Source));
         var statisticId = StatisticId.Trim();
@@ -192,6 +197,7 @@ public sealed class HomeAssistantStatisticImportMetadata
         DateTimeOffset? previousStart = null;
         foreach (var row in rows)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (row is null) throw new ArgumentException("Statistics rows cannot contain null values.", nameof(rows));
             if (row.Start.UtcDateTime.Ticks % TimeSpan.TicksPerHour != 0)
                 throw new ArgumentException("Imported statistics must start at the top of an hour.", nameof(rows));
@@ -276,6 +282,7 @@ internal static class HomeAssistantStatisticIdentifier
     internal static string? NormalizeOptionalUnit(string? value, string parameterName)
     {
         if (value is null) return null;
+        if (value.Length == 0) return string.Empty;
         if (string.IsNullOrWhiteSpace(value))
             throw new ArgumentException("A supplied unit cannot be empty.", parameterName);
         return value.Trim();

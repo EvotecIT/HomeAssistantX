@@ -178,7 +178,7 @@ public sealed class HomeAssistantRecorderClient
     public async Task ImportStatisticsAsync(HomeAssistantStatisticImportMetadata metadata, IReadOnlyCollection<HomeAssistantStatisticImportRow> rows, CancellationToken cancellationToken = default)
     {
         if (metadata is null) throw new ArgumentNullException(nameof(metadata));
-        metadata.ValidateRows(rows);
+        metadata.ValidateRows(rows, cancellationToken);
         var unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass));
         var unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement));
         var metadataPayload = new Dictionary<string, object?>
@@ -192,11 +192,17 @@ public sealed class HomeAssistantRecorderClient
             ["unit_of_measurement"] = unitOfMeasurement
         };
         metadataPayload["mean_type"] = (int)metadata.MeanType;
-        var rowPayload = rows.Select(ToImportPayload).ToArray();
+        var rowPayload = new List<Dictionary<string, object?>>(rows.Count);
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            rowPayload.Add(ToImportPayload(row));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
         _ = await _webSocket.RequestAsync("recorder/import_statistics", new Dictionary<string, object?>
         {
             ["metadata"] = metadataPayload,
-            ["stats"] = rowPayload
+            ["stats"] = rowPayload.ToArray()
         }, cancellationToken).ConfigureAwait(false);
     }
 

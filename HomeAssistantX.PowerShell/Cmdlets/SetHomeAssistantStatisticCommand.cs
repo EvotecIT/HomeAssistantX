@@ -47,7 +47,11 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 throw new ArgumentException("At least one import row is required.", nameof(ImportRow));
             }
 
-            _importRows.AddRange(ImportRow);
+            foreach (var row in ImportRow)
+            {
+                CancelToken.ThrowIfCancellationRequested();
+                _importRows.Add(row);
+            }
             return;
         }
 
@@ -128,12 +132,15 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             return;
         }
 
-        var metadata = ValidateImport(ImportMetadata, _importRows);
+        var metadata = ValidateImport(ImportMetadata, _importRows, CancelToken);
         if (!ShouldProcess(ConnectionDisplayName, $"Import {_importRows.Count} Recorder statistics rows for 1 identifier")) return;
         await Client.Recorder.ImportStatisticsAsync(metadata, _importRows, CancelToken).ConfigureAwait(false);
     }
 
-    private static HomeAssistantStatisticImportMetadata ValidateImport(HomeAssistantStatisticImportMetadata? metadata, IReadOnlyCollection<HomeAssistantStatisticImportRow> rows)
+    private static HomeAssistantStatisticImportMetadata ValidateImport(
+        HomeAssistantStatisticImportMetadata? metadata,
+        IReadOnlyCollection<HomeAssistantStatisticImportRow> rows,
+        CancellationToken cancellationToken)
     {
         if (metadata is null) throw new ArgumentException("Import metadata is required.", nameof(ImportMetadata));
         if (!HomeAssistantStatisticIdentifier.TryNormalizeExternal(metadata.StatisticId, out var statisticId, out var source)
@@ -150,7 +157,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             UnitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass)),
             UnitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement))
         };
-        normalized.ValidateRows(rows);
+        normalized.ValidateRows(rows, cancellationToken);
         return normalized;
     }
 

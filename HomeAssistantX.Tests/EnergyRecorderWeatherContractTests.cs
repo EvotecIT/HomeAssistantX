@@ -557,6 +557,43 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderMetadataMutationsPreserveAnEmptyUnitSentinel()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Recorder.UpdateStatisticsMetadataAsync("sensor.grid_energy", "energy", string.Empty);
+
+        using var command = JsonDocument.Parse(Assert.IsType<string>(
+            server.GetLastWebSocketCommand("recorder/update_statistics_metadata")));
+        Assert.Equal(string.Empty, command.RootElement.GetProperty("unit_of_measurement").GetString());
+    }
+
+    [Fact]
+    public async Task RecorderImportObservesCancellationDuringRowPreparation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var rows = new CancellingStatisticRows(cancellation);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Recorder.ImportStatisticsAsync(
+            new HomeAssistantStatisticImportMetadata
+            {
+                StatisticId = "external:daily_energy",
+                Source = "external",
+                HasSum = true,
+                MeanType = HomeAssistantStatisticMeanType.None,
+                UnitClass = "energy",
+                UnitOfMeasurement = "kWh"
+            },
+            rows,
+            cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("recorder/import_statistics"));
+    }
+
+    [Fact]
     public async Task WeatherCurrentForecastUnitsAndSubscriptionAreTypedAndPushBased()
     {
         using var server = new TestHomeAssistantServer();
@@ -1270,6 +1307,32 @@ public sealed class EnergyRecorderWeatherContractTests
 
         public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
             => new[] { new KeyValuePair<string, string>(null!, "kWh") }.AsEnumerable().GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancellingStatisticRows : IReadOnlyCollection<HomeAssistantStatisticImportRow>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancellingStatisticRows(CancellationTokenSource cancellation) => _cancellation = cancellation;
+
+        public int Count => 2;
+
+        public IEnumerator<HomeAssistantStatisticImportRow> GetEnumerator()
+        {
+            yield return new HomeAssistantStatisticImportRow
+            {
+                Start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero),
+                Sum = 1.5
+            };
+            _cancellation.Cancel();
+            yield return new HomeAssistantStatisticImportRow
+            {
+                Start = new DateTimeOffset(2026, 8, 26, 11, 0, 0, TimeSpan.Zero),
+                Sum = 2.5
+            };
+        }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
