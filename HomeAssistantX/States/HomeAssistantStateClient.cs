@@ -18,6 +18,7 @@ public sealed class HomeAssistantStateClient : IDisposable
     private readonly HomeAssistantWebSocketClient _webSocket;
     private readonly HomeAssistantClientOptions _options;
     private readonly ConcurrentDictionary<Guid, LocalStateSubscription> _subscribers = new();
+    private readonly ConcurrentDictionary<Task, byte> _backgroundTasks = new();
     private readonly Dictionary<string, HomeAssistantState> _states = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private readonly object _stateGate = new();
@@ -110,7 +111,7 @@ public sealed class HomeAssistantStateClient : IDisposable
                     new Dictionary<string, object?> { ["event_type"] = "state_changed" },
                     HandleStateEventAsync,
                     cancellationToken).ConfigureAwait(false);
-                _ = ObserveServerSubscriptionAsync(_serverSubscription);
+                TrackBackgroundTask(ObserveServerSubscriptionAsync(_serverSubscription));
                 await ResynchronizeAsync(isReconnect: false, cancellationToken).ConfigureAwait(false);
                 _initialized = true;
                 _wasConnected = true;
@@ -306,7 +307,7 @@ public sealed class HomeAssistantStateClient : IDisposable
                 _scheduledReconciliationGeneration = generation;
             }
 
-            _ = ResynchronizeAfterReconnectAsync(generation);
+            TrackBackgroundTask(ResynchronizeAfterReconnectAsync(generation));
         }
 
         if (args.CurrentState == HomeAssistantConnectionState.Connected)
@@ -381,6 +382,34 @@ public sealed class HomeAssistantStateClient : IDisposable
         lock (_stateGate)
         {
             return generation == _reconciliationGeneration;
+        }
+    }
+
+    private void TrackBackgroundTask(Task task)
+    {
+        _backgroundTasks.TryAdd(task, 0);
+        _ = task.ContinueWith(
+            completed =>
+            {
+                _ = completed.Exception;
+                _backgroundTasks.TryRemove(completed, out _);
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    internal async Task WaitForBackgroundTasksAsync()
+    {
+        while (true)
+        {
+            var pending = _backgroundTasks.Keys.ToArray();
+            if (pending.Length == 0)
+            {
+                return;
+            }
+
+            await Task.WhenAll(pending).ConfigureAwait(false);
         }
     }
 
@@ -489,7 +518,7 @@ public sealed class HomeAssistantStateClient : IDisposable
         return state;
     }
 
-    private static IReadOnlyList<HomeAssistantState> ValidateSnapshotStates(
+    internal static IReadOnlyList<HomeAssistantState> ValidateSnapshotStates(
         IEnumerable<HomeAssistantState> states,
         CancellationToken cancellationToken)
     {

@@ -151,6 +151,25 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public async Task DisposeLetsPausedReconnectObserversExitWithoutFaulting()
+    {
+        using var server = new TestHomeAssistantServer();
+        var client = TestClientFactory.Create(server);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+        var states = client.States;
+        var pausedSnapshot = server.PauseNextGetStates();
+
+        await server.DropWebSocketsAsync();
+        await WithTimeoutAsync(pausedSnapshot.Received);
+        client.Dispose();
+        pausedSnapshot.Release();
+
+        await WithTimeoutAsync(states.WaitForBackgroundTasksAsync());
+    }
+
+    [Fact]
     public async Task BoundedStateSubscriptionFaultsWhenConsumerCannotKeepUp()
     {
         using var server = new TestHomeAssistantServer();
