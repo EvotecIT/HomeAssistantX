@@ -4,6 +4,7 @@ using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 #if NET10_0
 using System.Runtime.Loader;
 #endif
@@ -62,6 +63,14 @@ public sealed class PublicApiCompatibilityTests
         Assert.NotEqual(
             FormatTypeDeclarationName(typeof(CollisionOwner<>.Nested<>)),
             FormatTypeDeclarationName(typeof(CollisionOwner<,>.Nested)));
+    }
+
+    [Fact]
+    public void TypeFormatterPreservesStructLayoutContracts()
+    {
+        Assert.Equal(
+            "layout(Explicit,pack=4,size=16,charset=Unicode) ",
+            StructLayoutContract(typeof(StructLayoutFixture)));
     }
 
 #if NET10_0
@@ -476,7 +485,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ConditionalContract(type) + CollectionBuilderContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ConditionalContract(type) + CollectionBuilderContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -547,6 +556,20 @@ public sealed class PublicApiCompatibilityTests
         }
 
         return "collection-builder(" + FormatType(builderType) + "," + FormatDefault(methodName) + ") ";
+    }
+
+    private static string StructLayoutContract(Type type)
+    {
+        if (!type.IsValueType || type.IsEnum)
+        {
+            return string.Empty;
+        }
+
+        var layout = type.StructLayoutAttribute!;
+        return "layout(" + layout.Value
+            + ",pack=" + layout.Pack.ToString(CultureInfo.InvariantCulture)
+            + ",size=" + layout.Size.ToString(CultureInfo.InvariantCulture)
+            + ",charset=" + layout.CharSet + ") ";
     }
 
     private static IReadOnlyList<string> FormatInheritanceContracts(Type type)
@@ -816,6 +839,13 @@ public sealed class PublicApiCompatibilityTests
 
     private readonly struct ReadOnlyStructFixture
     {
+    }
+
+    [StructLayout(LayoutKind.Explicit, Pack = 4, Size = 16, CharSet = CharSet.Unicode)]
+    private struct StructLayoutFixture
+    {
+        [FieldOffset(0)]
+        public int Value;
     }
 
     private sealed class GenericOwner<TOuter>

@@ -103,6 +103,30 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task HelperSelectOptionsPreserveExactConfiguredText()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("input_select.mode");
+
+        await client.Controls.Helpers.SelectOptionAsync(
+            HomeAssistantHelperDomain.InputSelect,
+            target,
+            " Away ");
+        using (var selectCall = LastCall(server))
+        {
+            Assert.Equal(" Away ", selectCall.RootElement.GetProperty("service_data").GetProperty("option").GetString());
+        }
+
+        await client.Controls.Helpers.SetSelectOptionsAsync(target, new[] { " Home ", "Away" });
+        using var optionsCall = LastCall(server);
+        Assert.Equal(
+            new[] { " Home ", "Away" },
+            optionsCall.RootElement.GetProperty("service_data").GetProperty("options")
+                .EnumerateArray().Select(item => item.GetString()));
+    }
+
+    [Fact]
     public async Task InvalidControlShapesFailBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

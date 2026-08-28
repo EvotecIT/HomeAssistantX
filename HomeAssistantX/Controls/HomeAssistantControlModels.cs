@@ -249,6 +249,19 @@ internal static class ControlValidation
         IReadOnlyList<string>? values,
         string name,
         CancellationToken cancellationToken = default)
+        => RequiredValuesCore(values, name, preserveWhitespace: false, cancellationToken);
+
+    public static IReadOnlyList<string> RequiredValuesUnchanged(
+        IReadOnlyList<string>? values,
+        string name,
+        CancellationToken cancellationToken = default)
+        => RequiredValuesCore(values, name, preserveWhitespace: true, cancellationToken);
+
+    private static IReadOnlyList<string> RequiredValuesCore(
+        IReadOnlyList<string>? values,
+        string name,
+        bool preserveWhitespace,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (values is null || values.Count == 0)
@@ -266,7 +279,7 @@ internal static class ControlValidation
                 throw new ArgumentException("At least one non-empty value is required.", name);
             }
 
-            normalized[index] = value.Trim();
+            normalized[index] = preserveWhitespace ? value : value.Trim();
         }
 
         cancellationToken.ThrowIfCancellationRequested();
