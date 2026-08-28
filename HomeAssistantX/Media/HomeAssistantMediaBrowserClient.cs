@@ -44,9 +44,9 @@ public sealed class HomeAssistantMediaBrowserClient
             "The resolved media response could not be decoded.",
             cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if (!IsValidResolvedUrl(result.Url))
+        if (!IsValidResolvedUrl(result.Url, cancellationToken))
             throw new HomeAssistantProtocolException("The resolved media response contained an invalid URL.");
-        if (result.MimeType is not null && !IsValidMediaType(result.MimeType))
+        if (result.MimeType is not null && !IsValidMediaType(result.MimeType, cancellationToken))
             throw new HomeAssistantProtocolException("The resolved media response contained an invalid MIME type.");
         return result;
     }
@@ -211,31 +211,44 @@ public sealed class HomeAssistantMediaBrowserClient
             && !string.IsNullOrWhiteSpace(mediaClass)
             && string.Equals(mediaClass, mediaClass.Trim(), StringComparison.Ordinal);
 
-    internal static bool IsValidResolvedUrl(string? value)
+    internal static bool IsValidResolvedUrl(
+        string? value,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value is null
             || value.Length == 0
-            || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
-            || value.Any(char.IsWhiteSpace))
+            || char.IsWhiteSpace(value[0])
+            || char.IsWhiteSpace(value[value.Length - 1])
+            || ContainsWhitespace(value, cancellationToken))
         {
             return false;
         }
 
         if (value.StartsWith("/", StringComparison.Ordinal))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (value.StartsWith("//", StringComparison.Ordinal)
                 || value.Contains('\\')
                 || !Uri.TryCreate(value, UriKind.Relative, out _))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 return false;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             var resolved = new Uri(new Uri("https://homeassistant.invalid", UriKind.Absolute), value);
-            return string.Equals(resolved.PathAndQuery + resolved.Fragment, value, StringComparison.Ordinal);
+            cancellationToken.ThrowIfCancellationRequested();
+            var canonical = string.Equals(resolved.PathAndQuery + resolved.Fragment, value, StringComparison.Ordinal);
+            cancellationToken.ThrowIfCancellationRequested();
+            return canonical;
         }
 
-        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
+        cancellationToken.ThrowIfCancellationRequested();
+        var valid = Uri.TryCreate(value, UriKind.Absolute, out var absolute)
             && absolute.IsWellFormedOriginalString();
+        cancellationToken.ThrowIfCancellationRequested();
+        return valid;
     }
 
     private static bool IsCanonicalActionableSelector(string? value)
@@ -303,26 +316,40 @@ public sealed class HomeAssistantMediaBrowserClient
         return value.Trim();
     }
 
-    private static bool IsValidMediaType(string value)
+    internal static bool IsValidMediaType(
+        string value,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(value)
-            || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrEmpty(value)
+            || char.IsWhiteSpace(value[0])
+            || char.IsWhiteSpace(value[value.Length - 1]))
         {
             return false;
         }
 
-        var separator = value.IndexOf('/');
+        var separator = -1;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] != '/') continue;
+            if (separator >= 0) return false;
+            separator = index;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         return separator > 0
-            && separator == value.LastIndexOf('/')
             && separator < value.Length - 1
-            && IsMediaTypeToken(value.AsSpan(0, separator))
-            && IsMediaTypeToken(value.AsSpan(separator + 1));
+            && IsMediaTypeToken(value.AsSpan(0, separator), cancellationToken)
+            && IsMediaTypeToken(value.AsSpan(separator + 1), cancellationToken);
     }
 
-    private static bool IsMediaTypeToken(ReadOnlySpan<char> value)
+    private static bool IsMediaTypeToken(ReadOnlySpan<char> value, CancellationToken cancellationToken)
     {
-        foreach (var character in value)
+        for (var index = 0; index < value.Length; index++)
         {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var character = value[index];
             if (character is >= 'A' and <= 'Z'
                 || character is >= 'a' and <= 'z'
                 || character is >= '0' and <= '9'
@@ -335,6 +362,19 @@ public sealed class HomeAssistantMediaBrowserClient
             return false;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return true;
+    }
+
+    private static bool ContainsWhitespace(string value, CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (char.IsWhiteSpace(value[index])) return true;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
     }
 }
