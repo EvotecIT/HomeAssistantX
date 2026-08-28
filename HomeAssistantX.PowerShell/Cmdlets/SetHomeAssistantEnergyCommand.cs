@@ -25,6 +25,7 @@ public sealed class SetHomeAssistantEnergyCommand : HomeAssistantCmdlet
         };
         if (update.EnergySources is null && update.DeviceConsumption is null && update.DeviceConsumptionWater is null)
             throw new ArgumentException("At least one Energy preference JSON array is required.");
+        _ = update.ToPayload(CancelToken);
         if (!ShouldProcess(ConnectionDisplayName, "Update Energy dashboard preferences")) return;
         var result = await Client.Energy.SavePreferencesAsync(update, CancelToken).ConfigureAwait(false);
         if (PassThru) WriteObject(result);

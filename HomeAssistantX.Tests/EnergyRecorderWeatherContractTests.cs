@@ -85,6 +85,21 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("[{\"type\":\"grid\",\"type\":\"solar\"}]")]
+    [InlineData("[{\"type\":\"grid\",\"nested\":{\"value\":1,\"value\":2}}]")]
+    public async Task EnergyPreferenceUpdateRejectsDuplicateCallerPropertiesBeforeDispatch(string json)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var document = JsonDocument.Parse(json);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Energy.SavePreferencesAsync(
+            new HomeAssistantEnergyPreferencesUpdate { EnergySources = document.RootElement.Clone() }));
+
+        Assert.Null(server.GetLastWebSocketCommand("energy/save_prefs"));
+    }
+
+    [Theory]
     [InlineData("{\"energy_sources\":null,\"device_consumption\":[],\"device_consumption_water\":[]}")]
     [InlineData("{\"energy_sources\":[1],\"device_consumption\":[],\"device_consumption_water\":[]}")]
     [InlineData("{\"energy_sources\":[],\"device_consumption\":{},\"device_consumption_water\":[]}")]

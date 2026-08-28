@@ -69,6 +69,11 @@ public sealed class HomeAssistantEnergyPreferencesUpdate
             {
                 throw new ArgumentException($"Every {name} preference entry must be a JSON object.", name);
             }
+
+            if (HomeAssistantJson.HasDuplicateProperties(item, cancellationToken))
+            {
+                throw new ArgumentException($"Every {name} preference entry must use each JSON property name only once.", name);
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();

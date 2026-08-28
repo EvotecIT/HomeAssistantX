@@ -330,7 +330,7 @@ try {
         throw 'A destructive parameter set accepted its mandatory selector switch as an explicit false value.'
     }
 
-    foreach ($invalidEnergyJson in '[null]', '[1]', '["sensor.energy"]') {
+    foreach ($invalidEnergyJson in '[null]', '[1]', '["sensor.energy"]', '[{"type":"grid","type":"solar"}]') {
         $invalidEnergyRejected = $false
         try {
             Set-HomeAssistantEnergy -DeviceConsumptionJson $invalidEnergyJson -WhatIf -ErrorAction Stop
