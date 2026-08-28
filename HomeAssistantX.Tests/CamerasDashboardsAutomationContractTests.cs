@@ -653,6 +653,19 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Null(server.GetLastWebSocketCommand("lovelace/config/save"));
     }
 
+    [Fact]
+    public async Task DashboardConfigurationSaveRejectsDuplicatePropertiesBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var configuration = JsonDocument.Parse("{\"views\":[],\"nested\":{\"cards\":[],\"cards\":[{}]}}");
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Dashboards.SaveConfigurationAsync(configuration.RootElement));
+
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/config/save"));
+    }
+
     [Theory]
     [InlineData("[{\"id\":\" resource-1 \",\"url\":\"/local/card.js\",\"type\":\"module\"}]")]
     [InlineData("[{\"id\":\"resource-1\",\"url\":\"/local/a.js\",\"type\":\"module\"},{\"id\":\"resource-1\",\"url\":\"/local/b.js\",\"type\":\"module\"}]")]
@@ -832,6 +845,24 @@ public sealed class CamerasDashboardsAutomationContractTests
             HomeAssistantTarget.ForEntity("automation.morning.extra")));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.TriggerAsync(
             HomeAssistantTarget.Create()));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task AutomationTargetNormalizationHonorsPreCancellation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var target = new HomeAssistantTarget
+        {
+            EntityIds = new[] { "automation.morning", "not-an-entity" }
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Automations.TriggerAsync(target, cancellationToken: cancellation.Token));
 
         Assert.Null(server.LastServiceCallBody);
     }

@@ -20,7 +20,11 @@ public sealed class SetHomeAssistantAutomationCommand : HomeAssistantCmdlet
         using var document = JsonDocument.Parse(ConfigurationJson);
         if (document.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("ConfigurationJson must be a JSON object.", nameof(ConfigurationJson));
         var configuration = document.RootElement.Clone();
-        HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(automationId, configuration, nameof(ConfigurationJson));
+        HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(
+            automationId,
+            configuration,
+            nameof(ConfigurationJson),
+            CancelToken);
         if (!ShouldProcess(automationId, "Create or replace Home Assistant automation configuration")) return;
         var result = await Client.Automations.SaveConfigurationAsync(automationId, configuration, CancelToken).ConfigureAwait(false);
         if (PassThru) WriteObject(result);

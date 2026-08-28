@@ -41,7 +41,7 @@ public sealed class HomeAssistantAutomationClient
     public Task<HomeAssistantServiceCallResult> TriggerAsync(HomeAssistantTarget target, bool skipConditions = true, CancellationToken cancellationToken = default)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
-        var normalizedTarget = target.NormalizeForDomain("automation");
+        var normalizedTarget = target.NormalizeForDomain("automation", cancellationToken);
         if (!normalizedTarget.HasAnySelection())
             throw new ArgumentException("At least one automation target selection is required.", nameof(target));
         return _services.CallAsync(

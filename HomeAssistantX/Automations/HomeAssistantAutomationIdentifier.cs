@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Automations;
 
@@ -23,7 +24,7 @@ public static class HomeAssistantAutomationIdentifier
         cancellationToken.ThrowIfCancellationRequested();
         if (definition.ValueKind != JsonValueKind.Object)
             throw new ArgumentException("An automation definition JSON object is required.", parameterName);
-        if (HasDuplicateProperties(definition, cancellationToken))
+        if (HomeAssistantJson.HasDuplicateProperties(definition, cancellationToken))
             throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", parameterName);
 
         var definitionIds = definition.EnumerateObject()
@@ -42,26 +43,5 @@ public static class HomeAssistantAutomationIdentifier
     internal static bool HasDuplicateProperties(
         JsonElement value,
         CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (value.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in value.EnumerateArray())
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (HasDuplicateProperties(item, cancellationToken)) return true;
-            }
-
-            return false;
-        }
-        if (value.ValueKind != JsonValueKind.Object) return false;
-
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var property in value.EnumerateObject())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!names.Add(property.Name) || HasDuplicateProperties(property.Value, cancellationToken)) return true;
-        }
-        return false;
-    }
+        => HomeAssistantJson.HasDuplicateProperties(value, cancellationToken);
 }

@@ -148,6 +148,8 @@ public sealed class HomeAssistantDashboardClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (configuration.ValueKind != JsonValueKind.Object) throw new ArgumentException("A Lovelace configuration JSON object is required.", nameof(configuration));
+        if (HomeAssistantJson.HasDuplicateProperties(configuration, cancellationToken))
+            throw new ArgumentException("A Lovelace configuration cannot contain duplicate JSON properties.", nameof(configuration));
         var payload = new Dictionary<string, object?>
         {
             ["config"] = HomeAssistantJson.FreezeValue(

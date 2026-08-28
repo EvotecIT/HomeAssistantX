@@ -52,7 +52,7 @@ raw access for custom integrations.
 - typed current weather observations plus daily, hourly, and twice-daily push forecasts
 - typed camera state, bounded/scaled snapshots, HLS and signed MJPEG paths,
   stream capabilities, preferences, and reconnect-safe state updates
-- provider-neutral media-source and media-player browse, search, and resolve APIs
+- Home Assistant-native media-source and media-player browse, search, and resolve APIs
 - frontend panels plus Lovelace dashboard, configuration, and resource management
 - automation runtime state and execution kept separate from administrator-managed definitions
 - OAuth authorization, proactive and rejection-triggered refresh, revocation,

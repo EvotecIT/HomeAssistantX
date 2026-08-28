@@ -86,7 +86,7 @@ public sealed class HomeAssistantClient : IDisposable
     /// <summary>Provides camera state, bounded snapshots, streams, signed paths, preferences, and push updates.</summary>
     public HomeAssistantCameraClient Cameras { get; }
 
-    /// <summary>Provides provider-neutral media-source and media-player browsing, search, and resolution.</summary>
+    /// <summary>Provides Home Assistant-native media-source and media-player browsing, search, and resolution.</summary>
     public HomeAssistantMediaBrowserClient Media { get; }
 
     /// <summary>Provides typed frontend panel and Lovelace dashboard, configuration, and resource access.</summary>

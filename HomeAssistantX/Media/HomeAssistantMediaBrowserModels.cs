@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace HomeAssistantX.Media;
 
-/// <summary>A provider-neutral media node returned by Home Assistant media-source or media-player browsing.</summary>
+/// <summary>A Home Assistant-native media node returned by media-source or media-player browsing.</summary>
 public sealed class HomeAssistantMediaItem
 {
     [JsonPropertyName("title")]
