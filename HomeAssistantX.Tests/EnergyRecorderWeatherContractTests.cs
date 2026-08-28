@@ -883,6 +883,22 @@ public sealed class EnergyRecorderWeatherContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
     }
 
+    [Theory]
+    [InlineData("unit_of_measurement", "")]
+    [InlineData("unit_of_measurement", " kWh ")]
+    [InlineData("statistics_unit_of_measurement", "")]
+    [InlineData("statistics_unit_of_measurement", " kWh ")]
+    public async Task RecorderMetadataRejectsMalformedReturnedUnits(string propertyName, string unit)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.grid_energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true,\"" + propertyName + "\":\"" + unit + "\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
+    }
+
     [Fact]
     public async Task FilteredRecorderMetadataAllowsMissingRequestedRows()
     {
@@ -1036,6 +1052,22 @@ public sealed class EnergyRecorderWeatherContractTests
         using var server = new TestHomeAssistantServer
         {
             WeatherForecastResponseJson = "{\"weather.home\":{\"forecast\":[{\"datetime\":\"" + timestamp + "\"}]}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Weather.GetForecastAsync("weather.home", HomeAssistantWeatherForecastType.Daily));
+    }
+
+    [Theory]
+    [InlineData("temperature")]
+    [InlineData("wind_gust_speed")]
+    [InlineData("wind_bearing")]
+    public async Task WeatherForecastRejectsNonFiniteNumericValues(string propertyName)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            WeatherForecastResponseJson = "{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-28T10:00:00+00:00\",\"" + propertyName + "\":1e400}]}}"
         };
         using var client = TestClientFactory.Create(server);
 

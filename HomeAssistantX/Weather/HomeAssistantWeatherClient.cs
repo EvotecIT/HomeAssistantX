@@ -166,9 +166,10 @@ public sealed class HomeAssistantWeatherClient
             if (value.ValueKind != JsonValueKind.Object
                 || !value.TryGetProperty("datetime", out var timestamp)
                 || timestamp.ValueKind != JsonValueKind.String
-                || !HomeAssistantTimestamp.TryParse(timestamp.GetString(), out _))
+                || !HomeAssistantTimestamp.TryParse(timestamp.GetString(), out _)
+                || !HasFiniteForecastNumbers(value))
             {
-                throw new HomeAssistantProtocolException("The weather forecast omitted a valid offset-aware timestamp.");
+                throw new HomeAssistantProtocolException("The weather forecast contained an invalid period value.");
             }
         }
         var items = HomeAssistantJson.DeserializeResponse<HomeAssistantWeatherForecast[]>(forecast, "The weather forecast could not be decoded.");
@@ -190,6 +191,53 @@ public sealed class HomeAssistantWeatherClient
             Forecast = items,
             Raw = raw.Clone()
         };
+    }
+
+    private static bool HasFiniteForecastNumbers(JsonElement value)
+    {
+        foreach (var propertyName in new[]
+        {
+            "temperature",
+            "templow",
+            "apparent_temperature",
+            "dew_point",
+            "precipitation",
+            "precipitation_probability",
+            "pressure",
+            "humidity",
+            "cloud_coverage",
+            "uv_index",
+            "wind_speed",
+            "wind_gust_speed"
+        })
+        {
+            if (!HasFiniteOptionalNumber(value, propertyName))
+            {
+                return false;
+            }
+        }
+
+        if (value.TryGetProperty("wind_bearing", out var windBearing)
+            && windBearing.ValueKind == JsonValueKind.Number
+            && (!windBearing.TryGetDouble(out var bearing) || double.IsNaN(bearing) || double.IsInfinity(bearing)))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool HasFiniteOptionalNumber(JsonElement value, string propertyName)
+    {
+        if (!value.TryGetProperty(propertyName, out var number) || number.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        return number.ValueKind == JsonValueKind.Number
+            && number.TryGetDouble(out var parsed)
+            && !double.IsNaN(parsed)
+            && !double.IsInfinity(parsed);
     }
 
     private static string NormalizeEntityId(string entityId)

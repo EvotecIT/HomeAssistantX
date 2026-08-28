@@ -247,7 +247,9 @@ public sealed class HomeAssistantRecorderClient
                 || !item.TryGetProperty("has_mean", out var hasMean)
                 || hasMean.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
                 || !item.TryGetProperty("has_sum", out var hasSum)
-                || hasSum.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                || hasSum.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                || !HasCanonicalOptionalUnit(item, "unit_of_measurement")
+                || !HasCanonicalOptionalUnit(item, "statistics_unit_of_measurement"))
             {
                 throw new HomeAssistantProtocolException(failureMessage);
             }
@@ -260,6 +262,22 @@ public sealed class HomeAssistantRecorderClient
             || item.UnitClass is not null && !HomeAssistantStatisticIdentifier.IsSlug(item.UnitClass)))
             throw new HomeAssistantProtocolException(failureMessage);
         return metadata;
+    }
+
+    private static bool HasCanonicalOptionalUnit(JsonElement value, string propertyName)
+    {
+        if (!value.TryGetProperty(propertyName, out var unit) || unit.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (unit.ValueKind != JsonValueKind.String || unit.GetString() is not string text)
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(text)
+            && string.Equals(text, text.Trim(), StringComparison.Ordinal);
     }
 
     private static void ValidateStatisticRows(JsonElement value)
