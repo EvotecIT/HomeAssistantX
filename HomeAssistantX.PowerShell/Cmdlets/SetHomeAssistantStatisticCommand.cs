@@ -69,23 +69,24 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 {
                     throw new ArgumentException("Specify a unit class or unit-of-measurement change.");
                 }
+                var requestedUnitClass = ClearUnitClass
+                    ? null
+                    : hasUnitClassValue
+                        ? HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(UnitClass, nameof(UnitClass))
+                        : null;
+                var requestedUnitOfMeasurement = ClearUnitOfMeasurement
+                    ? null
+                    : hasUnitValue
+                        ? HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement))
+                        : null;
                 var availableMetadata = await Client.Recorder.GetStatisticsMetadataAsync(new[] { statisticId }, CancelToken).ConfigureAwait(false);
                 var matchingMetadata = availableMetadata.FirstOrDefault(item => string.Equals(item.StatisticId, statisticId, StringComparison.OrdinalIgnoreCase));
                 if (matchingMetadata is null)
                 {
                     throw new InvalidOperationException("Home Assistant did not return metadata for the requested Recorder statistic.");
                 }
-                var unitClass = ClearUnitClass ? null : UnitClass;
-                if (!ClearUnitClass && !MyInvocation.BoundParameters.ContainsKey(nameof(UnitClass)))
-                {
-                    unitClass = matchingMetadata.UnitClass;
-                }
-                unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(unitClass, nameof(UnitClass));
-                var unitOfMeasurement = ClearUnitOfMeasurement
-                    ? null
-                    : hasUnitOfMeasurement
-                        ? NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement))
-                        : matchingMetadata.UnitOfMeasurement;
+                var unitClass = hasUnitClass ? requestedUnitClass : matchingMetadata.UnitClass;
+                var unitOfMeasurement = hasUnitOfMeasurement ? requestedUnitOfMeasurement : matchingMetadata.UnitOfMeasurement;
                 if (string.Equals(unitClass, matchingMetadata.UnitClass, StringComparison.Ordinal)
                     && string.Equals(unitOfMeasurement, matchingMetadata.UnitOfMeasurement, StringComparison.Ordinal))
                 {
@@ -147,7 +148,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             HasSum = metadata.HasSum,
             MeanType = metadata.MeanType,
             UnitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass)),
-            UnitOfMeasurement = NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement))
+            UnitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement))
         };
         normalized.ValidateRows(rows);
         return normalized;
@@ -160,10 +161,4 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
         if (value is not null && string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{valueName} must not be blank.", valueName);
     }
 
-    private static string? NormalizeOptionalUnit(string? value, string parameterName)
-    {
-        if (value is null) return null;
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{parameterName} must not be blank.", parameterName);
-        return value.Trim();
-    }
 }

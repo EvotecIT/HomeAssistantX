@@ -264,6 +264,32 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Null(server.GetLastWebSocketCommand("recorder/import_statistics"));
     }
 
+    [Theory]
+    [InlineData("Energy", "kWh")]
+    [InlineData(" energy ", "kWh")]
+    [InlineData(null, " ")]
+    public void RecorderImportMetadataPublicPreflightValidatesUnits(string? unitClass, string? unitOfMeasurement)
+    {
+        var metadata = new HomeAssistantStatisticImportMetadata
+        {
+            StatisticId = "external:daily_energy",
+            Source = "external",
+            HasSum = true,
+            MeanType = HomeAssistantStatisticMeanType.None,
+            UnitClass = unitClass,
+            UnitOfMeasurement = unitOfMeasurement
+        };
+
+        Assert.Throws<ArgumentException>(() => metadata.ValidateRows(new[]
+        {
+            new HomeAssistantStatisticImportRow
+            {
+                Start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero),
+                Sum = 1.5
+            }
+        }));
+    }
+
     [Fact]
     public async Task RecorderMetadataRejectsNoncanonicalResponseUnitClasses()
     {

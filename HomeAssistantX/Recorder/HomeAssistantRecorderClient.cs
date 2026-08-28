@@ -135,7 +135,7 @@ public sealed class HomeAssistantRecorderClient
     public async Task UpdateStatisticsMetadataAsync(string statisticId, string? unitClass, string? unitOfMeasurement, CancellationToken cancellationToken = default)
     {
         unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(unitClass, nameof(unitClass));
-        unitOfMeasurement = NormalizeOptionalUnit(unitOfMeasurement, nameof(unitOfMeasurement));
+        unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(unitOfMeasurement, nameof(unitOfMeasurement));
         _ = await _webSocket.RequestAsync("recorder/update_statistics_metadata", new Dictionary<string, object?>
         {
             ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId)),
@@ -146,8 +146,8 @@ public sealed class HomeAssistantRecorderClient
 
     public async Task ChangeStatisticsUnitAsync(string statisticId, string? oldUnit, string? newUnit, CancellationToken cancellationToken = default)
     {
-        oldUnit = NormalizeOptionalUnit(oldUnit, nameof(oldUnit));
-        newUnit = NormalizeOptionalUnit(newUnit, nameof(newUnit));
+        oldUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(oldUnit, nameof(oldUnit));
+        newUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(newUnit, nameof(newUnit));
         if (string.Equals(oldUnit, newUnit, StringComparison.Ordinal))
             throw new ArgumentException("The old and new statistics units must be different.", nameof(newUnit));
         _ = await _webSocket.RequestAsync("recorder/change_statistics_unit", new Dictionary<string, object?>
@@ -162,7 +162,7 @@ public sealed class HomeAssistantRecorderClient
     {
         if (double.IsNaN(adjustment) || double.IsInfinity(adjustment)) throw new ArgumentOutOfRangeException(nameof(adjustment));
         if (adjustment == 0d) throw new ArgumentOutOfRangeException(nameof(adjustment), "A statistics sum adjustment must be non-zero.");
-        unit = NormalizeOptionalUnit(unit, nameof(unit));
+        unit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(unit, nameof(unit));
         _ = await _webSocket.RequestAsync("recorder/adjust_sum_statistics", new Dictionary<string, object?>
         {
             ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId)),
@@ -177,7 +177,7 @@ public sealed class HomeAssistantRecorderClient
         if (metadata is null) throw new ArgumentNullException(nameof(metadata));
         metadata.ValidateRows(rows);
         var unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass));
-        var unitOfMeasurement = NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement));
+        var unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement));
         var metadataPayload = new Dictionary<string, object?>
         {
             ["statistic_id"] = RequireStatisticId(metadata.StatisticId, nameof(metadata.StatisticId)),
@@ -328,13 +328,6 @@ public sealed class HomeAssistantRecorderClient
             || double.IsNaN(number) || double.IsInfinity(number)) return false;
         result = number;
         return true;
-    }
-
-    private static string? NormalizeOptionalUnit(string? value, string parameterName)
-    {
-        if (value is null) return null;
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A supplied unit cannot be empty.", parameterName);
-        return value.Trim();
     }
 
     private static Dictionary<string, object?> ToImportPayload(HomeAssistantStatisticImportRow row)

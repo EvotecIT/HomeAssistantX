@@ -806,6 +806,12 @@ try {
         }
     }
 
+    $server.StandardInput.WriteLine('CLEAR_LAST_RECORDER_METADATA_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'RECORDER_METADATA_LIST_CLEARED') {
+        throw 'Could not establish the Recorder metadata-list command baseline.'
+    }
+
     foreach ($invalidControl in @(
         { Set-HomeAssistantLight -Area Kitchen -ColorTemperatureKelvin 3000 -RgbColor 10, 20, 30 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
@@ -869,6 +875,12 @@ try {
         if (-not $invalidEnumRejected) {
             throw 'A typed operation accepted invalid input under WhatIf.'
         }
+    }
+
+    $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'RECORDER_METADATA_LIST_NONE') {
+        throw 'Invalid Recorder metadata input queried Home Assistant before local preflight completed.'
     }
 
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')

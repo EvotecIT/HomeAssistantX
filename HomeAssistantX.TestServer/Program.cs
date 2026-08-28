@@ -90,6 +90,13 @@ while (await Console.In.ReadLineAsync() is { } command)
         case "GET_LAST_RECORDER_METADATA_UPDATE":
             Console.WriteLine(server.GetLastWebSocketCommand("recorder/update_statistics_metadata") ?? "RECORDER_METADATA_NONE");
             break;
+        case "GET_LAST_RECORDER_METADATA_LIST":
+            Console.WriteLine(server.GetLastWebSocketCommand("recorder/get_statistics_metadata") ?? "RECORDER_METADATA_LIST_NONE");
+            break;
+        case "CLEAR_LAST_RECORDER_METADATA_LIST":
+            server.ClearLastWebSocketCommand("recorder/get_statistics_metadata");
+            Console.WriteLine("RECORDER_METADATA_LIST_CLEARED");
+            break;
         case "GET_UNSUBSCRIBE_COUNT":
             Console.WriteLine(server.UnsubscribeCommandCount);
             break;

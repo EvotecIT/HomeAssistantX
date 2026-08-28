@@ -181,6 +181,8 @@ public sealed class HomeAssistantStatisticImportMetadata
             throw new ArgumentException("External StatisticId and Source must use lowercase Home Assistant slug segments.", nameof(StatisticId));
         if (!string.Equals(statisticSource, source, StringComparison.Ordinal))
             throw new ArgumentException("Source must exactly match the prefix before ':' in StatisticId.", nameof(Source));
+        _ = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(UnitClass, nameof(UnitClass));
+        _ = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement));
         if (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), MeanType)) throw new ArgumentOutOfRangeException(nameof(MeanType));
         if (MeanType == HomeAssistantStatisticMeanType.None && !HasSum) throw new ArgumentException("Import metadata must enable mean or sum statistics.");
         if (HasMean != (MeanType == HomeAssistantStatisticMeanType.Arithmetic))
@@ -269,6 +271,14 @@ internal static class HomeAssistantStatisticIdentifier
         if (!IsSlug(value))
             throw new ArgumentException("Unit classes must be canonical lowercase identifiers.", parameterName);
         return value;
+    }
+
+    internal static string? NormalizeOptionalUnit(string? value, string parameterName)
+    {
+        if (value is null) return null;
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("A supplied unit cannot be empty.", parameterName);
+        return value.Trim();
     }
 }
 
