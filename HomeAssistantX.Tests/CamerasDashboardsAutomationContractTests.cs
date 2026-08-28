@@ -366,6 +366,25 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.ResolveAsync("media-source://media_source/local/file.mp3"));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" audio/mpeg")]
+    [InlineData("audio /mpeg")]
+    [InlineData("audio")]
+    [InlineData("audio/mpeg/extra")]
+    public async Task MediaResolveRejectsMalformedMimeTypes(string mimeType)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ResolvedMediaResponseJson = JsonSerializer.Serialize(new { url = "/api/media/file", mime_type = mimeType })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Media.ResolveAsync("media-source://media_source/local/file.mp3"));
+    }
+
     [Fact]
     public async Task MediaClassFiltersPreserveOrderWhileDeduplicatingCaseInsensitively()
     {
@@ -703,6 +722,12 @@ public sealed class CamerasDashboardsAutomationContractTests
 
             HomeAssistantAtomicFile.PreserveDestinationPermissions(destination, temporary);
 
+            Assert.Equal(File.GetUnixFileMode(destination), File.GetUnixFileMode(temporary));
+
+            File.SetUnixFileMode(
+                temporary,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+            HomeAssistantAtomicFile.PreserveDestinationPermissions(destination, temporary, useManagedApis: false);
             Assert.Equal(File.GetUnixFileMode(destination), File.GetUnixFileMode(temporary));
         }
         finally

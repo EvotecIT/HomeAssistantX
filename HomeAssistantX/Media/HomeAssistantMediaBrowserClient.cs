@@ -46,6 +46,8 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
         if (!IsValidResolvedUrl(result.Url))
             throw new HomeAssistantProtocolException("The resolved media response contained an invalid URL.");
+        if (result.MimeType is not null && !IsValidMediaType(result.MimeType))
+            throw new HomeAssistantProtocolException("The resolved media response contained an invalid MIME type.");
         return result;
     }
 
@@ -288,5 +290,40 @@ public sealed class HomeAssistantMediaBrowserClient
     {
         if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", parameterName);
         return value.Trim();
+    }
+
+    private static bool IsValidMediaType(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var separator = value.IndexOf('/');
+        return separator > 0
+            && separator == value.LastIndexOf('/')
+            && separator < value.Length - 1
+            && IsMediaTypeToken(value.AsSpan(0, separator))
+            && IsMediaTypeToken(value.AsSpan(separator + 1));
+    }
+
+    private static bool IsMediaTypeToken(ReadOnlySpan<char> value)
+    {
+        foreach (var character in value)
+        {
+            if (character is >= 'A' and <= 'Z'
+                || character is >= 'a' and <= 'z'
+                || character is >= '0' and <= '9'
+                || character is '!' or '#' or '$' or '%' or '&' or '\'' or '*'
+                    or '+' or '-' or '.' or '^' or '_' or '`' or '|' or '~')
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
     }
 }
