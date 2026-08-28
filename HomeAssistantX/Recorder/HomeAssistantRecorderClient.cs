@@ -137,7 +137,11 @@ public sealed class HomeAssistantRecorderClient
                 || !requestedIds.Contains(normalizedStatisticId)
                 || !responseIds.Add(normalizedStatisticId))
                 throw new HomeAssistantProtocolException("Recorder statistics contained an unexpected or duplicate statistic identifier.");
-            ValidateStatisticRows(property.Value, cancellationToken);
+            ValidateStatisticRows(
+                property.Value,
+                GetPeriodStart(query.StartTime, query.Period).ToUnixTimeMilliseconds(),
+                query.EndTime?.ToUnixTimeMilliseconds(),
+                cancellationToken);
             var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(
                 property.Value,
                 "A Recorder statistics series could not be decoded.",
@@ -145,9 +149,23 @@ public sealed class HomeAssistantRecorderClient
             series.Add(new HomeAssistantStatisticSeries { StatisticId = normalizedStatisticId, Rows = rows });
         }
         var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
-        series.Sort((left, right) => comparer.Compare(left.StatisticId, right.StatisticId));
+        SortSeries(series, comparer);
         cancellationToken.ThrowIfCancellationRequested();
         return series;
+    }
+
+    internal static void SortSeries(
+        List<HomeAssistantStatisticSeries> series,
+        IComparer<string> comparer)
+    {
+        try
+        {
+            series.Sort((left, right) => comparer.Compare(left.StatisticId, right.StatisticId));
+        }
+        catch (InvalidOperationException ex) when (ex.InnerException is OperationCanceledException cancellation)
+        {
+            throw cancellation;
+        }
     }
 
     public Task<JsonElement> ValidateStatisticsAsync(CancellationToken cancellationToken = default)
@@ -255,9 +273,9 @@ public sealed class HomeAssistantRecorderClient
             throw new ArgumentException("At least one entity, domain, or entity glob is required.");
         if (keepDays.HasValue && keepDays.Value < 0) throw new ArgumentOutOfRangeException(nameof(keepDays));
         var call = new HomeAssistantServiceCall("recorder", "purge_entities");
-        if (entityIds is { Count: > 0 }) call.WithData("entity_id", RequireEntityIds(entityIds, nameof(entityIds)));
-        if (domains is { Count: > 0 }) call.WithData("domains", RequireDomains(domains, nameof(domains)));
-        if (entityGlobs is { Count: > 0 }) call.WithData("entity_globs", RequireEntityGlobs(entityGlobs, nameof(entityGlobs)));
+        if (entityIds is { Count: > 0 }) call.WithData("entity_id", RequireEntityIds(entityIds, nameof(entityIds), cancellationToken));
+        if (domains is { Count: > 0 }) call.WithData("domains", RequireDomains(domains, nameof(domains), cancellationToken));
+        if (entityGlobs is { Count: > 0 }) call.WithData("entity_globs", RequireEntityGlobs(entityGlobs, nameof(entityGlobs), cancellationToken));
         if (keepDays.HasValue) call.WithData("keep_days", keepDays.Value);
         return _services.CallControlAsync(call, cancellationToken);
     }
@@ -337,7 +355,11 @@ public sealed class HomeAssistantRecorderClient
                 && string.Equals(text, text.Trim(), StringComparison.Ordinal));
     }
 
-    private static void ValidateStatisticRows(JsonElement value, CancellationToken cancellationToken)
+    private static void ValidateStatisticRows(
+        JsonElement value,
+        long earliestPeriodStart,
+        long? endTimeExclusive,
+        CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("A Recorder statistics series could not be decoded.");
@@ -367,6 +389,12 @@ public sealed class HomeAssistantRecorderClient
             if (end <= start)
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a non-positive interval.");
+            }
+
+            if (end <= earliestPeriodStart
+                || endTimeExclusive.HasValue && start >= endTimeExclusive.Value)
+            {
+                throw new HomeAssistantProtocolException("A Recorder statistics series contained a row outside the requested time window.");
             }
 
             if (hasLastReset && lastReset > end)
@@ -445,7 +473,10 @@ public sealed class HomeAssistantRecorderClient
         return values.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static string[] RequireEntityGlobs(IReadOnlyCollection<string> values, string name)
+    private static string[] RequireEntityGlobs(
+        IReadOnlyCollection<string> values,
+        string name,
+        CancellationToken cancellationToken)
     {
         if (values is null || values.Count == 0)
         {
@@ -453,8 +484,10 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var normalized = new List<string>(values.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantRecorderEntityGlob.TryNormalize(value, out var entityGlob))
             {
                 throw new ArgumentException(
@@ -462,16 +495,20 @@ public sealed class HomeAssistantRecorderClient
                     name);
             }
 
-            if (!normalized.Contains(entityGlob, StringComparer.Ordinal))
+            if (seen.Add(entityGlob))
             {
                 normalized.Add(entityGlob);
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized.ToArray();
     }
 
-    private static string[] RequireEntityIds(IReadOnlyCollection<string> values, string name)
+    private static string[] RequireEntityIds(
+        IReadOnlyCollection<string> values,
+        string name,
+        CancellationToken cancellationToken)
     {
         if (values is null || values.Count == 0)
         {
@@ -479,19 +516,22 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var normalized = new List<string>(values.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantEntityId.TryNormalize(value, out var entityId))
             {
                 throw new ArgumentException("Entity identifiers must use the native Home Assistant format.", name);
             }
 
-            if (!normalized.Contains(entityId, StringComparer.Ordinal))
+            if (seen.Add(entityId))
             {
                 normalized.Add(entityId);
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized.ToArray();
     }
 
@@ -521,7 +561,10 @@ public sealed class HomeAssistantRecorderClient
         return statisticId;
     }
 
-    private static string[] RequireDomains(IReadOnlyCollection<string> values, string name)
+    private static string[] RequireDomains(
+        IReadOnlyCollection<string> values,
+        string name,
+        CancellationToken cancellationToken)
     {
         if (values is null || values.Count == 0)
         {
@@ -529,20 +572,48 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var normalized = new List<string>(values.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantEntityId.TryNormalizeDomain(value, out var domain))
             {
                 throw new ArgumentException("Domains must use the native Home Assistant format.", name);
             }
 
-            if (!normalized.Contains(domain, StringComparer.Ordinal))
+            if (seen.Add(domain))
             {
                 normalized.Add(domain);
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized.ToArray();
+    }
+
+    private static DateTimeOffset GetPeriodStart(
+        DateTimeOffset value,
+        HomeAssistantStatisticPeriod period)
+    {
+        var minute = period == HomeAssistantStatisticPeriod.FiveMinute
+            ? value.Minute - value.Minute % 5
+            : 0;
+        var start = period switch
+        {
+            HomeAssistantStatisticPeriod.FiveMinute => new DateTimeOffset(
+                value.Year, value.Month, value.Day, value.Hour, minute, 0, value.Offset),
+            HomeAssistantStatisticPeriod.Hour => new DateTimeOffset(
+                value.Year, value.Month, value.Day, value.Hour, 0, 0, value.Offset),
+            HomeAssistantStatisticPeriod.Day => new DateTimeOffset(
+                value.Year, value.Month, value.Day, 0, 0, 0, value.Offset),
+            HomeAssistantStatisticPeriod.Week => new DateTimeOffset(
+                value.Year, value.Month, value.Day, 0, 0, 0, value.Offset)
+                .AddDays(-((7 + (int)value.DayOfWeek - (int)DayOfWeek.Monday) % 7)),
+            HomeAssistantStatisticPeriod.Month => new DateTimeOffset(
+                value.Year, value.Month, 1, 0, 0, 0, value.Offset),
+            _ => throw new ArgumentOutOfRangeException(nameof(period))
+        };
+        return start;
     }
 
     private static string PeriodName(HomeAssistantStatisticPeriod value) => value switch

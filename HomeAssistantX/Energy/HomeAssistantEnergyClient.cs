@@ -50,6 +50,7 @@ public sealed class HomeAssistantEnergyClient
     {
         var value = await _webSocket.RequestAsync("energy/info", null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object
+            || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken)
             || !value.TryGetProperty("cost_sensors", out var costSensors)
             || costSensors.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("solar_forecast_domains", out var forecastDomains)

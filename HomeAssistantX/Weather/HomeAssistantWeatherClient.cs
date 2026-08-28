@@ -154,13 +154,17 @@ public sealed class HomeAssistantWeatherClient
         var payload = new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId, ["forecast_type"] = TypeName(type) };
         return _webSocket.SubscribeAsync("weather/subscribe_forecast", payload, async (value, token) =>
         {
-            if (value.ValueKind != JsonValueKind.Object
-                || !value.TryGetProperty("type", out var responseType)
-                || responseType.ValueKind != JsonValueKind.String
-                || !string.Equals(responseType.GetString(), TypeName(type), StringComparison.Ordinal)
-                || !value.TryGetProperty("forecast", out var forecast))
-                throw new HomeAssistantProtocolException("The weather forecast subscription had an unexpected shape.");
-            await handler(ParseUpdate(normalizedEntityId, type, forecast, value, token), token).ConfigureAwait(false);
+            var update = HomeAssistantSubscriptionProjectionException.Capture(() =>
+            {
+                if (value.ValueKind != JsonValueKind.Object
+                    || !value.TryGetProperty("type", out var responseType)
+                    || responseType.ValueKind != JsonValueKind.String
+                    || !string.Equals(responseType.GetString(), TypeName(type), StringComparison.Ordinal)
+                    || !value.TryGetProperty("forecast", out var forecast))
+                    throw new HomeAssistantProtocolException("The weather forecast subscription had an unexpected shape.");
+                return ParseUpdate(normalizedEntityId, type, forecast, value, token);
+            });
+            await handler(update, token).ConfigureAwait(false);
         }, cancellationToken);
     }
 
@@ -211,10 +215,12 @@ public sealed class HomeAssistantWeatherClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (value.ValueKind != JsonValueKind.Object
+                || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken)
                 || !value.TryGetProperty("datetime", out var timestamp)
                 || timestamp.ValueKind != JsonValueKind.String
                 || !HomeAssistantTimestamp.TryParse(timestamp.GetString(), out _)
-                || !HasFiniteForecastNumbers(value))
+                || !HasFiniteForecastNumbers(value)
+                || !HasValidForecastPercentages(value))
             {
                 throw new HomeAssistantProtocolException("The weather forecast contained an invalid period value.");
             }
@@ -240,7 +246,7 @@ public sealed class HomeAssistantWeatherClient
             Type = type,
             IsAvailable = true,
             Forecast = items,
-            Raw = raw.Clone()
+            Raw = raw
         };
     }
 
@@ -272,6 +278,27 @@ public sealed class HomeAssistantWeatherClient
             && !IsValidWindBearing(windBearing))
         {
             return false;
+        }
+
+        return true;
+    }
+
+    private static bool HasValidForecastPercentages(JsonElement value)
+    {
+        foreach (var propertyName in new[] { "humidity", "cloud_coverage", "precipitation_probability" })
+        {
+            if (!value.TryGetProperty(propertyName, out var number) || number.ValueKind == JsonValueKind.Null)
+            {
+                continue;
+            }
+
+            if (number.ValueKind != JsonValueKind.Number
+                || !number.TryGetDouble(out var parsed)
+                || parsed < 0d
+                || parsed > 100d)
+            {
+                return false;
+            }
         }
 
         return true;

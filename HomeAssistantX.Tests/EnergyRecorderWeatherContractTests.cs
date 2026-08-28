@@ -150,6 +150,8 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("{\"cost_sensors\":{},\"solar_forecast_domains\":[\" \" ]}")]
     [InlineData("{\"cost_sensors\":{},\"solar_forecast_domains\":[\"Forecast_Solar\"]}")]
     [InlineData("{\"cost_sensors\":{},\"solar_forecast_domains\":[\"forecast_solar\",\"forecast_solar\"]}")]
+    [InlineData("{\"cost_sensors\":{},\"cost_sensors\":{},\"solar_forecast_domains\":[]}")]
+    [InlineData("{\"cost_sensors\":{},\"solar_forecast_domains\":[],\"solar_forecast_domains\":[]}")]
     public async Task EnergyInfoRequiresBothTypedCapabilityCollections(string response)
     {
         using var server = new TestHomeAssistantServer { EnergyInfoResponseJson = response };
@@ -717,6 +719,23 @@ public sealed class EnergyRecorderWeatherContractTests
             client.Weather.GetForecastAsync("weather.home", HomeAssistantWeatherForecastType.Daily));
     }
 
+    [Theory]
+    [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"temperature\":20,\"temperature\":21}")]
+    [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"humidity\":-1}")]
+    [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"cloud_coverage\":101}")]
+    [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"precipitation_probability\":101}")]
+    public async Task WeatherForecastRejectsAmbiguousOrImpossiblePeriods(string period)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            WeatherForecastResponseJson = "{\"weather.home\":{\"forecast\":[" + period + "]}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Weather.GetForecastAsync("weather.home", HomeAssistantWeatherForecastType.Hourly));
+    }
+
     [Fact]
     public async Task WeatherConvertibleUnitsRejectMalformedEntriesAsProtocolFailures()
     {
@@ -1118,7 +1137,7 @@ public sealed class EnergyRecorderWeatherContractTests
         var tokenProvider = new BlockingTokenProvider();
         using var client = TestClientFactory.Create(server, accessTokenProvider: tokenProvider);
         var query = new HomeAssistantStatisticsQuery(
-            DateTimeOffset.UtcNow.AddHours(-1),
+            DateTimeOffset.FromUnixTimeSeconds(1787731200),
             HomeAssistantStatisticPeriod.Hour,
             "sensor.grid_energy");
 
@@ -1222,6 +1241,60 @@ public sealed class EnergyRecorderWeatherContractTests
             "sensor.energy");
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(query));
+    }
+
+    [Fact]
+    public async Task RecorderStatisticsRejectRowsOutsideTheRequestedWindow()
+    {
+        var start = new DateTimeOffset(2026, 8, 26, 10, 30, 0, TimeSpan.Zero);
+        var end = start.AddHours(2);
+        foreach (var row in new[]
+        {
+            new { Start = start.AddHours(-2), End = start.AddHours(-1) },
+            new { Start = end, End = end.AddHours(1) }
+        })
+        {
+            using var server = new TestHomeAssistantServer
+            {
+                RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":"
+                    + row.Start.ToUnixTimeMilliseconds() + ",\"end\":"
+                    + row.End.ToUnixTimeMilliseconds() + "}]}"
+            };
+            using var client = TestClientFactory.Create(server);
+            var query = new HomeAssistantStatisticsQuery(start, HomeAssistantStatisticPeriod.Hour, "sensor.energy")
+            {
+                EndTime = end
+            };
+
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(query));
+        }
+    }
+
+    [Fact]
+    public void RecorderStatisticsSortingPreservesCancellationExceptions()
+    {
+        var series = new List<HomeAssistantStatisticSeries>
+        {
+            new() { StatisticId = "sensor.second" },
+            new() { StatisticId = "sensor.first" }
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRecorderClient.SortSeries(series, new CancelingStringComparer()));
+    }
+
+    [Fact]
+    public async Task RecorderPurgeSelectorNormalizationObservesCancellation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Recorder.PurgeEntitiesAsync(
+                entityIds: new CancellingStatisticIds(cancellation),
+                cancellationToken: cancellation.Token));
+        Assert.Null(server.LastServiceCallBody);
     }
 
     [Fact]
@@ -1521,6 +1594,12 @@ public sealed class EnergyRecorderWeatherContractTests
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancelingStringComparer : IComparer<string>
+    {
+        public int Compare(string? left, string? right)
+            => throw new OperationCanceledException();
     }
 
     private sealed class CancellingStatisticRows : IReadOnlyCollection<HomeAssistantStatisticImportRow>
