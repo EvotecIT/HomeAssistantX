@@ -57,6 +57,12 @@ internal static class HomeAssistantRecurrenceRuleValidator
         {
             throw Invalid(parameterName, "COUNT and UNTIL cannot be combined in one recurrence rule.");
         }
+
+        if (clauses.ContainsKey("BYSETPOS")
+            && !clauses.Keys.Any(name => name.StartsWith("BY", StringComparison.Ordinal) && name != "BYSETPOS"))
+        {
+            throw Invalid(parameterName, "BYSETPOS requires at least one other BY rule.");
+        }
     }
 
     private static void ValidateClause(

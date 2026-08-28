@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Buffers;
 using System.Text.Json.Serialization;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
@@ -156,67 +157,82 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
                 "A Home Assistant calendar boundary string must be an ISO date or an offset timestamp.");
         }
 
-        using var document = JsonDocument.ParseValue(ref reader);
-        var root = document.RootElement;
-        if (root.ValueKind != JsonValueKind.Object)
+        if (reader.TokenType != JsonTokenType.StartObject)
         {
             throw new JsonException("A Home Assistant calendar boundary must be a string or object.");
         }
 
-        var hasDate = root.TryGetProperty("date", out var date);
-        var hasDateTime = root.TryGetProperty("dateTime", out var dateTimeValue);
+        string? dateValue = null;
+        DateTimeOffset? parsedDateTime = null;
+        var hasDate = false;
+        var hasDateTime = false;
+        var additionalData = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            _cancellationToken.ThrowIfCancellationRequested();
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                throw new JsonException("A Home Assistant calendar boundary contained an invalid object member.");
+            }
+
+            var propertyName = reader.GetString()!;
+            if (!propertyNames.Add(propertyName))
+            {
+                throw new JsonException("A Home Assistant calendar boundary contained a duplicate field.");
+            }
+
+            if (!reader.Read())
+            {
+                throw new JsonException("A Home Assistant calendar boundary ended before its property value.");
+            }
+
+            _cancellationToken.ThrowIfCancellationRequested();
+            if (propertyName == "date")
+            {
+                hasDate = true;
+                if (reader.TokenType != JsonTokenType.String)
+                {
+                    throw new JsonException("A Home Assistant calendar date must be a string.");
+                }
+
+                dateValue = reader.GetString();
+                if (!DateTime.TryParseExact(
+                        dateValue,
+                        "yyyy-MM-dd",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
+                {
+                    throw new JsonException("A Home Assistant calendar date must use yyyy-MM-dd.");
+                }
+            }
+            else if (propertyName == "dateTime")
+            {
+                hasDateTime = true;
+                if (reader.TokenType != JsonTokenType.String
+                    || !TryReadWireDateTime(reader.GetString(), out var dateTime))
+                {
+                    throw new JsonException("A Home Assistant calendar dateTime must be a valid timestamp string.");
+                }
+
+                parsedDateTime = dateTime;
+            }
+            else
+            {
+                additionalData.Add(propertyName, ReadExtensionValue(ref reader));
+            }
+        }
+
+        if (reader.TokenType != JsonTokenType.EndObject)
+        {
+            throw new JsonException("A Home Assistant calendar boundary object was incomplete.");
+        }
+
         if (hasDate == hasDateTime)
         {
             throw new JsonException(
                 "A Home Assistant calendar boundary must contain exactly one of date or dateTime.");
-        }
-
-        string? dateValue = null;
-        if (hasDate)
-        {
-            if (date.ValueKind != JsonValueKind.String)
-            {
-                throw new JsonException("A Home Assistant calendar date must be a string.");
-            }
-
-            dateValue = date.GetString();
-            if (!DateTime.TryParseExact(
-                    dateValue,
-                    "yyyy-MM-dd",
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None,
-                    out _))
-            {
-                throw new JsonException("A Home Assistant calendar date must use yyyy-MM-dd.");
-            }
-        }
-
-        DateTimeOffset? parsedDateTime = null;
-        if (hasDateTime)
-        {
-            if (!TryReadWireDateTime(dateTimeValue, out var dateTime))
-            {
-                throw new JsonException("A Home Assistant calendar dateTime must be a valid timestamp string.");
-            }
-
-            parsedDateTime = dateTime;
-        }
-
-        var additionalData = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (var property in root.EnumerateObject())
-        {
-            _cancellationToken.ThrowIfCancellationRequested();
-            if (property.Name == "date" || property.Name == "dateTime")
-            {
-                continue;
-            }
-
-            if (additionalData.ContainsKey(property.Name))
-            {
-                throw new JsonException("A Home Assistant calendar boundary contained a duplicate extension field.");
-            }
-
-            additionalData.Add(property.Name, property.Value.Clone());
         }
 
         _cancellationToken.ThrowIfCancellationRequested();
@@ -226,6 +242,103 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             DateTime = parsedDateTime,
             AdditionalData = additionalData
         };
+    }
+
+    private JsonElement ReadExtensionValue(ref Utf8JsonReader reader)
+    {
+        byte[] payload;
+        using (var buffer = new MemoryStream())
+        {
+            using (var writer = new Utf8JsonWriter(buffer))
+            {
+                CopyValue(ref reader, writer);
+                writer.Flush();
+            }
+
+            payload = buffer.ToArray();
+        }
+
+        _cancellationToken.ThrowIfCancellationRequested();
+        if (!_cancellationToken.CanBeCanceled)
+        {
+            using var document = JsonDocument.Parse(payload);
+            return document.RootElement.Clone();
+        }
+
+        var parseTask = Task.Run(() =>
+        {
+            using var document = JsonDocument.Parse(payload);
+            return document.RootElement.Clone();
+        });
+        var completed = Task.WhenAny(
+                parseTask,
+                Task.Delay(Timeout.Infinite, _cancellationToken))
+            .GetAwaiter()
+            .GetResult();
+        if (!ReferenceEquals(completed, parseTask))
+        {
+            _ = parseTask.ContinueWith(
+                task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+            _cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        return parseTask.GetAwaiter().GetResult();
+    }
+
+    private void CopyValue(ref Utf8JsonReader reader, Utf8JsonWriter writer)
+    {
+        _cancellationToken.ThrowIfCancellationRequested();
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.StartObject:
+                writer.WriteStartObject();
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    _cancellationToken.ThrowIfCancellationRequested();
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                        throw new JsonException("A calendar extension object contained an invalid member.");
+                    writer.WritePropertyName(reader.GetString()!);
+                    if (!reader.Read()) throw new JsonException("A calendar extension object was incomplete.");
+                    CopyValue(ref reader, writer);
+                }
+                if (reader.TokenType != JsonTokenType.EndObject)
+                    throw new JsonException("A calendar extension object was incomplete.");
+                writer.WriteEndObject();
+                return;
+            case JsonTokenType.StartArray:
+                writer.WriteStartArray();
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                {
+                    CopyValue(ref reader, writer);
+                }
+                if (reader.TokenType != JsonTokenType.EndArray)
+                    throw new JsonException("A calendar extension array was incomplete.");
+                writer.WriteEndArray();
+                return;
+            case JsonTokenType.String:
+                writer.WriteStringValue(reader.GetString());
+                return;
+            case JsonTokenType.Number:
+                if (reader.HasValueSequence)
+                    writer.WriteRawValue(reader.ValueSequence.ToArray(), skipInputValidation: true);
+                else
+                    writer.WriteRawValue(reader.ValueSpan, skipInputValidation: true);
+                return;
+            case JsonTokenType.True:
+                writer.WriteBooleanValue(true);
+                return;
+            case JsonTokenType.False:
+                writer.WriteBooleanValue(false);
+                return;
+            case JsonTokenType.Null:
+                writer.WriteNullValue();
+                return;
+            default:
+                throw new JsonException("A calendar extension value contained an invalid JSON token.");
+        }
     }
 
     private static bool TryReadWireDateTime(JsonElement value, out DateTimeOffset result)
