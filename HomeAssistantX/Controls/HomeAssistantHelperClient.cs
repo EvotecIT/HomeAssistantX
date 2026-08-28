@@ -82,9 +82,11 @@ public sealed class HomeAssistantHelperClient
 
     private async Task<HomeAssistantServiceCallResult> CallAsync(HomeAssistantHelperDomain domain, string service, HomeAssistantTarget target, Action<HomeAssistantServiceCall>? configure, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (target is null) throw new ArgumentNullException(nameof(target));
         var serviceDomain = ToDomain(domain);
-        var call = HomeAssistantServiceCall.Create(serviceDomain, service).ForTarget(target.NormalizeRequiredForDomain(serviceDomain));
+        var call = HomeAssistantServiceCall.Create(serviceDomain, service).ForTarget(
+            target.NormalizeRequiredForDomain(serviceDomain, cancellationToken: cancellationToken));
         configure?.Invoke(call);
         return await _services.CallControlAsync(call, cancellationToken).ConfigureAwait(false);
     }

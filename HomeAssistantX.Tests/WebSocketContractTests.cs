@@ -857,6 +857,14 @@ public sealed class WebSocketContractTests
         target.EntityIds = new[] { "_light.kitchen" };
         await Assert.ThrowsAsync<ArgumentException>(
             () => client.Services.CallAsync(HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target)));
+        target.EntityIds = new[] { " " };
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var canceledCall = HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.Services.CallAsync(canceledCall, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.Services.CallRestAsync(canceledCall, cancellation.Token));
         Assert.Throws<ArgumentException>(() => HomeAssistantTarget.ForEntity("LIGHT.kitchen"));
     }
 

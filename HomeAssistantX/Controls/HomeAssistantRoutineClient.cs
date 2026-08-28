@@ -50,8 +50,10 @@ public sealed class HomeAssistantRoutineClient
 
     private async Task<HomeAssistantServiceCallResult> CallAsync(string domain, string action, HomeAssistantTarget target, Action<HomeAssistantServiceCall>? configure, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (target is null) throw new ArgumentNullException(nameof(target));
-        var call = HomeAssistantServiceCall.Create(domain, action).ForTarget(target.NormalizeRequiredForDomain(domain));
+        var call = HomeAssistantServiceCall.Create(domain, action).ForTarget(
+            target.NormalizeRequiredForDomain(domain, cancellationToken: cancellationToken));
         configure?.Invoke(call);
         return await _services.CallControlAsync(call, cancellationToken).ConfigureAwait(false);
     }

@@ -55,10 +55,12 @@ public sealed class HomeAssistantAutomationClient
     /// <summary>Runs one or more automation entities without changing their configuration.</summary>
     public Task<HomeAssistantServiceCallResult> TriggerAsync(HomeAssistantTarget target, bool skipConditions = true, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (target is null) throw new ArgumentNullException(nameof(target));
-        var normalizedTarget = target.NormalizeForDomain("automation", cancellationToken);
-        if (!normalizedTarget.HasAnySelection())
-            throw new ArgumentException("At least one automation target selection is required.", nameof(target));
+        var normalizedTarget = target.NormalizeRequiredForDomain(
+            "automation",
+            nameof(target),
+            cancellationToken);
         return _services.CallAsync(
             new HomeAssistantServiceCall("automation", "trigger")
                 .ForTarget(normalizedTarget)

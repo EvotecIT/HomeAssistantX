@@ -127,6 +127,15 @@ public sealed class StableControlAndAdapterContractTests
             cyclicVariables));
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Fans.SetDirectionAsync(
+            HomeAssistantTarget.ForEntity("light.office"),
+            HomeAssistantFanDirection.Forward,
+            canceled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Helpers.SetNumberAsync(
+            HomeAssistantHelperDomain.InputNumber,
+            HomeAssistantTarget.ForEntity("number.volume"),
+            12.5,
+            canceled.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Routines.RunScriptAsync(
             HomeAssistantTarget.ForEntity("script.evening"),
             cyclicVariables,
