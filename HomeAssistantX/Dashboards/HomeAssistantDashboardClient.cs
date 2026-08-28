@@ -25,13 +25,19 @@ public sealed class HomeAssistantDashboardClient
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
             RequirePanelBooleans(property.Value);
             var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(property.Value, "A frontend panel could not be decoded.");
-            if (string.IsNullOrWhiteSpace(panel.UrlPath))
+            if (!property.Value.TryGetProperty("url_path", out var embeddedRoute))
             {
                 panel.UrlPath = route;
             }
-            else if (!string.Equals(RequireResponseSelector(panel.UrlPath, "A frontend panel contained an invalid route."), route, StringComparison.Ordinal))
+            else
             {
-                throw new HomeAssistantProtocolException("A frontend panel route did not match its registered key.");
+                if (embeddedRoute.ValueKind != JsonValueKind.String)
+                    throw new HomeAssistantProtocolException("A frontend panel contained an invalid route.");
+                panel.UrlPath = RequireResponseSelector(
+                    embeddedRoute.GetString(),
+                    "A frontend panel contained an invalid route.");
+                if (!string.Equals(panel.UrlPath, route, StringComparison.Ordinal))
+                    throw new HomeAssistantProtocolException("A frontend panel route did not match its registered key.");
             }
             if (string.IsNullOrWhiteSpace(panel.UrlPath) || string.IsNullOrWhiteSpace(panel.ComponentName))
                 throw new HomeAssistantProtocolException("A frontend panel did not contain its required fields.");
@@ -140,8 +146,16 @@ public sealed class HomeAssistantDashboardClient
 
     public Task<JsonElement> SaveConfigurationAsync(JsonElement configuration, string? urlPath = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (configuration.ValueKind != JsonValueKind.Object) throw new ArgumentException("A Lovelace configuration JSON object is required.", nameof(configuration));
-        var payload = new Dictionary<string, object?> { ["config"] = configuration.Clone() };
+        var payload = new Dictionary<string, object?>
+        {
+            ["config"] = HomeAssistantJson.FreezeValue(
+                configuration,
+                nameof(configuration),
+                "Lovelace configuration",
+                cancellationToken)
+        };
         if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
         return _webSocket.RequestAsync("lovelace/config/save", payload, cancellationToken);
     }

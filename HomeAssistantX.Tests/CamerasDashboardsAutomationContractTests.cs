@@ -574,6 +574,42 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Theory]
+    [InlineData("null")]
+    [InlineData("\"\"")]
+    [InlineData("\" \"")]
+    public async Task PanelResponsesRejectPresentInvalidEmbeddedRoutes(string embeddedRoute)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson =
+                "{\"lovelace\":{\"url_path\":" + embeddedRoute
+                + ",\"component_name\":\"lovelace\",\"default_visible\":true,\"require_admin\":false,\"show_in_sidebar\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Fact]
+    public async Task DashboardConfigurationSaveHonorsCancellationBeforeInspectingOrCopyingJson()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        JsonElement configuration;
+        using (var document = JsonDocument.Parse("{}"))
+        {
+            configuration = document.RootElement;
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Dashboards.SaveConfigurationAsync(configuration, cancellationToken: cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/config/save"));
+    }
+
+    [Theory]
     [InlineData("[{\"id\":\" resource-1 \",\"url\":\"/local/card.js\",\"type\":\"module\"}]")]
     [InlineData("[{\"id\":\"resource-1\",\"url\":\"/local/a.js\",\"type\":\"module\"},{\"id\":\"resource-1\",\"url\":\"/local/b.js\",\"type\":\"module\"}]")]
     public async Task StorageResourceResponsesRejectNonCanonicalAndDuplicateIdentifiers(string response)

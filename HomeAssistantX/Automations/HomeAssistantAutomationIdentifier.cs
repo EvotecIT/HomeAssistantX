@@ -14,11 +14,16 @@ public static class HomeAssistantAutomationIdentifier
         return automationId.Trim();
     }
 
-    internal static void ValidateDefinitionForSave(string automationId, JsonElement definition, string parameterName)
+    internal static void ValidateDefinitionForSave(
+        string automationId,
+        JsonElement definition,
+        string parameterName,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (definition.ValueKind != JsonValueKind.Object)
             throw new ArgumentException("An automation definition JSON object is required.", parameterName);
-        if (HasDuplicateProperties(definition))
+        if (HasDuplicateProperties(definition, cancellationToken))
             throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", parameterName);
 
         var definitionIds = definition.EnumerateObject()
@@ -34,18 +39,28 @@ public static class HomeAssistantAutomationIdentifier
         }
     }
 
-    internal static bool HasDuplicateProperties(JsonElement value)
+    internal static bool HasDuplicateProperties(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind == JsonValueKind.Array)
         {
-            return value.EnumerateArray().Any(HasDuplicateProperties);
+            foreach (var item in value.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (HasDuplicateProperties(item, cancellationToken)) return true;
+            }
+
+            return false;
         }
         if (value.ValueKind != JsonValueKind.Object) return false;
 
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
         {
-            if (!names.Add(property.Name) || HasDuplicateProperties(property.Value)) return true;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!names.Add(property.Name) || HasDuplicateProperties(property.Value, cancellationToken)) return true;
         }
         return false;
     }

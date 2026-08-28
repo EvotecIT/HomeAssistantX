@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
@@ -75,8 +76,13 @@ public sealed class HomeAssistantAutomationClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
-        HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(id, definition, nameof(definition));
-        return await _rest.SendAsync<JsonElement>(HttpMethod.Post, ConfigurationPath(id), definition.Clone(), cancellationToken).ConfigureAwait(false);
+        HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(id, definition, nameof(definition), cancellationToken);
+        var frozenDefinition = HomeAssistantJson.FreezeValue(
+            definition,
+            nameof(definition),
+            "Automation definition",
+            cancellationToken);
+        return await _rest.SendAsync<JsonElement>(HttpMethod.Post, ConfigurationPath(id), frozenDefinition, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Deletes an editable automation definition. Requires an administrator.</summary>
