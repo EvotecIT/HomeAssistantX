@@ -226,7 +226,7 @@ public sealed class HomeAssistantStateClient : IDisposable
             snapshot,
             "The get_states response could not be decoded.",
             cancellationToken: cancellationToken);
-        var validatedStates = ValidateSnapshotStates(currentStates);
+        var validatedStates = ValidateSnapshotStates(currentStates, cancellationToken);
         var changes = new List<HomeAssistantStateChange>();
 
         lock (_stateGate)
@@ -489,12 +489,15 @@ public sealed class HomeAssistantStateClient : IDisposable
         return state;
     }
 
-    private static IReadOnlyList<HomeAssistantState> ValidateSnapshotStates(IEnumerable<HomeAssistantState> states)
+    private static IReadOnlyList<HomeAssistantState> ValidateSnapshotStates(
+        IEnumerable<HomeAssistantState> states,
+        CancellationToken cancellationToken)
     {
         var result = new List<HomeAssistantState>();
         var entityIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var state in states)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (state is null)
             {
                 throw new HomeAssistantProtocolException("The get_states response contained a null entity state.");
@@ -561,7 +564,9 @@ public sealed class HomeAssistantStateClient : IDisposable
         }
 
         _subscribers.Clear();
-        _initializationGate.Dispose();
+        // Reconnect and subscription observers can still be unwinding after disposal invalidates
+        // their generation. SemaphoreSlim has no unmanaged state unless its wait handle is used,
+        // so leave this private gate alive until those fire-and-forget observers have exited.
     }
 
     private sealed class LocalStateSubscription : IHomeAssistantSubscription
