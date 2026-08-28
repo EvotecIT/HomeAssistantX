@@ -594,6 +594,32 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderImportSnapshotsCallerRowsOnceBeforeValidation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var rows = new SingleEnumerationStatisticRows();
+
+        await client.Recorder.ImportStatisticsAsync(
+            CreateSumImportMetadata(),
+            rows);
+
+        Assert.Equal(1, rows.EnumerationCount);
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/import_statistics")));
+        Assert.Equal(2, command.RootElement.GetProperty("stats").GetArrayLength());
+    }
+
+    [Fact]
+    public void RecorderImportValidationObservesCancellationAfterEnumerationCompletes()
+    {
+        using var cancellation = new CancellationTokenSource();
+
+        Assert.ThrowsAny<OperationCanceledException>(() => CreateSumImportMetadata().ValidateRows(
+            new CancelAtEndStatisticRows(cancellation),
+            cancellation.Token));
+    }
+
+    [Fact]
     public async Task WeatherCurrentForecastUnitsAndSubscriptionAreTypedAndPushBased()
     {
         using var server = new TestHomeAssistantServer();
@@ -1336,6 +1362,57 @@ public sealed class EnergyRecorderWeatherContractTests
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
+
+    private sealed class CancelAtEndStatisticRows : IReadOnlyCollection<HomeAssistantStatisticImportRow>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancelAtEndStatisticRows(CancellationTokenSource cancellation) => _cancellation = cancellation;
+
+        public int Count => 1;
+
+        public IEnumerator<HomeAssistantStatisticImportRow> GetEnumerator()
+        {
+            yield return CreateSumRow(10, 1.5);
+            _cancellation.Cancel();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class SingleEnumerationStatisticRows : IReadOnlyCollection<HomeAssistantStatisticImportRow>
+    {
+        internal int EnumerationCount { get; private set; }
+
+        public int Count => 2;
+
+        public IEnumerator<HomeAssistantStatisticImportRow> GetEnumerator()
+        {
+            EnumerationCount++;
+            if (EnumerationCount != 1)
+                throw new InvalidOperationException("The caller-owned row collection was enumerated more than once.");
+            yield return CreateSumRow(10, 1.5);
+            yield return CreateSumRow(11, 2.5);
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private static HomeAssistantStatisticImportMetadata CreateSumImportMetadata() => new()
+    {
+        StatisticId = "external:daily_energy",
+        Source = "external",
+        HasSum = true,
+        MeanType = HomeAssistantStatisticMeanType.None,
+        UnitClass = "energy",
+        UnitOfMeasurement = "kWh"
+    };
+
+    private static HomeAssistantStatisticImportRow CreateSumRow(int hour, double sum) => new()
+    {
+        Start = new DateTimeOffset(2026, 8, 26, hour, 0, 0, TimeSpan.Zero),
+        Sum = sum
+    };
 
     private sealed class BlockingTokenProvider : IHomeAssistantAccessTokenProvider
     {

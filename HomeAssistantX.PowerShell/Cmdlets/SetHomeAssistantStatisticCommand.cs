@@ -62,7 +62,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
         {
             case MetadataSet:
                 RequireExclusive(UnitClass, ClearUnitClass, nameof(UnitClass), nameof(ClearUnitClass));
-                RequireExclusive(UnitOfMeasurement, ClearUnitOfMeasurement, nameof(UnitOfMeasurement), nameof(ClearUnitOfMeasurement));
+                RequireExclusive(UnitOfMeasurement, ClearUnitOfMeasurement, nameof(UnitOfMeasurement), nameof(ClearUnitOfMeasurement), allowEmptySentinel: true);
                 var hasUnitClassValue = MyInvocation.BoundParameters.ContainsKey(nameof(UnitClass));
                 var hasUnitValue = MyInvocation.BoundParameters.ContainsKey(nameof(UnitOfMeasurement));
                 if (hasUnitClassValue && UnitClass is null) throw new ArgumentNullException(nameof(UnitClass), "Use ClearUnitClass to remove the unit class.");
@@ -100,8 +100,8 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 await Client.Recorder.UpdateStatisticsMetadataAsync(statisticId, unitClass, unitOfMeasurement, CancelToken).ConfigureAwait(false);
                 return;
             case UnitSet:
-                RequireExclusive(OldUnit, ClearOldUnit, nameof(OldUnit), nameof(ClearOldUnit), required: true);
-                RequireExclusive(NewUnit, ClearNewUnit, nameof(NewUnit), nameof(ClearNewUnit), required: true);
+                RequireExclusive(OldUnit, ClearOldUnit, nameof(OldUnit), nameof(ClearOldUnit), required: true, allowEmptySentinel: true);
+                RequireExclusive(NewUnit, ClearNewUnit, nameof(NewUnit), nameof(ClearNewUnit), required: true, allowEmptySentinel: true);
                 var oldUnit = ClearOldUnit ? null : OldUnit!.Trim();
                 var newUnit = ClearNewUnit ? null : NewUnit!.Trim();
                 if (string.Equals(oldUnit, newUnit, StringComparison.Ordinal))
@@ -112,11 +112,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             case AdjustSet:
                 if (double.IsNaN(AdjustSum) || double.IsInfinity(AdjustSum)) throw new ArgumentOutOfRangeException(nameof(AdjustSum));
                 if (AdjustSum == 0d) throw new ArgumentOutOfRangeException(nameof(AdjustSum), "AdjustSum must be non-zero.");
-                var adjustmentUnit = Unit is null
-                    ? null
-                    : string.IsNullOrWhiteSpace(Unit)
-                        ? throw new ArgumentException("Unit must not be blank.", nameof(Unit))
-                        : Unit.Trim();
+                var adjustmentUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(Unit, nameof(Unit));
                 if (!ShouldProcess(ConnectionDisplayName, $"Adjust Recorder sum by {AdjustSum} for 1 identifier")) return;
                 await Client.Recorder.AdjustSumStatisticsAsync(statisticId, StartTime, AdjustSum, adjustmentUnit, CancelToken).ConfigureAwait(false);
                 return;
@@ -161,11 +157,20 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
         return normalized;
     }
 
-    private static void RequireExclusive(string? value, bool clear, string valueName, string clearName, bool required = false)
+    private static void RequireExclusive(
+        string? value,
+        bool clear,
+        string valueName,
+        string clearName,
+        bool required = false,
+        bool allowEmptySentinel = false)
     {
         if (value is not null && clear) throw new ArgumentException($"{valueName} and {clearName} cannot be combined.");
         if (required && value is null && !clear) throw new ArgumentException($"Specify {valueName} or {clearName}.");
-        if (value is not null && string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{valueName} must not be blank.", valueName);
+        if (value is not null
+            && string.IsNullOrWhiteSpace(value)
+            && !(allowEmptySentinel && value.Length == 0))
+            throw new ArgumentException($"{valueName} must not be blank.", valueName);
     }
 
 }

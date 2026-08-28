@@ -223,6 +223,7 @@ public sealed class HomeAssistantStatisticImportMetadata
                     throw new ArgumentException("Imported arithmetic statistics Mean cannot exceed Maximum.", nameof(rows));
             }
         }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static void ValidateFinite(double? value, string name)

@@ -556,6 +556,9 @@ try {
     $null = Set-HomeAssistantEnergy -DeviceConsumptionJson '[]' -WhatIf
     $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement MWh -WhatIf
     $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1.5 -StartTime '2026-08-26T00:00:00Z' -Unit kWh -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement '' -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ChangeUnit -OldUnit '' -NewUnit kWh -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1.5 -StartTime '2026-08-26T00:00:00Z' -Unit '' -WhatIf
     $null = Remove-HomeAssistantStatistic sensor.grid_energy -WhatIf
     $null = Invoke-HomeAssistantRecorderMaintenance -Purge -KeepDays 30 -WhatIf
     $null = Invoke-HomeAssistantRecorderMaintenance -RefreshStatisticsIssues -Confirm:$false

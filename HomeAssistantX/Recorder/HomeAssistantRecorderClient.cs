@@ -178,7 +178,16 @@ public sealed class HomeAssistantRecorderClient
     public async Task ImportStatisticsAsync(HomeAssistantStatisticImportMetadata metadata, IReadOnlyCollection<HomeAssistantStatisticImportRow> rows, CancellationToken cancellationToken = default)
     {
         if (metadata is null) throw new ArgumentNullException(nameof(metadata));
-        metadata.ValidateRows(rows, cancellationToken);
+        if (rows is null) throw new ArgumentNullException(nameof(rows));
+        cancellationToken.ThrowIfCancellationRequested();
+        var rowSnapshot = new List<HomeAssistantStatisticImportRow>(rows.Count);
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            rowSnapshot.Add(row);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        metadata.ValidateRows(rowSnapshot, cancellationToken);
         var unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass));
         var unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement));
         var metadataPayload = new Dictionary<string, object?>
@@ -192,8 +201,8 @@ public sealed class HomeAssistantRecorderClient
             ["unit_of_measurement"] = unitOfMeasurement
         };
         metadataPayload["mean_type"] = (int)metadata.MeanType;
-        var rowPayload = new List<Dictionary<string, object?>>(rows.Count);
-        foreach (var row in rows)
+        var rowPayload = new List<Dictionary<string, object?>>(rowSnapshot.Count);
+        foreach (var row in rowSnapshot)
         {
             cancellationToken.ThrowIfCancellationRequested();
             rowPayload.Add(ToImportPayload(row));
