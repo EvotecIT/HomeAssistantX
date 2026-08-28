@@ -459,6 +459,15 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public void RegistryResponsesRejectPaddedDisplayNames()
+    {
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateLabels(
+            new[] { new HomeAssistantLabel { LabelId = "security", Name = " Security " } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateCategories(
+            new[] { new HomeAssistantCategory { CategoryId = "comfort", Name = " Comfort " } }, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task EmptyRegistryUpdatesFailBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

@@ -385,7 +385,8 @@ public sealed class HomeAssistantRegistryClient
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(label.LabelId)
             || !string.Equals(label.LabelId, label.LabelId.Trim(), StringComparison.Ordinal)
-            || string.IsNullOrWhiteSpace(label.Name))
+            || string.IsNullOrWhiteSpace(label.Name)
+            || !string.Equals(label.Name, label.Name.Trim(), StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Home Assistant label did not contain its required identifier and name.");
     }
 
@@ -394,7 +395,8 @@ public sealed class HomeAssistantRegistryClient
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(category.CategoryId)
             || !string.Equals(category.CategoryId, category.CategoryId.Trim(), StringComparison.Ordinal)
-            || string.IsNullOrWhiteSpace(category.Name))
+            || string.IsNullOrWhiteSpace(category.Name)
+            || !string.Equals(category.Name, category.Name.Trim(), StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Home Assistant category did not contain its required identifier and name.");
     }
 
