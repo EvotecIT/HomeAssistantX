@@ -741,7 +741,7 @@ try {
     $importMetadata.HasMean = $false
     $importMetadata.HasSum = $true
     $importMetadata.MeanType = [HomeAssistantX.Recorder.HomeAssistantStatisticMeanType]::None
-    $importMetadata.UnitClass = ' energy '
+    $importMetadata.UnitClass = 'energy'
     $importMetadata.UnitOfMeasurement = ' kWh '
     $importRows = 1, 2 | ForEach-Object {
         $row = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
