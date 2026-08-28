@@ -1584,8 +1584,14 @@ T sealed class HomeAssistantX.Weather.HomeAssistantWeatherClient
   M instance System.Threading.Tasks.Task<HomeAssistantX.Weather.HomeAssistantWeatherObservation> GetAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Weather.HomeAssistantWeatherObservation>> GetAsync(System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<System.String,System.Collections.Generic.IReadOnlyList<System.String>>> GetConvertibleUnitsAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Weather.HomeAssistantWeatherConvertibleUnitsResponse> GetConvertibleUnitsResponseAsync(System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<HomeAssistantX.Weather.HomeAssistantWeatherForecastUpdate> GetForecastAsync(System.String entityId, HomeAssistantX.Weather.HomeAssistantWeatherForecastType type, System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<HomeAssistantX.Subscriptions.IHomeAssistantSubscription> SubscribeForecastAsync(System.String entityId, HomeAssistantX.Weather.HomeAssistantWeatherForecastType type, System.Func<HomeAssistantX.Weather.HomeAssistantWeatherForecastUpdate,System.Threading.CancellationToken,System.Threading.Tasks.Task> handler, System.Threading.CancellationToken cancellationToken = null)
+T sealed class HomeAssistantX.Weather.HomeAssistantWeatherConvertibleUnitsResponse
+  C HomeAssistantX.Weather.HomeAssistantWeatherConvertibleUnitsResponse()
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
+  P instance System.Text.Json.JsonElement Raw {get;set;}
+  P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Collections.Generic.IReadOnlyList<System.String>> Units {get;set;}
 T flags enum HomeAssistantX.Weather.HomeAssistantWeatherFeature : System.Int32
   F None = 0
   F DailyForecast = 1

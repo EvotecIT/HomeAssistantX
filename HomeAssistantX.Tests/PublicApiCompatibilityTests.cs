@@ -204,6 +204,33 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void TypeFormatterPreservesAttributeUsageContracts()
+    {
+        Assert.Equal(
+            "attribute-usage(targets=Class|Method,allow-multiple=true,inherited=false) ",
+            AttributeUsageContract(typeof(AttributeUsageFixtureAttribute)));
+    }
+
+    [Fact]
+    public void MethodFormatterPreservesNativeImportContracts()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(NativeImportFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var omitted = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(NativeImportOmittedOptionsFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var disabled = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(NativeImportDisabledOptionsFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var formatted = FormatMethod(method);
+        Assert.StartsWith("dll-import(\"native-test\",entry=\"native_entry\",import-flags=", formatted, StringComparison.Ordinal);
+        Assert.Contains(",calling=Cdecl,charset=Unicode,exact=true,set-last-error=true", formatted, StringComparison.Ordinal);
+        Assert.NotEqual(DllImportContract(omitted), DllImportContract(disabled));
+    }
+
+    [Fact]
     public void TypeFormatterPreservesDynamicMetadataAcrossNestedContracts()
     {
         var method = typeof(PublicApiCompatibilityTests).GetMethod(
@@ -500,7 +527,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ConditionalContract(type) + CollectionBuilderContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + CollectionBuilderContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -623,7 +650,51 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return ObsoleteContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return ObsoleteContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+    }
+
+    private static string AttributeUsageContract(Type type)
+    {
+        if (!typeof(Attribute).IsAssignableFrom(type)) return string.Empty;
+        var usage = type.GetCustomAttribute<AttributeUsageAttribute>(inherit: true)
+            ?? new AttributeUsageAttribute(AttributeTargets.All);
+        var targets = usage.ValidOn == AttributeTargets.All
+            ? nameof(AttributeTargets.All)
+            : string.Join("|", Enum.GetValues(typeof(AttributeTargets))
+                .Cast<AttributeTargets>()
+                .Where(value => value != 0
+                    && value != AttributeTargets.All
+                    && (usage.ValidOn & value) == value)
+                .OrderBy(value => (int)value)
+                .Select(value => value.ToString()));
+        return "attribute-usage(targets=" + targets
+            + ",allow-multiple=" + FormatBoolean(usage.AllowMultiple)
+            + ",inherited=" + FormatBoolean(usage.Inherited) + ") ";
+    }
+
+    private static string DllImportContract(MethodBase method)
+    {
+        var attribute = method.GetCustomAttribute<DllImportAttribute>();
+        if (attribute is null) return string.Empty;
+        return "dll-import(" + FormatDefault(attribute.Value)
+            + ",entry=" + FormatDefault(attribute.EntryPoint)
+            + ",import-flags=" + ((int)ReadMethodImportAttributes(method)).ToString(CultureInfo.InvariantCulture)
+            + ",calling=" + attribute.CallingConvention
+            + ",charset=" + attribute.CharSet
+            + ",exact=" + FormatBoolean(attribute.ExactSpelling)
+            + ",set-last-error=" + FormatBoolean(attribute.SetLastError)
+            + ",best-fit=" + FormatBoolean(attribute.BestFitMapping)
+            + ",throw-unmappable=" + FormatBoolean(attribute.ThrowOnUnmappableChar)
+            + ",preserve-sig=" + FormatBoolean(attribute.PreserveSig) + ") ";
+    }
+
+    private static MethodImportAttributes ReadMethodImportAttributes(MethodBase method)
+    {
+        using var stream = File.OpenRead(method.Module.FullyQualifiedName);
+        using var peReader = new PEReader(stream);
+        var reader = peReader.GetMetadataReader();
+        var row = method.MetadataToken & 0x00FFFFFF;
+        return reader.GetMethodDefinition(MetadataTokens.MethodDefinitionHandle(row)).GetImport().Attributes;
     }
 
     private static string FormatConstructor(ConstructorInfo constructor)
@@ -668,6 +739,45 @@ public sealed class PublicApiCompatibilityTests
         dynamic value,
         IReadOnlyDictionary<string, dynamic[]> nested)
         => value;
+
+    [DllImport(
+        "native-test",
+        EntryPoint = "native_entry",
+        CallingConvention = CallingConvention.Cdecl,
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true,
+        SetLastError = true,
+        BestFitMapping = false,
+        ThrowOnUnmappableChar = true,
+        PreserveSig = false)]
+    private static extern int NativeImportFixture(string value);
+
+    [DllImport(
+        "native-test",
+        EntryPoint = "native_entry",
+        CallingConvention = CallingConvention.Cdecl,
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true,
+        SetLastError = true,
+        PreserveSig = false)]
+    private static extern int NativeImportOmittedOptionsFixture(string value);
+
+    [DllImport(
+        "native-test",
+        EntryPoint = "native_entry",
+        CallingConvention = CallingConvention.Cdecl,
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true,
+        SetLastError = true,
+        BestFitMapping = false,
+        ThrowOnUnmappableChar = false,
+        PreserveSig = false)]
+    private static extern int NativeImportDisabledOptionsFixture(string value);
+
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
+    private sealed class AttributeUsageFixtureAttribute : Attribute
+    {
+    }
 
 #if NET10_0
     [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(value))]
