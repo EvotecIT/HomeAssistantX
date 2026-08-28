@@ -26,7 +26,10 @@ public sealed class HomeAssistantRepairClient
             throw new HomeAssistantProtocolException("The Home Assistant repairs response had an unexpected shape.");
         }
 
-        var decoded = HomeAssistantJson.DeserializeResponse<HomeAssistantRepairIssue[]>(issues, "The Home Assistant repairs issues could not be decoded.");
+        var decoded = HomeAssistantJson.DeserializeResponse<HomeAssistantRepairIssue[]>(
+            issues,
+            "The Home Assistant repairs issues could not be decoded.",
+            cancellationToken: cancellationToken);
         return includeIgnored ? decoded : decoded.Where(issue => !issue.Ignored).ToArray();
     }
 

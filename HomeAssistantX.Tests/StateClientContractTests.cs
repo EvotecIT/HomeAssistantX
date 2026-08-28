@@ -127,6 +127,30 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public async Task StaleReconnectFailureCannotTearDownNewerHealthyReconciliation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+        server.SetStates("[" + TestHomeAssistantServer.KitchenLightOnStateJson + "]");
+        var pausedSnapshot = server.PauseNextGetStates();
+
+        await server.DropWebSocketsAsync();
+        await WithTimeoutAsync(pausedSnapshot.Received);
+        await server.DropWebSocketsAsync();
+        pausedSnapshot.Release();
+
+        await WaitUntilAsync(() =>
+            server.WebSocketConnectionCount >= 3
+            && client.States.Snapshot.TryGetValue("light.kitchen", out var state)
+            && state.State == "on");
+
+        Assert.False(subscription.Completion.IsCompleted);
+    }
+
+    [Fact]
     public async Task BoundedStateSubscriptionFaultsWhenConsumerCannotKeepUp()
     {
         using var server = new TestHomeAssistantServer();

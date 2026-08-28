@@ -62,7 +62,8 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
     {
         return Decode<HomeAssistantSupervisorInfo>(
             await SendAsync(HttpMethod.Get, "/supervisor/info", null, cancellationToken).ConfigureAwait(false),
-            "Supervisor information");
+            "Supervisor information",
+            cancellationToken);
     }
 
     /// <summary>Gets the combined Supervisor, Core, OS, and host installation overview.</summary>
@@ -71,7 +72,8 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
     {
         return Decode<HomeAssistantSupervisorOverview>(
             await SendAsync(HttpMethod.Get, "/info", null, cancellationToken).ConfigureAwait(false),
-            "Supervisor installation overview");
+            "Supervisor installation overview",
+            cancellationToken);
     }
 
     public Task<JsonElement> GetCoreInfoAsync(CancellationToken cancellationToken = default)
@@ -83,14 +85,14 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         var result = await SendAsync(HttpMethod.Get, "/available_updates", null, cancellationToken).ConfigureAwait(false);
-        return DecodeList<HomeAssistantSupervisorUpdate>(result, "available_updates", "Supervisor updates");
+        return DecodeList<HomeAssistantSupervisorUpdate>(result, "available_updates", "Supervisor updates", cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantApp>> GetAppsAsync(
         CancellationToken cancellationToken = default)
     {
         var result = await SendAsync(HttpMethod.Get, "/addons", null, cancellationToken).ConfigureAwait(false);
-        var apps = DecodeList<HomeAssistantApp>(result, "addons", "Home Assistant apps");
+        var apps = DecodeList<HomeAssistantApp>(result, "addons", "Home Assistant apps", cancellationToken);
         foreach (var app in apps)
         {
             // The /addons endpoint is the installed-app inventory and does not emit an installed flag.
@@ -104,14 +106,14 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         var result = await SendAsync(HttpMethod.Get, "/backups", null, cancellationToken).ConfigureAwait(false);
-        return DecodeList<HomeAssistantBackup>(result, "backups", "Home Assistant backups");
+        return DecodeList<HomeAssistantBackup>(result, "backups", "Home Assistant backups", cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantSupervisorJob>> GetJobsAsync(
         CancellationToken cancellationToken = default)
     {
         var result = await SendAsync(HttpMethod.Get, "/jobs/info", null, cancellationToken).ConfigureAwait(false);
-        return DecodeList<HomeAssistantSupervisorJob>(result, "jobs", "Supervisor jobs");
+        return DecodeList<HomeAssistantSupervisorJob>(result, "jobs", "Supervisor jobs", cancellationToken);
     }
 
     public async Task<HomeAssistantSupervisorJob> GetJobAsync(
@@ -124,7 +126,8 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
                 "/jobs/" + Escape(jobId, nameof(jobId)),
                 null,
                 cancellationToken).ConfigureAwait(false),
-            "Supervisor job");
+            "Supervisor job",
+            cancellationToken);
     }
 
     public Task<JsonElement> GetResolutionAsync(CancellationToken cancellationToken = default)
@@ -265,12 +268,19 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         return value.Clone();
     }
 
-    private static T Decode<T>(JsonElement value, string name)
+    private static T Decode<T>(JsonElement value, string name, CancellationToken cancellationToken)
     {
-        return HomeAssistantJson.DeserializeResponse<T>(value, "The " + name + " response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<T>(
+            value,
+            "The " + name + " response could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
-    private static IReadOnlyList<T> DecodeList<T>(JsonElement value, string propertyName, string name)
+    private static IReadOnlyList<T> DecodeList<T>(
+        JsonElement value,
+        string propertyName,
+        string name,
+        CancellationToken cancellationToken)
     {
         var list = value;
         if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty(propertyName, out var nested))
@@ -278,7 +288,10 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             list = nested;
         }
 
-        return HomeAssistantJson.DeserializeResponse<T[]>(list, "The " + name + " response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<T[]>(
+            list,
+            "The " + name + " response could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
     private static string Escape(string? value, string parameterName)

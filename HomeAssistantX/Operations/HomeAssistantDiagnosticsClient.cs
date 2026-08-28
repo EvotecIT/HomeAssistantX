@@ -23,7 +23,10 @@ public sealed class HomeAssistantDiagnosticsClient
         CancellationToken cancellationToken = default)
     {
         var result = await _webSocket.RequestAsync("diagnostics/list", null, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantDiagnosticHandler[]>(result, "The Home Assistant diagnostics handlers could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantDiagnosticHandler[]>(
+            result,
+            "The Home Assistant diagnostics handlers could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
     public Task<byte[]> GetConfigEntryAsync(

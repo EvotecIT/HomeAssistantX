@@ -26,6 +26,8 @@ public sealed class HomeAssistantStateClient : IDisposable
     private volatile bool _initialized;
     private bool _snapshotReady;
     private bool _wasConnected;
+    private long _reconciliationGeneration;
+    private long _scheduledReconciliationGeneration = -1;
     private readonly List<HomeAssistantStateChange> _bufferedChanges = new();
     private int _disposed;
 
@@ -65,7 +67,10 @@ public sealed class HomeAssistantStateClient : IDisposable
     public async Task<IReadOnlyList<HomeAssistantState>> GetAllWebSocketAsync(CancellationToken cancellationToken = default)
     {
         var result = await _webSocket.RequestAsync("get_states", null, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(result, "The Home Assistant state list could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(
+            result,
+            "The Home Assistant state list could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Creates or updates a state representation through REST without controlling the underlying device.</summary>
@@ -168,7 +173,10 @@ public sealed class HomeAssistantStateClient : IDisposable
 
     private Task HandleStateEventAsync(JsonElement eventMessage, CancellationToken cancellationToken)
     {
-        var eventValue = HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(eventMessage, "A Home Assistant state event could not be decoded.");
+        var eventValue = HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(
+            eventMessage,
+            "A Home Assistant state event could not be decoded.",
+            cancellationToken: cancellationToken);
         if (!string.Equals(eventValue.EventType, "state_changed", StringComparison.Ordinal))
         {
             return Task.CompletedTask;
@@ -181,8 +189,8 @@ public sealed class HomeAssistantStateClient : IDisposable
         }
 
         var entityId = HomeAssistantEntityId.RequireResponseEntityId(entityProperty.GetString());
-        var previous = DeserializeOptionalState(eventValue.Data, "old_state", entityId);
-        var current = DeserializeOptionalState(eventValue.Data, "new_state", entityId);
+        var previous = DeserializeOptionalState(eventValue.Data, "old_state", entityId, cancellationToken);
+        var current = DeserializeOptionalState(eventValue.Data, "new_state", entityId, cancellationToken);
         var change = new HomeAssistantStateChange(entityId, previous, current);
 
         lock (_stateGate)
@@ -200,7 +208,10 @@ public sealed class HomeAssistantStateClient : IDisposable
         return Task.CompletedTask;
     }
 
-    private async Task ResynchronizeAsync(bool isReconnect, CancellationToken cancellationToken)
+    private async Task ResynchronizeAsync(
+        bool isReconnect,
+        CancellationToken cancellationToken,
+        long? expectedGeneration = null)
     {
         var snapshot = await _webSocket.RequestAsync("get_states", null, cancellationToken).ConfigureAwait(false);
         if (_serverSubscription is not null)
@@ -211,12 +222,20 @@ public sealed class HomeAssistantStateClient : IDisposable
                 .ConfigureAwait(false);
         }
 
-        var currentStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(snapshot, "The get_states response could not be decoded.");
+        var currentStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(
+            snapshot,
+            "The get_states response could not be decoded.",
+            cancellationToken: cancellationToken);
         var validatedStates = ValidateSnapshotStates(currentStates);
         var changes = new List<HomeAssistantStateChange>();
 
         lock (_stateGate)
         {
+            if (expectedGeneration.HasValue && expectedGeneration.Value != _reconciliationGeneration)
+            {
+                return;
+            }
+
             var previousStates = new Dictionary<string, HomeAssistantState>(_states, StringComparer.OrdinalIgnoreCase);
             _states.Clear();
             foreach (var state in validatedStates)
@@ -266,6 +285,7 @@ public sealed class HomeAssistantStateClient : IDisposable
         {
             lock (_stateGate)
             {
+                _reconciliationGeneration++;
                 _snapshotReady = false;
             }
 
@@ -274,7 +294,19 @@ public sealed class HomeAssistantStateClient : IDisposable
 
         if (args.CurrentState == HomeAssistantConnectionState.Connected && _wasConnected && _initialized)
         {
-            _ = ResynchronizeAfterReconnectAsync();
+            long generation;
+            lock (_stateGate)
+            {
+                generation = _reconciliationGeneration;
+                if (_scheduledReconciliationGeneration == generation)
+                {
+                    return;
+                }
+
+                _scheduledReconciliationGeneration = generation;
+            }
+
+            _ = ResynchronizeAfterReconnectAsync(generation);
         }
 
         if (args.CurrentState == HomeAssistantConnectionState.Connected)
@@ -283,45 +315,47 @@ public sealed class HomeAssistantStateClient : IDisposable
         }
     }
 
-    private async Task ResynchronizeAfterReconnectAsync()
+    private async Task ResynchronizeAfterReconnectAsync(long generation)
     {
         try
         {
-            await ResynchronizeAsync(isReconnect: true, CancellationToken.None).ConfigureAwait(false);
+            await _initializationGate.WaitAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_initialized || !IsCurrentReconciliationGeneration(generation))
+            {
+                return;
+            }
+
+            await ResynchronizeAsync(
+                isReconnect: true,
+                CancellationToken.None,
+                expectedGeneration: generation).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             IHomeAssistantSubscription? failedServerSubscription = null;
             LocalStateSubscription[] affectedSubscribers = Array.Empty<LocalStateSubscription>();
-            try
+            lock (_stateGate)
             {
-                await _initializationGate.WaitAsync().ConfigureAwait(false);
-            }
-            catch (ObjectDisposedException)
-            {
-                return;
-            }
-
-            try
-            {
-                if (_initialized)
+                if (!_initialized || generation != _reconciliationGeneration)
                 {
-                    _initialized = false;
-                    failedServerSubscription = _serverSubscription;
-                    _serverSubscription = null;
-                    Volatile.Write(ref _serverSubscriptionFailure, ex);
-                    affectedSubscribers = _subscribers.Values.ToArray();
+                    return;
                 }
 
-                lock (_stateGate)
-                {
-                    _snapshotReady = false;
-                    _bufferedChanges.Clear();
-                }
-            }
-            finally
-            {
-                _initializationGate.Release();
+                _initialized = false;
+                failedServerSubscription = _serverSubscription;
+                _serverSubscription = null;
+                Volatile.Write(ref _serverSubscriptionFailure, ex);
+                affectedSubscribers = _subscribers.Values.ToArray();
+                _snapshotReady = false;
+                _bufferedChanges.Clear();
             }
 
             failedServerSubscription?.Dispose();
@@ -335,6 +369,18 @@ public sealed class HomeAssistantStateClient : IDisposable
                 "state.reconciliation_failed",
                 "Home Assistant state reconciliation failed after reconnect.",
                 ex);
+        }
+        finally
+        {
+            _initializationGate.Release();
+        }
+    }
+
+    private bool IsCurrentReconciliationGeneration(long generation)
+    {
+        lock (_stateGate)
+        {
+            return generation == _reconciliationGeneration;
         }
     }
 
@@ -422,14 +468,18 @@ public sealed class HomeAssistantStateClient : IDisposable
     private static HomeAssistantState? DeserializeOptionalState(
         IReadOnlyDictionary<string, JsonElement> data,
         string name,
-        string expectedEntityId)
+        string expectedEntityId,
+        CancellationToken cancellationToken)
     {
         if (!data.TryGetValue(name, out var value) || value.ValueKind == JsonValueKind.Null)
         {
             return null;
         }
 
-        var state = HomeAssistantJson.DeserializeResponse<HomeAssistantState>(value, "A Home Assistant state change could not be decoded.");
+        var state = HomeAssistantJson.DeserializeResponse<HomeAssistantState>(
+            value,
+            "A Home Assistant state change could not be decoded.",
+            cancellationToken: cancellationToken);
         var stateEntityId = HomeAssistantEntityId.RequireResponseEntityId(state.EntityId);
         if (!string.Equals(stateEntityId, expectedEntityId, StringComparison.Ordinal))
         {
@@ -500,6 +550,10 @@ public sealed class HomeAssistantStateClient : IDisposable
         }
 
         _webSocket.ConnectionStateChanged -= OnConnectionStateChanged;
+        lock (_stateGate)
+        {
+            _reconciliationGeneration++;
+        }
         _serverSubscription?.Dispose();
         foreach (var subscriber in _subscribers.Values)
         {

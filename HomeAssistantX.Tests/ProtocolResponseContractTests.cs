@@ -166,6 +166,20 @@ public sealed class ProtocolResponseContractTests
         Assert.InRange(values.ReadCount, 1, 16);
     }
 
+    [Fact]
+    public void BuiltInResponseDecoderHonorsCallerCancellation()
+    {
+        using var document = JsonDocument.Parse("[{\"entity_id\":\"light.kitchen\",\"state\":\"on\",\"attributes\":{}}]");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(
+                document.RootElement,
+                "State response failed.",
+                cancellationToken: cancellation.Token));
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]

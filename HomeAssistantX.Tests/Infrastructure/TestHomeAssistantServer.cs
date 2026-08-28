@@ -30,6 +30,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private TaskCompletionSource<bool>? _pausedSubscriptionActivated;
     private TaskCompletionSource<bool>? _pausedServiceCallReceived;
     private TaskCompletionSource<bool>? _pausedServiceCallRelease;
+    private TaskCompletionSource<bool>? _pausedGetStatesReceived;
+    private TaskCompletionSource<bool>? _pausedGetStatesRelease;
     private readonly TaskCompletionSource<bool> _unsubscribeReceived =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource<bool> _systemHealthEventsSent =
@@ -92,6 +94,20 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pausedServiceCallReceived = received;
             _pausedServiceCallRelease = release;
+            return (received.Task, () => release.TrySetResult(true));
+        }
+    }
+
+    public (Task Received, Action Release) PauseNextGetStates()
+    {
+        lock (_stateGate)
+        {
+            if (_pausedGetStatesReceived is not null)
+                throw new InvalidOperationException("A get_states request is already paused.");
+            var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pausedGetStatesReceived = received;
+            _pausedGetStatesRelease = release;
             return (received.Task, () => release.TrySetResult(true));
         }
     }
@@ -480,6 +496,21 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     .ConfigureAwait(false);
                 return;
             case "get_states":
+                TaskCompletionSource<bool>? pausedGetStatesReceived;
+                TaskCompletionSource<bool>? pausedGetStatesRelease;
+                lock (_stateGate)
+                {
+                    pausedGetStatesReceived = _pausedGetStatesReceived;
+                    pausedGetStatesRelease = _pausedGetStatesRelease;
+                    _pausedGetStatesReceived = null;
+                    _pausedGetStatesRelease = null;
+                }
+                if (pausedGetStatesReceived is not null && pausedGetStatesRelease is not null)
+                {
+                    pausedGetStatesReceived.TrySetResult(true);
+                    await pausedGetStatesRelease.Task.ConfigureAwait(false);
+                }
+
                 if (SendStateChangeBeforeSnapshot && session.StateSubscriptionId is int subscriptionId)
                 {
                     await session.SendStateChangeAsync(subscriptionId, _source.Token).ConfigureAwait(false);

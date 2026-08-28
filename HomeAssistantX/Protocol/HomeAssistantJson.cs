@@ -222,18 +222,17 @@ internal static class HomeAssistantJson
     public static T DeserializeResponse<T>(
         JsonElement value,
         string failureMessage,
-        bool allowNullCollectionEntries = false)
+        bool allowNullCollectionEntries = false,
+        CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var result = value.Deserialize<T>(SerializerOptions)
-                ?? throw new HomeAssistantProtocolException(failureMessage);
-            return RequireNoNullCollectionEntries(result, failureMessage, allowNullCollectionEntries);
-        }
-        catch (JsonException ex)
-        {
-            throw new HomeAssistantProtocolException(failureMessage, ex);
-        }
+        return DeserializeResponseAsync<T>(
+                value,
+                failureMessage,
+                cancellationToken,
+                allowNullCollectionEntries)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
     }
 
     /// <summary>Decodes a built-in Home Assistant response while honoring cancellation during DOM traversal and typed projection.</summary>

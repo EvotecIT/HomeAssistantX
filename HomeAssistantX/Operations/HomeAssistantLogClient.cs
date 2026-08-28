@@ -23,7 +23,10 @@ public sealed class HomeAssistantLogClient
         CancellationToken cancellationToken = default)
     {
         var result = await _webSocket.RequestAsync("system_log/list", null, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantSystemLogEntry[]>(result, "The Home Assistant system log could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantSystemLogEntry[]>(
+            result,
+            "The Home Assistant system log could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>

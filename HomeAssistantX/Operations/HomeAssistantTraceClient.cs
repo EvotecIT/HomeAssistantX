@@ -29,7 +29,10 @@ public sealed class HomeAssistantTraceClient
                 ["item_id"] = Required(itemId, nameof(itemId))
             },
             cancellationToken).ConfigureAwait(false);
-        return HomeAssistantJson.DeserializeResponse<HomeAssistantTraceSummary[]>(result, "The Home Assistant traces could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantTraceSummary[]>(
+            result,
+            "The Home Assistant traces could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
     public Task<JsonElement> GetAsync(
