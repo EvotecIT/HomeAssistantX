@@ -737,6 +737,27 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Theory]
+    [InlineData("Linux", "X64", 24)]
+    [InlineData("Linux", "Ppc64le", 24)]
+    [InlineData("Linux", "S390x", 24)]
+    [InlineData("Linux", "Arm64", 16)]
+    [InlineData("Linux", "RiscV64", 16)]
+    [InlineData("OSX", "Arm64", 4)]
+    public void AtomicExportsSelectTheNativeStatModeOffsetByAbi(
+        string operatingSystem,
+        string architecture,
+        int expectedOffset)
+    {
+        Assert.Equal(expectedOffset, HomeAssistantAtomicFile.UnixModeOffset(operatingSystem, architecture));
+    }
+
+    [Fact]
+    public void AtomicExportsRejectUnknownNativeStatLayouts()
+    {
+        Assert.Throws<PlatformNotSupportedException>(() => HomeAssistantAtomicFile.UnixModeOffset("Linux", "FutureCpu"));
+    }
+
+    [Theory]
     [InlineData("House-main")]
     [InlineData("house--main")]
     [InlineData(" house-main ")]

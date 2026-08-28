@@ -77,10 +77,25 @@ internal static class HomeAssistantAtomicFile
 
     private static int UnixModeOffset()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return 4;
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        var operatingSystem = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            ? "OSX"
+            : RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "Linux" : string.Empty;
+        return UnixModeOffset(operatingSystem, RuntimeInformation.ProcessArchitecture.ToString());
+    }
+
+    internal static int UnixModeOffset(string operatingSystem, string architecture)
+    {
+        if (string.Equals(operatingSystem, "OSX", StringComparison.Ordinal)) return 4;
+        if (!string.Equals(operatingSystem, "Linux", StringComparison.Ordinal))
             throw new PlatformNotSupportedException("Unix file-mode preservation supports Linux and macOS.");
-        return RuntimeInformation.ProcessArchitecture == Architecture.X64 ? 24 : 16;
+
+        return architecture switch
+        {
+            "X64" or "S390x" or "Ppc64le" => 24,
+            "X86" or "Arm" or "Arm64" or "Armv6" or "LoongArch64" or "RiscV64" => 16,
+            _ => throw new PlatformNotSupportedException(
+                "Unix file-mode preservation does not recognize the current Linux architecture.")
+        };
     }
 
     [DllImport("libc", EntryPoint = "stat", SetLastError = true)]
