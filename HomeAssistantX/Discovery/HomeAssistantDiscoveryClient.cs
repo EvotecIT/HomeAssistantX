@@ -327,6 +327,12 @@ internal sealed class DnsDiscoveryAggregate
         {
             var now = _clock();
             Prune(now);
+            if (!_services.Values.SelectMany(value => value).Any(value =>
+                    string.Equals(value.Host, host, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
             if (!_addresses.TryGetValue(host, out var addresses))
             {
                 if (_addresses.Count >= _limits.AddressHosts) return;
@@ -334,7 +340,15 @@ internal sealed class DnsDiscoveryAggregate
             }
 
             if (addresses.ContainsKey(address) || addresses.Count < MaximumAddressesPerHost)
-                addresses[address] = new CachedAddress(now, Expiry(now, 120));
+            {
+                var advertisedExpiry = Expiry(now, 120);
+                var isVerified = IsVerifiedHost(host);
+                addresses[address] = new CachedAddress(
+                    now,
+                    advertisedExpiry,
+                    isVerified ? advertisedExpiry : Earlier(advertisedExpiry, now + PendingRecordLifetime),
+                    isVerified);
+            }
         }
     }
 
@@ -353,6 +367,7 @@ internal sealed class DnsDiscoveryAggregate
             var announcedText = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var announcedIpv4 = new Dictionary<string, HashSet<IPAddress>>(StringComparer.OrdinalIgnoreCase);
             var announcedIpv6 = new Dictionary<string, HashSet<IPAddress>>(StringComparer.OrdinalIgnoreCase);
+            var unrelatedServiceHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var update in updates)
             {
                 switch (update.Kind)
@@ -364,6 +379,9 @@ internal sealed class DnsDiscoveryAggregate
                     case DnsDiscoveryRecordKind.Srv when IsHomeAssistantInstanceName(update.Name):
                         serviceUpdates.Add(update);
                         AddAnnouncement(announcedServices, update);
+                        break;
+                    case DnsDiscoveryRecordKind.Srv when update.Host is not null:
+                        unrelatedServiceHosts.Add(update.Host);
                         break;
                     case DnsDiscoveryRecordKind.Txt when IsHomeAssistantInstanceName(update.Name):
                         textUpdates.Add(update);
@@ -388,7 +406,16 @@ internal sealed class DnsDiscoveryAggregate
             }
 
             acceptedInstances.IntersectWith(_instances.Keys);
-            foreach (var update in serviceUpdates.Where(value => !goodbyeInstances.Contains(value.Name) || acceptedInstances.Contains(value.Name)))
+            var acceptedServiceUpdates = serviceUpdates
+                .Where(value => !goodbyeInstances.Contains(value.Name) || acceptedInstances.Contains(value.Name))
+                .ToArray();
+            var rejectedServiceHosts = new HashSet<string>(
+                serviceUpdates.Except(acceptedServiceUpdates).Select(value => value.Host!),
+                StringComparer.OrdinalIgnoreCase);
+            var homeAssistantServiceHosts = new HashSet<string>(
+                serviceUpdates.Select(value => value.Host!),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var update in acceptedServiceUpdates)
                 ApplyService(update, now, Announcement(announcedServices, update), acceptedInstances.Contains(update.Name));
             foreach (var update in textUpdates.Where(value => !goodbyeInstances.Contains(value.Name) || acceptedInstances.Contains(value.Name)))
                 ApplyText(update, now, Announcement(announcedText, update), acceptedInstances.Contains(update.Name));
@@ -399,7 +426,11 @@ internal sealed class DnsDiscoveryAggregate
             var verifiedHosts = new HashSet<string>(
                 _services.Values.SelectMany(value => value).Where(value => value.IsVerified).Select(value => value.Host),
                 StringComparer.OrdinalIgnoreCase);
-            foreach (var update in addressUpdates.Where(value => acceptedHosts.Contains(value.Name)))
+            foreach (var update in addressUpdates.Where(value =>
+                         acceptedHosts.Contains(value.Name)
+                         || !homeAssistantServiceHosts.Contains(value.Name)
+                            && !unrelatedServiceHosts.Contains(value.Name)
+                            && !rejectedServiceHosts.Contains(value.Name)))
                 ApplyAddress(update, now, update.Kind == DnsDiscoveryRecordKind.A
                     ? AddressAnnouncement(announcedIpv4, update)
                     : AddressAnnouncement(announcedIpv6, update),
@@ -461,6 +492,7 @@ internal sealed class DnsDiscoveryAggregate
                 {
                     service.IsVerified = true;
                     service.ExpiresAt = service.AdvertisedExpiresAt;
+                    PromoteAddresses(service.Host);
                 }
             if (_text.TryGetValue(instance, out var textRecords))
                 foreach (var text in textRecords)
@@ -505,6 +537,7 @@ internal sealed class DnsDiscoveryAggregate
                 advertisedExpiry,
                 isVerified ? advertisedExpiry : Earlier(advertisedExpiry, now + PendingRecordLifetime),
                 isVerified));
+            if (isVerified) PromoteAddresses(update.Host!);
         }
     }
 
@@ -559,18 +592,25 @@ internal sealed class DnsDiscoveryAggregate
         if (update.Ttl == 0)
         {
             if (addresses.TryGetValue(address, out var existing))
-                existing.ExpiresAt = Earlier(existing.ExpiresAt, now + TimeSpan.FromSeconds(1));
+                Shorten(existing, now + TimeSpan.FromSeconds(1));
             return;
         }
         if (update.CacheFlush)
         {
             foreach (var pair in addresses.Where(pair => pair.Key.AddressFamily == address.AddressFamily && !announced!.Contains(pair.Key) && now - pair.Value.ReceivedAt >= TimeSpan.FromSeconds(1)).ToArray())
-                pair.Value.ExpiresAt = Earlier(pair.Value.ExpiresAt, now + TimeSpan.FromSeconds(1));
+                Shorten(pair.Value, now + TimeSpan.FromSeconds(1));
         }
         if (addresses.ContainsKey(address)
             || addresses.Count < MaximumAddressesPerHost
             || (announced is not null && addresses.Count < MaximumTransitionalAddressesPerHost))
-            addresses[address] = new CachedAddress(now, Expiry(now, update.Ttl));
+        {
+            var advertisedExpiry = Expiry(now, update.Ttl);
+            addresses[address] = new CachedAddress(
+                now,
+                advertisedExpiry,
+                isVerifiedHost ? advertisedExpiry : Earlier(advertisedExpiry, now + PendingRecordLifetime),
+                isVerifiedHost);
+        }
     }
 
     private bool EnsureServiceOwnerCapacity(bool isVerified)
@@ -631,7 +671,12 @@ internal sealed class DnsDiscoveryAggregate
             _services.Values.SelectMany(value => value).Select(value => value.Host),
             StringComparer.OrdinalIgnoreCase);
         foreach (var owner in _addresses.Keys.Where(owner => !retainedHosts.Contains(owner)).ToArray())
-            _addresses.Remove(owner);
+        {
+            var values = _addresses[owner];
+            foreach (var address in values.Where(value => value.Value.IsVerified).Select(value => value.Key).ToArray())
+                values.Remove(address);
+            if (values.Count == 0) _addresses.Remove(owner);
+        }
     }
 
     private static void AddAnnouncement(
@@ -676,6 +721,26 @@ internal sealed class DnsDiscoveryAggregate
         record.ExpiresAt = Earlier(record.ExpiresAt, expiresAt);
     }
 
+    private static void Shorten(CachedAddress record, TimeSpan expiresAt)
+    {
+        record.AdvertisedExpiresAt = Earlier(record.AdvertisedExpiresAt, expiresAt);
+        record.ExpiresAt = Earlier(record.ExpiresAt, expiresAt);
+    }
+
+    private bool IsVerifiedHost(string host)
+        => _services.Values.SelectMany(value => value).Any(value =>
+            value.IsVerified && string.Equals(value.Host, host, StringComparison.OrdinalIgnoreCase));
+
+    private void PromoteAddresses(string host)
+    {
+        if (!_addresses.TryGetValue(host, out var addresses)) return;
+        foreach (var address in addresses.Values)
+        {
+            address.IsVerified = true;
+            address.ExpiresAt = address.AdvertisedExpiresAt;
+        }
+    }
+
     private void Prune(TimeSpan now)
     {
         foreach (var key in _instances.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) _instances.Remove(key);
@@ -685,8 +750,11 @@ internal sealed class DnsDiscoveryAggregate
         foreach (var owner in _addresses.Keys.ToArray())
         {
             var values = _addresses[owner];
-            foreach (var address in values.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) values.Remove(address);
-            if (values.Count == 0 || !retainedHosts.Contains(owner)) _addresses.Remove(owner);
+            foreach (var address in values.Where(value =>
+                         value.Value.ExpiresAt <= now
+                         || value.Value.IsVerified && !retainedHosts.Contains(owner)).Select(value => value.Key).ToArray())
+                values.Remove(address);
+            if (values.Count == 0) _addresses.Remove(owner);
         }
     }
 
@@ -712,7 +780,21 @@ internal sealed class DnsDiscoveryAggregate
     private sealed class CachedPtr : CachedRecord { internal CachedPtr(string key, TimeSpan receivedAt, TimeSpan expiresAt) : base(key, receivedAt, expiresAt) { } }
     private sealed class CachedService : CachedRecord { internal CachedService(string host, int port, string key, TimeSpan receivedAt, TimeSpan advertisedExpiresAt, TimeSpan expiresAt, bool isVerified) : base(key, receivedAt, expiresAt) { Host = host; Port = port; AdvertisedExpiresAt = advertisedExpiresAt; IsVerified = isVerified; } internal string Host { get; } internal int Port { get; } internal TimeSpan AdvertisedExpiresAt { get; set; } internal bool IsVerified { get; set; } }
     private sealed class CachedText : CachedRecord { internal CachedText(Dictionary<string, string?> properties, string key, TimeSpan receivedAt, TimeSpan advertisedExpiresAt, TimeSpan expiresAt, bool isVerified) : base(key, receivedAt, expiresAt) { Properties = properties; AdvertisedExpiresAt = advertisedExpiresAt; IsVerified = isVerified; } internal Dictionary<string, string?> Properties { get; } internal TimeSpan AdvertisedExpiresAt { get; set; } internal bool IsVerified { get; set; } }
-    private sealed class CachedAddress { internal CachedAddress(TimeSpan receivedAt, TimeSpan expiresAt) { ReceivedAt = receivedAt; ExpiresAt = expiresAt; } internal TimeSpan ReceivedAt { get; } internal TimeSpan ExpiresAt { get; set; } }
+    private sealed class CachedAddress
+    {
+        internal CachedAddress(TimeSpan receivedAt, TimeSpan advertisedExpiresAt, TimeSpan expiresAt, bool isVerified)
+        {
+            ReceivedAt = receivedAt;
+            AdvertisedExpiresAt = advertisedExpiresAt;
+            ExpiresAt = expiresAt;
+            IsVerified = isVerified;
+        }
+
+        internal TimeSpan ReceivedAt { get; }
+        internal TimeSpan AdvertisedExpiresAt { get; set; }
+        internal TimeSpan ExpiresAt { get; set; }
+        internal bool IsVerified { get; set; }
+    }
 
     private static string FriendlyInstanceName(string instance)
     {

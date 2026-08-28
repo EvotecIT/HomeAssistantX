@@ -754,6 +754,39 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdRetainsAnAddressThatArrivesBeforeItsServiceRecord()
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        var address = IPAddress.Parse("192.0.2.10");
+
+        DnsDiscoveryPacket.ReadInto(CreateAddressOnlyPacket(120, address), aggregate);
+        Assert.Equal(1, aggregate.AddressHostCount);
+        Assert.Empty(aggregate.Build());
+
+        DnsDiscoveryPacket.ReadInto(CreatePtrOnlyPacket(120), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 0, 0, "ha.local", 8123), aggregate);
+
+        var instance = Assert.Single(aggregate.Build());
+        Assert.Equal(address, Assert.Single(instance.Addresses));
+
+        now += TimeSpan.FromMilliseconds(5100);
+        Assert.Equal(address, Assert.Single(Assert.Single(aggregate.Build()).Addresses));
+    }
+
+    [Fact]
+    public void DnsSdExpiresAnUncorrelatedPendingAddress()
+    {
+        var now = TimeSpan.Zero;
+        var aggregate = new DnsDiscoveryAggregate(clock: () => now);
+        DnsDiscoveryPacket.ReadInto(CreateAddressOnlyPacket(120, IPAddress.Parse("192.0.2.10")), aggregate);
+
+        now += TimeSpan.FromMilliseconds(5100);
+
+        Assert.Equal(0, aggregate.AddressHostCount);
+    }
+
+    [Fact]
     public void DnsSdPacketIndexingIsLinearForCacheFlushRecords()
     {
         var updates = Enumerable.Range(0, 64)
