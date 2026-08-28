@@ -294,7 +294,13 @@ public sealed class HomeAssistantMediaPlayerStatus
             && string.IsNullOrEmpty(value.UserInfo);
 
     public static HomeAssistantMediaPlayerStatus FromState(HomeAssistantState state)
+        => FromState(state, default);
+
+    internal static HomeAssistantMediaPlayerStatus FromState(
+        HomeAssistantState state,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (state is null)
         {
             throw new ArgumentNullException(nameof(state));
@@ -324,9 +330,9 @@ public sealed class HomeAssistantMediaPlayerStatus
             VolumeStep = GetNormalizedVolume(attributes, "volume_step"),
             IsVolumeMuted = HomeAssistantAttributeReader.GetBoolean(attributes, "is_volume_muted"),
             Source = HomeAssistantAttributeReader.GetString(attributes, "source"),
-            Sources = HomeAssistantAttributeReader.GetStringList(attributes, "source_list"),
+            Sources = HomeAssistantAttributeReader.GetStringList(attributes, "source_list", cancellationToken),
             SoundMode = HomeAssistantAttributeReader.GetString(attributes, "sound_mode"),
-            SoundModes = HomeAssistantAttributeReader.GetStringList(attributes, "sound_mode_list"),
+            SoundModes = HomeAssistantAttributeReader.GetStringList(attributes, "sound_mode_list", cancellationToken),
             MediaContentId = HomeAssistantAttributeReader.GetString(attributes, "media_content_id"),
             MediaContentType = HomeAssistantAttributeReader.GetString(attributes, "media_content_type"),
             MediaDuration = ToTimeSpan(duration),
@@ -346,7 +352,7 @@ public sealed class HomeAssistantMediaPlayerStatus
             AppName = HomeAssistantAttributeReader.GetString(attributes, "app_name"),
             Shuffle = HomeAssistantAttributeReader.GetBoolean(attributes, "shuffle"),
             Repeat = HomeAssistantAttributeReader.GetString(attributes, "repeat"),
-            GroupMembers = GetGroupMembers(attributes),
+            GroupMembers = GetGroupMembers(attributes, cancellationToken),
             MediaImageUrl = HomeAssistantAttributeReader.GetString(attributes, "media_image_url"),
             EntityPicture = HomeAssistantAttributeReader.GetString(attributes, "entity_picture"),
             EntityPictureLocal = HomeAssistantAttributeReader.GetString(attributes, "entity_picture_local"),
@@ -372,8 +378,11 @@ public sealed class HomeAssistantMediaPlayerStatus
         };
     }
 
-    private static IReadOnlyList<string> GetGroupMembers(IReadOnlyDictionary<string, JsonElement> attributes)
+    private static IReadOnlyList<string> GetGroupMembers(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!HomeAssistantAttributeReader.TryGetValue(attributes, "group_members", out var value))
         {
             return Array.Empty<string>();
@@ -388,6 +397,7 @@ public sealed class HomeAssistantMediaPlayerStatus
         var unique = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in value.EnumerateArray())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind != JsonValueKind.String
                 || !HomeAssistantEntityId.TryNormalizeForDomain(item.GetString(), "media_player", out var member)
                 || !string.Equals(item.GetString(), member, StringComparison.Ordinal)
@@ -399,6 +409,7 @@ public sealed class HomeAssistantMediaPlayerStatus
             members.Add(member);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return members;
     }
 

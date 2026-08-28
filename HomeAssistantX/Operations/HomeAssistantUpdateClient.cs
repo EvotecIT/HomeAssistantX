@@ -29,10 +29,18 @@ public sealed class HomeAssistantUpdateClient
         CancellationToken cancellationToken = default)
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        var updates = HomeAssistantEntityId.RequireResponseDomainStates(states, "update")
-            .Select(ToUpdate)
-            .Where(update => !availableOnly || update.IsAvailable)
-            .ToArray();
+        var updates = new List<HomeAssistantUpdate>();
+        foreach (var state in HomeAssistantEntityId.RequireResponseDomainStates(states, "update", cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var update = ToUpdate(state);
+            if (!availableOnly || update.IsAvailable)
+            {
+                updates.Add(update);
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         return updates;
     }
 

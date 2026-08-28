@@ -107,18 +107,33 @@ internal static class HomeAssistantAttributeReader
     public static IReadOnlyList<string> GetStringList(
         IReadOnlyDictionary<string, JsonElement> attributes,
         string name)
+        => GetStringList(attributes, name, default);
+
+    internal static IReadOnlyList<string> GetStringList(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!TryGetValue(attributes, name, out var value) || value.ValueKind != JsonValueKind.Array)
         {
             return Array.Empty<string>();
         }
 
-        return value.EnumerateArray()
-            .Where(item => item.ValueKind == JsonValueKind.String)
-            .Select(item => item.GetString())
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .Select(item => item!)
-            .ToArray();
+        var result = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (item.ValueKind == JsonValueKind.String
+                && item.GetString() is string text
+                && !string.IsNullOrWhiteSpace(text))
+            {
+                result.Add(text);
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     public static DateTimeOffset? GetDateTimeOffset(

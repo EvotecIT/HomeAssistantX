@@ -106,7 +106,9 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         ValidateOptionalEnum(Enqueue, nameof(Enqueue));
         ValidateFinitePercent(VolumePercent, nameof(VolumePercent));
         var seekPosition = ToTimeSpan(SeekSeconds, nameof(SeekSeconds));
-        ValidateJoinMembers(JoinMember);
+        var joinMembers = JoinMember is null
+            ? null
+            : HomeAssistantMediaPlayerClient.NormalizeEntityIds(JoinMember, nameof(JoinMember), CancelToken);
         var mediaExtra = ConvertExtra(MediaExtra, CancelToken);
 
         if (MediaContentId is not null && string.IsNullOrWhiteSpace(MediaContentId))
@@ -218,9 +220,9 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             results.Add(await Client.Controls.MediaPlayers.ClearPlaylistAsync(target.Target, CancelToken).ConfigureAwait(false));
         }
 
-        if (JoinMember is not null)
+        if (joinMembers is not null)
         {
-            results.Add(await Client.Controls.MediaPlayers.JoinAsync(target.Target, JoinMember, CancelToken).ConfigureAwait(false));
+            results.Add(await Client.Controls.MediaPlayers.JoinAsync(target.Target, joinMembers, CancelToken).ConfigureAwait(false));
         }
 
         if (Unjoin.IsPresent)
@@ -356,23 +358,6 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         {
             throw new ArgumentOutOfRangeException(name, "The value must be a finite percentage from zero through 100.");
         }
-    }
-
-    private static void ValidateJoinMembers(IReadOnlyList<string>? members)
-    {
-        if (members is not null
-            && (members.Count == 0
-                || members.Any(value => !IsMediaPlayerEntityId(value))))
-        {
-            throw new ArgumentException(
-                "JoinMember must contain at least one media_player entity identifier.",
-                nameof(JoinMember));
-        }
-    }
-
-    private static bool IsMediaPlayerEntityId(string? value)
-    {
-        return HomeAssistantEntityId.TryNormalizeForDomain(value, "media_player", out _);
     }
 
     private static void ValidateOptionalEnum<T>(T? value, string name)

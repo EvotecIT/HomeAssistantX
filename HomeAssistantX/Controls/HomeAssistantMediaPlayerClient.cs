@@ -33,9 +33,15 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         CancellationToken cancellationToken = default)
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        return HomeAssistantEntityId.RequireResponseDomainStates(states, Domain)
-            .Select(HomeAssistantMediaPlayerStatus.FromState)
-            .ToArray();
+        var result = new List<HomeAssistantMediaPlayerStatus>();
+        foreach (var state in HomeAssistantEntityId.RequireResponseDomainStates(states, Domain, cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result.Add(HomeAssistantMediaPlayerStatus.FromState(state, cancellationToken));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     public Task<IHomeAssistantSubscription> SubscribeAsync(
@@ -52,8 +58,8 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             (change, token) => handler(
                 new HomeAssistantMediaPlayerStateChange(
                     change.EntityId,
-                    ToStatus(change.PreviousState),
-                    ToStatus(change.CurrentState)),
+                    ToStatus(change.PreviousState, token),
+                    ToStatus(change.CurrentState, token)),
                 token),
             cancellationToken);
     }
@@ -309,7 +315,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var members = ValidateEntityIds(groupMembers, nameof(groupMembers), cancellationToken);
+        var members = NormalizeEntityIds(groupMembers, nameof(groupMembers), cancellationToken);
         return CallAsync(
             "join",
             target,
@@ -423,7 +429,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unsupported enqueue mode.")
     };
 
-    private static IReadOnlyList<string> ValidateEntityIds(
+    internal static IReadOnlyList<string> NormalizeEntityIds(
         IEnumerable<string> entityIds,
         string parameterName,
         CancellationToken cancellationToken)
@@ -458,10 +464,14 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         return values;
     }
 
-    private static HomeAssistantMediaPlayerStatus? ToStatus(HomeAssistantState? state)
+    private static HomeAssistantMediaPlayerStatus? ToStatus(
+        HomeAssistantState? state,
+        CancellationToken cancellationToken)
     {
         return state is null
             ? null
-            : HomeAssistantMediaPlayerStatus.FromState(HomeAssistantEntityId.RequireResponseDomain(state, "media_player"));
+            : HomeAssistantMediaPlayerStatus.FromState(
+                HomeAssistantEntityId.RequireResponseDomain(state, "media_player"),
+                cancellationToken);
     }
 }

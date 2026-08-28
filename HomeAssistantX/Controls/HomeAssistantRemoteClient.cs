@@ -38,9 +38,15 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        return HomeAssistantEntityId.RequireResponseDomainStates(states, Domain)
-            .Select(HomeAssistantRemoteStatus.FromState)
-            .ToArray();
+        var result = new List<HomeAssistantRemoteStatus>();
+        foreach (var state in HomeAssistantEntityId.RequireResponseDomainStates(states, Domain, cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result.Add(HomeAssistantRemoteStatus.FromState(state, cancellationToken));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     public Task<IHomeAssistantSubscription> SubscribeAsync(
@@ -57,8 +63,8 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
             (change, token) => handler(
                 new HomeAssistantRemoteStateChange(
                     change.EntityId,
-                    ToStatus(change.PreviousState),
-                    ToStatus(change.CurrentState)),
+                    ToStatus(change.PreviousState, token),
+                    ToStatus(change.CurrentState, token)),
                 token),
             cancellationToken);
     }
@@ -279,10 +285,14 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         return normalized;
     }
 
-    private static HomeAssistantRemoteStatus? ToStatus(HomeAssistantState? state)
+    private static HomeAssistantRemoteStatus? ToStatus(
+        HomeAssistantState? state,
+        CancellationToken cancellationToken)
     {
         return state is null
             ? null
-            : HomeAssistantRemoteStatus.FromState(HomeAssistantEntityId.RequireResponseDomain(state, "remote"));
+            : HomeAssistantRemoteStatus.FromState(
+                HomeAssistantEntityId.RequireResponseDomain(state, "remote"),
+                cancellationToken);
     }
 }

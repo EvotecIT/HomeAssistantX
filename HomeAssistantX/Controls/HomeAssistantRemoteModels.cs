@@ -120,7 +120,13 @@ public sealed class HomeAssistantRemoteStatus
     }
 
     public static HomeAssistantRemoteStatus FromState(HomeAssistantState state)
+        => FromState(state, default);
+
+    internal static HomeAssistantRemoteStatus FromState(
+        HomeAssistantState state,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (state is null)
         {
             throw new ArgumentNullException(nameof(state));
@@ -148,7 +154,7 @@ public sealed class HomeAssistantRemoteStatus
             FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name"),
             SupportedFeatures = (HomeAssistantRemoteFeature)(HomeAssistantAttributeReader.GetNonNegativeInt32(attributes, "supported_features") ?? 0),
             CurrentActivity = HomeAssistantAttributeReader.GetString(attributes, "current_activity"),
-            Activities = HomeAssistantAttributeReader.GetStringList(attributes, "activity_list")
+            Activities = HomeAssistantAttributeReader.GetStringList(attributes, "activity_list", cancellationToken)
         };
     }
 }

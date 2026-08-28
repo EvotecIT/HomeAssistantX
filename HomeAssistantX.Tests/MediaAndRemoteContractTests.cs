@@ -738,6 +738,49 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public void TypedBulkProjectionStopsWhenCancellationArrivesDuringStateValidation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var states = new CancellationProbeStateEnumerable(cancellation);
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantEntityId.RequireResponseDomainStates(
+                states,
+                "media_player",
+                cancellation.Token).ToArray());
+
+        Assert.InRange(states.ReadCount, 1, 64);
+    }
+
+    [Fact]
+    public void TypedStatusProjectionChecksCancellationBeforeParsingAttributes()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var invalid = DeserializeState(
+            "{\"entity_id\":\"media_player.kitchen\",\"state\":\"idle\",\"attributes\":{\"source_list\":{}}}");
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaPlayerStatus.FromState(invalid, cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRemoteStatus.FromState(invalid, cancellation.Token));
+    }
+
+    [Fact]
+    public void MediaGroupMembersAreNormalizedIntoAnIndependentSnapshot()
+    {
+        var callerOwned = new List<string> { " media_player.kitchen " };
+
+        var snapshot = HomeAssistantMediaPlayerClient.NormalizeEntityIds(
+            callerOwned,
+            "JoinMember",
+            CancellationToken.None);
+        callerOwned[0] = "light.changed_after_validation";
+
+        Assert.Equal(new[] { "media_player.kitchen" }, snapshot);
+    }
+
+    [Fact]
     public async Task RemoteActionsMapPowerSendLearnAndDeleteParameterContracts()
     {
         using var server = new TestHomeAssistantServer();
@@ -1151,6 +1194,36 @@ public sealed class MediaAndRemoteContractTests
                 if (ReadCount == 1) _cancellation.Cancel();
                 if (ReadCount > 64) throw new InvalidOperationException("Enumeration continued after cancellation.");
                 yield return _value;
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+
+    private sealed class CancellationProbeStateEnumerable : IEnumerable<HomeAssistantState>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancellationProbeStateEnumerable(CancellationTokenSource cancellation)
+        {
+            _cancellation = cancellation;
+        }
+
+        internal int ReadCount { get; private set; }
+
+        public IEnumerator<HomeAssistantState> GetEnumerator()
+        {
+            for (var index = 0; index < 1000; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 64) throw new InvalidOperationException("Enumeration continued after cancellation.");
+                yield return new HomeAssistantState
+                {
+                    EntityId = "media_player.test_" + index,
+                    State = "idle"
+                };
             }
         }
 

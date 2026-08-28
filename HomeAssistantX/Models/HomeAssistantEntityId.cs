@@ -162,11 +162,14 @@ public static class HomeAssistantEntityId
 
     internal static IEnumerable<HomeAssistantState> RequireResponseDomainStates(
         IEnumerable<HomeAssistantState> states,
-        string domain)
+        string domain,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var entityIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var state in states)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (state is null)
             {
                 throw new HomeAssistantProtocolException(
@@ -185,5 +188,7 @@ public static class HomeAssistantEntityId
                 yield return state;
             }
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
     }
 }
