@@ -434,11 +434,28 @@ public sealed class LivePlatformDataContractTests
             new[] { new HomeAssistantEntityRegistryEntry { Labels = new[] { labelId } } }, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" entry-id ")]
+    public void RegistrySnapshotValidationRejectsMalformedConfigurationEntryAssignments(string entryId)
+    {
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantDeviceRegistryEntry { ConfigEntries = new[] { entryId } } }, CancellationToken.None));
+    }
+
     [Fact]
     public void RegistrySnapshotValidationRejectsDuplicateLabelAssignments()
     {
         Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
             new[] { new HomeAssistantEntityRegistryEntry { Labels = new[] { "security", "security" } } }, CancellationToken.None));
+    }
+
+    [Fact]
+    public void RegistrySnapshotValidationRejectsDuplicateConfigurationEntryAssignments()
+    {
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantDeviceRegistryEntry { ConfigEntries = new[] { "entry-id", "entry-id" } } }, CancellationToken.None));
     }
 
     [Fact]

@@ -304,7 +304,7 @@ public sealed class HomeAssistantRegistryClient
         foreach (var entry in entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            RequireAssignmentCollection(entry.ConfigEntries, "device configuration-entry assignments", cancellationToken);
+            RequireIdentifierAssignmentCollection(entry.ConfigEntries, "device configuration-entry assignments", cancellationToken);
             RequireIdentifierAssignmentCollection(entry.Labels, "device label assignments", cancellationToken);
         }
         cancellationToken.ThrowIfCancellationRequested();
