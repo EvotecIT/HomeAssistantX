@@ -174,6 +174,21 @@ public sealed class EnergyRecorderWeatherContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.ListStatisticsAsync(kind));
     }
 
+    [Fact]
+    public async Task RecorderMeanCatalogAcceptsCircularStatisticsWithoutLegacyArithmeticFlag()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.direction\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":false,\"mean_type\":2}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var metadata = Assert.Single(await client.Recorder.ListStatisticsAsync(HomeAssistantStatisticKind.Mean));
+
+        Assert.False(metadata.HasMean);
+        Assert.Equal(HomeAssistantStatisticMeanType.Circular, metadata.MeanType);
+    }
+
     [Theory]
     [InlineData("Energy")]
     [InlineData(" energy")]
@@ -214,6 +229,54 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData("Energy")]
+    [InlineData(" energy")]
+    [InlineData("energy ")]
+    [InlineData("not-a-unit")]
+    public async Task RecorderMetadataMutationsRequireCanonicalUnitClassesBeforeDispatch(string unitClass)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var rows = new[]
+        {
+            new HomeAssistantStatisticImportRow
+            {
+                Start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero),
+                Sum = 1.5
+            }
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Recorder.UpdateStatisticsMetadataAsync("sensor.grid_energy", unitClass, "kWh"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.ImportStatisticsAsync(
+            new HomeAssistantStatisticImportMetadata
+            {
+                StatisticId = "external:daily_energy",
+                Source = "external",
+                HasSum = true,
+                MeanType = HomeAssistantStatisticMeanType.None,
+                UnitClass = unitClass,
+                UnitOfMeasurement = "kWh"
+            },
+            rows));
+
+        Assert.Null(server.GetLastWebSocketCommand("recorder/update_statistics_metadata"));
+        Assert.Null(server.GetLastWebSocketCommand("recorder/import_statistics"));
+    }
+
+    [Fact]
+    public async Task RecorderMetadataRejectsNoncanonicalResponseUnitClasses()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true,\"unit_class\":\"Energy\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
+    }
+
+    [Theory]
     [InlineData("{\"sensor.grid_energy\":[{\"start\":1,\"end\":2,\"min\":10,\"max\":1}]}")]
     [InlineData("{\"sensor.grid_energy\":[{\"start\":1,\"end\":2,\"min\":\"bad\",\"max\":1}]}")]
     public async Task RecorderStatisticsRejectInvalidDecodedRanges(string response)
@@ -231,7 +294,7 @@ public sealed class EnergyRecorderWeatherContractTests
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
 
-        await client.Recorder.UpdateStatisticsMetadataAsync("sensor.grid_energy", " energy ", " kWh ");
+        await client.Recorder.UpdateStatisticsMetadataAsync("sensor.grid_energy", "energy", " kWh ");
         using (var metadata = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/update_statistics_metadata"))))
         {
             Assert.Equal("energy", metadata.RootElement.GetProperty("unit_class").GetString());
@@ -245,7 +308,7 @@ public sealed class EnergyRecorderWeatherContractTests
             new HomeAssistantStatisticImportMetadata
             {
                 StatisticId = "external:daily_energy", Source = "external", Name = "Daily energy",
-                HasMean = false, HasSum = true, MeanType = HomeAssistantStatisticMeanType.None, UnitClass = " energy ", UnitOfMeasurement = " kWh "
+                HasMean = false, HasSum = true, MeanType = HomeAssistantStatisticMeanType.None, UnitClass = "energy", UnitOfMeasurement = " kWh "
             },
             new[]
             {

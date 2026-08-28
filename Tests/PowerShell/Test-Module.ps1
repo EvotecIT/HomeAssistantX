@@ -352,6 +352,21 @@ try {
         throw 'The logbook cmdlet broadened a blank entity filter to the whole installation.'
     }
 
+    foreach ($invalidHistoricalRange in @(
+        { Get-HomeAssistantLogbook -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop },
+        { Get-HomeAssistantHistory -EntityId sensor.temperature -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop }
+    )) {
+        $rangeRejected = $false
+        try {
+            & $invalidHistoricalRange
+        } catch {
+            $rangeRejected = $true
+        }
+        if (-not $rangeRejected) {
+            throw 'A historical query accepted EndTime without an explicit StartTime.'
+        }
+    }
+
     $floors = @(Get-HomeAssistantFloor)
     $areas = @(Get-HomeAssistantArea -Floor Ground)
     $devices = @(Get-HomeAssistantDevice -Area Kitchen)
@@ -829,6 +844,8 @@ try {
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1 -StartTime ([DateTimeOffset]::UtcNow) -Unit ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 0 -StartTime ([DateTimeOffset]::UtcNow) -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitClass ' ' -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitClass Energy -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitClass ' energy ' -WhatIf -ErrorAction Stop },
         { $invalidImportUnit = [HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata]::new(); $invalidImportUnit.StatisticId = 'external:blank_unit'; $invalidImportUnit.Source = 'external'; $invalidImportUnit.HasSum = $true; $invalidImportUnit.UnitOfMeasurement = ' '; $alignedImportRow | Set-HomeAssistantStatistic -ImportMetadata $invalidImportUnit -WhatIf -ErrorAction Stop },
         { $variables = @{}; $variables.self = $variables; Invoke-HomeAssistantRoutine -Entity script.evening -Action RunScript -Variables $variables -WhatIf -ErrorAction Stop },
         { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }

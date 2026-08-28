@@ -57,7 +57,8 @@ public sealed class HomeAssistantRecorderClient
             throw new HomeAssistantProtocolException("Recorder statistic identifiers contained a duplicate identifier.");
         }
 
-        if (kind == HomeAssistantStatisticKind.Mean && metadata.Any(item => !item.HasMean)
+        if (kind == HomeAssistantStatisticKind.Mean
+                && metadata.Any(item => !item.HasMean && item.MeanType != HomeAssistantStatisticMeanType.Circular)
             || kind == HomeAssistantStatisticKind.Sum && metadata.Any(item => !item.HasSum))
         {
             throw new HomeAssistantProtocolException("Recorder statistic identifiers did not match the requested statistic type.");
@@ -133,7 +134,7 @@ public sealed class HomeAssistantRecorderClient
 
     public async Task UpdateStatisticsMetadataAsync(string statisticId, string? unitClass, string? unitOfMeasurement, CancellationToken cancellationToken = default)
     {
-        unitClass = NormalizeOptionalUnit(unitClass, nameof(unitClass));
+        unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(unitClass, nameof(unitClass));
         unitOfMeasurement = NormalizeOptionalUnit(unitOfMeasurement, nameof(unitOfMeasurement));
         _ = await _webSocket.RequestAsync("recorder/update_statistics_metadata", new Dictionary<string, object?>
         {
@@ -175,7 +176,7 @@ public sealed class HomeAssistantRecorderClient
     {
         if (metadata is null) throw new ArgumentNullException(nameof(metadata));
         metadata.ValidateRows(rows);
-        var unitClass = NormalizeOptionalUnit(metadata.UnitClass, nameof(metadata.UnitClass));
+        var unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass));
         var unitOfMeasurement = NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement));
         var metadataPayload = new Dictionary<string, object?>
         {
@@ -254,8 +255,9 @@ public sealed class HomeAssistantRecorderClient
 
         var metadata = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticMetadata[]>(value, failureMessage);
         if (metadata.Any(item => item.MeanType.HasValue
-            && (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)
-                || item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic))))
+                && (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)
+                    || item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic))
+            || item.UnitClass is not null && !HomeAssistantStatisticIdentifier.IsSlug(item.UnitClass)))
             throw new HomeAssistantProtocolException(failureMessage);
         return metadata;
     }

@@ -80,7 +80,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 {
                     unitClass = matchingMetadata.UnitClass;
                 }
-                unitClass = NormalizeOptionalUnit(unitClass, nameof(UnitClass));
+                unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(unitClass, nameof(UnitClass));
                 var unitOfMeasurement = ClearUnitOfMeasurement
                     ? null
                     : hasUnitOfMeasurement
@@ -146,7 +146,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             HasMean = metadata.HasMean,
             HasSum = metadata.HasSum,
             MeanType = metadata.MeanType,
-            UnitClass = NormalizeOptionalUnit(metadata.UnitClass, nameof(metadata.UnitClass)),
+            UnitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass)),
             UnitOfMeasurement = NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement))
         };
         normalized.ValidateRows(rows);

@@ -41,6 +41,10 @@ public sealed class GetHomeAssistantHistoryCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        if (EndTime.HasValue && !StartTime.HasValue)
+            throw new ArgumentException("EndTime requires StartTime so the requested history window is explicit.", nameof(EndTime));
+        if (StartTime.HasValue && EndTime.HasValue && EndTime <= StartTime)
+            throw new ArgumentOutOfRangeException(nameof(EndTime), "EndTime must be after StartTime.");
         var query = new HomeAssistantHistoryQuery(EntityId)
         {
             StartTime = StartTime,

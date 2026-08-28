@@ -34,6 +34,8 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentNullException(nameof(query));
         }
 
+        ValidateOptionalTimeRange(query.StartTime, query.EndTime, nameof(query));
+
         var path = "api/history/period";
         if (query.StartTime.HasValue)
         {
@@ -63,6 +65,7 @@ public sealed partial class HomeAssistantRestClient
         CancellationToken cancellationToken = default)
     {
         query ??= new HomeAssistantLogbookQuery();
+        ValidateOptionalTimeRange(query.StartTime, query.EndTime, nameof(query));
         var path = "api/logbook";
         if (query.StartTime.HasValue)
         {
@@ -87,6 +90,17 @@ public sealed partial class HomeAssistantRestClient
     public Task<string> GetErrorLogAsync(CancellationToken cancellationToken = default)
     {
         return SendTextAsync(HttpMethod.Get, "api/error_log", null, cancellationToken);
+    }
+
+    private static void ValidateOptionalTimeRange(
+        DateTimeOffset? startTime,
+        DateTimeOffset? endTime,
+        string parameterName)
+    {
+        if (endTime.HasValue && !startTime.HasValue)
+            throw new ArgumentException("An explicit end time requires an explicit start time.", parameterName);
+        if (startTime.HasValue && endTime.HasValue && endTime.Value <= startTime.Value)
+            throw new ArgumentOutOfRangeException(parameterName, "The end time must be after the start time.");
     }
 
     /// <summary>Gets an image from a camera entity.</summary>

@@ -262,6 +262,14 @@ internal static class HomeAssistantStatisticIdentifier
             || (character >= '0' && character <= '9')
             || character == '_');
     }
+
+    internal static string? NormalizeOptionalUnitClass(string? value, string parameterName)
+    {
+        if (value is null) return null;
+        if (!IsSlug(value))
+            throw new ArgumentException("Unit classes must be canonical lowercase identifiers.", parameterName);
+        return value;
+    }
 }
 
 /// <summary>One row imported into Recorder statistics.</summary>
