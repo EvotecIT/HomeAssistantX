@@ -26,7 +26,9 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, Domain, out var normalizedEntityId))
             throw new ArgumentException("A media-player entity identifier is required.", nameof(entityId));
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantMediaPlayerStatus.FromState(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId));
+        return HomeAssistantMediaPlayerStatus.FromState(
+            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId),
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantMediaPlayerStatus>> GetAllAsync(

@@ -31,7 +31,9 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, Domain, out var normalizedEntityId))
             throw new ArgumentException("A remote entity identifier is required.", nameof(entityId));
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
-        return HomeAssistantRemoteStatus.FromState(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId));
+        return HomeAssistantRemoteStatus.FromState(
+            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId),
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantRemoteStatus>> GetAllAsync(
