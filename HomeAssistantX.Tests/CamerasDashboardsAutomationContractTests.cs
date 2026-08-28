@@ -730,6 +730,31 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task DashboardReadsRejectDuplicatePropertiesBeforeProjection()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson =
+                "{\"lovelace\":{\"component_name\":\"lovelace\",\"component_name\":\"other\",\"default_visible\":true,\"require_admin\":false,\"show_in_sidebar\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.LovelaceInfoResponseJson = "{\"resource_mode\":\"storage\",\"resource_mode\":\"yaml\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetInfoAsync());
+
+        server.DashboardListResponseJson =
+            "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"title\":\"Other\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.LovelaceInfoResponseJson = "{\"resource_mode\":\"storage\"}";
+        server.DashboardResourceListResponseJson =
+            "[{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"url\":\"/local/other.js\",\"type\":\"module\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
+    }
+
+    [Fact]
     public async Task DashboardMutationsCorrelateEverySuppliedField()
     {
         using var server = new TestHomeAssistantServer();

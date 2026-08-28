@@ -16,6 +16,10 @@ public sealed class HomeAssistantDashboardClient
     {
         var value = await _webSocket.RequestAsync("get_panels", null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("The frontend panel response was not an object.");
+        RequireNoDuplicateProperties(
+            value,
+            "The frontend panel response contained duplicate JSON properties.",
+            cancellationToken);
         var result = new List<HomeAssistantPanel>();
         var routes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
@@ -52,8 +56,13 @@ public sealed class HomeAssistantDashboardClient
 
     public async Task<HomeAssistantLovelaceInfo> GetInfoAsync(CancellationToken cancellationToken = default)
     {
+        var value = await _webSocket.RequestAsync("lovelace/info", null, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicateProperties(
+            value,
+            "The Lovelace information contained duplicate JSON properties.",
+            cancellationToken);
         var info = HomeAssistantJson.DeserializeResponse<HomeAssistantLovelaceInfo>(
-            await _webSocket.RequestAsync("lovelace/info", null, cancellationToken).ConfigureAwait(false),
+            value,
             "The Lovelace information could not be decoded.",
             cancellationToken: cancellationToken);
         if (info.ResourceMode != "storage" && info.ResourceMode != "yaml")
@@ -66,6 +75,10 @@ public sealed class HomeAssistantDashboardClient
         var value = await _webSocket.RequestAsync("lovelace/dashboards/list", null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The dashboard list had an unexpected shape.");
+        RequireNoDuplicateProperties(
+            value,
+            "The dashboard list contained duplicate JSON properties.",
+            cancellationToken);
         foreach (var item in value.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -199,8 +212,13 @@ public sealed class HomeAssistantDashboardClient
     public async Task<IReadOnlyList<HomeAssistantDashboardResource>> GetResourcesAsync(CancellationToken cancellationToken = default)
     {
         var resourceMode = (await GetInfoAsync(cancellationToken).ConfigureAwait(false)).ResourceMode;
+        var value = await _webSocket.RequestAsync("lovelace/resources/list", null, cancellationToken).ConfigureAwait(false);
+        RequireNoDuplicateProperties(
+            value,
+            "The Lovelace resource list contained duplicate JSON properties.",
+            cancellationToken);
         var resources = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource[]>(
-            await _webSocket.RequestAsync("lovelace/resources/list", null, cancellationToken).ConfigureAwait(false),
+            value,
             "The Lovelace resource list could not be decoded.",
             cancellationToken: cancellationToken);
         var storageIds = new HashSet<string>(StringComparer.Ordinal);
