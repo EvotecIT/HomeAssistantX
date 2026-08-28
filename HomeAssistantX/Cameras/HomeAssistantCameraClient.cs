@@ -41,7 +41,7 @@ public sealed class HomeAssistantCameraClient
         }
         cancellationToken.ThrowIfCancellationRequested();
         var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
-        result.Sort((left, right) => comparer.Compare(left.EntityId, right.EntityId));
+        CancellationAwareSort.Sort(result, (left, right) => comparer.Compare(left.EntityId, right.EntityId));
         cancellationToken.ThrowIfCancellationRequested();
         return result;
     }

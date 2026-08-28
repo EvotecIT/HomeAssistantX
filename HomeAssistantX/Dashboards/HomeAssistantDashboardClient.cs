@@ -68,7 +68,7 @@ public sealed class HomeAssistantDashboardClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
-        panels.Sort((left, right) => comparer.Compare(left.UrlPath, right.UrlPath));
+        CancellationAwareSort.Sort(panels, (left, right) => comparer.Compare(left.UrlPath, right.UrlPath));
         cancellationToken.ThrowIfCancellationRequested();
         return panels;
     }
