@@ -23,8 +23,11 @@ public sealed class HomeAssistantNotificationClient
         CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("persistent_notification/get", null, cancellationToken).ConfigureAwait(false);
-        var notifications = HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification[]>(value, "The Home Assistant persistent-notification response could not be decoded.");
-        ValidateNotifications(notifications, "The Home Assistant persistent-notification response");
+        var notifications = HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification[]>(
+            value,
+            "The Home Assistant persistent-notification response could not be decoded.",
+            cancellationToken: cancellationToken);
+        ValidateNotifications(notifications, "The Home Assistant persistent-notification response", cancellationToken);
         return notifications;
     }
 
@@ -103,8 +106,9 @@ public sealed class HomeAssistantNotificationClient
             }
             var notifications = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantPersistentNotification>>(
                 notificationsValue,
-                "The Home Assistant persistent-notification update could not be decoded.");
-            ValidateNotifications(notifications.Values, "The Home Assistant persistent-notification update");
+                "The Home Assistant persistent-notification update could not be decoded.",
+                cancellationToken: token);
+            ValidateNotifications(notifications.Values, "The Home Assistant persistent-notification update", token);
             if (notifications.Any(item => !string.Equals(item.Key, item.Value.NotificationId, StringComparison.Ordinal)))
             {
                 throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a mismatched notification identifier.");
@@ -121,11 +125,17 @@ public sealed class HomeAssistantNotificationClient
 
     private static void ValidateNotifications(
         IEnumerable<HomeAssistantPersistentNotification> notifications,
-        string responseName)
+        string responseName,
+        CancellationToken cancellationToken)
     {
-        HomeAssistantJson.RequireNoNullCollectionEntries(notifications, responseName + " contained a null item.");
+        HomeAssistantJson.RequireNoNullCollectionEntries(
+            notifications,
+            responseName + " contained a null item.",
+            cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (notifications.Any(item => string.IsNullOrWhiteSpace(item.NotificationId) || string.IsNullOrWhiteSpace(item.Message)))
             throw new HomeAssistantProtocolException(responseName + " contained an incomplete item.");
+        cancellationToken.ThrowIfCancellationRequested();
         var identifiers = new HashSet<string>(StringComparer.Ordinal);
         if (notifications.Any(item => !identifiers.Add(item.NotificationId)))
             throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification identifier.");

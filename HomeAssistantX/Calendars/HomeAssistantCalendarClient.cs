@@ -145,8 +145,9 @@ public sealed class HomeAssistantCalendarClient
             {
                 update.Events = HomeAssistantJson.DeserializeResponse<HomeAssistantCalendarEvent[]>(
                     value,
-                    "The Home Assistant calendar subscription could not be decoded.");
-                ValidateEvents(update.Events);
+                    "The Home Assistant calendar subscription could not be decoded.",
+                    cancellationToken: token);
+                ValidateEvents(update.Events, token);
             }
 
             await handler(update, token).ConfigureAwait(false);
@@ -161,10 +162,13 @@ public sealed class HomeAssistantCalendarClient
         }
     }
 
-    private static void ValidateEvents(IReadOnlyList<HomeAssistantCalendarEvent> events)
+    private static void ValidateEvents(
+        IReadOnlyList<HomeAssistantCalendarEvent> events,
+        CancellationToken cancellationToken = default)
     {
         foreach (var item in events)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(item.Summary) || item.Start is null || item.End is null)
             {
                 throw new HomeAssistantProtocolException("Home Assistant returned an incomplete calendar event.");
