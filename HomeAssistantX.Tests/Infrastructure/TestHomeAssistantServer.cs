@@ -301,6 +301,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             {
                 return;
             }
+            catch (InvalidOperationException) when (_source.IsCancellationRequested)
+            {
+                return;
+            }
 
             _ = Task.Run(() => HandleClientAsync(client));
         }
