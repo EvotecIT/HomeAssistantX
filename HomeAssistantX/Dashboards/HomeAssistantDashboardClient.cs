@@ -20,11 +20,15 @@ public sealed class HomeAssistantDashboardClient
         var routes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.");
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
             RequirePanelBooleans(property.Value);
-            var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(property.Value, "A frontend panel could not be decoded.");
+            var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(
+                property.Value,
+                "A frontend panel could not be decoded.",
+                cancellationToken: cancellationToken);
             if (!property.Value.TryGetProperty("url_path", out var embeddedRoute))
             {
                 panel.UrlPath = route;
@@ -50,7 +54,8 @@ public sealed class HomeAssistantDashboardClient
     {
         var info = HomeAssistantJson.DeserializeResponse<HomeAssistantLovelaceInfo>(
             await _webSocket.RequestAsync("lovelace/info", null, cancellationToken).ConfigureAwait(false),
-            "The Lovelace information could not be decoded.");
+            "The Lovelace information could not be decoded.",
+            cancellationToken: cancellationToken);
         if (info.ResourceMode != "storage" && info.ResourceMode != "yaml")
             throw new HomeAssistantProtocolException("The Lovelace information did not contain its resource mode.");
         return info;
@@ -61,14 +66,20 @@ public sealed class HomeAssistantDashboardClient
         var value = await _webSocket.RequestAsync("lovelace/dashboards/list", null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The dashboard list had an unexpected shape.");
-        foreach (var item in value.EnumerateArray()) RequireDashboardVisibility(item, "A dashboard did not contain its required visibility fields.");
+        foreach (var item in value.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequireDashboardVisibility(item, "A dashboard did not contain its required visibility fields.");
+        }
         var dashboards = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard[]>(
             value,
-            "The dashboard list could not be decoded.");
+            "The dashboard list could not be decoded.",
+            cancellationToken: cancellationToken);
         var urlPaths = new HashSet<string>(StringComparer.Ordinal);
         var storageIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var dashboard in dashboards)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ValidateListedDashboard(dashboard);
             if (!urlPaths.Add(dashboard.UrlPath)
                 || (!string.IsNullOrEmpty(dashboard.Id) && !storageIds.Add(dashboard.Id)))
@@ -174,10 +185,12 @@ public sealed class HomeAssistantDashboardClient
         var resourceMode = (await GetInfoAsync(cancellationToken).ConfigureAwait(false)).ResourceMode;
         var resources = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource[]>(
             await _webSocket.RequestAsync("lovelace/resources/list", null, cancellationToken).ConfigureAwait(false),
-            "The Lovelace resource list could not be decoded.");
+            "The Lovelace resource list could not be decoded.",
+            cancellationToken: cancellationToken);
         var storageIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var resource in resources)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ValidateListedResource(resource, resourceMode);
             if (resourceMode == "storage" && !storageIds.Add(resource.Id))
                 throw new HomeAssistantProtocolException("The Lovelace resource list contained a duplicate storage identifier.");
@@ -233,7 +246,8 @@ public sealed class HomeAssistantDashboardClient
         var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
         var dashboard = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard>(
             value,
-            "The dashboard response could not be decoded.");
+            "The dashboard response could not be decoded.",
+            cancellationToken: cancellationToken);
         ValidateStorageDashboard(dashboard);
         RequireDashboardVisibility(value, "A dashboard mutation response did not contain its required visibility fields.");
         if (expectedDashboardId is not null && !string.Equals(dashboard.Id, expectedDashboardId, StringComparison.Ordinal))
@@ -265,7 +279,8 @@ public sealed class HomeAssistantDashboardClient
     {
         var resource = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource>(
             await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false),
-            "The Lovelace resource response could not be decoded.");
+            "The Lovelace resource response could not be decoded.",
+            cancellationToken: cancellationToken);
         ValidateStorageResource(resource);
         if (expectedResourceId is not null && !string.Equals(resource.Id, expectedResourceId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested identifier.");

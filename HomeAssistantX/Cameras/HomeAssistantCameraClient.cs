@@ -30,7 +30,8 @@ public sealed class HomeAssistantCameraClient
     public async Task<IReadOnlyList<HomeAssistantCameraStatus>> GetAsync(CancellationToken cancellationToken = default)
         => HomeAssistantEntityId.RequireResponseDomainStates(
                 await _states.GetAllAsync(cancellationToken).ConfigureAwait(false),
-                "camera")
+                "camera",
+                cancellationToken)
             .Select(ToStatus)
             .OrderBy(item => item.EntityId, StringComparer.OrdinalIgnoreCase).ToArray();
 
@@ -64,10 +65,16 @@ public sealed class HomeAssistantCameraClient
         {
             throw new HomeAssistantProtocolException("The camera capabilities omitted their frontend stream-type collection.");
         }
-        var result = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraCapabilities>(value, "The camera capabilities could not be decoded.");
+        var result = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraCapabilities>(
+            value,
+            "The camera capabilities could not be decoded.",
+            cancellationToken: cancellationToken);
         if (result.FrontendStreamTypes is null)
             throw new HomeAssistantProtocolException("The camera capabilities contained a null stream-type collection.");
-        HomeAssistantJson.RequireNoNullCollectionEntries(result.FrontendStreamTypes, "The camera capabilities contained a null stream type.");
+        HomeAssistantJson.RequireNoNullCollectionEntries(
+            result.FrontendStreamTypes,
+            "The camera capabilities contained a null stream type.",
+            cancellationToken: cancellationToken);
         var streamTypes = new HashSet<string>(StringComparer.Ordinal);
         if (result.FrontendStreamTypes.Any(value => string.IsNullOrWhiteSpace(value)
             || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
@@ -83,7 +90,10 @@ public sealed class HomeAssistantCameraClient
     {
         ValidateEntityId(entityId);
         var value = await _webSocket.RequestAsync("camera/stream", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim(), ["format"] = "hls" }, cancellationToken).ConfigureAwait(false);
-        var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraStream>(value, "The camera stream response could not be decoded.");
+        var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraStream>(
+            value,
+            "The camera stream response could not be decoded.",
+            cancellationToken: cancellationToken);
         if (!HomeAssistantRootRelativePath.IsValid(stream.Path))
         {
             throw new HomeAssistantProtocolException("Home Assistant did not return a valid root-relative camera stream path.");
@@ -97,7 +107,7 @@ public sealed class HomeAssistantCameraClient
     {
         ValidateEntityId(entityId);
         var value = await _webSocket.RequestAsync("camera/get_prefs", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim() }, cancellationToken).ConfigureAwait(false);
-        return DecodePreferences(value, "The camera preferences could not be decoded.");
+        return DecodePreferences(value, "The camera preferences could not be decoded.", cancellationToken);
     }
 
     public async Task<HomeAssistantCameraPreferences> SavePreferencesAsync(string entityId, HomeAssistantCameraPreferencesUpdate update, CancellationToken cancellationToken = default)
@@ -108,7 +118,7 @@ public sealed class HomeAssistantCameraClient
         var expectedOrientation = update.Orientation;
         var payload = update.ToPayload(entityId.Trim());
         var value = await _webSocket.RequestAsync("camera/update_prefs", payload, cancellationToken).ConfigureAwait(false);
-        var preferences = DecodePreferences(value, "The updated camera preferences could not be decoded.");
+        var preferences = DecodePreferences(value, "The updated camera preferences could not be decoded.", cancellationToken);
         if (expectedPreloadStream.HasValue
             && (!value.TryGetProperty("preload_stream", out _)
                 || preferences.PreloadStream != expectedPreloadStream.Value))
@@ -120,7 +130,10 @@ public sealed class HomeAssistantCameraClient
         return preferences;
     }
 
-    private static HomeAssistantCameraPreferences DecodePreferences(JsonElement value, string failureMessage)
+    private static HomeAssistantCameraPreferences DecodePreferences(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("preload_stream", out var preloadStream)
@@ -132,7 +145,10 @@ public sealed class HomeAssistantCameraClient
             throw new HomeAssistantProtocolException(failureMessage);
         }
 
-        var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraPreferences>(value, failureMessage);
+        var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraPreferences>(
+            value,
+            failureMessage,
+            cancellationToken: cancellationToken);
         if (!Enum.IsDefined(typeof(HomeAssistantCameraOrientation), preferences.Orientation))
             throw new HomeAssistantProtocolException(failureMessage);
         return preferences;

@@ -26,7 +26,8 @@ public sealed class HomeAssistantAutomationClient
     public async Task<IReadOnlyList<HomeAssistantAutomationStatus>> GetAsync(CancellationToken cancellationToken = default)
         => HomeAssistantEntityId.RequireResponseDomainStates(
                 await _states.GetAllAsync(cancellationToken).ConfigureAwait(false),
-                "automation")
+                "automation",
+                cancellationToken)
             .Select(ToStatus)
             .OrderBy(item => item.EntityId, StringComparer.OrdinalIgnoreCase).ToArray();
 
