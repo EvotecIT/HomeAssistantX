@@ -155,6 +155,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string? ConfigEntriesErrorCode { get; set; }
 
     public bool OmitSystemHealthFinish { get; set; }
+    public string SystemHealthInitialEventJson { get; set; } =
+        "{\"type\":\"initial\",\"data\":{\"homeassistant\":{\"info\":{\"version\":\"2026.8.3\",\"installation_type\":\"Home Assistant OS\",\"hassio\":true}}}}";
 
     public bool IgnoreUnsubscribeAcknowledgement { get; set; }
 
@@ -831,7 +833,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             case "system_health/info":
                 session.SubscriptionIds.Add(id);
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
-                await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"initial\",\"data\":{\"homeassistant\":{\"info\":{\"version\":\"2026.8.3\",\"installation_type\":\"Home Assistant OS\",\"hassio\":true}}}}"), _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson(SystemHealthInitialEventJson), _source.Token).ConfigureAwait(false);
                 await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"update\",\"success\":true,\"domain\":\"homeassistant\",\"key\":\"python_version\",\"data\":\"3.14.1\"}"), _source.Token).ConfigureAwait(false);
                 await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"update\",\"success\":false,\"domain\":\"test\",\"key\":\"api\",\"error\":{\"msg\":\"Unavailable\"}}"), _source.Token).ConfigureAwait(false);
                 _systemHealthEventsSent.TrySetResult(true);

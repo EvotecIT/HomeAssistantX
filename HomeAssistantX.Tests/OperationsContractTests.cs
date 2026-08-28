@@ -1,5 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
+using System.Collections.Concurrent;
+using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Supervisor;
@@ -122,6 +124,19 @@ public sealed class OperationsContractTests
         var completed = await Task.WhenAny(healthTask, Task.Delay(TimeSpan.FromSeconds(5)));
         Assert.Same(healthTask, completed);
         await Assert.ThrowsAnyAsync<Exception>(() => healthTask);
+    }
+
+    [Fact]
+    public async Task SystemHealthClassifiesMalformedProjectionAsUpstreamFailure()
+    {
+        using var server = new TestHomeAssistantServer { SystemHealthInitialEventJson = "{\"type\":\"initial\"}" };
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Operations.Health.GetAsync());
+
+        Assert.Contains(diagnostics.Events, item => item.Name == "subscription.upstream_failed");
+        Assert.DoesNotContain(diagnostics.Events, item => item.Name == "subscription.handler_failed");
     }
 
     [Fact]
@@ -315,5 +330,14 @@ public sealed class OperationsContractTests
             () => supervisor.SendAsync(System.Net.Http.HttpMethod.Get, "/core/%2e%2e/host/info"));
         await Assert.ThrowsAsync<ArgumentException>(
             () => supervisor.SendAsync(System.Net.Http.HttpMethod.Get, "/core\\..\\host\\info"));
+    }
+
+    private sealed class RecordingDiagnosticsSink : IHomeAssistantDiagnosticsSink
+    {
+        private readonly ConcurrentQueue<HomeAssistantDiagnosticEvent> _events = new();
+
+        internal IReadOnlyList<HomeAssistantDiagnosticEvent> Events => _events.ToArray();
+
+        public void Write(HomeAssistantDiagnosticEvent diagnosticEvent) => _events.Enqueue(diagnosticEvent);
     }
 }
