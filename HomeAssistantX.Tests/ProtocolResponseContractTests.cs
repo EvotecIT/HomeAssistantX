@@ -151,6 +151,21 @@ public sealed class ProtocolResponseContractTests
         }
     }
 
+    [Fact]
+    public void BuiltInResponseValidationStopsCollectionTraversalAfterCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var values = new CancellationProbeEnumerable(cancellation);
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantJson.RequireNoNullCollectionEntries(
+                values,
+                "The response was invalid.",
+                cancellationToken: cancellation.Token));
+
+        Assert.InRange(values.ReadCount, 1, 16);
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]

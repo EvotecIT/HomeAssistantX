@@ -236,13 +236,59 @@ internal static class HomeAssistantJson
         }
     }
 
+    /// <summary>Decodes a built-in Home Assistant response while honoring cancellation during DOM traversal and typed projection.</summary>
+    internal static async Task<T> DeserializeResponseAsync<T>(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken,
+        bool allowNullCollectionEntries = false)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                WriteJsonElement(writer, value, cancellationToken);
+                writer.Flush();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            stream.Position = 0;
+            var result = await JsonSerializer.DeserializeAsync<T>(
+                stream,
+                SerializerOptions,
+                cancellationToken).ConfigureAwait(false)
+                ?? throw new HomeAssistantProtocolException(failureMessage);
+            return RequireNoNullCollectionEntries(
+                result,
+                failureMessage,
+                allowNullCollectionEntries,
+                cancellationToken);
+        }
+        catch (JsonException ex)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new HomeAssistantProtocolException(failureMessage, ex);
+        }
+    }
+
     /// <summary>Rejects null entries in a built-in response collection, including nested collections.</summary>
     public static T RequireNoNullCollectionEntries<T>(
         T value,
         string failureMessage,
-        bool allowNullCollectionEntries = false)
+        bool allowNullCollectionEntries = false,
+        CancellationToken cancellationToken = default)
     {
-        ValidateValue(value, typeof(T), failureMessage, allowNullCollection: false, allowNullEntries: allowNullCollectionEntries);
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateValue(
+            value,
+            typeof(T),
+            failureMessage,
+            allowNullCollection: false,
+            allowNullEntries: allowNullCollectionEntries,
+            cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         return value;
     }
 
@@ -251,8 +297,10 @@ internal static class HomeAssistantJson
         Type declaredType,
         string failureMessage,
         bool allowNullCollection,
-        bool allowNullEntries)
+        bool allowNullEntries,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value is null)
         {
             if (!allowNullCollection && IsCollectionType(declaredType))
@@ -265,9 +313,16 @@ internal static class HomeAssistantJson
             var valueType = GetDictionaryValueType(declaredType) ?? typeof(object);
             foreach (DictionaryEntry entry in dictionary)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (entry.Value is null && !allowNullEntries)
                     throw new HomeAssistantProtocolException(failureMessage);
-                ValidateValue(entry.Value, valueType, failureMessage, allowNullCollection: allowNullEntries, allowNullEntries: false);
+                ValidateValue(
+                    entry.Value,
+                    valueType,
+                    failureMessage,
+                    allowNullCollection: allowNullEntries,
+                    allowNullEntries: false,
+                    cancellationToken);
             }
 
             return;
@@ -275,21 +330,32 @@ internal static class HomeAssistantJson
 
         if (value is not IEnumerable enumerable || value is string)
         {
-            ValidateCollectionProperties(value, failureMessage);
+            ValidateCollectionProperties(value, failureMessage, cancellationToken);
             return;
         }
 
         var elementType = GetCollectionElementType(declaredType) ?? typeof(object);
         foreach (var item in enumerable)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (item is null && !allowNullEntries)
                 throw new HomeAssistantProtocolException(failureMessage);
-            ValidateValue(item, elementType, failureMessage, allowNullCollection: allowNullEntries, allowNullEntries: false);
+            ValidateValue(
+                item,
+                elementType,
+                failureMessage,
+                allowNullCollection: allowNullEntries,
+                allowNullEntries: false,
+                cancellationToken);
         }
     }
 
-    private static void ValidateCollectionProperties(object value, string failureMessage)
+    private static void ValidateCollectionProperties(
+        object value,
+        string failureMessage,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var type = value.GetType();
         if (type.IsValueType || type.Namespace?.StartsWith("HomeAssistantX", StringComparison.Ordinal) != true)
         {
@@ -298,6 +364,7 @@ internal static class HomeAssistantJson
 
         foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!property.CanRead || property.SetMethod?.IsPublic != true || property.GetIndexParameters().Length != 0)
             {
                 continue;
@@ -312,11 +379,12 @@ internal static class HomeAssistantJson
                     property.PropertyType,
                     failureMessage,
                     nullability.Collection,
-                    nullability.Entry);
+                    nullability.Entry,
+                    cancellationToken);
             }
             else if (propertyValue is not null)
             {
-                ValidateCollectionProperties(propertyValue, failureMessage);
+                ValidateCollectionProperties(propertyValue, failureMessage, cancellationToken);
             }
         }
     }

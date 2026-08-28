@@ -141,7 +141,8 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             .ConfigureAwait(false);
         return HomeAssistantJson.RequireNoNullCollectionEntries(
             value,
-            "The Home Assistant response contained a null collection entry.");
+            "The Home Assistant response contained a null collection entry.",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Sends an authenticated request and returns its bounded response body as text.</summary>
@@ -173,7 +174,13 @@ public sealed partial class HomeAssistantRestClient : IDisposable
                     response.Content,
                     _options.MaximumRestResponseBytes,
                     operationToken).ConfigureAwait(false);
-                var value = JsonSerializer.Deserialize<T>(bytes, serializerOptions);
+                operationToken.ThrowIfCancellationRequested();
+                using var stream = new MemoryStream(bytes, writable: false);
+                var value = await JsonSerializer.DeserializeAsync<T>(
+                    stream,
+                    serializerOptions,
+                    operationToken).ConfigureAwait(false);
+                operationToken.ThrowIfCancellationRequested();
                 return value ?? throw new HomeAssistantProtocolException("Home Assistant returned an empty JSON response.");
             },
             cancellationToken).ConfigureAwait(false);
