@@ -5,7 +5,7 @@ namespace HomeAssistantX.Controls;
 
 /// <summary>Optional capabilities exposed through a Home Assistant <c>remote</c> entity.</summary>
 [Flags]
-public enum HomeAssistantRemoteFeature
+public enum HomeAssistantRemoteFeature : long
 {
     None = 0,
     LearnCommand = 1,
@@ -152,7 +152,7 @@ public sealed class HomeAssistantRemoteStatus
                     ? false
                     : null,
             FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name"),
-            SupportedFeatures = (HomeAssistantRemoteFeature)(HomeAssistantAttributeReader.GetNonNegativeInt32(attributes, "supported_features") ?? 0),
+            SupportedFeatures = (HomeAssistantRemoteFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features") ?? 0),
             CurrentActivity = HomeAssistantAttributeReader.GetString(attributes, "current_activity"),
             Activities = HomeAssistantAttributeReader.GetStringList(attributes, "activity_list", cancellationToken)
         };

@@ -308,9 +308,8 @@ public sealed class MediaAndRemoteContractTests
 
     [Theory]
     [InlineData("-1")]
-    [InlineData("2147483648")]
-    [InlineData("4294967297")]
-    public void RemoteStatusRejectsCapabilityMasksOutsideTheEnumRange(string value)
+    [InlineData("9223372036854775808")]
+    public void RemoteStatusRejectsCapabilityMasksOutsideTheWireRange(string value)
     {
         var raw = DeserializeState(
             "{\"entity_id\":\"remote.bad\",\"state\":\"on\",\"attributes\":{" +
@@ -319,6 +318,21 @@ public sealed class MediaAndRemoteContractTests
         var status = HomeAssistantRemoteStatus.FromState(raw);
 
         Assert.Equal(HomeAssistantRemoteFeature.None, status.SupportedFeatures);
+    }
+
+    [Theory]
+    [InlineData("2147483649")]
+    [InlineData("4294967297")]
+    public void RemoteStatusRetainsKnownCapabilitiesWhenFutureHighBitsArePresent(string value)
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"remote.living_room\",\"state\":\"on\",\"attributes\":{" +
+            "\"supported_features\":" + value + "}}");
+
+        var status = HomeAssistantRemoteStatus.FromState(raw);
+
+        Assert.True(status.Supports(HomeAssistantRemoteFeature.LearnCommand));
+        Assert.Equal(long.Parse(value, System.Globalization.CultureInfo.InvariantCulture), (long)status.SupportedFeatures);
     }
 
     [Fact]
