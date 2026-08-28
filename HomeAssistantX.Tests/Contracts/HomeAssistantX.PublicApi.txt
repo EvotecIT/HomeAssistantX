@@ -1076,6 +1076,7 @@ T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata
   P instance System.String? UnitClass {get;set;}
   P instance System.String? UnitOfMeasurement {get;set;}
   M instance System.Void ValidateRows(System.Collections.Generic.IReadOnlyCollection<HomeAssistantX.Recorder.HomeAssistantStatisticImportRow> rows)
+  M instance System.Void ValidateRows(System.Collections.Generic.IReadOnlyCollection<HomeAssistantX.Recorder.HomeAssistantStatisticImportRow> rows, System.Threading.CancellationToken cancellationToken)
 T sealed class HomeAssistantX.Recorder.HomeAssistantStatisticImportRow
   C HomeAssistantX.Recorder.HomeAssistantStatisticImportRow()
   P instance System.Nullable<System.DateTimeOffset> LastReset {get;set;}
