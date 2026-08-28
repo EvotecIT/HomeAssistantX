@@ -11,7 +11,7 @@ public sealed class RemoveHomeAssistantAutomationCommand : HomeAssistantCmdlet
     [Parameter(Mandatory = true, Position = 0)][ValidateNotNullOrEmpty] public string AutomationId { get; set; } = string.Empty;
     protected override async Task ProcessRecordAsync()
     {
-        var automationId = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(AutomationId);
+        var automationId = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(AutomationId, CancelToken);
         if (ShouldProcess(automationId, "Delete Home Assistant automation configuration"))
             await Client.Automations.DeleteConfigurationAsync(automationId, CancelToken).ConfigureAwait(false);
     }

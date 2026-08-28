@@ -17,7 +17,7 @@ public sealed class SetHomeAssistantAutomationCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        var automationId = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(AutomationId);
+        var automationId = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(AutomationId, CancelToken);
         CancelToken.ThrowIfCancellationRequested();
         using var document = await HomeAssistantJson.ParseDocumentAsync(ConfigurationJson, CancelToken).ConfigureAwait(false);
         if (document.RootElement.ValueKind != JsonValueKind.Object) throw new ArgumentException("ConfigurationJson must be a JSON object.", nameof(ConfigurationJson));

@@ -66,7 +66,7 @@ public sealed class HomeAssistantAutomationClient
     /// <summary>Reads an editable automation definition. Requires an administrator and an automation with a configuration id.</summary>
     public async Task<HomeAssistantAutomationConfiguration> GetConfigurationAsync(string automationId, CancellationToken cancellationToken = default)
     {
-        var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
+        var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
         var value = await _rest.SendAsync<JsonElement>(HttpMethod.Get, ConfigurationPath(id), null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Home Assistant returned a non-object automation definition.");
         if (HomeAssistantAutomationIdentifier.HasDuplicateProperties(value, cancellationToken)) throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with duplicate JSON properties.");
@@ -99,7 +99,7 @@ public sealed class HomeAssistantAutomationClient
     public async Task<JsonElement> SaveConfigurationAsync(string automationId, JsonElement definition, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
+        var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
         HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(id, definition, nameof(definition), cancellationToken);
         var frozenDefinition = HomeAssistantJson.FreezeValue(
             definition,
@@ -112,7 +112,7 @@ public sealed class HomeAssistantAutomationClient
     /// <summary>Deletes an editable automation definition. Requires an administrator.</summary>
     public Task<JsonElement> DeleteConfigurationAsync(string automationId, CancellationToken cancellationToken = default)
     {
-        var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId);
+        var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
         return _rest.SendAsync<JsonElement>(HttpMethod.Delete, ConfigurationPath(id), null, cancellationToken);
     }
 

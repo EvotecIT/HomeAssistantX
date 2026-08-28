@@ -291,6 +291,23 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
     }
 
+    [Fact]
+    public async Task AutomationIdentifierNormalizationObservesCancellationDuringTraversal()
+    {
+        var longValue = "automation-" + new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Run(() =>
+        {
+            started.TrySetResult(true);
+            return HomeAssistantAutomationIdentifier.NormalizeConfigurationId(longValue, cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
     [Theory]
     [InlineData("{\"title\":\"Music\",\"media_content_type\":\"library\",\"can_play\":true,\"children\":[]}")]
     [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"can_expand\":true,\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"can_play\":true,\"children\":[]}]}")]

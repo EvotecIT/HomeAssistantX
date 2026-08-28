@@ -9,10 +9,38 @@ public static class HomeAssistantAutomationIdentifier
     /// <summary>Returns a trimmed non-empty automation configuration identifier.</summary>
     /// <exception cref="ArgumentException">Thrown when <paramref name="automationId"/> is empty or whitespace.</exception>
     public static string NormalizeConfigurationId(string automationId)
+        => NormalizeConfigurationId(automationId, default);
+
+    internal static string NormalizeConfigurationId(
+        string automationId,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(automationId))
+        if (automationId is null)
+            throw new ArgumentNullException(nameof(automationId));
+        cancellationToken.ThrowIfCancellationRequested();
+        var start = 0;
+        while (start < automationId.Length && char.IsWhiteSpace(automationId[start]))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+
+        var end = automationId.Length - 1;
+        while (end >= start && char.IsWhiteSpace(automationId[end]))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+
+        if (end < start)
             throw new ArgumentException("An automation configuration identifier is required.", nameof(automationId));
-        return automationId.Trim();
+        for (var index = start; index <= end; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return automationId.Substring(start, end - start + 1);
     }
 
     internal static void ValidateDefinitionForSave(
