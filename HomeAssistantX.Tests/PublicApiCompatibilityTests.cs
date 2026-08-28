@@ -69,8 +69,11 @@ public sealed class PublicApiCompatibilityTests
     public void TypeFormatterPreservesStructLayoutContracts()
     {
         Assert.Equal(
-            "layout(Explicit,pack=4,size=16,charset=Unicode) ",
+            "layout(Explicit,pack=4,size=16,charset=Unicode;fields=System.Int64 Zulu@0|System.Int32 Alpha@8) ",
             StructLayoutContract(typeof(StructLayoutFixture)));
+        Assert.Equal(
+            "layout(Sequential,pack=2,size=0,charset=Ansi;fields=System.Int32 Zulu|System.Int16 Alpha) ",
+            StructLayoutContract(typeof(SequentialStructLayoutFixture)));
     }
 
 #if NET10_0
@@ -566,10 +569,20 @@ public sealed class PublicApiCompatibilityTests
         }
 
         var layout = type.StructLayoutAttribute!;
+        var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            .OrderBy(field => field.MetadataToken)
+            .Select(field =>
+            {
+                var offset = field.GetCustomAttribute<FieldOffsetAttribute>();
+                return FormatType(field.FieldType) + " " + field.Name
+                    + (offset is null ? string.Empty : "@" + offset.Value.ToString(CultureInfo.InvariantCulture));
+            })
+            .ToArray();
         return "layout(" + layout.Value
             + ",pack=" + layout.Pack.ToString(CultureInfo.InvariantCulture)
             + ",size=" + layout.Size.ToString(CultureInfo.InvariantCulture)
-            + ",charset=" + layout.CharSet + ") ";
+            + ",charset=" + layout.CharSet
+            + ";fields=" + string.Join("|", fields) + ") ";
     }
 
     private static IReadOnlyList<string> FormatInheritanceContracts(Type type)
@@ -845,7 +858,18 @@ public sealed class PublicApiCompatibilityTests
     private struct StructLayoutFixture
     {
         [FieldOffset(0)]
-        public int Value;
+        public long Zulu;
+
+        [FieldOffset(8)]
+        public int Alpha;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 2)]
+    private struct SequentialStructLayoutFixture
+    {
+        public int Zulu;
+
+        public short Alpha;
     }
 
     private sealed class GenericOwner<TOuter>
