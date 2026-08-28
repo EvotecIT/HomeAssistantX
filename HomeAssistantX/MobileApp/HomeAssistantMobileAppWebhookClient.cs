@@ -68,7 +68,8 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         var result = await SendAsync("stream_camera", new Dictionary<string, object?> { ["camera_entity_id"] = normalizedEntityId }, cancellationToken).ConfigureAwait(false);
         var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantMobileAppCameraStream>(
             result,
-            "Home Assistant returned an invalid camera-stream response.");
+            "Home Assistant returned an invalid camera-stream response.",
+            cancellationToken: cancellationToken);
         var hasMjpeg = !string.IsNullOrWhiteSpace(stream.MjpegPath);
         var hasHls = !string.IsNullOrWhiteSpace(stream.HlsPath);
         if (stream.Success == false
