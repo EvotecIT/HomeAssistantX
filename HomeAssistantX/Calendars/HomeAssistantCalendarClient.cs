@@ -140,30 +140,39 @@ public sealed class HomeAssistantCalendarClient
         };
         return _webSocket.SubscribeAsync("calendar/event/subscribe", payload, async (value, token) =>
         {
-            token.ThrowIfCancellationRequested();
-            if (value.ValueKind != JsonValueKind.Null && value.ValueKind != JsonValueKind.Array)
-            {
-                throw new HomeAssistantProtocolException("The Home Assistant calendar subscription had an unexpected shape.");
-            }
-
-            var update = new HomeAssistantCalendarEventUpdate
-            {
-                IsAvailable = value.ValueKind == JsonValueKind.Array,
-                // WebSocket event payloads are already detached before routing.
-                Raw = value
-            };
-            if (update.IsAvailable)
-            {
-                update.Events = HomeAssistantJson.DeserializeResponse<HomeAssistantCalendarEvent[]>(
-                    value,
-                    "The Home Assistant calendar subscription could not be decoded.",
-                    cancellationToken: token);
-                ValidateEvents(update.Events, token);
-            }
-
-            token.ThrowIfCancellationRequested();
+            var update = HomeAssistantSubscriptionProjectionException.Capture(
+                () => ProjectSubscriptionUpdate(value, token));
             await handler(update, token).ConfigureAwait(false);
         }, cancellationToken);
+    }
+
+    private static HomeAssistantCalendarEventUpdate ProjectSubscriptionUpdate(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.Null && value.ValueKind != JsonValueKind.Array)
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant calendar subscription had an unexpected shape.");
+        }
+
+        var update = new HomeAssistantCalendarEventUpdate
+        {
+            IsAvailable = value.ValueKind == JsonValueKind.Array,
+            // WebSocket event payloads are already detached before routing.
+            Raw = value
+        };
+        if (update.IsAvailable)
+        {
+            update.Events = HomeAssistantJson.DeserializeResponse<HomeAssistantCalendarEvent[]>(
+                value,
+                "The Home Assistant calendar subscription could not be decoded.",
+                cancellationToken: cancellationToken);
+            ValidateEvents(update.Events, cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return update;
     }
 
     private static void ValidateRange(DateTimeOffset start, DateTimeOffset end)

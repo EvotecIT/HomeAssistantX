@@ -94,6 +94,28 @@ public sealed class HomeAssistantNotificationClient
 
         return _webSocket.SubscribeAsync("persistent_notification/subscribe", null, async (value, token) =>
         {
+            HomeAssistantPersistentNotificationUpdate update;
+            try
+            {
+                update = await ProjectPersistentUpdateAsync(value, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new HomeAssistantSubscriptionProjectionException(ex);
+            }
+
+            await handler(update, token).ConfigureAwait(false);
+        }, cancellationToken);
+    }
+
+    private static async Task<HomeAssistantPersistentNotificationUpdate> ProjectPersistentUpdateAsync(
+        JsonElement value,
+        CancellationToken token)
+    {
             if (value.ValueKind != JsonValueKind.Object
                 || !value.TryGetProperty("type", out var typeValue)
                 || typeValue.ValueKind != JsonValueKind.String
@@ -130,14 +152,13 @@ public sealed class HomeAssistantNotificationClient
                 value,
                 "The Home Assistant persistent-notification update could not be snapshotted.",
                 token).ConfigureAwait(false);
-            await handler(new HomeAssistantPersistentNotificationUpdate
+            return new HomeAssistantPersistentNotificationUpdate
             {
                 RawType = rawType,
                 Type = ParseType(rawType),
                 Notifications = notifications,
                 Raw = raw
-            }, token).ConfigureAwait(false);
-        }, cancellationToken);
+            };
     }
 
     internal static void ValidateNotifications(

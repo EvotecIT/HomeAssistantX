@@ -280,7 +280,7 @@ public sealed class HomeAssistantRegistryClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             RequireAssignmentCollection(entry.Aliases, "area aliases", cancellationToken);
-            RequireAssignmentCollection(entry.Labels, "area labels", cancellationToken);
+            RequireIdentifierAssignmentCollection(entry.Labels, "area labels", cancellationToken);
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
@@ -305,7 +305,7 @@ public sealed class HomeAssistantRegistryClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             RequireAssignmentCollection(entry.ConfigEntries, "device configuration-entry assignments", cancellationToken);
-            RequireAssignmentCollection(entry.Labels, "device label assignments", cancellationToken);
+            RequireIdentifierAssignmentCollection(entry.Labels, "device label assignments", cancellationToken);
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
@@ -318,7 +318,7 @@ public sealed class HomeAssistantRegistryClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             RequireAssignmentCollection(entry.Aliases, "entity aliases", cancellationToken, allowNullEntries: true);
-            RequireAssignmentCollection(entry.Labels, "entity label assignments", cancellationToken);
+            RequireIdentifierAssignmentCollection(entry.Labels, "entity label assignments", cancellationToken);
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
@@ -341,6 +341,32 @@ public sealed class HomeAssistantRegistryClient
                 throw new HomeAssistantProtocolException("The Home Assistant " + responseName + " contained a null value.");
             }
         }
+    }
+
+    private static void RequireIdentifierAssignmentCollection(
+        IEnumerable<string>? values,
+        string responseName,
+        CancellationToken cancellationToken)
+    {
+        if (values is null)
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant " + responseName + " were null.");
+        }
+
+        var identities = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(value)
+                || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
+                || !identities.Add(value))
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant " + responseName + " contained an invalid or duplicate identifier.");
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static T DeserializeObject<T>(

@@ -420,6 +420,27 @@ public sealed class LivePlatformDataContractTests
             new[] { new HomeAssistantEntityRegistryEntry { Labels = null! } }, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" security ")]
+    public void RegistrySnapshotValidationRejectsMalformedLabelAssignments(string labelId)
+    {
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantArea { Labels = new[] { labelId } } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantDeviceRegistryEntry { Labels = new[] { labelId } } }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantEntityRegistryEntry { Labels = new[] { labelId } } }, CancellationToken.None));
+    }
+
+    [Fact]
+    public void RegistrySnapshotValidationRejectsDuplicateLabelAssignments()
+    {
+        Assert.Throws<HomeAssistantProtocolException>(() => HomeAssistantRegistryClient.ValidateAssignmentCollections(
+            new[] { new HomeAssistantEntityRegistryEntry { Labels = new[] { "security", "security" } } }, CancellationToken.None));
+    }
+
     [Fact]
     public async Task EmptyRegistryUpdatesFailBeforeDispatch()
     {
