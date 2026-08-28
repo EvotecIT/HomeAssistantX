@@ -79,9 +79,9 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
     {
         if (ParameterSetName == InputObjectParameterSet)
         {
-            ValidateDomains(InputObject, expectedDomain);
-            BindInputConnection(InputObject);
-            var ids = InputObject.Select(x => x.EntityId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            ValidateDomains(InputObject, expectedDomain, CancelToken);
+            BindInputConnection(InputObject, CancelToken);
+            var ids = SelectDistinct(InputObject, x => x.EntityId, StringComparer.OrdinalIgnoreCase, CancelToken);
             return new ResolvedHomeAssistantTarget(HomeAssistantTarget.ForEntity(ids), ids.Length + " " + expectedDomain + " entities (" + string.Join(", ", ids) + ")", ids.Length);
         }
 
@@ -90,48 +90,48 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         {
             case EntityParameterSet:
             {
-                var entities = Entity.Select(value => Client.Inventory.ResolveEntity(snapshot, value)).ToArray();
-                ValidateDomains(entities, expectedDomain);
-                var ids = entities.Select(x => x.EntityId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.ForEntity(ids), Describe("entities", entities.Select(x => x.Name), ids.Length), ids.Length);
+                var entities = Select(Entity, value => Client.Inventory.ResolveEntity(snapshot, value, CancelToken), CancelToken);
+                ValidateDomains(entities, expectedDomain, CancelToken);
+                var ids = SelectDistinct(entities, x => x.EntityId, StringComparer.OrdinalIgnoreCase, CancelToken);
+                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.ForEntity(ids), Describe("entities", Select(entities, x => x.Name, CancelToken), ids.Length), ids.Length);
             }
             case AreaParameterSet:
             {
-                var areas = Area.Select(value => Client.Inventory.ResolveArea(snapshot, value)).ToArray();
-                var count = CountEntities(areas.SelectMany(x => x.Entities), expectedDomain);
-                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithAreas(areas.Select(x => x.AreaId).ToArray()), Describe("areas", areas.Select(x => x.Name), count), count);
+                var areas = Select(Area, value => Client.Inventory.ResolveArea(snapshot, value, CancelToken), CancelToken);
+                var count = CountEntities(SelectMany(areas, x => x.Entities, CancelToken), expectedDomain, CancelToken);
+                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithAreas(Select(areas, x => x.AreaId, CancelToken)), Describe("areas", Select(areas, x => x.Name, CancelToken), count), count);
             }
             case DeviceParameterSet:
             {
-                var devices = Device.Select(value => Client.Inventory.ResolveDevice(snapshot, value)).ToArray();
-                var count = CountEntities(devices.SelectMany(x => x.Entities), expectedDomain);
-                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithDevices(devices.Select(x => x.DeviceId).ToArray()), Describe("devices", devices.Select(x => x.Name), count), count);
+                var devices = Select(Device, value => Client.Inventory.ResolveDevice(snapshot, value, CancelToken), CancelToken);
+                var count = CountEntities(SelectMany(devices, x => x.Entities, CancelToken), expectedDomain, CancelToken);
+                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithDevices(Select(devices, x => x.DeviceId, CancelToken)), Describe("devices", Select(devices, x => x.Name, CancelToken), count), count);
             }
             case FloorParameterSet:
             {
-                var floors = Floor.Select(value => Client.Inventory.ResolveFloor(snapshot, value)).ToArray();
-                var count = CountEntities(floors.SelectMany(x => x.Entities), expectedDomain);
-                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithFloors(floors.Select(x => x.FloorId).ToArray()), Describe("floors", floors.Select(x => x.Name), count), count);
+                var floors = Select(Floor, value => Client.Inventory.ResolveFloor(snapshot, value, CancelToken), CancelToken);
+                var count = CountEntities(SelectMany(floors, x => x.Entities, CancelToken), expectedDomain, CancelToken);
+                return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithFloors(Select(floors, x => x.FloorId, CancelToken)), Describe("floors", Select(floors, x => x.Name, CancelToken), count), count);
             }
             case LabelParameterSet:
             {
                 var labels = snapshot.Registries.Labels;
-                var selectors = Label.Select(value => RequireLookupValue(value, nameof(Label))).ToArray();
+                var selectors = Select(Label, value => RequireLookupValue(value, nameof(Label)), CancelToken);
                 var resolved = snapshot.Registries.IsLabelRegistryAvailable
-                    ? selectors.Select(value => ResolveLabel(labels, value)).ToArray()
+                    ? Select(selectors, value => ResolveLabel(labels, value, CancelToken), CancelToken)
                     : Array.Empty<Registries.HomeAssistantLabel>();
                 var labelIds = snapshot.Registries.IsLabelRegistryAvailable
-                    ? resolved.Select(x => x.LabelId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
-                    : selectors.Select(value => ResolveAssignedLabelId(snapshot, value)).Distinct(StringComparer.Ordinal).ToArray();
-                var matching = snapshot.Entities.Count(entity => IsSelectedByLabel(snapshot, entity, labelIds)
-                    && string.Equals(entity.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase));
+                    ? SelectDistinct(resolved, x => x.LabelId, StringComparer.Ordinal, CancelToken)
+                    : SelectDistinct(selectors, value => ResolveAssignedLabelId(snapshot, value, CancelToken), StringComparer.Ordinal, CancelToken);
+                var matching = Count(snapshot.Entities, entity => IsSelectedByLabel(snapshot, entity, labelIds, CancelToken)
+                    && string.Equals(entity.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase), CancelToken);
                 if (matching == 0)
                 {
                     throw new HomeAssistantLookupException("The selected labels contain no '" + expectedDomain + "' entities.");
                 }
 
                 var names = snapshot.Registries.IsLabelRegistryAvailable
-                    ? resolved.Select(x => x.Name)
+                    ? Select(resolved, x => x.Name, CancelToken)
                     : labelIds;
                 return new ResolvedHomeAssistantTarget(HomeAssistantTarget.Create().WithLabels(labelIds), Describe("labels", names, matching), matching);
             }
@@ -140,13 +140,14 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         }
     }
 
-    private void BindInputConnection(IEnumerable<HomeAssistantEntityInfo> entities)
+    private void BindInputConnection(IEnumerable<HomeAssistantEntityInfo> entities, CancellationToken cancellationToken)
     {
         var explicitConnection = MyInvocation.BoundParameters.ContainsKey(nameof(Connection)) ? Connection : null;
         HomeAssistantConnection? sourceConnection = null;
 
         foreach (var entity in entities)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantEntityProvenance.TryGet(entity, out var entityConnection))
             {
                 if (explicitConnection is null)
@@ -182,18 +183,23 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         }
     }
 
-    private static void ValidateDomains(IEnumerable<HomeAssistantEntityInfo> entities, string expectedDomain)
+    private static void ValidateDomains(IEnumerable<HomeAssistantEntityInfo> entities, string expectedDomain, CancellationToken cancellationToken)
     {
-        var mismatches = entities.Where(x => !string.Equals(x.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (mismatches.Length > 0)
+        var mismatches = new List<HomeAssistantEntityInfo>();
+        foreach (var entity in entities)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.Equals(entity.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase)) mismatches.Add(entity);
+        }
+        if (mismatches.Count > 0)
         {
             throw new HomeAssistantLookupException("The target contains entities outside the '" + expectedDomain + "' domain: " + string.Join(", ", mismatches.Select(x => x.EntityId)) + ".");
         }
     }
 
-    private static int CountEntities(IEnumerable<HomeAssistantEntityInfo> entities, string expectedDomain)
+    private static int CountEntities(IEnumerable<HomeAssistantEntityInfo> entities, string expectedDomain, CancellationToken cancellationToken)
     {
-        var count = entities.Count(x => string.Equals(x.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase));
+        var count = Count(entities, x => string.Equals(x.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase), cancellationToken);
         if (count == 0)
         {
             throw new HomeAssistantLookupException("The selected target contains no '" + expectedDomain + "' entities.");
@@ -204,19 +210,17 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
 
     private static Registries.HomeAssistantLabel ResolveLabel(
         IEnumerable<Registries.HomeAssistantLabel> labels,
-        string value)
+        string value,
+        CancellationToken cancellationToken)
     {
-        var materialized = labels.ToArray();
-        var exactNativeMatch = materialized
-            .FirstOrDefault(label => string.Equals(label.LabelId, value, StringComparison.Ordinal));
+        var materialized = Select(labels, label => label, cancellationToken);
+        var exactNativeMatch = FirstOrDefault(materialized, label => string.Equals(label.LabelId, value, StringComparison.Ordinal), cancellationToken);
         if (exactNativeMatch is not null)
         {
             return exactNativeMatch;
         }
 
-        var nativeMatches = materialized
-            .Where(label => string.Equals(label.LabelId, value, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var nativeMatches = Where(materialized, label => string.Equals(label.LabelId, value, StringComparison.OrdinalIgnoreCase), cancellationToken);
         if (nativeMatches.Length == 1)
         {
             return nativeMatches[0];
@@ -227,9 +231,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
             throw new HomeAssistantLookupException("More than one Home Assistant label has the native ID '" + value + "'.");
         }
 
-        var nameMatches = materialized
-            .Where(label => string.Equals(label.Name, value, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var nameMatches = Where(materialized, label => string.Equals(label.Name, value, StringComparison.OrdinalIgnoreCase), cancellationToken);
         return nameMatches.Length switch
         {
             1 => nameMatches[0],
@@ -238,22 +240,22 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         };
     }
 
-    private static string ResolveAssignedLabelId(HomeAssistantInventorySnapshot snapshot, string value)
+    private static string ResolveAssignedLabelId(HomeAssistantInventorySnapshot snapshot, string value, CancellationToken cancellationToken)
     {
-        var assigned = snapshot.Entities.SelectMany(entity => entity.RegistryEntry?.Labels ?? Array.Empty<string>())
-            .Concat(snapshot.Devices.SelectMany(device => device.Raw.Labels))
-            .Concat(snapshot.Areas.SelectMany(area => area.Raw.Labels))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        var exactMatch = assigned.FirstOrDefault(labelId => string.Equals(labelId, value, StringComparison.Ordinal));
+        var assigned = SelectDistinct(
+            SelectMany(snapshot.Entities, entity => entity.RegistryEntry?.Labels ?? Array.Empty<string>(), cancellationToken)
+                .Concat(SelectMany(snapshot.Devices, device => device.Raw.Labels, cancellationToken))
+                .Concat(SelectMany(snapshot.Areas, area => area.Raw.Labels, cancellationToken)),
+            labelId => labelId,
+            StringComparer.Ordinal,
+            cancellationToken);
+        var exactMatch = FirstOrDefault(assigned, labelId => string.Equals(labelId, value, StringComparison.Ordinal), cancellationToken);
         if (exactMatch is not null)
         {
             return exactMatch;
         }
 
-        var matches = assigned
-            .Where(labelId => string.Equals(labelId, value, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var matches = Where(assigned, labelId => string.Equals(labelId, value, StringComparison.OrdinalIgnoreCase), cancellationToken);
         return matches.Length switch
         {
             1 => matches[0],
@@ -272,25 +274,115 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
     private static bool IsSelectedByLabel(
         HomeAssistantInventorySnapshot snapshot,
         HomeAssistantEntityInfo entity,
-        IReadOnlyCollection<string> labelIds)
+        IReadOnlyCollection<string> labelIds,
+        CancellationToken cancellationToken)
     {
-        if (entity.RegistryEntry?.Labels.Any(value => labelIds.Contains(value, StringComparer.Ordinal)) == true)
+        cancellationToken.ThrowIfCancellationRequested();
+        if (entity.RegistryEntry?.Labels.Any(value => Contains(labelIds, value, cancellationToken)) == true)
         {
             return true;
         }
 
         if (entity.DeviceId is not null
-            && snapshot.Devices.FirstOrDefault(device => string.Equals(device.DeviceId, entity.DeviceId, StringComparison.OrdinalIgnoreCase))
+            && FirstOrDefault(snapshot.Devices, device => string.Equals(device.DeviceId, entity.DeviceId, StringComparison.OrdinalIgnoreCase), cancellationToken)
                 is { } device
-            && device.Raw.Labels.Any(value => labelIds.Contains(value, StringComparer.Ordinal)))
+            && device.Raw.Labels.Any(value => Contains(labelIds, value, cancellationToken)))
         {
             return true;
         }
 
         return entity.AreaId is not null
-            && snapshot.Areas.FirstOrDefault(area => string.Equals(area.AreaId, entity.AreaId, StringComparison.OrdinalIgnoreCase))
+            && FirstOrDefault(snapshot.Areas, area => string.Equals(area.AreaId, entity.AreaId, StringComparison.OrdinalIgnoreCase), cancellationToken)
                 is { } area
-            && area.Raw.Labels.Any(value => labelIds.Contains(value, StringComparer.Ordinal));
+            && area.Raw.Labels.Any(value => Contains(labelIds, value, cancellationToken));
+    }
+
+    private static TTarget[] Select<TSource, TTarget>(IEnumerable<TSource> source, Func<TSource, TTarget> selector, CancellationToken cancellationToken)
+    {
+        var result = new List<TTarget>();
+        foreach (var item in source)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result.Add(selector(item));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return result.ToArray();
+    }
+
+    private static TTarget[] SelectMany<TSource, TTarget>(IEnumerable<TSource> source, Func<TSource, IEnumerable<TTarget>> selector, CancellationToken cancellationToken)
+    {
+        var result = new List<TTarget>();
+        foreach (var item in source)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var selected in selector(item))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                result.Add(selected);
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return result.ToArray();
+    }
+
+    private static TTarget[] SelectDistinct<TSource, TTarget>(IEnumerable<TSource> source, Func<TSource, TTarget> selector, IEqualityComparer<TTarget> comparer, CancellationToken cancellationToken)
+    {
+        var result = new List<TTarget>();
+        var seen = new HashSet<TTarget>(comparer);
+        foreach (var item in source)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var selected = selector(item);
+            if (seen.Add(selected)) result.Add(selected);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return result.ToArray();
+    }
+
+    private static TSource[] Where<TSource>(IEnumerable<TSource> source, Func<TSource, bool> predicate, CancellationToken cancellationToken)
+    {
+        var result = new List<TSource>();
+        foreach (var item in source)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (predicate(item)) result.Add(item);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return result.ToArray();
+    }
+
+    private static TSource? FirstOrDefault<TSource>(IEnumerable<TSource> source, Func<TSource, bool> predicate, CancellationToken cancellationToken) where TSource : class
+    {
+        foreach (var item in source)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (predicate(item)) return item;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return null;
+    }
+
+    private static int Count<TSource>(IEnumerable<TSource> source, Func<TSource, bool> predicate, CancellationToken cancellationToken)
+    {
+        var count = 0;
+        foreach (var item in source)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (predicate(item)) count++;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return count;
+    }
+
+    private static bool Contains(IEnumerable<string> source, string value, CancellationToken cancellationToken)
+    {
+        foreach (var item in source)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(item, value, StringComparison.Ordinal)) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
     }
 
     private static string Describe(string kind, IEnumerable<string> names, int count)

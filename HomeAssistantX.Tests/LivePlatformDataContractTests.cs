@@ -477,6 +477,26 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public void RegistrySemanticValidationStopsAfterCancellation()
+    {
+        using var labelCancellation = new CancellationTokenSource();
+        var labels = new CancellingRegistryEnumerable<HomeAssistantLabel>(
+            labelCancellation,
+            () => new HomeAssistantLabel { LabelId = "security", Name = "Security" });
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRegistryClient.ValidateLabels(labels, labelCancellation.Token));
+        Assert.InRange(labels.ReadCount, 1, 2);
+
+        using var categoryCancellation = new CancellationTokenSource();
+        var categories = new CancellingRegistryEnumerable<HomeAssistantCategory>(
+            categoryCancellation,
+            () => new HomeAssistantCategory { CategoryId = "comfort", Name = "Comfort" });
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRegistryClient.ValidateCategories(categories, categoryCancellation.Token));
+        Assert.InRange(categories.ReadCount, 1, 2);
+    }
+
+    [Fact]
     public async Task EmptyNotificationTargetFailsBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();
@@ -517,6 +537,33 @@ public sealed class LivePlatformDataContractTests
         Assert.Equal(service, body.RootElement.GetProperty("service").GetString());
         var data = body.RootElement.TryGetProperty("service_data", out var serviceData) ? serviceData : default;
         assertData(data);
+    }
+
+    private sealed class CancellingRegistryEnumerable<T> : IEnumerable<T>
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private readonly Func<T> _factory;
+
+        internal CancellingRegistryEnumerable(CancellationTokenSource cancellation, Func<T> factory)
+        {
+            _cancellation = cancellation;
+            _factory = factory;
+        }
+
+        internal int ReadCount { get; private set; }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            for (var index = 0; index < 1000; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 2) throw new InvalidOperationException("Registry validation continued after cancellation.");
+                yield return _factory();
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }
 #endif

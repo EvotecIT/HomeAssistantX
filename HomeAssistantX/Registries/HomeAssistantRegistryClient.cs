@@ -60,8 +60,7 @@ public sealed class HomeAssistantRegistryClient
     {
         var value = await _webSocket.RequestAsync("config/label_registry/list", null, cancellationToken).ConfigureAwait(false);
         var labels = DeserializeArray<HomeAssistantLabel>(value, "label registry", cancellationToken);
-        foreach (var label in labels) ValidateLabel(label);
-        RequireUniqueIdentities(labels.Select(label => label.LabelId), "label registry");
+        ValidateLabels(labels, cancellationToken);
         return labels;
     }
 
@@ -82,7 +81,7 @@ public sealed class HomeAssistantRegistryClient
             await _webSocket.RequestAsync("config/label_registry/create", payload, cancellationToken).ConfigureAwait(false),
             "created label",
             cancellationToken);
-        ValidateLabel(created);
+        ValidateLabel(created, cancellationToken);
         return created;
     }
 
@@ -102,7 +101,7 @@ public sealed class HomeAssistantRegistryClient
             await _webSocket.RequestAsync("config/label_registry/update", payload, cancellationToken).ConfigureAwait(false),
             "updated label",
             cancellationToken);
-        ValidateLabel(updated);
+        ValidateLabel(updated, cancellationToken);
         if (!string.Equals(updated.LabelId, labelId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("The updated Home Assistant label did not match the requested identifier.");
         return updated;
@@ -124,8 +123,7 @@ public sealed class HomeAssistantRegistryClient
             ["scope"] = scope
         }, cancellationToken).ConfigureAwait(false);
         var categories = DeserializeArray<HomeAssistantCategory>(value, "category registry", cancellationToken);
-        foreach (var category in categories) ValidateCategory(category);
-        RequireUniqueIdentities(categories.Select(category => category.CategoryId), "category registry");
+        ValidateCategories(categories, cancellationToken);
         return categories;
     }
 
@@ -146,7 +144,7 @@ public sealed class HomeAssistantRegistryClient
             await _webSocket.RequestAsync("config/category_registry/create", payload, cancellationToken).ConfigureAwait(false),
             "created category",
             cancellationToken);
-        ValidateCategory(created);
+        ValidateCategory(created, cancellationToken);
         return created;
     }
 
@@ -169,7 +167,7 @@ public sealed class HomeAssistantRegistryClient
             await _webSocket.RequestAsync("config/category_registry/update", payload, cancellationToken).ConfigureAwait(false),
             "updated category",
             cancellationToken);
-        ValidateCategory(updated);
+        ValidateCategory(updated, cancellationToken);
         if (!string.Equals(updated.CategoryId, categoryId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("The updated Home Assistant category did not match the requested identifier.");
         return updated;
@@ -277,27 +275,67 @@ public sealed class HomeAssistantRegistryClient
             cancellationToken: cancellationToken);
     }
 
-    private static void ValidateLabel(HomeAssistantLabel label)
+    private static void ValidateLabel(HomeAssistantLabel label, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(label.LabelId)
             || !string.Equals(label.LabelId, label.LabelId.Trim(), StringComparison.Ordinal)
             || string.IsNullOrWhiteSpace(label.Name))
             throw new HomeAssistantProtocolException("A Home Assistant label did not contain its required identifier and name.");
     }
 
-    private static void ValidateCategory(HomeAssistantCategory category)
+    private static void ValidateCategory(HomeAssistantCategory category, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(category.CategoryId)
             || !string.Equals(category.CategoryId, category.CategoryId.Trim(), StringComparison.Ordinal)
             || string.IsNullOrWhiteSpace(category.Name))
             throw new HomeAssistantProtocolException("A Home Assistant category did not contain its required identifier and name.");
     }
 
-    private static void RequireUniqueIdentities(IEnumerable<string> identities, string registryName)
+    internal static void ValidateLabels(
+        IEnumerable<HomeAssistantLabel> labels,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var identities = new List<string>();
+        foreach (var label in labels)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateLabel(label, cancellationToken);
+            identities.Add(label.LabelId);
+        }
+        RequireUniqueIdentities(identities, "label registry", cancellationToken);
+    }
+
+    internal static void ValidateCategories(
+        IEnumerable<HomeAssistantCategory> categories,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var identities = new List<string>();
+        foreach (var category in categories)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateCategory(category, cancellationToken);
+            identities.Add(category.CategoryId);
+        }
+        RequireUniqueIdentities(identities, "category registry", cancellationToken);
+    }
+
+    private static void RequireUniqueIdentities(
+        IEnumerable<string> identities,
+        string registryName,
+        CancellationToken cancellationToken)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        if (identities.Any(identity => !seen.Add(identity)))
-            throw new HomeAssistantProtocolException("The Home Assistant " + registryName + " response contained a duplicate identifier.");
+        foreach (var identity in identities)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!seen.Add(identity))
+                throw new HomeAssistantProtocolException("The Home Assistant " + registryName + " response contained a duplicate identifier.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private async Task IgnoreResultAsync(

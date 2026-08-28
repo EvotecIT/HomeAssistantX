@@ -28,14 +28,43 @@ public sealed class GetHomeAssistantLabelCommand : HomeAssistantCmdlet
         var labels = await Client.Registries.GetLabelsAsync(CancelToken).ConfigureAwait(false);
         if (filter is not null)
         {
-            var nativeMatches = labels
-                .Where(value => string.Equals(value.LabelId, filter, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
+            HomeAssistantLabel? exactNativeMatch = null;
+            foreach (var value in labels)
+            {
+                CancelToken.ThrowIfCancellationRequested();
+                if (string.Equals(value.LabelId, filter, StringComparison.Ordinal))
+                {
+                    exactNativeMatch = value;
+                    break;
+                }
+            }
+            if (exactNativeMatch is not null)
+            {
+                CancelToken.ThrowIfCancellationRequested();
+                labels = new[] { exactNativeMatch };
+                WriteObject(labels, true);
+                return;
+            }
+
+            var nativeMatches = Filter(labels, value => string.Equals(value.LabelId, filter, StringComparison.OrdinalIgnoreCase));
             labels = nativeMatches.Length > 0
                 ? nativeMatches
-                : labels.Where(value => string.Equals(value.Name, filter, StringComparison.OrdinalIgnoreCase)).ToArray();
+                : Filter(labels, value => string.Equals(value.Name, filter, StringComparison.OrdinalIgnoreCase));
         }
 
+        CancelToken.ThrowIfCancellationRequested();
         WriteObject(labels, true);
+    }
+
+    private HomeAssistantLabel[] Filter(IEnumerable<HomeAssistantLabel> values, Func<HomeAssistantLabel, bool> predicate)
+    {
+        var result = new List<HomeAssistantLabel>();
+        foreach (var value in values)
+        {
+            CancelToken.ThrowIfCancellationRequested();
+            if (predicate(value)) result.Add(value);
+        }
+        CancelToken.ThrowIfCancellationRequested();
+        return result.ToArray();
     }
 }

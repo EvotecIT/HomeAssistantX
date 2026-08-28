@@ -117,6 +117,7 @@ public sealed partial class HomeAssistantRestClient
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return calendars;
     }
 

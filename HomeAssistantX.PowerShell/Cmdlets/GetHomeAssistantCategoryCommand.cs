@@ -32,14 +32,43 @@ public sealed class GetHomeAssistantCategoryCommand : HomeAssistantCmdlet
         var categories = await Client.Registries.GetCategoriesAsync(Scope, CancelToken).ConfigureAwait(false);
         if (filter is not null)
         {
-            var nativeMatches = categories
-                .Where(value => string.Equals(value.CategoryId, filter, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
+            HomeAssistantCategory? exactNativeMatch = null;
+            foreach (var value in categories)
+            {
+                CancelToken.ThrowIfCancellationRequested();
+                if (string.Equals(value.CategoryId, filter, StringComparison.Ordinal))
+                {
+                    exactNativeMatch = value;
+                    break;
+                }
+            }
+            if (exactNativeMatch is not null)
+            {
+                CancelToken.ThrowIfCancellationRequested();
+                categories = new[] { exactNativeMatch };
+                WriteObject(categories, true);
+                return;
+            }
+
+            var nativeMatches = Filter(categories, value => string.Equals(value.CategoryId, filter, StringComparison.OrdinalIgnoreCase));
             categories = nativeMatches.Length > 0
                 ? nativeMatches
-                : categories.Where(value => string.Equals(value.Name, filter, StringComparison.OrdinalIgnoreCase)).ToArray();
+                : Filter(categories, value => string.Equals(value.Name, filter, StringComparison.OrdinalIgnoreCase));
         }
 
+        CancelToken.ThrowIfCancellationRequested();
         WriteObject(categories, true);
+    }
+
+    private HomeAssistantCategory[] Filter(IEnumerable<HomeAssistantCategory> values, Func<HomeAssistantCategory, bool> predicate)
+    {
+        var result = new List<HomeAssistantCategory>();
+        foreach (var value in values)
+        {
+            CancelToken.ThrowIfCancellationRequested();
+            if (predicate(value)) result.Add(value);
+        }
+        CancelToken.ThrowIfCancellationRequested();
+        return result.ToArray();
     }
 }
