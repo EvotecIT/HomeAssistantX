@@ -15,6 +15,13 @@ public abstract class HomeAssistantCmdlet : AsyncPSCmdlet
     [ValidateNotNull]
     public HomeAssistantConnection? Connection { get; set; }
 
+    /// <summary>Captures runspace identity before any derived asynchronous work can resume on a worker thread.</summary>
+    protected override Task BeginProcessingAsync()
+    {
+        _ = CurrentRunspaceId;
+        return base.BeginProcessingAsync();
+    }
+
     protected Guid CurrentRunspaceId => _runspaceId ??= HomeAssistantSession.GetCurrentRunspaceId();
 
     protected HomeAssistantConnection ActiveConnection => Connection ?? HomeAssistantSession.GetRequired(CurrentRunspaceId);
