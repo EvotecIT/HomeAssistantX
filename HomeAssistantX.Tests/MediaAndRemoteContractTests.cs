@@ -519,6 +519,23 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task ExplicitFalseAnnouncementWithoutMediaIsRejectedBeforeOtherDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions
+            {
+                VolumePercent = 35,
+                Announce = false
+            }));
+
+        Assert.Empty(server.ServiceCallBodies);
+    }
+
+    [Fact]
     public async Task CompoundMediaOperationSnapshotsEveryOptionBeforeItsFirstDispatch()
     {
         using var server = new TestHomeAssistantServer();
@@ -811,6 +828,70 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task RemoteAndMediaEnumerablesHonorMidTraversalCancellation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var remoteTarget = HomeAssistantTarget.ForEntity("remote.living_room");
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var values = new CancellationProbeStringList(cancellation);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Controls.Remotes.SendCommandsAsync(remoteTarget, values, cancellationToken: cancellation.Token));
+            Assert.InRange(values.ReadCount, 1, 64);
+        }
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var values = new CancellationProbeStringList(cancellation);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Controls.Remotes.LearnCommandsAsync(
+                    remoteTarget,
+                    new HomeAssistantRemoteLearnOptions { Commands = values },
+                    cancellation.Token));
+            Assert.InRange(values.ReadCount, 1, 64);
+        }
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var values = new CancellationProbeStringList(cancellation);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Controls.Remotes.DeleteCommandsAsync(remoteTarget, values, cancellationToken: cancellation.Token));
+            Assert.InRange(values.ReadCount, 1, 64);
+        }
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var values = new CancellationProbeStringList(cancellation, "media_player.dining");
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Controls.MediaPlayers.JoinAsync(
+                    HomeAssistantTarget.ForEntity("media_player.kitchen"),
+                    values,
+                    cancellation.Token));
+            Assert.InRange(values.ReadCount, 1, 64);
+        }
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var values = new CancellationProbeStringList(cancellation, new string('x', 4096));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Controls.MediaPlayers.SetAsync(
+                    HomeAssistantTarget.ForEntity("media_player.kitchen"),
+                    new HomeAssistantMediaPlayerOptions
+                    {
+                        MediaContentId = "media-source://local/song.mp3",
+                        MediaContentType = "music",
+                        MediaExtra = new Dictionary<string, object?> { ["values"] = values }
+                    },
+                    cancellation.Token));
+            Assert.InRange(values.ReadCount, 1, 64);
+        }
+
+        Assert.Empty(server.ServiceCallBodies);
+    }
+
+    [Fact]
     public async Task DirectSoundModeSelectionNormalizesTheSelector()
     {
         using var server = new TestHomeAssistantServer();
@@ -991,6 +1072,38 @@ public sealed class MediaAndRemoteContractTests
 
         public IEnumerator<string> GetEnumerator()
             => throw new InvalidOperationException("The collection must not be enumerated.");
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+
+    private sealed class CancellationProbeStringList : IReadOnlyList<string>
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private readonly string _value;
+
+        internal CancellationProbeStringList(CancellationTokenSource cancellation, string value = "power")
+        {
+            _cancellation = cancellation;
+            _value = value;
+        }
+
+        internal int ReadCount { get; private set; }
+
+        public int Count => 1000;
+
+        public string this[int index] => _value;
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            for (var index = 0; index < Count; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 64) throw new InvalidOperationException("Enumeration continued after cancellation.");
+                yield return _value;
+            }
+        }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
             => GetEnumerator();

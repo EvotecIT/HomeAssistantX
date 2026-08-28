@@ -89,7 +89,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentException("MediaContentId and MediaContentType must be supplied together.", nameof(options));
         }
 
-        if ((enqueue.HasValue || announce == true || mediaExtra is not null)
+        if ((enqueue.HasValue || announce.HasValue || mediaExtra is not null)
             && string.IsNullOrWhiteSpace(mediaContentId))
         {
             throw new ArgumentException("Play-media options require media content.", nameof(options));
@@ -283,7 +283,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var members = ValidateEntityIds(groupMembers, nameof(groupMembers));
+        var members = ValidateEntityIds(groupMembers, nameof(groupMembers), cancellationToken);
         return CallAsync(
             "join",
             target,
@@ -399,28 +399,37 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
     private static IReadOnlyList<string> ValidateEntityIds(
         IEnumerable<string> entityIds,
-        string parameterName)
+        string parameterName,
+        CancellationToken cancellationToken)
     {
         if (entityIds is null)
         {
             throw new ArgumentNullException(parameterName);
         }
 
-        var values = entityIds.Select(value =>
+        var values = new List<string>();
+        foreach (var value in entityIds)
         {
-            return HomeAssistantEntityId.TryNormalizeForDomain(value, "media_player", out var normalized)
-                ? normalized
-                : null;
-        }).ToArray();
-        if (values.Length == 0
-            || values.Any(value => value is null))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!HomeAssistantEntityId.TryNormalizeForDomain(value, "media_player", out var normalized))
+            {
+                throw new ArgumentException(
+                    "At least one media_player entity identifier is required.",
+                    parameterName);
+            }
+
+            values.Add(normalized);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (values.Count == 0)
         {
             throw new ArgumentException(
                 "At least one media_player entity identifier is required.",
                 parameterName);
         }
 
-        return values!;
+        return values;
     }
 
     private static HomeAssistantMediaPlayerStatus? ToStatus(HomeAssistantState? state)

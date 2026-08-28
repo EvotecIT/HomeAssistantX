@@ -93,8 +93,11 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var values = ValidateCommands(commands, nameof(commands));
+        var values = ValidateCommands(commands, nameof(commands), cancellationToken);
         var device = options?.Device is null ? null : RequiredSelector(options.Device, nameof(options.Device));
+        var repeatCount = options?.RepeatCount;
+        var delay = options?.Delay;
+        var hold = options?.Hold;
         return CallAsync(
             "send_command",
             target,
@@ -106,19 +109,19 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
                     call.WithData("device", device);
                 }
 
-                if (options?.RepeatCount.HasValue == true)
+                if (repeatCount.HasValue)
                 {
-                    call.WithData("num_repeats", options.RepeatCount.Value);
+                    call.WithData("num_repeats", repeatCount.Value);
                 }
 
-                if (options?.Delay.HasValue == true)
+                if (delay.HasValue)
                 {
-                    call.WithData("delay_secs", options.Delay.Value.TotalSeconds);
+                    call.WithData("delay_secs", delay.Value.TotalSeconds);
                 }
 
-                if (options?.Hold.HasValue == true)
+                if (hold.HasValue)
                 {
-                    call.WithData("hold_secs", options.Hold.Value.TotalSeconds);
+                    call.WithData("hold_secs", hold.Value.TotalSeconds);
                 }
             },
             cancellationToken);
@@ -131,29 +134,33 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
     {
         cancellationToken.ThrowIfCancellationRequested();
         var device = options?.Device is null ? null : RequiredSelector(options.Device, nameof(options.Device));
+        var timeout = options?.Timeout;
+        var commandTypeOption = options?.CommandType;
+        var alternative = options?.Alternative;
+        var optionCommands = options?.Commands;
         var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(
-            options?.Timeout,
+            timeout,
             _options.RequestTimeout,
             nameof(options));
 
         string? commandType = null;
-        if (options?.CommandType.HasValue == true)
+        if (commandTypeOption.HasValue)
         {
-            commandType = options.CommandType.Value switch
+            commandType = commandTypeOption.Value switch
             {
                 HomeAssistantRemoteCommandType.Ir => "ir",
                 HomeAssistantRemoteCommandType.Rf => "rf",
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(options.CommandType),
-                    options.CommandType.Value,
+                    commandTypeOption.Value,
                     "Unsupported remote command type.")
             };
         }
 
         IReadOnlyList<string>? commands = null;
-        if (options?.Commands is not null)
+        if (optionCommands is not null)
         {
-            commands = ValidateCommands(options.Commands, nameof(options.Commands));
+            commands = ValidateCommands(optionCommands, nameof(options.Commands), cancellationToken);
         }
 
         return CallAsync(
@@ -176,9 +183,9 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
                     call.WithData("command_type", commandType);
                 }
 
-                if (options?.Alternative.HasValue == true)
+                if (alternative.HasValue)
                 {
-                    call.WithData("alternative", options.Alternative.Value);
+                    call.WithData("alternative", alternative.Value);
                 }
 
                 call.WithData("timeout", learningTimeoutSeconds);
@@ -214,7 +221,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var values = ValidateCommands(commands, nameof(commands));
+        var values = ValidateCommands(commands, nameof(commands), cancellationToken);
         var normalizedDevice = device is null ? null : RequiredSelector(device, nameof(device));
         return CallAsync(
             "delete_command",
@@ -232,15 +239,30 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
 
     private static IReadOnlyList<string> ValidateCommands(
         IEnumerable<string> commands,
-        string parameterName)
+        string parameterName,
+        CancellationToken cancellationToken)
     {
         if (commands is null)
         {
             throw new ArgumentNullException(parameterName);
         }
 
-        var values = commands.ToArray();
-        if (values.Length == 0 || values.Any(string.IsNullOrWhiteSpace))
+        var values = new List<string>();
+        foreach (var command in commands)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                throw new ArgumentException(
+                    "At least one non-empty remote command is required.",
+                    parameterName);
+            }
+
+            values.Add(command);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (values.Count == 0)
         {
             throw new ArgumentException(
                 "At least one non-empty remote command is required.",
