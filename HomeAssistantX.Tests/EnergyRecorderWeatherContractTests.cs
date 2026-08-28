@@ -922,9 +922,9 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
-    [InlineData("unit_of_measurement", "")]
+    [InlineData("unit_of_measurement", " ")]
     [InlineData("unit_of_measurement", " kWh ")]
-    [InlineData("statistics_unit_of_measurement", "")]
+    [InlineData("statistics_unit_of_measurement", " ")]
     [InlineData("statistics_unit_of_measurement", " kWh ")]
     public async Task RecorderMetadataRejectsMalformedReturnedUnits(string propertyName, string unit)
     {
@@ -935,6 +935,25 @@ public sealed class EnergyRecorderWeatherContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
+    }
+
+    [Fact]
+    public async Task RecorderMetadataPreservesHomeAssistantEmptyUnitSentinels()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson =
+                "[{\"statistic_id\":\"sensor.grid_energy\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":true,\"unit_of_measurement\":\"\",\"statistics_unit_of_measurement\":\"\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var listed = Assert.Single(await client.Recorder.ListStatisticsAsync());
+        Assert.Equal(string.Empty, listed.UnitOfMeasurement);
+        Assert.Equal(string.Empty, listed.StatisticsUnitOfMeasurement);
+
+        var metadata = Assert.Single(await client.Recorder.GetStatisticsMetadataAsync());
+        Assert.Equal(string.Empty, metadata.UnitOfMeasurement);
+        Assert.Equal(string.Empty, metadata.StatisticsUnitOfMeasurement);
     }
 
     [Fact]

@@ -286,8 +286,9 @@ public sealed class HomeAssistantRecorderClient
             return false;
         }
 
-        return !string.IsNullOrWhiteSpace(text)
-            && string.Equals(text, text.Trim(), StringComparison.Ordinal);
+        return text.Length == 0
+            || (!string.IsNullOrWhiteSpace(text)
+                && string.Equals(text, text.Trim(), StringComparison.Ordinal));
     }
 
     private static void ValidateStatisticRows(JsonElement value, CancellationToken cancellationToken)
