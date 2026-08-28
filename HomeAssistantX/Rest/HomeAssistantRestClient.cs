@@ -101,9 +101,13 @@ public sealed partial class HomeAssistantRestClient : IDisposable
 
             if (result.TryGetProperty("service_response", out var serviceResponse))
             {
-                response.Response = serviceResponse.Clone();
+                response.Response = await HomeAssistantJson.SnapshotResponseAsync(
+                    serviceResponse,
+                    "The Home Assistant service response could not be snapshotted.",
+                    cancellationToken).ConfigureAwait(false);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             return response;
         }
 
@@ -285,7 +289,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         var serializedBody = body is null
             ? null
-            : JsonSerializer.SerializeToUtf8Bytes(body, HomeAssistantJson.SerializerOptions);
+            : HomeAssistantJson.SerializeToUtf8Bytes(body, cancellationToken);
         for (var attempt = 0; ; attempt++)
         {
             using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, serializedBody, cancellationToken)

@@ -93,9 +93,13 @@ public sealed class HomeAssistantServiceClient
 
         if (result.TryGetProperty("response", out var serviceResponse))
         {
-            response.Response = serviceResponse.Clone();
+            response.Response = await HomeAssistantJson.SnapshotResponseAsync(
+                serviceResponse,
+                "The Home Assistant service response could not be snapshotted.",
+                cancellationToken).ConfigureAwait(false);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return response;
     }
 

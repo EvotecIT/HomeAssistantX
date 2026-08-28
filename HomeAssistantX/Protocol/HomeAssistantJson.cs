@@ -31,6 +31,45 @@ internal static class HomeAssistantJson
         return value.Clone();
     }
 
+    /// <summary>Snapshots a response DOM with cancellation checks throughout traversal.</summary>
+    internal static async Task<JsonElement> SnapshotResponseAsync(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        JsonDocument? document = null;
+        var ownershipTransferred = false;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                WriteJsonElement(writer, value, cancellationToken);
+                writer.Flush();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            stream.Position = 0;
+            document = await JsonDocument.ParseAsync(
+                stream,
+                default,
+                cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            ownershipTransferred = true;
+            return document.RootElement;
+        }
+        catch (JsonException ex)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new HomeAssistantProtocolException(failureMessage, ex);
+        }
+        finally
+        {
+            if (!ownershipTransferred) document?.Dispose();
+        }
+    }
+
     /// <summary>Snapshots an arbitrary dictionary as a JSON object before asynchronous dispatch.</summary>
     internal static IReadOnlyDictionary<string, object?>? FreezeObject(
         IReadOnlyDictionary<string, object?>? value,
@@ -107,12 +146,25 @@ internal static class HomeAssistantJson
         }
     }
 
+    internal static byte[] SerializeToUtf8Bytes(
+        object? value,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var stream = new MemoryStream();
+        var options = CreateCancellationAwareOptions(cancellationToken);
+        JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
+        return stream.ToArray();
+    }
+
     private static JsonDocument SerializeSnapshot(object? value, CancellationToken cancellationToken)
     {
         using var stream = new MemoryStream();
-        var options = new JsonSerializerOptions(SerializerOptions);
-        options.Converters.Insert(0, new CancellationAwareJsonDocumentConverter(cancellationToken));
-        options.Converters.Insert(0, new CancellationAwareJsonElementConverter(cancellationToken));
+        var options = CreateCancellationAwareOptions(cancellationToken);
         JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
             .ConfigureAwait(false)
             .GetAwaiter()
@@ -123,6 +175,14 @@ internal static class HomeAssistantJson
             .ConfigureAwait(false)
             .GetAwaiter()
             .GetResult();
+    }
+
+    private static JsonSerializerOptions CreateCancellationAwareOptions(CancellationToken cancellationToken)
+    {
+        var options = new JsonSerializerOptions(SerializerOptions);
+        options.Converters.Insert(0, new CancellationAwareJsonDocumentConverter(cancellationToken));
+        options.Converters.Insert(0, new CancellationAwareJsonElementConverter(cancellationToken));
+        return options;
     }
 
     private static void WriteJsonElement(

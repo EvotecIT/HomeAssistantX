@@ -124,6 +124,18 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
+    public void TransportSerializationStopsCallerGraphTraversalAfterCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var values = new CancellationProbeEnumerable(cancellation);
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantJson.SerializeToUtf8Bytes(values, cancellation.Token));
+
+        Assert.InRange(values.ReadCount, 1, 16);
+    }
+
+    [Fact]
     public void JsonSnapshotHelpersHonorCancellationForJsonDomValues()
     {
         using var document = JsonDocument.Parse("[1]");
@@ -149,6 +161,21 @@ public sealed class ProtocolResponseContractTests
                     "Value",
                     nestedCancellation.Token));
         }
+    }
+
+    [Fact]
+    public async Task ResponseSnapshotStopsLargeJsonTraversalAfterCancellation()
+    {
+        var json = "[" + string.Join(",", Enumerable.Repeat("0", 1_000_000)) + "]";
+        using var document = JsonDocument.Parse(json);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantJson.SnapshotResponseAsync(
+                document.RootElement,
+                "The response could not be snapshotted.",
+                cancellation.Token));
     }
 
     [Fact]

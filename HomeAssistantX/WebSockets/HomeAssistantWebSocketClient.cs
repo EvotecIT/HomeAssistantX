@@ -637,7 +637,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
 
     private static Task SendJsonAsync(ClientWebSocket socket, object payload, CancellationToken cancellationToken)
     {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, HomeAssistantJson.SerializerOptions);
+        var bytes = HomeAssistantJson.SerializeToUtf8Bytes(payload, cancellationToken);
         return socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
     }
 
