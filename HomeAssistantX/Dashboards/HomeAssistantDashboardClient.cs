@@ -112,7 +112,7 @@ public sealed class HomeAssistantDashboardClient
         foreach (var dashboard in dashboards)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ValidateListedDashboard(dashboard);
+            ValidateListedDashboard(dashboard, cancellationToken);
             if (!urlPaths.Add(dashboard.UrlPath)
                 || (!string.IsNullOrEmpty(dashboard.Id) && !storageIds.Add(dashboard.Id)))
             {
@@ -125,7 +125,7 @@ public sealed class HomeAssistantDashboardClient
     public async Task<HomeAssistantDashboard> CreateDashboardAsync(HomeAssistantDashboardCreate create, CancellationToken cancellationToken = default)
     {
         if (create is null) throw new ArgumentNullException(nameof(create));
-        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(create.UrlPath, create.AllowSingleWord, out var urlPath))
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(create.UrlPath, create.AllowSingleWord, out var urlPath, cancellationToken))
             throw new ArgumentException("Dashboard URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens; a hyphen is required unless AllowSingleWord is enabled.", nameof(create));
         var title = Require(create.Title, nameof(create.Title));
         var payload = new Dictionary<string, object?>
@@ -187,7 +187,7 @@ public sealed class HomeAssistantDashboardClient
     {
         var payload = new Dictionary<string, object?>();
         if (force) payload["force"] = true;
-        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
+        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath), cancellationToken);
         var value = await RequestJsonAsync(
             "lovelace/config",
             payload,
@@ -212,7 +212,7 @@ public sealed class HomeAssistantDashboardClient
                 "Lovelace configuration",
                 cancellationToken)
         };
-        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
+        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath), cancellationToken);
         return RequestJsonAsync(
             "lovelace/config/save",
             payload,
@@ -223,7 +223,7 @@ public sealed class HomeAssistantDashboardClient
     public Task<JsonElement> DeleteConfigurationAsync(string? urlPath = null, CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, object?>();
-        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath));
+        if (urlPath is not null) payload["url_path"] = RequireConfigurationUrlPath(urlPath, nameof(urlPath), cancellationToken);
         return RequestJsonAsync(
             "lovelace/config/delete",
             payload,
@@ -330,7 +330,7 @@ public sealed class HomeAssistantDashboardClient
             value,
             "The dashboard response could not be decoded.",
             cancellationToken: cancellationToken);
-        ValidateStorageDashboard(dashboard);
+        ValidateStorageDashboard(dashboard, cancellationToken);
         RequireDashboardVisibility(value, "A dashboard mutation response did not contain its required visibility fields.");
         if (expectedDashboardId is not null && !string.Equals(dashboard.Id, expectedDashboardId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested identifier.");
@@ -400,9 +400,9 @@ public sealed class HomeAssistantDashboardClient
         }
     }
 
-    private static void ValidateListedDashboard(HomeAssistantDashboard dashboard)
+    private static void ValidateListedDashboard(HomeAssistantDashboard dashboard, CancellationToken cancellationToken)
     {
-        dashboard.UrlPath = RequireResponseUrlPath(dashboard.UrlPath, "A dashboard did not contain a canonical URL path.");
+        dashboard.UrlPath = RequireResponseUrlPath(dashboard.UrlPath, "A dashboard did not contain a canonical URL path.", cancellationToken);
         if (string.IsNullOrWhiteSpace(dashboard.Title)
             || string.IsNullOrWhiteSpace(dashboard.Mode))
             throw new HomeAssistantProtocolException("A dashboard did not contain its required fields.");
@@ -456,9 +456,9 @@ public sealed class HomeAssistantDashboardClient
         => value.TryGetProperty(propertyName, out var property)
             && property.ValueKind is JsonValueKind.True or JsonValueKind.False;
 
-    private static void ValidateStorageDashboard(HomeAssistantDashboard dashboard)
+    private static void ValidateStorageDashboard(HomeAssistantDashboard dashboard, CancellationToken cancellationToken)
     {
-        ValidateListedDashboard(dashboard);
+        ValidateListedDashboard(dashboard, cancellationToken);
         if (!string.Equals(dashboard.Mode, "storage", StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response was not a storage dashboard.");
     }
@@ -495,16 +495,16 @@ public sealed class HomeAssistantDashboardClient
         return value.Trim();
     }
 
-    private static string RequireConfigurationUrlPath(string? value, string parameterName)
+    private static string RequireConfigurationUrlPath(string? value, string parameterName, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(value, allowSingleWord: true, out var normalized))
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(value, true, out var normalized, cancellationToken))
             throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", parameterName);
         return normalized;
     }
 
-    private static string RequireResponseUrlPath(string? value, string failureMessage)
+    private static string RequireResponseUrlPath(string? value, string failureMessage, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(value, allowSingleWord: true, out var normalized)
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(value, true, out var normalized, cancellationToken)
             || !string.Equals(value, normalized, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException(failureMessage);
         return normalized;

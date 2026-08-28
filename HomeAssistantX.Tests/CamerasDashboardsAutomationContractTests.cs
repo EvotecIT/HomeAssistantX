@@ -270,6 +270,27 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
     }
 
+    [Fact]
+    public async Task DashboardSlugValidationObservesCancellationDuringTraversal()
+    {
+        var longValue = "house-" + new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Run(() =>
+        {
+            started.TrySetResult(true);
+            return HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(
+                longValue,
+                allowSingleWord: false,
+                out _,
+                cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
     [Theory]
     [InlineData("{\"title\":\"Music\",\"media_content_type\":\"library\",\"can_play\":true,\"children\":[]}")]
     [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"can_expand\":true,\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"can_play\":true,\"children\":[]}]}")]
@@ -438,6 +459,11 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("//other.example/media")]
     [InlineData("http://[")]
     [InlineData("relative/media")]
+    [InlineData("file:///var/media/file.mp3")]
+    [InlineData("data:audio/mpeg;base64,AA==")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("ftp://provider.example/media/file.mp3")]
+    [InlineData("https://user:secret@provider.example/media/file.mp3")]
     public async Task MediaResolveRejectsMalformedOrNoncanonicalUrls(string url)
     {
         using var server = new TestHomeAssistantServer

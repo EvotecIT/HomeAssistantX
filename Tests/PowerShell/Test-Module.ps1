@@ -767,6 +767,7 @@ try {
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain SENSOR -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain ' ' -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.kitchen -KeepDays -1 -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantCamera camera.front -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantCamera camera.Front -PreloadStream $true -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ConfigurationJson '[]' -WhatIf -ErrorAction Stop }

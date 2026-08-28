@@ -59,7 +59,7 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
         switch (ParameterSetName)
         {
             case CreateSet:
-                if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, AllowSingleWord, out var createUrlPath))
+                if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, AllowSingleWord, out var createUrlPath, CancelToken))
                     throw new ArgumentException("Dashboard URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens; a hyphen is required unless AllowSingleWord is enabled.", nameof(UrlPath));
                 var createTitle = Require(Title, nameof(Title));
                 var createIcon = Icon is null ? null : RequireIcon(Icon, nameof(Icon));
@@ -105,7 +105,7 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                         CancelToken);
                     string? configurationUrlPath = null;
                     if (UrlPath is not null
-                        && !HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, allowSingleWord: true, out configurationUrlPath))
+                        && !HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, true, out configurationUrlPath, CancelToken))
                         throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", nameof(UrlPath));
                     target = configurationUrlPath ?? "default"; action = "Replace Home Assistant dashboard configuration";
                     if (!ShouldProcess(target, action)) return;

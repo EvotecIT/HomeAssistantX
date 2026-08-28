@@ -23,7 +23,7 @@ public sealed class RemoveHomeAssistantDashboardCommand : HomeAssistantCmdlet
             case ConfigurationSet:
                 string? urlPath = null;
                 if (UrlPath is not null
-                    && !HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, allowSingleWord: true, out urlPath))
+                    && !HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, true, out urlPath, CancelToken))
                     throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", nameof(UrlPath));
                 if (ShouldProcess(urlPath ?? "default", "Delete Home Assistant dashboard configuration")) await Client.Dashboards.DeleteConfigurationAsync(urlPath, CancelToken).ConfigureAwait(false);
                 break;

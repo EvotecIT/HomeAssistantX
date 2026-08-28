@@ -246,7 +246,9 @@ public sealed class HomeAssistantMediaBrowserClient
 
         cancellationToken.ThrowIfCancellationRequested();
         var valid = Uri.TryCreate(value, UriKind.Absolute, out var absolute)
-            && absolute.IsWellFormedOriginalString();
+            && absolute.IsWellFormedOriginalString()
+            && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps)
+            && string.IsNullOrEmpty(absolute.UserInfo);
         cancellationToken.ThrowIfCancellationRequested();
         return valid;
     }
