@@ -110,7 +110,10 @@ internal static class HomeAssistantJson
     private static JsonDocument SerializeSnapshot(object? value, CancellationToken cancellationToken)
     {
         using var stream = new MemoryStream();
-        JsonSerializer.SerializeAsync(stream, value, SerializerOptions, cancellationToken)
+        var options = new JsonSerializerOptions(SerializerOptions);
+        options.Converters.Insert(0, new CancellationAwareJsonDocumentConverter(cancellationToken));
+        options.Converters.Insert(0, new CancellationAwareJsonElementConverter(cancellationToken));
+        JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
             .ConfigureAwait(false)
             .GetAwaiter()
             .GetResult();
@@ -120,6 +123,86 @@ internal static class HomeAssistantJson
             .ConfigureAwait(false)
             .GetAwaiter()
             .GetResult();
+    }
+
+    private static void WriteJsonElement(
+        Utf8JsonWriter writer,
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in value.EnumerateObject())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    writer.WritePropertyName(property.Name);
+                    WriteJsonElement(writer, property.Value, cancellationToken);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in value.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    WriteJsonElement(writer, item, cancellationToken);
+                }
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                writer.WriteStringValue(value.GetString());
+                break;
+            case JsonValueKind.Number:
+                writer.WriteRawValue(value.GetRawText(), skipInputValidation: true);
+                break;
+            case JsonValueKind.True:
+                writer.WriteBooleanValue(true);
+                break;
+            case JsonValueKind.False:
+                writer.WriteBooleanValue(false);
+                break;
+            case JsonValueKind.Null:
+                writer.WriteNullValue();
+                break;
+            default:
+                throw new JsonException("Undefined JSON values cannot be snapshotted.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private sealed class CancellationAwareJsonElementConverter : JsonConverter<JsonElement>
+    {
+        private readonly CancellationToken _cancellationToken;
+
+        internal CancellationAwareJsonElementConverter(CancellationToken cancellationToken)
+        {
+            _cancellationToken = cancellationToken;
+        }
+
+        public override JsonElement Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            => throw new NotSupportedException();
+
+        public override void Write(Utf8JsonWriter writer, JsonElement value, JsonSerializerOptions options)
+            => WriteJsonElement(writer, value, _cancellationToken);
+    }
+
+    private sealed class CancellationAwareJsonDocumentConverter : JsonConverter<JsonDocument>
+    {
+        private readonly CancellationToken _cancellationToken;
+
+        internal CancellationAwareJsonDocumentConverter(CancellationToken cancellationToken)
+        {
+            _cancellationToken = cancellationToken;
+        }
+
+        public override JsonDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            => throw new NotSupportedException();
+
+        public override void Write(Utf8JsonWriter writer, JsonDocument value, JsonSerializerOptions options)
+            => WriteJsonElement(writer, value.RootElement, _cancellationToken);
     }
 
     /// <summary>Parses a Home Assistant response while preserving the classified protocol-failure contract.</summary>

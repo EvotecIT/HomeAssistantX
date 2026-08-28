@@ -123,6 +123,35 @@ public sealed class ProtocolResponseContractTests
         Assert.InRange(objectValues.ReadCount, 1, 16);
     }
 
+    [Fact]
+    public void JsonSnapshotHelpersPollCancellationWhileCopyingJsonDomValues()
+    {
+        using var document = JsonDocument.Parse(
+            "[" + string.Join(",", Enumerable.Range(0, 250_000)) + "]");
+
+        using (var rootCancellation = new CancellationTokenSource())
+        {
+            rootCancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+            Assert.ThrowsAny<OperationCanceledException>(() =>
+                HomeAssistantJson.FreezeValue(
+                    document.RootElement,
+                    "value",
+                    "Value",
+                    rootCancellation.Token));
+        }
+
+        using (var nestedCancellation = new CancellationTokenSource())
+        {
+            nestedCancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+            Assert.ThrowsAny<OperationCanceledException>(() =>
+                HomeAssistantJson.FreezeObject(
+                    new Dictionary<string, object?> { ["value"] = document },
+                    "value",
+                    "Value",
+                    nestedCancellation.Token));
+        }
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]
