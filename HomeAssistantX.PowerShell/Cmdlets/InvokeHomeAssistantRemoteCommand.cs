@@ -85,12 +85,15 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
             throw new ArgumentOutOfRangeException(nameof(CommandType), CommandType.Value, "Unsupported remote command type.");
         }
 
+        CancelToken.ThrowIfCancellationRequested();
+        var commands = Command?.ToArray();
+        CancelToken.ThrowIfCancellationRequested();
         ValidateFiniteDuration(DelaySeconds, nameof(DelaySeconds), allowZero: true);
         ValidateFiniteDuration(HoldSeconds, nameof(HoldSeconds), allowZero: true);
         ValidateFiniteDuration(TimeoutSeconds, nameof(TimeoutSeconds), allowZero: false);
         var activity = Activity is null ? null : RequireSelector(Activity, nameof(Activity));
         var remoteDevice = RemoteDevice is null ? null : RequireSelector(RemoteDevice, nameof(RemoteDevice));
-        ValidateShape();
+        ValidateShape(commands);
         var target = await ResolveTargetAsync("remote").ConfigureAwait(false);
         var learningTimeout = ToDuration(TimeoutSeconds);
         var learningResponseMargin = TimeSpan.FromSeconds(1);
@@ -130,7 +133,7 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
                 target.Target, HomeAssistantPowerAction.Toggle, activity, CancelToken).ConfigureAwait(false),
             HomeAssistantRemoteAction.SendCommand => await Client.Controls.Remotes.SendCommandsAsync(
                 target.Target,
-                Command!,
+                commands!,
                 new HomeAssistantRemoteSendOptions
                 {
                     Device = remoteDevice,
@@ -144,14 +147,14 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
                 new HomeAssistantRemoteLearnOptions
                 {
                     Device = remoteDevice,
-                    Commands = Command,
+                    Commands = commands,
                     CommandType = CommandType,
                     Alternative = Alternative,
                     Timeout = learningTimeout
                 },
                 CancelToken).ConfigureAwait(false),
             HomeAssistantRemoteAction.DeleteCommand => await Client.Controls.Remotes.DeleteCommandsAsync(
-                target.Target, Command!, remoteDevice, CancelToken).ConfigureAwait(false),
+                target.Target, commands!, remoteDevice, CancelToken).ConfigureAwait(false),
             _ => throw new ArgumentOutOfRangeException(nameof(Action), Action, "Unsupported remote action.")
         };
         WriteObject(result);
@@ -164,10 +167,10 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
         return value;
     }
 
-    private void ValidateShape()
+    private void ValidateShape(IReadOnlyList<string>? commands)
     {
-        var hasCommands = Command is not null;
-        if (hasCommands && (Command!.Length == 0 || Command.Any(string.IsNullOrWhiteSpace)))
+        var hasCommands = commands is not null;
+        if (hasCommands && (commands!.Count == 0 || commands.Any(string.IsNullOrWhiteSpace)))
         {
             throw new ArgumentException("Command must contain at least one non-empty value.", nameof(Command));
         }
