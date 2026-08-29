@@ -4,12 +4,12 @@ namespace HomeAssistantX.Calendars;
 
 internal static class HomeAssistantRecurrenceRuleValidator
 {
-    private static readonly HashSet<string> SupportedFrequencies = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> SupportedFrequencies = new(StringComparer.OrdinalIgnoreCase)
     {
         "DAILY", "WEEKLY", "MONTHLY", "YEARLY"
     };
 
-    private static readonly HashSet<string> Weekdays = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> Weekdays = new(StringComparer.OrdinalIgnoreCase)
     {
         "MO", "TU", "WE", "TH", "FR", "SA", "SU"
     };
@@ -21,7 +21,7 @@ internal static class HomeAssistantRecurrenceRuleValidator
             throw Invalid(parameterName, "A recurrence rule cannot be empty.");
         }
 
-        var clauses = new Dictionary<string, string>(StringComparer.Ordinal);
+        var clauses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var clause in value.Split(';'))
         {
             var separator = clause.IndexOf('=');
@@ -50,7 +50,7 @@ internal static class HomeAssistantRecurrenceRuleValidator
 
         foreach (var clause in clauses)
         {
-            ValidateClause(clause.Key, clause.Value, isAllDay, parameterName);
+            ValidateClause(clause.Key.ToUpperInvariant(), clause.Value, isAllDay, parameterName);
         }
 
         if (clauses.ContainsKey("COUNT") && clauses.ContainsKey("UNTIL"))
@@ -59,12 +59,13 @@ internal static class HomeAssistantRecurrenceRuleValidator
         }
 
         if (clauses.ContainsKey("BYSETPOS")
-            && !clauses.Keys.Any(name => name.StartsWith("BY", StringComparison.Ordinal) && name != "BYSETPOS"))
+            && !clauses.Keys.Any(name => name.StartsWith("BY", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(name, "BYSETPOS", StringComparison.OrdinalIgnoreCase)))
         {
             throw Invalid(parameterName, "BYSETPOS requires at least one other BY rule.");
         }
 
-        ValidateFrequencyCombinations(clauses, frequency, parameterName);
+        ValidateFrequencyCombinations(clauses, frequency.ToUpperInvariant(), parameterName);
     }
 
     private static void ValidateFrequencyCombinations(

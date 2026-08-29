@@ -10,6 +10,7 @@ public sealed class CalendarRecurrenceContractTests
     [InlineData("FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20261231")]
     [InlineData("FREQ=YEARLY;BYMONTH=3;BYDAY=2SU;WKST=MO")]
     [InlineData("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1")]
+    [InlineData("freq=weekly;interval=2;byday=mo,we,fr;count=10")]
     public void CalendarInputAcceptsSupportedWellFormedRecurrenceRules(string rule)
     {
         var input = HomeAssistantCalendarEventInput.AllDay(
@@ -23,7 +24,6 @@ public sealed class CalendarRecurrenceContractTests
     }
 
     [Theory]
-    [InlineData("freq=weekly")]
     [InlineData("FREQ=WEEKLY;COUNT=abc")]
     [InlineData("FREQ=WEEKLY;FREQ=DAILY")]
     [InlineData("FREQ=WEEKLY;INTERVAL=0")]

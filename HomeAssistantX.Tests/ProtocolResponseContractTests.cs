@@ -6,6 +6,7 @@ using HomeAssistantX.Calendars;
 using HomeAssistantX.Registries;
 using HomeAssistantX.States;
 using HomeAssistantX.Rest;
+using HomeAssistantX.Notifications;
 
 namespace HomeAssistantX.Tests;
 
@@ -197,6 +198,24 @@ public sealed class ProtocolResponseContractTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             JsonSerializer.DeserializeAsync<HomeAssistantCalendarEvent[]>(
+                    stream,
+                    HomeAssistantJson.CreateCancellationAwareResponseOptions(cancellation.Token),
+                    cancellation.Token)
+                .AsTask());
+    }
+
+    [Fact]
+    public async Task GenericExtensionProjectionStopsAfterCancellation()
+    {
+        var json = "[{\"notification_id\":\"notice\",\"message\":\"Ready\",\"provider_payload\":["
+            + string.Join(",", Enumerable.Repeat("0", 1_000_000))
+            + "]}]";
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json), writable: false);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            JsonSerializer.DeserializeAsync<HomeAssistantPersistentNotification[]>(
                     stream,
                     HomeAssistantJson.CreateCancellationAwareResponseOptions(cancellation.Token),
                     cancellation.Token)
