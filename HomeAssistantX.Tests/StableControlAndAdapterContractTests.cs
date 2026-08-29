@@ -1491,6 +1491,7 @@ public sealed class StableControlAndAdapterContractTests
             webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate(
                 "1.0", "CasaRay", "Evotec", "Windows")
             {
+                OperatingSystemVersion = new string(' ', 1_000_000),
                 AppData = cyclic
             }, cancellation.Token));
         var registration = RegistrationRequest(false);

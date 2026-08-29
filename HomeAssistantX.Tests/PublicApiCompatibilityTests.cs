@@ -15,6 +15,7 @@ namespace HomeAssistantX.Tests;
 
 public sealed class PublicApiCompatibilityTests
 {
+    private const TypeAttributes SerializableTypeMetadataFlag = (TypeAttributes)0x00002000;
     [Fact]
     public void ParameterFormatterPreservesRefOutAndInDirections()
     {
@@ -76,6 +77,19 @@ public sealed class PublicApiCompatibilityTests
         Assert.NotEqual(
             FormatTypeDeclarationName(typeof(CollisionOwner<>.Nested<>)),
             FormatTypeDeclarationName(typeof(CollisionOwner<,>.Nested)));
+    }
+
+    [Fact]
+    public void FormatterPreservesSerializableDispatchAndAssemblyIdentityContracts()
+    {
+        Assert.Equal("serializable ", SerializableContract(typeof(SerializableFixture)));
+        Assert.Equal("dispid(42) ", DispIdContract(
+            typeof(DispatchFixture).GetMethod(nameof(DispatchFixture.Invoke))!));
+        Assert.Equal("dispid(43) ", DispIdContract(
+            typeof(DispatchFixture).GetProperty(nameof(DispatchFixture.Value))!));
+        Assert.Contains(
+            FormatAssemblyContracts(typeof(HomeAssistantClient).Assembly),
+            value => value.StartsWith("A assembly-identity(\"HomeAssistantX, Version=", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -831,7 +845,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -862,7 +876,7 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(eventInfo) + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name + " {" + FormatEventAccessors(eventInfo) + "}");
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(eventInfo) + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + DispIdContract(eventInfo) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name + " {" + FormatEventAccessors(eventInfo) + "}");
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -874,6 +888,7 @@ public sealed class PublicApiCompatibilityTests
     private static IEnumerable<string> FormatAssemblyContracts(Assembly assembly)
     {
         var contracts = new SortedSet<string>(StringComparer.Ordinal);
+        contracts.Add("A assembly-identity(" + FormatDefault(assembly.FullName) + ")");
         foreach (var forwardedType in GetForwardedTypes(assembly).OrderBy(FormatType, StringComparer.Ordinal))
         {
             contracts.Add("A type-forwarded-to(" + FormatType(forwardedType)
@@ -1052,7 +1067,7 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => DynamicallyAccessedMembersContract(argument) + argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + DispIdContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static string SpecialNameContract(MemberInfo member)
@@ -1064,6 +1079,19 @@ public sealed class PublicApiCompatibilityTests
             EventInfo eventInfo when eventInfo.IsSpecialName => "special-name ",
             _ => string.Empty
         };
+
+    private static string DispIdContract(MemberInfo member)
+    {
+        var attribute = member.GetCustomAttribute<DispIdAttribute>(inherit: false);
+        return attribute is null
+            ? string.Empty
+            : "dispid(" + attribute.Value.ToString(CultureInfo.InvariantCulture) + ") ";
+    }
+
+    private static string SerializableContract(Type type)
+        => (type.Attributes & SerializableTypeMetadataFlag) != 0
+            ? "serializable "
+            : string.Empty;
 
     private static string DefaultMemberContract(Type type)
     {
@@ -1244,7 +1272,7 @@ public sealed class PublicApiCompatibilityTests
             getter,
             setter)
             + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
-            + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter)
+            + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
@@ -1389,6 +1417,22 @@ public sealed class PublicApiCompatibilityTests
     [ClassInterface(ClassInterfaceType.AutoDispatch)]
     private sealed class ComClassFixture
     {
+    }
+
+    [Serializable]
+    private sealed class SerializableFixture
+    {
+    }
+
+    private sealed class DispatchFixture
+    {
+        [DispId(43)]
+        public int Value { get; set; }
+
+        [DispId(42)]
+        public void Invoke()
+        {
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -2008,7 +2052,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
     }
 
     private static string FormatFieldType(FieldInfo field)

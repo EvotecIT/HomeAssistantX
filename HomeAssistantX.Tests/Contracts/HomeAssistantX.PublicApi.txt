@@ -1,3 +1,4 @@
+A assembly-identity("HomeAssistantX, Version=0.1.0.0, Culture=neutral, PublicKeyToken=null")
 T sealed class HomeAssistantX.Authentication.HomeAssistantOAuthClient : System.IDisposable
   C special-name HomeAssistantX.Authentication.HomeAssistantOAuthClient(System.Uri baseUri, System.Net.Http.HttpClient? httpClient = null)
   M instance System.Uri BuildAuthorizationUri(System.Uri clientId, System.Uri redirectUri, System.String state)

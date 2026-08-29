@@ -163,9 +163,13 @@ public sealed class HomeAssistantMobileAppRegistrationUpdate
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyDictionary<string, object?>? AppData { get; set; }
 
-    internal void Validate()
+    internal string? CaptureValidatedOperatingSystemVersion(CancellationToken cancellationToken)
     {
-        Optional(OperatingSystemVersion, nameof(OperatingSystemVersion));
+        cancellationToken.ThrowIfCancellationRequested();
+        var value = OperatingSystemVersion;
+        Optional(value, nameof(OperatingSystemVersion), cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return value;
     }
 
     private static string Required(string value, string name)
@@ -174,9 +178,21 @@ public sealed class HomeAssistantMobileAppRegistrationUpdate
         return value;
     }
 
-    private static void Optional(string? value, string name)
+    private static void Optional(
+        string? value,
+        string name,
+        CancellationToken cancellationToken)
     {
-        if (value is not null && string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A supplied value cannot be empty.", name);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null) return;
+        var found = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            found |= !char.IsWhiteSpace(value[index]);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!found) throw new ArgumentException("A supplied value cannot be empty.", name);
     }
 }
 
