@@ -129,7 +129,7 @@ public sealed class HomeAssistantMediaBrowserClient
         if (value.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("media_class", out var mediaClass)
             || mediaClass.ValueKind != JsonValueKind.String
-            || !IsCanonicalMediaClass(mediaClass.GetString())
+            || !IsCanonicalMediaClass(mediaClass.GetString(), cancellationToken)
             || !value.TryGetProperty("media_content_id", out var mediaContentId)
             || mediaContentId.ValueKind != JsonValueKind.String
             || !value.TryGetProperty("media_content_type", out var mediaContentType)
@@ -149,12 +149,12 @@ public sealed class HomeAssistantMediaBrowserClient
         if (value.TryGetProperty("children_media_class", out var childrenMediaClass)
             && childrenMediaClass.ValueKind != JsonValueKind.Null
             && (childrenMediaClass.ValueKind != JsonValueKind.String
-                || !IsCanonicalMediaClass(childrenMediaClass.GetString())))
+                || !IsCanonicalMediaClass(childrenMediaClass.GetString(), cancellationToken)))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
 
         if ((canPlay.GetBoolean() || canExpand.GetBoolean() || canSearch.GetBoolean())
-            && (!IsCanonicalActionableSelector(mediaContentId.GetString())
-                || !IsCanonicalActionableSelector(mediaContentType.GetString())))
+            && (!IsCanonicalActionableSelector(mediaContentId.GetString(), cancellationToken)
+                || !IsCanonicalActionableSelector(mediaContentType.GetString(), cancellationToken)))
             throw new HomeAssistantProtocolException("An actionable media response contained a noncanonical selector.");
 
         if (!value.TryGetProperty("children", out var children)) return;
@@ -172,15 +172,15 @@ public sealed class HomeAssistantMediaBrowserClient
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(item.Title))
+        if (!HasNonWhitespace(item.Title, cancellationToken))
             throw new HomeAssistantProtocolException("The media response omitted an item title.");
-        if (!IsCanonicalMediaClass(item.MediaClass))
+        if (!IsCanonicalMediaClass(item.MediaClass, cancellationToken))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical media class.");
-        if (item.ChildrenMediaClass is not null && !IsCanonicalMediaClass(item.ChildrenMediaClass))
+        if (item.ChildrenMediaClass is not null && !IsCanonicalMediaClass(item.ChildrenMediaClass, cancellationToken))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
         if ((item.CanPlay || item.CanExpand || item.CanSearch)
-            && (!IsCanonicalActionableSelector(item.MediaContentId)
-                || !IsCanonicalActionableSelector(item.MediaContentType)))
+            && (!IsCanonicalActionableSelector(item.MediaContentId, cancellationToken)
+                || !IsCanonicalActionableSelector(item.MediaContentType, cancellationToken)))
             throw new HomeAssistantProtocolException("The media response contained an item without a media content identifier or type.");
         if (item.Children is null)
             throw new HomeAssistantProtocolException("The media response contained a null children collection.");
@@ -189,8 +189,7 @@ public sealed class HomeAssistantMediaBrowserClient
             foreach (var mediaClass in item.SearchMediaClasses)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (string.IsNullOrWhiteSpace(mediaClass)
-                    || !string.Equals(mediaClass, mediaClass.Trim(), StringComparison.Ordinal))
+                if (!IsCanonicalTrimmed(mediaClass, cancellationToken))
                     throw new HomeAssistantProtocolException("The media response contained a noncanonical search media class.");
             }
         }
@@ -206,10 +205,8 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
     }
 
-    private static bool IsCanonicalMediaClass(string? value)
-        => value is string mediaClass
-            && !string.IsNullOrWhiteSpace(mediaClass)
-            && string.Equals(mediaClass, mediaClass.Trim(), StringComparison.Ordinal);
+    private static bool IsCanonicalMediaClass(string? value, CancellationToken cancellationToken)
+        => IsCanonicalTrimmed(value, cancellationToken);
 
     internal static bool IsValidResolvedUrl(
         string? value,
@@ -253,10 +250,8 @@ public sealed class HomeAssistantMediaBrowserClient
         return valid;
     }
 
-    private static bool IsCanonicalActionableSelector(string? value)
-        => value is not null
-            && !string.IsNullOrWhiteSpace(value)
-            && string.Equals(value, value.Trim(), StringComparison.Ordinal);
+    private static bool IsCanonicalActionableSelector(string? value, CancellationToken cancellationToken)
+        => IsCanonicalTrimmed(value, cancellationToken);
 
     private static Dictionary<string, object?> PlayerPayload(
         string entityId,
@@ -301,9 +296,8 @@ public sealed class HomeAssistantMediaBrowserClient
         foreach (var mediaClass in mediaClasses)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(mediaClass))
-                throw new ArgumentException("Media classes cannot be empty.", nameof(mediaClasses));
-            var normalized = mediaClass.Trim();
+            var normalized = Require(mediaClass, nameof(mediaClasses), cancellationToken);
+            ObserveString(normalized, cancellationToken);
             if (seen.Add(normalized)) values.Add(normalized);
         }
 
@@ -345,6 +339,37 @@ public sealed class HomeAssistantMediaBrowserClient
         return start == 0 && end == value.Length - 1
             ? value
             : value.Substring(start, end - start + 1);
+    }
+
+    private static bool HasNonWhitespace(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null) return false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (!char.IsWhiteSpace(value[index])) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
+    private static bool IsCanonicalTrimmed(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return value is not null
+            && value.Length != 0
+            && !char.IsWhiteSpace(value[0])
+            && !char.IsWhiteSpace(value[value.Length - 1]);
+    }
+
+    private static void ObserveString(string value, CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     internal static bool IsValidMediaType(

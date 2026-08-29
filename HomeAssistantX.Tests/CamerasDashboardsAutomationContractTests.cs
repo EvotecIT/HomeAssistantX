@@ -78,6 +78,29 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task GlobalMediaClassNormalizationObservesCancellationBeforeHashing()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var mediaClass = "music" + new string('a', 16_000_000);
+        var operation = Task.Run(async () =>
+        {
+            started.TrySetResult(true);
+            await client.Media.SearchSourcesResponseAsync(
+                "music",
+                mediaClasses: new[] { mediaClass },
+                cancellationToken: cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+    }
+
+    [Fact]
     public async Task CameraSurfaceIsTypedBoundedSignedAndPushCapable()
     {
         using var server = new TestHomeAssistantServer();
