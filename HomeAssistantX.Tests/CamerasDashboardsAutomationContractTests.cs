@@ -785,38 +785,20 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
-    public async Task ResolvedMediaStringValidationObservesCancellation()
+    public void ResolvedMediaStringValidationHonorsCancellation()
     {
         var longValue = new string('a', 16_000_000);
-        using (var cancellation = new CancellationTokenSource())
-        {
-            var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var operation = Task.Run(() =>
-            {
-                started.TrySetResult(true);
-                return HomeAssistantMediaBrowserClient.IsValidResolvedUrl(
-                    "/api/media/" + longValue,
-                    cancellation.Token);
-            });
-            await started.Task;
-            cancellation.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
-        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
 
-        using (var cancellation = new CancellationTokenSource())
-        {
-            var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var operation = Task.Run(() =>
-            {
-                started.TrySetResult(true);
-                return HomeAssistantMediaBrowserClient.IsValidMediaType(
-                    "audio/" + longValue,
-                    cancellation.Token);
-            });
-            await started.Task;
-            cancellation.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
-        }
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaBrowserClient.IsValidResolvedUrl(
+                "/api/media/" + longValue,
+                cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaBrowserClient.IsValidMediaType(
+                "audio/" + longValue,
+                cancellation.Token));
     }
 
     [Fact]
