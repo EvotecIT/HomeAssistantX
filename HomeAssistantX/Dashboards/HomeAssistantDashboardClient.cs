@@ -338,7 +338,7 @@ public sealed class HomeAssistantDashboardClient
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested identifier.");
         if (expectedUrlPath is not null && !string.Equals(dashboard.UrlPath, expectedUrlPath, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested URL path.");
-        if (expectedTitle is not null && !string.Equals(dashboard.Title, expectedTitle, StringComparison.Ordinal))
+        if (expectedTitle is not null && !CancellationAwareString.EqualsOrdinal(dashboard.Title, expectedTitle, cancellationToken))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested title.");
         if (validateIcon && !string.Equals(dashboard.Icon, expectedIcon, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested icon.");
@@ -350,6 +350,7 @@ public sealed class HomeAssistantDashboardClient
             && (!value.TryGetProperty("require_admin", out _)
                 || dashboard.RequireAdmin != expectedRequireAdmin.Value))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested administrator requirement.");
+        cancellationToken.ThrowIfCancellationRequested();
         return dashboard;
     }
 
@@ -373,10 +374,11 @@ public sealed class HomeAssistantDashboardClient
         ValidateStorageResource(resource, cancellationToken);
         if (expectedResourceId is not null && !string.Equals(resource.Id, expectedResourceId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested identifier.");
-        if (expectedUrl is not null && !string.Equals(resource.Url, expectedUrl, StringComparison.Ordinal))
+        if (expectedUrl is not null && !CancellationAwareString.EqualsOrdinal(resource.Url, expectedUrl, cancellationToken))
             throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested URL.");
         if (expectedType is not null && !string.Equals(resource.Type, expectedType, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested type.");
+        cancellationToken.ThrowIfCancellationRequested();
         return resource;
     }
 

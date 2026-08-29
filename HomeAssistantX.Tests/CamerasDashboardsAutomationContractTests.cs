@@ -383,6 +383,28 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task DashboardMutationCorrelationObservesCancellationAcrossUnboundedValues()
+    {
+        var left = new string('x', 16_000_000);
+        var right = new string(left.ToCharArray());
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return CancellationAwareString.EqualsOrdinal(left, right, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
     public void DashboardMutationValuesFollowHomeAssistantWithoutClientOnlyCaps()
     {
         var title = new string('T', 512);
