@@ -35,6 +35,28 @@ public abstract class HomeAssistantControlClientBase
         return Services.CaptureControlTransport();
     }
 
+    private protected HomeAssistantControlCallContext CaptureContext(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Services.CaptureControlContext();
+    }
+
+    private protected Task<HomeAssistantServiceCallResult> CallAsync(
+        string action,
+        HomeAssistantTarget target,
+        Action<HomeAssistantServiceCall>? configure,
+        HomeAssistantControlCallContext context,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        var normalizedTarget = target.NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
+        var call = HomeAssistantServiceCall.Create(Domain, action);
+        configure?.Invoke(call);
+        call.ForNormalizedTarget(normalizedTarget);
+        return Services.CallControlAsync(call, context, cancellationToken);
+    }
+
     private protected Task<HomeAssistantServiceCallResult> CallAsync(
         string action,
         HomeAssistantTarget target,

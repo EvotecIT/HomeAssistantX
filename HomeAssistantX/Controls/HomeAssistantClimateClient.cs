@@ -38,7 +38,7 @@ public sealed class HomeAssistantClimateClient : HomeAssistantControlClientBase
 
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
             .NormalizeForDomain(Domain, cancellationToken);
-        var transport = CaptureTransport(cancellationToken);
+        var context = CaptureContext(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (hasTemperature)
         {
@@ -63,26 +63,26 @@ public sealed class HomeAssistantClimateClient : HomeAssistantControlClientBase
                 {
                     call.WithData("hvac_mode", hvacMode);
                 }
-            }, transport, cancellationToken).ConfigureAwait(false));
+            }, context, cancellationToken).ConfigureAwait(false));
         }
         else if (!string.IsNullOrWhiteSpace(hvacMode))
         {
-            results.Add(await CallAsync("set_hvac_mode", frozenTarget, call => call.WithData("hvac_mode", hvacMode), transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("set_hvac_mode", frozenTarget, call => call.WithData("hvac_mode", hvacMode), context, cancellationToken).ConfigureAwait(false));
         }
 
         if (!string.IsNullOrWhiteSpace(fanMode))
         {
-            results.Add(await CallAsync("set_fan_mode", frozenTarget, call => call.WithData("fan_mode", fanMode), transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("set_fan_mode", frozenTarget, call => call.WithData("fan_mode", fanMode), context, cancellationToken).ConfigureAwait(false));
         }
 
         if (!string.IsNullOrWhiteSpace(presetMode))
         {
-            results.Add(await CallAsync("set_preset_mode", frozenTarget, call => call.WithData("preset_mode", presetMode), transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("set_preset_mode", frozenTarget, call => call.WithData("preset_mode", presetMode), context, cancellationToken).ConfigureAwait(false));
         }
 
         if (humidity.HasValue)
         {
-            results.Add(await CallAsync("set_humidity", frozenTarget, call => call.WithData("humidity", humidity.Value), transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("set_humidity", frozenTarget, call => call.WithData("humidity", humidity.Value), context, cancellationToken).ConfigureAwait(false));
         }
 
         return results;

@@ -1131,6 +1131,30 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task CompoundMediaControlPinsOneRequestTimeoutBeforeTargetPreparation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(3));
+        var target = new HomeAssistantTarget
+        {
+            EntityIds = new MutatingStringList(
+                () => client.Options.RequestTimeout = TimeSpan.Zero,
+                "media_player.living_room")
+        };
+
+        var results = await client.Controls.MediaPlayers.SetAsync(
+            target,
+            new HomeAssistantMediaPlayerOptions
+            {
+                Power = HomeAssistantPowerAction.On,
+                VolumePercent = 25
+            });
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal(2, server.ServiceCallBodies.Count);
+    }
+
+    [Fact]
     public async Task RemoteLearningPinsOneDeadlineAcrossValidationAndDispatch()
     {
         using var server = new TestHomeAssistantServer();

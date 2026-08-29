@@ -148,6 +148,18 @@ public sealed class HomeAssistantServiceClient
         };
     }
 
+    internal HomeAssistantControlCallContext CaptureControlContext()
+    {
+        var transport = CaptureControlTransport();
+        var requestTimeout = _options.RequestTimeout;
+        if (requestTimeout <= TimeSpan.Zero)
+        {
+            throw new InvalidOperationException("The configured typed-control request timeout must be positive.");
+        }
+
+        return new HomeAssistantControlCallContext(transport, requestTimeout);
+    }
+
     internal Task<HomeAssistantServiceCallResult> CallControlAsync(
         HomeAssistantServiceCall call,
         HomeAssistantServiceCallTransport transport,
@@ -156,6 +168,12 @@ public sealed class HomeAssistantServiceClient
         var requestTimeout = _options.RequestTimeout;
         return CallControlAsync(call, transport, requestTimeout, cancellationToken);
     }
+
+    internal Task<HomeAssistantServiceCallResult> CallControlAsync(
+        HomeAssistantServiceCall call,
+        HomeAssistantControlCallContext context,
+        CancellationToken cancellationToken)
+        => CallControlAsync(call, context.Transport, context.RequestTimeout, cancellationToken);
 
     internal Task<HomeAssistantServiceCallResult> CallControlAsync(
         HomeAssistantServiceCall call,
@@ -239,4 +257,19 @@ public sealed class HomeAssistantServiceClient
     {
         return value.TryGetProperty(name, out var property) ? property.Clone() : null;
     }
+}
+
+internal readonly struct HomeAssistantControlCallContext
+{
+    internal HomeAssistantControlCallContext(
+        HomeAssistantServiceCallTransport transport,
+        TimeSpan requestTimeout)
+    {
+        Transport = transport;
+        RequestTimeout = requestTimeout;
+    }
+
+    internal HomeAssistantServiceCallTransport Transport { get; }
+
+    internal TimeSpan RequestTimeout { get; }
 }

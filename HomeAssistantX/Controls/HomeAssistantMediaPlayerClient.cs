@@ -71,14 +71,14 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         HomeAssistantMediaPlayerOptions options,
         CancellationToken cancellationToken = default)
     {
-        var transport = CaptureTransport(cancellationToken);
-        return await SetAsync(target, options, transport, cancellationToken).ConfigureAwait(false);
+        var context = CaptureContext(cancellationToken);
+        return await SetAsync(target, options, context, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyList<HomeAssistantServiceCallResult>> SetAsync(
         HomeAssistantTarget target,
         HomeAssistantMediaPlayerOptions options,
-        HomeAssistantServiceCallTransport transport,
+        HomeAssistantControlCallContext context,
         CancellationToken cancellationToken)
     {
         if (options is null)
@@ -150,22 +150,22 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var results = new List<HomeAssistantServiceCallResult>();
         if (powerAction is not null)
         {
-            results.Add(await CallAsync(powerAction, frozenTarget, null, transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(powerAction, frozenTarget, null, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (volumePercent.HasValue)
         {
-            results.Add(await CallAsync("volume_set", frozenTarget, call => call.WithData("volume_level", volumePercent.Value / 100d), transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("volume_set", frozenTarget, call => call.WithData("volume_level", volumePercent.Value / 100d), context, cancellationToken).ConfigureAwait(false));
         }
 
         if (muted.HasValue)
         {
-            results.Add(await CallAsync("volume_mute", frozenTarget, call => call.WithData("is_volume_muted", muted.Value), transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("volume_mute", frozenTarget, call => call.WithData("is_volume_muted", muted.Value), context, cancellationToken).ConfigureAwait(false));
         }
 
         if (!string.IsNullOrWhiteSpace(source))
         {
-            results.Add(await CallAsync("select_source", frozenTarget, call => call.WithData("source", source), transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("select_source", frozenTarget, call => call.WithData("source", source), context, cancellationToken).ConfigureAwait(false));
         }
 
         if (!string.IsNullOrWhiteSpace(soundMode))
@@ -174,7 +174,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 "select_sound_mode",
                 frozenTarget,
                 call => call.WithData("sound_mode", soundMode),
-                transport,
+                context,
                 cancellationToken).ConfigureAwait(false));
         }
 
@@ -184,7 +184,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 "shuffle_set",
                 frozenTarget,
                 call => call.WithData("shuffle", shuffle.Value),
-                transport,
+                context,
                 cancellationToken).ConfigureAwait(false));
         }
 
@@ -194,7 +194,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 "repeat_set",
                 frozenTarget,
                 call => call.WithData("repeat", repeatMode),
-                transport,
+                context,
                 cancellationToken).ConfigureAwait(false));
         }
 
@@ -222,13 +222,13 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                         call.WithData("extra", frozenMediaExtra);
                     }
                 },
-                transport,
+                context,
                 cancellationToken).ConfigureAwait(false));
         }
 
         if (playbackAction is not null)
         {
-            results.Add(await CallAsync(playbackAction, frozenTarget, null, transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(playbackAction, frozenTarget, null, context, cancellationToken).ConfigureAwait(false));
         }
 
         return results;
@@ -403,11 +403,11 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var transport = CaptureTransport(cancellationToken);
+        var context = CaptureContext(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (settings is not null)
         {
-            results.AddRange(await SetAsync(target, settings, transport, cancellationToken).ConfigureAwait(false));
+            results.AddRange(await SetAsync(target, settings, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (volumeStep.HasValue)
@@ -418,12 +418,12 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 HomeAssistantMediaVolumeStepAction.Down => "volume_down",
                 _ => throw new ArgumentOutOfRangeException(nameof(volumeStep), volumeStep, "Unsupported volume-step action.")
             };
-            results.Add(await CallAsync(service, target, null, transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(service, target, null, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (clearPlaylist)
         {
-            results.Add(await CallAsync("clear_playlist", target, null, transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("clear_playlist", target, null, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (groupMembers is not null)
@@ -433,13 +433,13 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 "join",
                 target,
                 call => call.WithData("group_members", members),
-                transport,
+                context,
                 cancellationToken).ConfigureAwait(false));
         }
 
         if (unjoin)
         {
-            results.Add(await CallAsync("unjoin", target, null, transport, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("unjoin", target, null, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (mediaContentId is not null || mediaContentType is not null)
@@ -477,7 +477,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                         call.WithData("extra", frozenExtra);
                     }
                 },
-                transport,
+                context,
                 cancellationToken).ConfigureAwait(false));
         }
 
@@ -488,7 +488,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 "media_seek",
                 target,
                 call => call.WithData("seek_position", position.TotalSeconds),
-                transport,
+                context,
                 cancellationToken).ConfigureAwait(false));
         }
 
@@ -498,7 +498,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 PlaybackAction(playback.Value),
                 target,
                 null,
-                transport,
+                context,
                 cancellationToken).ConfigureAwait(false));
         }
 
