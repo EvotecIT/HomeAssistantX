@@ -292,14 +292,14 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         return value;
     }
 
-    private static HomeAssistantRemoteStatus? ToStatus(
+    internal static HomeAssistantRemoteStatus? ToStatus(
         HomeAssistantState? state,
         CancellationToken cancellationToken)
     {
         return state is null
             ? null
             : HomeAssistantRemoteStatus.FromState(
-                HomeAssistantEntityId.RequireResponseDomain(state, "remote"),
+                HomeAssistantEntityId.RequireResponseDomain(state, "remote", cancellationToken),
                 cancellationToken);
     }
 }

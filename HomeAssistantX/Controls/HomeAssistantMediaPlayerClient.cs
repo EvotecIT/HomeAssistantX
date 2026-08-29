@@ -593,14 +593,14 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         return values;
     }
 
-    private static HomeAssistantMediaPlayerStatus? ToStatus(
+    internal static HomeAssistantMediaPlayerStatus? ToStatus(
         HomeAssistantState? state,
         CancellationToken cancellationToken)
     {
         return state is null
             ? null
             : HomeAssistantMediaPlayerStatus.FromState(
-                HomeAssistantEntityId.RequireResponseDomain(state, "media_player"),
+                HomeAssistantEntityId.RequireResponseDomain(state, "media_player", cancellationToken),
                 cancellationToken);
     }
 }

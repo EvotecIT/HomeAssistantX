@@ -5,6 +5,7 @@ using System.Net.Http;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Supervisor;
 using HomeAssistantX.Tests.Infrastructure;
@@ -13,6 +14,26 @@ namespace HomeAssistantX.Tests;
 
 public sealed class OperationsContractTests
 {
+    [Fact]
+    public void UpdateProjectionPreservesCancellationAcrossProviderAttributes()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        using var title = JsonDocument.Parse("\"" + new string('x', 1_000_000) + "\"");
+        var state = new HomeAssistantState
+        {
+            EntityId = "update.platform",
+            State = "on",
+            Attributes = new Dictionary<string, JsonElement>
+            {
+                ["title"] = title.RootElement.Clone()
+            }
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantUpdateClient.ToUpdate(state, cancellation.Token));
+    }
+
     [Fact]
     public void SharedUriEscapingSupportsLongValuesAndCancellation()
     {

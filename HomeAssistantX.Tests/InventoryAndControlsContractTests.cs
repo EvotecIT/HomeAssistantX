@@ -527,6 +527,24 @@ public sealed class InventoryAndControlsContractTests
                 cancellation.Token));
     }
 
+    [Fact]
+    public void InventorySortPreservesCancellationClassification()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var values = new List<int> { 2, 1 };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantInventoryClient.Sort(
+                values,
+                (left, right) =>
+                {
+                    cancellation.Cancel();
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    return left.CompareTo(right);
+                },
+                cancellation.Token));
+    }
+
     private sealed class MutatingTargetList : IReadOnlyList<string>
     {
         private readonly Action _onRead;

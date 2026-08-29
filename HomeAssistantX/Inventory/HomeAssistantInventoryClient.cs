@@ -291,17 +291,25 @@ public sealed class HomeAssistantInventoryClient
         return result.ToArray();
     }
 
-    private static void Sort<T>(
+    internal static void Sort<T>(
         List<T> values,
         Comparison<T> comparison,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        values.Sort((left, right) =>
+        try
+        {
+            values.Sort((left, right) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return comparison(left, right);
+            });
+        }
+        catch (InvalidOperationException) when (cancellationToken.IsCancellationRequested)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return comparison(left, right);
-        });
+            throw;
+        }
         cancellationToken.ThrowIfCancellationRequested();
     }
 

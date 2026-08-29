@@ -10,6 +10,23 @@ namespace HomeAssistantX.Tests;
 public sealed class MediaAndRemoteContractTests
 {
     [Fact]
+    public void TypedSubscriptionStateProjectionPreservesCancellationDuringIdentityValidation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var state = new HomeAssistantState
+        {
+            EntityId = new string('x', 1_000_000),
+            State = "on"
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaPlayerClient.ToStatus(state, cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRemoteClient.ToStatus(state, cancellation.Token));
+    }
+
+    [Fact]
     public async Task SharedOptionalAttributeTraversalObservesCancellation()
     {
         using var cancellation = new CancellationTokenSource();

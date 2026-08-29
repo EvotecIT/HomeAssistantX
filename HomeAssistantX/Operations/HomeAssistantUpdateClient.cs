@@ -1,6 +1,7 @@
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.WebSockets;
@@ -33,7 +34,7 @@ public sealed class HomeAssistantUpdateClient
         foreach (var state in HomeAssistantEntityId.RequireResponseDomainStates(states, "update", cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var update = ToUpdate(state);
+            var update = ToUpdate(state, cancellationToken);
             if (!availableOnly || update.IsAvailable)
             {
                 updates.Add(update);
@@ -101,32 +102,44 @@ public sealed class HomeAssistantUpdateClient
         return normalized;
     }
 
-    private static HomeAssistantUpdate ToUpdate(HomeAssistantState state)
+    internal static HomeAssistantUpdate ToUpdate(
+        HomeAssistantState state,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return new HomeAssistantUpdate
         {
             State = state,
-            Title = GetString(state, "title") ?? GetString(state, "friendly_name"),
-            InstalledVersion = GetString(state, "installed_version"),
-            LatestVersion = GetString(state, "latest_version"),
-            IsAvailable = string.Equals(state.State, "on", StringComparison.OrdinalIgnoreCase),
-            IsInProgress = GetBoolean(state, "in_progress"),
-            ProgressPercentage = GetDouble(state, "update_percentage")
+            Title = GetString(state, "title", cancellationToken) ?? GetString(state, "friendly_name", cancellationToken),
+            InstalledVersion = GetString(state, "installed_version", cancellationToken),
+            LatestVersion = GetString(state, "latest_version", cancellationToken),
+            IsAvailable = CancellationAwareString.EqualsOrdinalIgnoreCase(state.State, "on", cancellationToken),
+            IsInProgress = GetBoolean(state, "in_progress", cancellationToken),
+            ProgressPercentage = GetDouble(state, "update_percentage", cancellationToken)
         };
     }
 
-    private static string? GetString(HomeAssistantState state, string name)
+    private static string? GetString(
+        HomeAssistantState state,
+        string name,
+        CancellationToken cancellationToken)
     {
-        return HomeAssistantAttributeReader.GetString(state.Attributes, name);
+        return HomeAssistantAttributeReader.GetString(state.Attributes, name, cancellationToken);
     }
 
-    private static bool GetBoolean(HomeAssistantState state, string name)
+    private static bool GetBoolean(
+        HomeAssistantState state,
+        string name,
+        CancellationToken cancellationToken)
     {
-        return HomeAssistantAttributeReader.GetBoolean(state.Attributes, name) == true;
+        return HomeAssistantAttributeReader.GetBoolean(state.Attributes, name, cancellationToken) == true;
     }
 
-    private static double? GetDouble(HomeAssistantState state, string name)
+    private static double? GetDouble(
+        HomeAssistantState state,
+        string name,
+        CancellationToken cancellationToken)
     {
-        return HomeAssistantAttributeReader.GetDouble(state.Attributes, name);
+        return HomeAssistantAttributeReader.GetDouble(state.Attributes, name, cancellationToken);
     }
 }
