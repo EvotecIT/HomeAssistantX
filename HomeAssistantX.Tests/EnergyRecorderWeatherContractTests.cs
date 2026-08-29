@@ -1419,6 +1419,24 @@ public sealed class EnergyRecorderWeatherContractTests
                 cancellation.Token));
     }
 
+    [Fact]
+    public void SharedStatisticIdentifierNormalizationIsDuplicateSafeAndCancellable()
+    {
+        Assert.Equal(
+            new[] { "sensor.energy", "external:energy" },
+            HomeAssistantRecorderClient.NormalizeStatisticIds(
+                new[] { "sensor.energy", "sensor.energy", "external:energy" },
+                "StatisticId",
+                default));
+
+        using var cancellation = new CancellationTokenSource();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRecorderClient.NormalizeStatisticIds(
+                new CancellingStatisticIds(cancellation),
+                "StatisticId",
+                cancellation.Token));
+    }
+
     [Theory]
     [InlineData("temperature_unit")]
     [InlineData("pressure_unit")]

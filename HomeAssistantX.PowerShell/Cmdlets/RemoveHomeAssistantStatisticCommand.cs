@@ -17,14 +17,8 @@ public sealed class RemoveHomeAssistantStatisticCommand : HomeAssistantCmdlet
             throw new ArgumentException("At least one statistic identifier is required.", nameof(StatisticId));
         }
 
-        var statisticIds = new List<string>(StatisticId.Length);
-        foreach (var value in StatisticId)
-        {
-            if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var normalized))
-                throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", nameof(StatisticId));
-            if (!statisticIds.Contains(normalized, StringComparer.Ordinal)) statisticIds.Add(normalized);
-        }
-        var count = statisticIds.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var statisticIds = HomeAssistantRecorderClient.NormalizeStatisticIds(StatisticId, nameof(StatisticId), CancelToken);
+        var count = statisticIds.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (!ShouldProcess(ConnectionDisplayName, "Permanently clear " + count + " Recorder statistic identifier(s)")) return;
         await Client.Recorder.ClearStatisticsAsync(statisticIds, CancelToken).ConfigureAwait(false);
     }

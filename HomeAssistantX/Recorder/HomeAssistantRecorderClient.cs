@@ -24,7 +24,7 @@ public sealed class HomeAssistantRecorderClient
         IReadOnlyCollection<string>? statisticIds = null,
         CancellationToken cancellationToken = default)
     {
-        var requestedIdSnapshot = statisticIds is null ? null : RequireStatisticIds(statisticIds, nameof(statisticIds), cancellationToken);
+        var requestedIdSnapshot = statisticIds is null ? null : NormalizeStatisticIds(statisticIds, nameof(statisticIds), cancellationToken);
         var payload = requestedIdSnapshot is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = requestedIdSnapshot };
         var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
         var metadata = DecodeMetadata(value, "Recorder statistics metadata could not be decoded.", cancellationToken);
@@ -90,7 +90,7 @@ public sealed class HomeAssistantRecorderClient
         var period = query.Period;
         if (endTime.HasValue && endTime <= startTime)
             throw new ArgumentOutOfRangeException(nameof(query), "The statistics end must be after the start.");
-        var requestedIdSnapshot = RequireStatisticIds(query.StatisticIds, nameof(query), cancellationToken);
+        var requestedIdSnapshot = NormalizeStatisticIds(query.StatisticIds, nameof(query), cancellationToken);
         var payload = new Dictionary<string, object?>
         {
             ["start_time"] = startTime.ToString("O", CultureInfo.InvariantCulture),
@@ -172,7 +172,7 @@ public sealed class HomeAssistantRecorderClient
         => _ = await _webSocket.RequestAsync("recorder/update_statistics_issues", null, cancellationToken).ConfigureAwait(false);
 
     public async Task ClearStatisticsAsync(IReadOnlyCollection<string> statisticIds, CancellationToken cancellationToken = default)
-        => _ = await _webSocket.RequestAsync("recorder/clear_statistics", new Dictionary<string, object?> { ["statistic_ids"] = RequireStatisticIds(statisticIds, nameof(statisticIds), cancellationToken) }, cancellationToken).ConfigureAwait(false);
+        => _ = await _webSocket.RequestAsync("recorder/clear_statistics", new Dictionary<string, object?> { ["statistic_ids"] = NormalizeStatisticIds(statisticIds, nameof(statisticIds), cancellationToken) }, cancellationToken).ConfigureAwait(false);
 
     public async Task UpdateStatisticsMetadataAsync(string statisticId, string? unitClass, string? unitOfMeasurement, CancellationToken cancellationToken = default)
     {
@@ -532,7 +532,7 @@ public sealed class HomeAssistantRecorderClient
         return normalized.ToArray();
     }
 
-    private static string[] RequireStatisticIds(
+    internal static string[] NormalizeStatisticIds(
         IReadOnlyCollection<string> values,
         string name,
         CancellationToken cancellationToken)
