@@ -101,6 +101,18 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void TypeFormatterDistinguishesExternalDefiningAssemblies()
+    {
+        var left = CreateExternalType("HomeAssistantX.TypeIdentity.Left", "External.Contract");
+        var right = CreateExternalType("HomeAssistantX.TypeIdentity.Right", "External.Contract");
+
+        Assert.NotEqual(FormatType(left), FormatType(right));
+        Assert.Contains("@assembly(\"HomeAssistantX.TypeIdentity.Left", FormatType(left), StringComparison.Ordinal);
+        Assert.Contains("@assembly(\"HomeAssistantX.TypeIdentity.Right", FormatType(right), StringComparison.Ordinal);
+        Assert.Equal("System.String", FormatType(typeof(string)));
+    }
+
+    [Fact]
     public void TypeFormatterPreservesStructLayoutContracts()
     {
         Assert.Equal(
@@ -2936,7 +2948,7 @@ public sealed class PublicApiCompatibilityTests
 #if NET10_0
         if (type.IsFunctionPointer) return FormatFunctionPointer(type);
 #endif
-        if (!type.IsGenericType) return type.FullName ?? type.Name;
+        if (!type.IsGenericType) return FormatNamedType(type);
         return FormatGenericTypeName(type, type.GetGenericArguments().Select(FormatType).ToArray());
     }
 
@@ -2984,7 +2996,7 @@ public sealed class PublicApiCompatibilityTests
                 ? "nint"
                 : isNativeInteger && type == typeof(UIntPtr)
                     ? "nuint"
-                    : type.FullName ?? type.Name;
+                    : FormatNamedType(type);
         return (!type.IsValueType || type.IsGenericParameter) && flag == 2 ? result + "?" : result;
     }
 
@@ -3085,7 +3097,53 @@ public sealed class PublicApiCompatibilityTests
 
         if (argumentIndex != formattedArguments.Count)
             throw new InvalidOperationException("The generic type name did not own all generic arguments.");
-        return string.Join("+", formattedSegments);
+        return string.Join("+", formattedSegments) + FormatSignatureAssemblyIdentity(definition);
+    }
+
+    private static string FormatNamedType(Type type)
+        => (type.FullName ?? type.Name) + FormatSignatureAssemblyIdentity(type);
+
+    private static string FormatSignatureAssemblyIdentity(Type type)
+    {
+        if (type.IsGenericParameter) return string.Empty;
+        var assemblyName = type.Assembly.GetName();
+        if (string.Equals(assemblyName.Name, "HomeAssistantX", StringComparison.Ordinal)
+            || string.Equals(assemblyName.Name, "HomeAssistantX.Tests", StringComparison.Ordinal)
+            || IsFrameworkAssembly(assemblyName))
+        {
+            return string.Empty;
+        }
+
+        return "@assembly(" + FormatDefault(type.Assembly.FullName) + ")";
+    }
+
+    private static bool IsFrameworkAssembly(AssemblyName assemblyName)
+    {
+        if (string.Equals(assemblyName.Name, "mscorlib", StringComparison.Ordinal)
+            || string.Equals(assemblyName.Name, "System.Private.CoreLib", StringComparison.Ordinal)
+            || string.Equals(assemblyName.Name, "System.Runtime", StringComparison.Ordinal)
+            || string.Equals(assemblyName.Name, "netstandard", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var token = assemblyName.GetPublicKeyToken();
+        if (token is null || token.Length == 0) return false;
+        var text = string.Concat(token.Select(value => value.ToString("x2", CultureInfo.InvariantCulture)));
+        return string.Equals(text, "b77a5c561934e089", StringComparison.Ordinal)
+            || string.Equals(text, "b03f5f7f11d50a3a", StringComparison.Ordinal)
+            || string.Equals(text, "cc7b13ffcd2ddd51", StringComparison.Ordinal)
+            || string.Equals(text, "7cec85d7bea7798e", StringComparison.Ordinal);
+    }
+
+    private static Type CreateExternalType(string assemblyName, string fullName)
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName(assemblyName),
+            AssemblyBuilderAccess.Run);
+        return assembly.DefineDynamicModule(assemblyName + ".dll")
+            .DefineType(fullName, TypeAttributes.Public | TypeAttributes.Class)
+            .CreateType()!;
     }
 
     private static byte[] ReadNullableFlags(ICustomAttributeProvider provider)

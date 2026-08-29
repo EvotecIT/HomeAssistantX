@@ -138,7 +138,8 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
                         "The mobile-app request payload could not be encrypted.",
                         ex);
                 }
-                if (string.IsNullOrWhiteSpace(encrypted)) throw new HomeAssistantProtocolException("The mobile-app payload protector returned an empty request payload.");
+                if (CancellationAwareString.IsNullOrWhiteSpace(encrypted, operationToken))
+                    throw new HomeAssistantProtocolException("The mobile-app payload protector returned an empty request payload.");
                 envelope = new Dictionary<string, object?> { ["type"] = command, ["encrypted"] = true, ["encrypted_data"] = encrypted };
             }
 
@@ -284,7 +285,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
 #if NET10_0_OR_GREATER
             using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 #else
-            using var stream = await content.ReadAsStreamAsync().ConfigureAwait(false);
+            using var stream = await ReadContentStreamAsync(content, cancellationToken).ConfigureAwait(false);
 #endif
             using var registration = cancellationToken.Register(state => ((Stream)state!).Dispose(), stream);
             using var output = new MemoryStream();
@@ -306,6 +307,38 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             throw new HomeAssistantConnectionException("The Home Assistant mobile-app webhook response could not be read.", ex);
         }
     }
+
+#if !NET10_0_OR_GREATER
+    private static async Task<Stream> ReadContentStreamAsync(
+        HttpContent content,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var streamTask = content.ReadAsStreamAsync();
+        if (!cancellationToken.CanBeCanceled || streamTask.IsCompleted)
+        {
+            return await streamTask.ConfigureAwait(false);
+        }
+
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        if (await Task.WhenAny(streamTask, canceled.Task).ConfigureAwait(false) != streamTask)
+        {
+            _ = streamTask.ContinueWith(
+                static task =>
+                {
+                    if (task.Status == TaskStatus.RanToCompletion) task.Result.Dispose();
+                    else _ = task.Exception;
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        return await streamTask.ConfigureAwait(false);
+    }
+#endif
 
     private static string RequireCommandType(string commandType, CancellationToken cancellationToken)
     {
