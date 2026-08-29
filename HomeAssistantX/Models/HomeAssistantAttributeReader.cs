@@ -76,14 +76,14 @@ internal static class HomeAssistantAttributeReader
         }
 
         if (value.ValueKind == JsonValueKind.Number
-            && TryParseIntegralInt64(value.GetRawText(), out var integer))
+            && TryParseIntegralInt64(value.GetRawText(), cancellationToken, out var integer))
         {
             return integer;
         }
 
         var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
         ObserveString(text, cancellationToken);
-        if (text is not null && TryParseIntegralInt64(text, out integer))
+        if (text is not null && TryParseIntegralInt64(text, cancellationToken, out integer))
         {
             return integer;
         }
@@ -226,86 +226,158 @@ internal static class HomeAssistantAttributeReader
         return !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
-    private static bool TryParseIntegralInt64(string? value, out long result)
+    private static bool TryParseIntegralInt64(
+        string? value,
+        CancellationToken cancellationToken,
+        out long result)
     {
-        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is not null
+            && value.Length <= 32
+            && long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return true;
         }
 
-        return TryParseExactIntegralInt64(value, out result);
+        return TryParseExactIntegralInt64(value, cancellationToken, out result);
     }
 
-    private static bool TryParseExactIntegralInt64(string? value, out long result)
+    private static bool TryParseExactIntegralInt64(
+        string? value,
+        CancellationToken cancellationToken,
+        out long result)
     {
         result = default;
-        if (string.IsNullOrWhiteSpace(value)) return false;
-        var text = value!.Trim();
-        var index = 0;
-        var negative = false;
-        if (text[index] is '+' or '-')
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null) return false;
+
+        var start = 0;
+        var end = value.Length;
+        while (start < end && char.IsWhiteSpace(value[start]))
         {
-            negative = text[index] == '-';
-            if (++index == text.Length) return false;
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+        while (end > start && char.IsWhiteSpace(value[end - 1]))
+        {
+            if ((end & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (start == end) return false;
+
+        var index = start;
+        var negative = false;
+        if (value[index] is '+' or '-')
+        {
+            negative = value[index] == '-';
+            if (++index == end) return false;
         }
 
-        var digits = new System.Text.StringBuilder(text.Length);
+        var digits = new System.Text.StringBuilder(Math.Min(end - start, 64));
         var fractionalDigits = 0;
         var sawDigit = false;
-        while (index < text.Length && IsAsciiDigit(text[index]))
+        while (index < end && IsAsciiDigit(value[index]))
         {
-            digits.Append(text[index++]);
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            digits.Append(value[index++]);
             sawDigit = true;
         }
 
-        if (index < text.Length && text[index] == '.')
+        if (index < end && value[index] == '.')
         {
             index++;
             var fractionStart = digits.Length;
-            while (index < text.Length && IsAsciiDigit(text[index]))
+            while (index < end && IsAsciiDigit(value[index]))
             {
-                digits.Append(text[index++]);
+                if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                digits.Append(value[index++]);
                 sawDigit = true;
             }
             fractionalDigits = digits.Length - fractionStart;
         }
 
         if (!sawDigit) return false;
-        var exponent = 0;
-        if (index < text.Length && text[index] is 'e' or 'E')
+        long exponent = 0;
+        if (index < end && value[index] is 'e' or 'E')
         {
             index++;
+            var exponentNegative = false;
+            if (index < end && value[index] is '+' or '-')
+            {
+                exponentNegative = value[index++] == '-';
+            }
             var exponentStart = index;
-            if (index < text.Length && text[index] is '+' or '-') index++;
-            while (index < text.Length && IsAsciiDigit(text[index])) index++;
-            if (index == exponentStart || (index == exponentStart + 1 && text[exponentStart] is '+' or '-')) return false;
-            if (!int.TryParse(text.Substring(exponentStart, index - exponentStart), NumberStyles.Integer, CultureInfo.InvariantCulture, out exponent)) return false;
+            var exponentLimit = exponentNegative ? 2147483648L : int.MaxValue;
+            while (index < end && IsAsciiDigit(value[index]))
+            {
+                if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                var digit = value[index++] - '0';
+                if (exponent > (exponentLimit - digit) / 10) return false;
+                exponent = (exponent * 10) + digit;
+            }
+            if (index == exponentStart) return false;
+            if (exponentNegative) exponent = -exponent;
         }
 
-        if (index != text.Length) return false;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (index != end) return false;
         var scale = (long)fractionalDigits - exponent;
-        var digitText = digits.ToString();
+        var effectiveLength = digits.Length;
         if (scale > 0)
         {
-            if (scale > digitText.Length) return digitText.All(character => character == '0');
+            if (scale > digits.Length)
+            {
+                for (var digitIndex = 0; digitIndex < digits.Length; digitIndex++)
+                {
+                    if ((digitIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    if (digits[digitIndex] != '0') return false;
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+                return true;
+            }
             var scaleCount = (int)scale;
-            if (digitText.Substring(digitText.Length - scaleCount).Any(character => character != '0')) return false;
-            digitText = digitText.Substring(0, digitText.Length - scaleCount);
+            effectiveLength = digits.Length - scaleCount;
+            for (var digitIndex = effectiveLength; digitIndex < digits.Length; digitIndex++)
+            {
+                if ((digitIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if (digits[digitIndex] != '0') return false;
+            }
         }
         else if (scale < 0)
         {
             var appendedZeroCount = -scale;
-            if (appendedZeroCount > 20 || digitText.Length + appendedZeroCount > 20) return false;
-            digitText += new string('0', (int)appendedZeroCount);
+            if (appendedZeroCount > 20 || digits.Length + appendedZeroCount > 20) return false;
+            effectiveLength = digits.Length + (int)appendedZeroCount;
         }
 
-        digitText = digitText.TrimStart('0');
-        if (digitText.Length == 0) return true;
-        if (digitText.Length > 19) return false;
-        var exact = BigInteger.Parse(digitText, CultureInfo.InvariantCulture);
+        if (effectiveLength == 0) return true;
+        var firstSignificant = 0;
+        while (firstSignificant < digits.Length && digits[firstSignificant] == '0')
+        {
+            if ((firstSignificant & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            firstSignificant++;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (firstSignificant == digits.Length) return true;
+        if (effectiveLength - firstSignificant > 19) return false;
+
+        BigInteger exact = 0;
+        for (var digitIndex = firstSignificant; digitIndex < digits.Length && digitIndex < effectiveLength; digitIndex++)
+        {
+            if ((digitIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            exact = (exact * 10) + (digits[digitIndex] - '0');
+        }
+        for (var digitIndex = digits.Length; digitIndex < effectiveLength; digitIndex++)
+        {
+            if ((digitIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            exact *= 10;
+        }
         if (negative) exact = -exact;
         if (exact < long.MinValue || exact > long.MaxValue) return false;
         result = (long)exact;
+        cancellationToken.ThrowIfCancellationRequested();
         return true;
     }
 

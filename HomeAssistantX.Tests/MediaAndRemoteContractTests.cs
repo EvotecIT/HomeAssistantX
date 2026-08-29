@@ -179,6 +179,19 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal(HomeAssistantRemoteFeature.None, HomeAssistantRemoteStatus.FromState(raw).SupportedFeatures);
     }
 
+    [Fact]
+    public void TypedStatusIntegerParsingHonorsCancellation()
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"remote.bad\",\"state\":\"on\",\"attributes\":{" +
+            "\"supported_features\":\"1." + new string('0', 1_000_000) + "\"}}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRemoteStatus.FromState(raw, cancellation.Token));
+    }
+
     [Theory]
     [InlineData("[\"light.kitchen\"]")]
     [InlineData("[\"media_player.Kitchen\"]")]
@@ -788,6 +801,22 @@ public sealed class MediaAndRemoteContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.GetAsync("media_player.kitchen.extra"));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.GetAsync("switch.remote"));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Remotes.GetAsync("remote."));
+
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Fact]
+    public async Task TypedMediaAndRemoteGettersHonorCancellationBeforeEntityValidation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.GetAsync(" light." + new string('x', 1_000_000), cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Remotes.GetAsync(" remote." + new string('x', 1_000_000), cancellation.Token));
 
         Assert.Null(server.LastRequestPath);
     }

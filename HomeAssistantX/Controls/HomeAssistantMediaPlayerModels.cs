@@ -306,7 +306,7 @@ public sealed class HomeAssistantMediaPlayerStatus
             throw new ArgumentNullException(nameof(state));
         }
 
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(state.EntityId, "media_player", out var normalizedEntityId)
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(state.EntityId, "media_player", cancellationToken, out var normalizedEntityId)
             || !string.Equals(state.EntityId, normalizedEntityId, StringComparison.Ordinal))
         {
             throw new ArgumentException("A canonical media_player entity state is required.", nameof(state));
@@ -404,7 +404,7 @@ public sealed class HomeAssistantMediaPlayerStatus
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind != JsonValueKind.String
-                || !HomeAssistantEntityId.TryNormalizeForDomain(item.GetString(), "media_player", out var member)
+                || !HomeAssistantEntityId.TryNormalizeForDomain(item.GetString(), "media_player", cancellationToken, out var member)
                 || !string.Equals(item.GetString(), member, StringComparison.Ordinal)
                 || !unique.Add(member))
             {
