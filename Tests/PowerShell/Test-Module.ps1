@@ -204,8 +204,18 @@ $dashboardCommand = Get-Command Set-HomeAssistantDashboard -ErrorAction Stop
 $dashboardAttribute = $dashboardCommand.ImplementingType.GetCustomAttributes($true) |
     Where-Object { $_ -is [System.Management.Automation.CmdletAttribute] } |
     Select-Object -First 1
-if ($null -eq $dashboardAttribute -or $dashboardAttribute.ConfirmImpact -ne [System.Management.Automation.ConfirmImpact]::High) {
-    throw 'Set-HomeAssistantDashboard must retain high-impact confirmation for full configuration replacement.'
+if ($null -eq $dashboardAttribute -or $dashboardAttribute.ConfirmImpact -ne [System.Management.Automation.ConfirmImpact]::Medium) {
+    throw 'Set-HomeAssistantDashboard must keep ordinary dashboard mutations at medium impact.'
+}
+$dashboardConfirmation = $dashboardCommand.ImplementingType.GetMethod(
+    'RequiresAdditionalConfigurationConfirmation',
+    [Reflection.BindingFlags]'Static,NonPublic')
+if ($null -eq $dashboardConfirmation -or
+    -not $dashboardConfirmation.Invoke($null, @('Configuration', $false, [System.Management.Automation.ConfirmImpact]::High)) -or
+    $dashboardConfirmation.Invoke($null, @('Create', $false, [System.Management.Automation.ConfirmImpact]::High)) -or
+    $dashboardConfirmation.Invoke($null, @('Configuration', $true, [System.Management.Automation.ConfirmImpact]::High)) -or
+    $dashboardConfirmation.Invoke($null, @('Configuration', $false, [System.Management.Automation.ConfirmImpact]::None))) {
+    throw 'Set-HomeAssistantDashboard must elevate only implicit full-configuration replacement at high confirmation preference.'
 }
 
 $server = New-Object System.Diagnostics.Process

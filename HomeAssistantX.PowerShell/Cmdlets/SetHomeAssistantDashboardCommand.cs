@@ -9,7 +9,7 @@ namespace HomeAssistantX.PowerShell;
 /// <example><summary>Replace the default dashboard configuration</summary><code>Set-HomeAssistantDashboard -ConfigurationJson '{"views":[]}' -WhatIf</code></example>
 /// <example><summary>Create a dashboard</summary><code>Set-HomeAssistantDashboard -New -UrlPath 'house-main' -Title 'House' -WhatIf</code></example>
 /// <example><summary>Add a dashboard resource</summary><code>Set-HomeAssistantDashboard -NewResource -ResourceUrl '/local/card.js' -ResourceType Module -WhatIf</code></example>
-[Cmdlet(VerbsCommon.Set, "HomeAssistantDashboard", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.High, DefaultParameterSetName = ConfigurationSet)]
+[Cmdlet(VerbsCommon.Set, "HomeAssistantDashboard", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.Medium, DefaultParameterSetName = ConfigurationSet)]
 [OutputType(typeof(HomeAssistantDashboard))]
 [OutputType(typeof(HomeAssistantDashboardResource))]
 [OutputType(typeof(JsonElement))]
@@ -20,6 +20,8 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
     private const string UpdateSet = "Update";
     private const string ResourceCreateSet = "ResourceCreate";
     private const string ResourceUpdateSet = "ResourceUpdate";
+    private ConfirmImpact _confirmPreference;
+    private bool _confirmWasExplicit;
 
     [Parameter(Mandatory = true, ParameterSetName = ConfigurationSet)][ValidateNotNullOrEmpty] public string? ConfigurationJson { get; set; }
     /// <summary>Dashboard URL path. Required when creating a dashboard; optional when targeting a stored configuration.</summary>
@@ -50,6 +52,14 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
     [Parameter(Mandatory = true, ParameterSetName = ResourceCreateSet)]
     [Parameter(ParameterSetName = ResourceUpdateSet)] public HomeAssistantDashboardResourceType? ResourceType { get; set; }
     [Parameter] public SwitchParameter PassThru { get; set; }
+
+    protected override Task BeginProcessingAsync()
+    {
+        _confirmWasExplicit = MyInvocation.BoundParameters.ContainsKey("Confirm");
+        _confirmPreference = LanguagePrimitives.ConvertTo<ConfirmImpact>(
+            SessionState.PSVariable.GetValue("ConfirmPreference"));
+        return base.BeginProcessingAsync();
+    }
 
     protected override async Task ProcessRecordAsync()
     {
@@ -109,12 +119,30 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                         throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", nameof(UrlPath));
                     target = configurationUrlPath ?? "default"; action = "Replace Home Assistant dashboard configuration";
                     if (!ShouldProcess(target, action)) return;
+                    if (RequiresAdditionalConfigurationConfirmation(
+                            ParameterSetName,
+                            _confirmWasExplicit,
+                            _confirmPreference)
+                        && !ShouldContinue(
+                            "Replace the selected dashboard configuration on " + ConnectionDisplayName + "?",
+                            "Confirm Home Assistant dashboard replacement"))
+                    {
+                        return;
+                    }
                     result = await Client.Dashboards.SaveConfigurationAsync(configuration, configurationUrlPath, CancelToken).ConfigureAwait(false);
                 }
                 break;
         }
         if (PassThru) WriteObject(result);
     }
+
+    internal static bool RequiresAdditionalConfigurationConfirmation(
+        string parameterSetName,
+        bool confirmWasExplicit,
+        ConfirmImpact confirmPreference)
+        => string.Equals(parameterSetName, ConfigurationSet, StringComparison.Ordinal)
+            && !confirmWasExplicit
+            && confirmPreference == ConfirmImpact.High;
 
     private static void ValidateResourceType(HomeAssistantDashboardResourceType? value, bool required)
     {

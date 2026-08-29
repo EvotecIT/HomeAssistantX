@@ -122,8 +122,8 @@ public sealed class HomeAssistantCameraClient
         var expectedPreloadStream = update.PreloadStream;
         var expectedOrientation = update.Orientation;
         var payload = update.ToPayload(normalizedEntityId);
-        await _webSocket.RequestAsync("camera/update_prefs", payload, cancellationToken).ConfigureAwait(false);
-        var preferences = await GetPreferencesAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
+        var value = await _webSocket.RequestAsync("camera/update_prefs", payload, cancellationToken).ConfigureAwait(false);
+        var preferences = DecodePreferences(value, "The updated camera preferences could not be decoded.", cancellationToken);
         if (expectedPreloadStream.HasValue
             && preferences.PreloadStream != expectedPreloadStream.Value)
             throw new HomeAssistantProtocolException("The updated camera preferences did not match the requested preload-stream value.");
