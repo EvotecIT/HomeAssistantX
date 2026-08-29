@@ -180,11 +180,13 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
 
             if (isEncryptedResponse)
             {
+                var protectedPayload = root.TryGetProperty("encrypted_data", out var encryptedData)
+                    && encryptedData.ValueKind == JsonValueKind.String
+                    ? encryptedData.GetString()
+                    : null;
                 if (_secret is null
                     || _protector is null
-                    || !root.TryGetProperty("encrypted_data", out var encryptedData)
-                    || encryptedData.ValueKind != JsonValueKind.String
-                    || string.IsNullOrWhiteSpace(encryptedData.GetString()))
+                    || CancellationAwareString.IsNullOrWhiteSpace(protectedPayload, operationToken))
                 {
                     throw new HomeAssistantProtocolException("Home Assistant returned an encrypted mobile-app response that cannot be decrypted.");
                 }
@@ -193,7 +195,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
                 try
                 {
                     plaintext = await _protector.UnprotectAsync(
-                        encryptedData.GetString()!,
+                        protectedPayload!,
                         _secret!,
                         operationToken).ConfigureAwait(false);
                 }
