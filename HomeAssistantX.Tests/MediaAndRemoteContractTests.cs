@@ -1129,8 +1129,22 @@ public sealed class MediaAndRemoteContractTests
 
         await client.Media.BrowsePlayerAsync("media_player.kitchen", mediaContentId: " source-only ");
         using var idOnly = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("media_player/browse_media")));
-        Assert.Equal("source-only", idOnly.RootElement.GetProperty("media_content_id").GetString());
+        Assert.Equal(" source-only ", idOnly.RootElement.GetProperty("media_content_id").GetString());
         Assert.False(idOnly.RootElement.TryGetProperty("media_content_type", out _));
+    }
+
+    [Fact]
+    public async Task ActionableMediaResponsesPreserveProviderOpaqueContentIdentifiers()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Station\",\"media_class\":\"music\",\"media_content_id\":\" opaque station \",\"media_content_type\":\"music\",\"can_play\":true,\"can_expand\":false,\"can_search\":false}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var item = await client.Media.BrowseSourcesAsync();
+
+        Assert.Equal(" opaque station ", item.MediaContentId);
     }
 
     [Fact]
