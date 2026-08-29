@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Recorder;
 
@@ -240,56 +241,117 @@ public sealed class HomeAssistantStatisticImportMetadata
 internal static class HomeAssistantStatisticIdentifier
 {
     internal static bool TryNormalize(string value, out string normalized)
+        => TryNormalize(value, default, out normalized);
+
+    internal static bool TryNormalize(
+        string value,
+        CancellationToken cancellationToken,
+        out string normalized)
     {
-        if (HomeAssistantEntityId.TryNormalize(value, out normalized)) return true;
-        return TryNormalizeExternal(value, out normalized, out _);
+        if (HomeAssistantEntityId.TryNormalize(value, cancellationToken, out normalized)) return true;
+        return TryNormalizeExternal(value, cancellationToken, out normalized, out _);
     }
 
     internal static bool TryNormalizeExternal(string value, out string normalized, out string source)
+        => TryNormalizeExternal(value, default, out normalized, out source);
+
+    internal static bool TryNormalizeExternal(
+        string value,
+        CancellationToken cancellationToken,
+        out string normalized,
+        out string source)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         normalized = string.Empty;
         source = string.Empty;
-        if (string.IsNullOrWhiteSpace(value)) return false;
-        var candidate = value.Trim();
-        var separator = candidate.IndexOf(':');
-        if (separator <= 0 || separator == candidate.Length - 1 || candidate.IndexOf(':', separator + 1) >= 0) return false;
-        source = candidate.Substring(0, separator);
-        if (!IsSlug(source) || !IsSlug(candidate.Substring(separator + 1))) return false;
+        if (HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)) return false;
+        var candidate = HomeAssistantX.Protocol.CancellationAwareString.Trim(value, cancellationToken);
+        var separator = -1;
+        for (var index = 0; index < candidate.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (candidate[index] != ':') continue;
+            if (separator >= 0) return false;
+            separator = index;
+        }
+        if (separator <= 0 || separator == candidate.Length - 1) return false;
+        source = HomeAssistantX.Protocol.CancellationAwareString.Slice(
+            candidate,
+            0,
+            separator,
+            cancellationToken);
+        var statisticName = HomeAssistantX.Protocol.CancellationAwareString.Slice(
+            candidate,
+            separator + 1,
+            candidate.Length - separator - 1,
+            cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsSlug(source, cancellationToken) || !IsSlug(statisticName, cancellationToken)) return false;
         normalized = candidate;
         return true;
     }
 
     internal static bool IsSlug(string value)
+        => IsSlug(value, default);
+
+    internal static bool IsSlug(string value, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value.Length == 0
             || value[0] == '_'
-            || value[value.Length - 1] == '_'
-            || value.Contains("__"))
+            || value[value.Length - 1] == '_')
         {
             return false;
         }
 
-        return value.All(character =>
-            (character >= 'a' && character <= 'z')
-            || (character >= '0' && character <= '9')
-            || character == '_');
+        var previousUnderscore = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var character = value[index];
+            var underscore = character == '_';
+            if (underscore && previousUnderscore
+                || !underscore
+                    && !((character >= 'a' && character <= 'z')
+                        || (character >= '0' && character <= '9')))
+            {
+                return false;
+            }
+            previousUnderscore = underscore;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return true;
     }
 
     internal static string? NormalizeOptionalUnitClass(string? value, string parameterName)
+        => NormalizeOptionalUnitClass(value, parameterName, default);
+
+    internal static string? NormalizeOptionalUnitClass(
+        string? value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value is null) return null;
-        if (!IsSlug(value))
+        if (!IsSlug(value, cancellationToken))
             throw new ArgumentException("Unit classes must be canonical lowercase identifiers.", parameterName);
         return value;
     }
 
     internal static string? NormalizeOptionalUnit(string? value, string parameterName)
+        => NormalizeOptionalUnit(value, parameterName, default);
+
+    internal static string? NormalizeOptionalUnit(
+        string? value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value is null) return null;
         if (value.Length == 0) return string.Empty;
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
             throw new ArgumentException("A supplied unit cannot be empty.", parameterName);
-        return value.Trim();
+        return CancellationAwareString.Trim(value, cancellationToken);
     }
 }
 

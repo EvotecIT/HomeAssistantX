@@ -104,16 +104,23 @@ public sealed class HomeAssistantRecorderClient
             ["period"] = PeriodName(period)
         };
         if (endTime.HasValue) payload["end_time"] = endTime.Value.ToString("O", CultureInfo.InvariantCulture);
+        IReadOnlyList<HomeAssistantStatisticType>? requestedTypes = null;
         if (query.Types is not null)
         {
             if (query.Types.Count == 0) throw new ArgumentException("Statistics types cannot be empty.", nameof(query));
             var types = new List<string>(query.Types.Count);
+            var typeSnapshot = new List<HomeAssistantStatisticType>(query.Types.Count);
             foreach (var type in query.Types)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var name = TypeName(type);
-                if (!types.Contains(name, StringComparer.Ordinal)) types.Add(name);
+                if (!types.Contains(name, StringComparer.Ordinal))
+                {
+                    types.Add(name);
+                    typeSnapshot.Add(type);
+                }
             }
+            requestedTypes = typeSnapshot;
             payload["types"] = types.ToArray();
         }
         if (query.Units is not null)
@@ -123,13 +130,13 @@ public sealed class HomeAssistantRecorderClient
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (string.IsNullOrEmpty(pair.Key)
-                    || !HomeAssistantStatisticIdentifier.IsSlug(pair.Key)
-                    || string.IsNullOrWhiteSpace(pair.Value))
+                    || !HomeAssistantStatisticIdentifier.IsSlug(pair.Key, cancellationToken)
+                    || CancellationAwareString.IsNullOrWhiteSpace(pair.Value, cancellationToken))
                     throw new ArgumentException("Statistics unit-class keys must be canonical lowercase identifiers and unit values must be non-empty.", nameof(query));
                 var normalizedName = pair.Key;
                 if (units.ContainsKey(normalizedName))
                     throw new ArgumentException("Statistics unit names must be unique after normalization.", nameof(query));
-                units.Add(normalizedName, pair.Value.Trim());
+                units.Add(normalizedName, CancellationAwareString.Trim(pair.Value, cancellationToken));
             }
             payload["units"] = units;
         }
@@ -151,8 +158,8 @@ public sealed class HomeAssistantRecorderClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantStatisticIdentifier.TryNormalize(property.Name, out var normalizedStatisticId)
-                || !string.Equals(property.Name, normalizedStatisticId, StringComparison.Ordinal)
+            if (!HomeAssistantStatisticIdentifier.TryNormalize(property.Name, cancellationToken, out var normalizedStatisticId)
+                || !CancellationAwareString.EqualsOrdinal(property.Name, normalizedStatisticId, cancellationToken)
                 || !requestedIds.Contains(normalizedStatisticId)
                 || !responseIds.Add(normalizedStatisticId))
                 throw new HomeAssistantProtocolException("Recorder statistics contained an unexpected or duplicate statistic identifier.");
@@ -162,6 +169,7 @@ public sealed class HomeAssistantRecorderClient
                 endTime,
                 period,
                 homeTimeZone,
+                requestedTypes,
                 cancellationToken);
             var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(
                 property.Value,
@@ -193,11 +201,11 @@ public sealed class HomeAssistantRecorderClient
 
     public async Task UpdateStatisticsMetadataAsync(string statisticId, string? unitClass, string? unitOfMeasurement, CancellationToken cancellationToken = default)
     {
-        unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(unitClass, nameof(unitClass));
-        unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(unitOfMeasurement, nameof(unitOfMeasurement));
+        unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(unitClass, nameof(unitClass), cancellationToken);
+        unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(unitOfMeasurement, nameof(unitOfMeasurement), cancellationToken);
         _ = await _webSocket.RequestAsync("recorder/update_statistics_metadata", new Dictionary<string, object?>
         {
-            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId)),
+            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId), cancellationToken),
             ["unit_class"] = unitClass,
             ["unit_of_measurement"] = unitOfMeasurement
         }, cancellationToken).ConfigureAwait(false);
@@ -205,13 +213,13 @@ public sealed class HomeAssistantRecorderClient
 
     public async Task ChangeStatisticsUnitAsync(string statisticId, string? oldUnit, string? newUnit, CancellationToken cancellationToken = default)
     {
-        oldUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(oldUnit, nameof(oldUnit));
-        newUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(newUnit, nameof(newUnit));
-        if (string.Equals(oldUnit, newUnit, StringComparison.Ordinal))
+        oldUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(oldUnit, nameof(oldUnit), cancellationToken);
+        newUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(newUnit, nameof(newUnit), cancellationToken);
+        if (CancellationAwareString.EqualsOrdinal(oldUnit, newUnit, cancellationToken))
             throw new ArgumentException("The old and new statistics units must be different.", nameof(newUnit));
         _ = await _webSocket.RequestAsync("recorder/change_statistics_unit", new Dictionary<string, object?>
         {
-            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId)),
+            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId), cancellationToken),
             ["old_unit_of_measurement"] = oldUnit,
             ["new_unit_of_measurement"] = newUnit
         }, cancellationToken).ConfigureAwait(false);
@@ -221,10 +229,10 @@ public sealed class HomeAssistantRecorderClient
     {
         if (double.IsNaN(adjustment) || double.IsInfinity(adjustment)) throw new ArgumentOutOfRangeException(nameof(adjustment));
         if (adjustment == 0d) throw new ArgumentOutOfRangeException(nameof(adjustment), "A statistics sum adjustment must be non-zero.");
-        unit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(unit, nameof(unit));
+        unit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(unit, nameof(unit), cancellationToken);
         _ = await _webSocket.RequestAsync("recorder/adjust_sum_statistics", new Dictionary<string, object?>
         {
-            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId)),
+            ["statistic_id"] = RequireStatisticId(statisticId, nameof(statisticId), cancellationToken),
             ["start_time"] = start.ToString("O", CultureInfo.InvariantCulture),
             ["adjustment"] = adjustment,
             ["adjustment_unit_of_measurement"] = unit
@@ -258,12 +266,12 @@ public sealed class HomeAssistantRecorderClient
         }
         cancellationToken.ThrowIfCancellationRequested();
         metadata.ValidateRows(rowSnapshot, cancellationToken);
-        var unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass));
-        var unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement));
+        var unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass), cancellationToken);
+        var unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement), cancellationToken);
         var metadataPayload = new Dictionary<string, object?>
         {
-            ["statistic_id"] = RequireStatisticId(metadata.StatisticId, nameof(metadata.StatisticId)),
-            ["source"] = Require(metadata.Source, nameof(metadata.Source)),
+            ["statistic_id"] = RequireStatisticId(metadata.StatisticId, nameof(metadata.StatisticId), cancellationToken),
+            ["source"] = Require(metadata.Source, nameof(metadata.Source), cancellationToken),
             ["name"] = metadata.Name,
             ["has_mean"] = metadata.HasMean,
             ["has_sum"] = metadata.HasSum,
@@ -326,23 +334,23 @@ public sealed class HomeAssistantRecorderClient
                 || !item.TryGetProperty("statistic_id", out var statisticId)
                 || statisticId.ValueKind != JsonValueKind.String
                 || statisticId.GetString() is not string statisticIdValue
-                || string.IsNullOrWhiteSpace(statisticIdValue)
-                || !HomeAssistantStatisticIdentifier.TryNormalize(statisticIdValue, out var normalizedStatisticId)
-                || !string.Equals(statisticIdValue, normalizedStatisticId, StringComparison.Ordinal)
+                || CancellationAwareString.IsNullOrWhiteSpace(statisticIdValue, cancellationToken)
+                || !HomeAssistantStatisticIdentifier.TryNormalize(statisticIdValue, cancellationToken, out var normalizedStatisticId)
+                || !CancellationAwareString.EqualsOrdinal(statisticIdValue, normalizedStatisticId, cancellationToken)
                 || !item.TryGetProperty("source", out var source)
                 || source.ValueKind != JsonValueKind.String
                 || source.GetString() is not string sourceValue
-                || !HomeAssistantStatisticIdentifier.IsSlug(sourceValue)
+                || !HomeAssistantStatisticIdentifier.IsSlug(sourceValue, cancellationToken)
                 || (statisticIdValue.Contains(':')
-                    ? !HomeAssistantStatisticIdentifier.TryNormalizeExternal(statisticIdValue, out _, out var statisticSource)
-                        || !string.Equals(sourceValue, statisticSource, StringComparison.Ordinal)
-                    : !string.Equals(sourceValue, "recorder", StringComparison.Ordinal))
+                    ? !HomeAssistantStatisticIdentifier.TryNormalizeExternal(statisticIdValue, cancellationToken, out _, out var statisticSource)
+                        || !CancellationAwareString.EqualsOrdinal(sourceValue, statisticSource, cancellationToken)
+                    : !CancellationAwareString.EqualsOrdinal(sourceValue, "recorder", cancellationToken))
                 || !item.TryGetProperty("has_mean", out var hasMean)
                 || hasMean.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
                 || !item.TryGetProperty("has_sum", out var hasSum)
                 || hasSum.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
-                || !HasCanonicalOptionalUnit(item, "unit_of_measurement")
-                || !HasCanonicalOptionalUnit(item, "statistics_unit_of_measurement"))
+                || !HasCanonicalOptionalUnit(item, "unit_of_measurement", cancellationToken)
+                || !HasCanonicalOptionalUnit(item, "statistics_unit_of_measurement", cancellationToken))
             {
                 throw new HomeAssistantProtocolException(failureMessage);
             }
@@ -359,14 +367,17 @@ public sealed class HomeAssistantRecorderClient
                     && (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)
                         || item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic))
                 || !item.HasMean && !item.HasSum && item.MeanType != HomeAssistantStatisticMeanType.Circular
-                || item.UnitClass is not null && !HomeAssistantStatisticIdentifier.IsSlug(item.UnitClass))
+                || item.UnitClass is not null && !HomeAssistantStatisticIdentifier.IsSlug(item.UnitClass, cancellationToken))
                 throw new HomeAssistantProtocolException(failureMessage);
         }
         cancellationToken.ThrowIfCancellationRequested();
         return metadata;
     }
 
-    private static bool HasCanonicalOptionalUnit(JsonElement value, string propertyName)
+    private static bool HasCanonicalOptionalUnit(
+        JsonElement value,
+        string propertyName,
+        CancellationToken cancellationToken)
     {
         if (!value.TryGetProperty(propertyName, out var unit) || unit.ValueKind == JsonValueKind.Null)
         {
@@ -379,8 +390,11 @@ public sealed class HomeAssistantRecorderClient
         }
 
         return text.Length == 0
-            || (!string.IsNullOrWhiteSpace(text)
-                && string.Equals(text, text.Trim(), StringComparison.Ordinal));
+            || (!CancellationAwareString.IsNullOrWhiteSpace(text, cancellationToken)
+                && CancellationAwareString.EqualsOrdinal(
+                    text,
+                    CancellationAwareString.Trim(text, cancellationToken),
+                    cancellationToken));
     }
 
     private static void ValidateStatisticRows(
@@ -389,6 +403,7 @@ public sealed class HomeAssistantRecorderClient
         DateTimeOffset? endTimeExclusive,
         HomeAssistantStatisticPeriod period,
         TimeZoneInfo? homeTimeZone,
+        IReadOnlyList<HomeAssistantStatisticType>? requestedTypes,
         CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Array)
@@ -398,7 +413,7 @@ public sealed class HomeAssistantRecorderClient
         foreach (var row in value.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var hasLastReset = row.ValueKind == JsonValueKind.Object
+            var hasNonNullLastReset = row.ValueKind == JsonValueKind.Object
                 && row.TryGetProperty("last_reset", out var lastResetValue)
                 && lastResetValue.ValueKind != JsonValueKind.Null;
             if (row.ValueKind != JsonValueKind.Object
@@ -406,14 +421,24 @@ public sealed class HomeAssistantRecorderClient
                 || !TryGetUnixMilliseconds(row, "start", required: true, out var start)
                 || !TryGetUnixMilliseconds(row, "end", required: true, out var end)
                 || !TryGetUnixMilliseconds(row, "last_reset", required: false, out var lastReset)
-                || !TryGetFiniteDouble(row, "mean", out _)
+                || !TryGetFiniteDouble(row, "mean", out var mean)
                 || !TryGetFiniteDouble(row, "min", out var minimum)
                 || !TryGetFiniteDouble(row, "max", out var maximum)
-                || !TryGetFiniteDouble(row, "state", out _)
-                || !TryGetFiniteDouble(row, "sum", out _)
-                || !TryGetFiniteDouble(row, "change", out _))
+                || !TryGetFiniteDouble(row, "state", out var state)
+                || !TryGetFiniteDouble(row, "sum", out var sum)
+                || !TryGetFiniteDouble(row, "change", out var change))
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained an invalid timestamp.");
+            }
+
+            if (requestedTypes is not null
+                && !ContainsRequestedStatisticValues(
+                    requestedTypes,
+                    row,
+                    cancellationToken))
+            {
+                throw new HomeAssistantProtocolException(
+                    "A Recorder statistics series omitted a requested statistic value.");
             }
 
             if (end <= start)
@@ -435,7 +460,7 @@ public sealed class HomeAssistantRecorderClient
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a row outside the requested time window.");
             }
 
-            if (hasLastReset && lastReset > end)
+            if (hasNonNullLastReset && lastReset > end)
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a reset timestamp after its interval.");
             }
@@ -456,6 +481,31 @@ public sealed class HomeAssistantRecorderClient
             previousStart = start;
             previousEnd = end;
         }
+    }
+
+    private static bool ContainsRequestedStatisticValues(
+        IReadOnlyList<HomeAssistantStatisticType> requestedTypes,
+        JsonElement row,
+        CancellationToken cancellationToken)
+    {
+        foreach (var type in requestedTypes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var propertyName = type switch
+            {
+                HomeAssistantStatisticType.Change => "change",
+                HomeAssistantStatisticType.LastReset => "last_reset",
+                HomeAssistantStatisticType.Maximum => "max",
+                HomeAssistantStatisticType.Mean => "mean",
+                HomeAssistantStatisticType.Minimum => "min",
+                HomeAssistantStatisticType.State => "state",
+                HomeAssistantStatisticType.Sum => "sum",
+                _ => throw new ArgumentOutOfRangeException(nameof(requestedTypes))
+            };
+            if (!row.TryGetProperty(propertyName, out _)) return false;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return true;
     }
 
     private static bool IsValidPeriodInterval(
@@ -543,8 +593,13 @@ public sealed class HomeAssistantRecorderClient
         payload[name] = value.Value;
     }
 
-    private static string Require(string value, string name)
-        => string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("A non-empty value is required.", name) : value.Trim();
+    private static string Require(
+        string value,
+        string name,
+        CancellationToken cancellationToken)
+        => CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)
+            ? throw new ArgumentException("A non-empty value is required.", name)
+            : CancellationAwareString.Trim(value, cancellationToken);
 
     private static string[] RequireIds(IReadOnlyCollection<string> values, string name)
     {
@@ -633,7 +688,7 @@ public sealed class HomeAssistantRecorderClient
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var statisticId))
+            if (!HomeAssistantStatisticIdentifier.TryNormalize(value, cancellationToken, out var statisticId))
                 throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", name);
             if (seen.Add(statisticId)) normalized.Add(statisticId);
         }
@@ -641,9 +696,12 @@ public sealed class HomeAssistantRecorderClient
         return normalized.ToArray();
     }
 
-    private static string RequireStatisticId(string value, string name)
+    private static string RequireStatisticId(
+        string value,
+        string name,
+        CancellationToken cancellationToken)
     {
-        if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var statisticId))
+        if (!HomeAssistantStatisticIdentifier.TryNormalize(value, cancellationToken, out var statisticId))
             throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", name);
         return statisticId;
     }
@@ -663,7 +721,7 @@ public sealed class HomeAssistantRecorderClient
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantEntityId.TryNormalizeDomain(value, out var domain))
+            if (!HomeAssistantEntityId.TryNormalizeDomain(value, cancellationToken, out var domain))
             {
                 throw new ArgumentException("Domains must use the native Home Assistant format.", name);
             }

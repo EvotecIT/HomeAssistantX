@@ -218,7 +218,7 @@ public sealed class HomeAssistantWeatherClient
         var observation = new HomeAssistantWeatherObservation
         {
             EntityId = state.EntityId,
-            Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name", cancellationToken),
+            Name = ReadOptionalDisplayName(state.Attributes, cancellationToken),
             Condition = state.State,
             Temperature = ReadCurrentNumber(state.Attributes, "temperature", cancellationToken),
             ApparentTemperature = ReadCurrentNumber(state.Attributes, "apparent_temperature", cancellationToken),
@@ -241,6 +241,32 @@ public sealed class HomeAssistantWeatherClient
         };
         cancellationToken.ThrowIfCancellationRequested();
         return observation;
+    }
+
+    private static string? ReadOptionalDisplayName(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        CancellationToken cancellationToken)
+    {
+        if (!HomeAssistantAttributeReader.TryGetValue(
+                attributes,
+                "friendly_name",
+                out var raw,
+                cancellationToken)
+            || raw.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (raw.ValueKind != JsonValueKind.String
+            || raw.GetString() is not string value
+            || CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant weather state contained an invalid display name.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return value;
     }
 
     private static double? ReadCurrentPercentage(

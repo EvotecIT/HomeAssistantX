@@ -87,8 +87,9 @@ public sealed class HomeAssistantEnergyClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(property.Name)
-                || !string.Equals(property.Name, property.Name.Trim(), StringComparison.Ordinal)
+            var normalizedName = CancellationAwareString.Trim(property.Name, cancellationToken);
+            if (normalizedName.Length == 0
+                || !CancellationAwareString.EqualsOrdinal(property.Name, normalizedName, cancellationToken)
                 || property.Value.ValueKind != JsonValueKind.Object)
             {
                 throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained an invalid entry.");
@@ -116,8 +117,8 @@ public sealed class HomeAssistantEnergyClient
             cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind != JsonValueKind.String
                 || item.GetString() is not string value
-                || !HomeAssistantEntityId.TryNormalizeDomain(value, out var normalized)
-                || !string.Equals(value, normalized, StringComparison.Ordinal)
+                || !HomeAssistantEntityId.TryNormalizeDomain(value, cancellationToken, out var normalized)
+                || !CancellationAwareString.EqualsOrdinal(value, normalized, cancellationToken)
                 || !seen.Add(normalized))
             {
                 return false;
@@ -139,7 +140,7 @@ public sealed class HomeAssistantEnergyClient
         if (!Enum.IsDefined(typeof(HomeAssistantEnergyPeriod), period))
             throw new ArgumentOutOfRangeException(nameof(period));
         var ids = RequireIds(energyStatisticIds, nameof(energyStatisticIds), cancellationToken);
-        var normalizedCo2StatisticId = RequireStatisticId(co2StatisticId, nameof(co2StatisticId));
+        var normalizedCo2StatisticId = RequireStatisticId(co2StatisticId, nameof(co2StatisticId), cancellationToken);
         TimeZoneInfo? homeTimeZone = null;
         if (period != HomeAssistantEnergyPeriod.Hour)
         {
@@ -260,7 +261,7 @@ public sealed class HomeAssistantEnergyClient
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var identifier = RequireStatisticId(value, parameterName);
+            var identifier = RequireStatisticId(value, parameterName, cancellationToken);
             if (!seen.Add(identifier))
                 throw new ArgumentException("Statistic identifiers must be unique.", parameterName);
             normalized.Add(identifier);
@@ -269,9 +270,12 @@ public sealed class HomeAssistantEnergyClient
         return normalized.ToArray();
     }
 
-    private static string RequireStatisticId(string value, string parameterName)
+    private static string RequireStatisticId(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (!HomeAssistantStatisticIdentifier.TryNormalize(value, out var normalized))
+        if (!HomeAssistantStatisticIdentifier.TryNormalize(value, cancellationToken, out var normalized))
             throw new ArgumentException("A canonical statistic identifier is required.", parameterName);
         return normalized;
     }
@@ -317,7 +321,7 @@ public sealed class HomeAssistantEnergyClient
                 throw new HomeAssistantProtocolException($"The Home Assistant {name} preference collection was malformed.");
             }
 
-            if (!HomeAssistantEnergyPreferencesUpdate.HasRequiredIdentity(item, name))
+            if (!HomeAssistantEnergyPreferencesUpdate.HasRequiredIdentity(item, name, cancellationToken))
             {
                 throw new HomeAssistantProtocolException(
                     $"The Home Assistant {name} preference collection omitted a required canonical identity field.");

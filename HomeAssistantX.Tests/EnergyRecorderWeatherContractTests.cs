@@ -255,6 +255,72 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Equal(new[] { "change", "sum" }, command.RootElement.GetProperty("types").EnumerateArray().Select(value => value.GetString()).ToArray());
     }
 
+    [Fact]
+    public async Task RecorderStatisticsRequireEveryExplicitlyRequestedValue()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson =
+                "{\"sensor.grid_energy\":[{\"start\":1787731200000,\"end\":1787734800000,\"mean\":3.5}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(
+            new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero),
+            HomeAssistantStatisticPeriod.Hour,
+            "sensor.grid_energy")
+        {
+            EndTime = new DateTimeOffset(2026, 8, 27, 0, 0, 0, TimeSpan.Zero),
+            Types = new[] { HomeAssistantStatisticType.Sum }
+        };
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Recorder.GetStatisticsAsync(query));
+    }
+
+    [Fact]
+    public async Task RecorderStatisticsTreatRequestedNullFieldsAsPresent()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson =
+                "{\"sensor.grid_energy\":[{\"start\":1787731200000,\"end\":1787734800000,\"change\":null,\"last_reset\":null,\"max\":null,\"mean\":null,\"min\":null,\"state\":null,\"sum\":null}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(
+            new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero),
+            HomeAssistantStatisticPeriod.Hour,
+            "sensor.grid_energy")
+        {
+            EndTime = new DateTimeOffset(2026, 8, 27, 0, 0, 0, TimeSpan.Zero),
+            Types = Enum.GetValues<HomeAssistantStatisticType>()
+        };
+
+        var row = Assert.Single(Assert.Single(await client.Recorder.GetStatisticsAsync(query)).Rows);
+
+        Assert.Null(row.Change);
+        Assert.Null(row.LastReset);
+        Assert.Null(row.Maximum);
+        Assert.Null(row.Mean);
+        Assert.Null(row.Minimum);
+        Assert.Null(row.State);
+        Assert.Null(row.Sum);
+    }
+
+    [Fact]
+    public void EnergyEntryIdentityValidationHonorsCancellation()
+    {
+        using var document = JsonDocument.Parse(
+            "{\"stat_consumption\":\"sensor." + new string('x', 1_000_000) + "\"}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantEnergyPreferencesUpdate.HasRequiredIdentity(
+                document.RootElement,
+                "device_consumption",
+                cancellation.Token));
+    }
+
     [Theory]
     [InlineData(HomeAssistantStatisticKind.Mean, false, true)]
     [InlineData(HomeAssistantStatisticKind.Sum, true, false)]
@@ -854,6 +920,24 @@ public sealed class EnergyRecorderWeatherContractTests
         {
             _ = HomeAssistantWeatherClient.ToObservation(state, cancellation.Token);
         });
+    }
+
+    [Theory]
+    [InlineData("true")]
+    [InlineData("42")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("\"   \"")]
+    public async Task WeatherCurrentReadsRejectMalformedDisplayNames(string friendlyName)
+    {
+        var state = "{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{"
+            + "\"friendly_name\":" + friendlyName + "}}";
+        using var server = new TestHomeAssistantServer { ExactStateResponseJson = state };
+        server.SetStates("[" + state + "]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync("weather.home"));
     }
 
     [Fact]

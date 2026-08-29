@@ -76,7 +76,7 @@ public sealed class HomeAssistantEnergyPreferencesUpdate
                 throw new ArgumentException($"Every {name} preference entry must use each JSON property name only once.", name);
             }
 
-            if (!HasRequiredIdentity(item, name))
+            if (!HasRequiredIdentity(item, name, cancellationToken))
             {
                 throw new ArgumentException($"Every {name} preference entry must contain its canonical required identity field.", name);
             }
@@ -86,26 +86,39 @@ public sealed class HomeAssistantEnergyPreferencesUpdate
         payload[name] = snapshot;
     }
 
-    internal static bool HasRequiredIdentity(JsonElement item, string collectionName)
+    internal static bool HasRequiredIdentity(
+        JsonElement item,
+        string collectionName,
+        CancellationToken cancellationToken)
     {
-        if (string.Equals(collectionName, "energy_sources", StringComparison.Ordinal))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+            collectionName,
+            "energy_sources",
+            cancellationToken))
         {
             return item.TryGetProperty("type", out var type)
                 && type.ValueKind == JsonValueKind.String
                 && type.GetString() is string value
-                && !string.IsNullOrWhiteSpace(value)
-                && string.Equals(value, value.Trim(), StringComparison.Ordinal);
+                && !HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)
+                && HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                    value,
+                    HomeAssistantX.Protocol.CancellationAwareString.Trim(value, cancellationToken),
+                    cancellationToken);
         }
 
         if (!item.TryGetProperty("stat_consumption", out var statistic)
             || statistic.ValueKind != JsonValueKind.String
             || statistic.GetString() is not string statisticId
-            || !HomeAssistantStatisticIdentifier.TryNormalize(statisticId, out var normalized))
+            || !HomeAssistantStatisticIdentifier.TryNormalize(statisticId, cancellationToken, out var normalized))
         {
             return false;
         }
 
-        return string.Equals(statisticId, normalized, StringComparison.Ordinal);
+        return HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+            statisticId,
+            normalized,
+            cancellationToken);
     }
 }
 
