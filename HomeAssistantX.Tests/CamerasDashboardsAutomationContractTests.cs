@@ -1991,6 +1991,15 @@ public sealed class CamerasDashboardsAutomationContractTests
             HomeAssistantRootRelativePath.IsValid("/api/hls/front/master_playlist.m3u8", cancellation.Token));
     }
 
+    [Fact]
+    public void SharedRootRelativePathValidationRejectsUnboundedProviderValues()
+    {
+        var path = "/" + new string('a', HomeAssistantRootRelativePath.MaximumLength);
+
+        Assert.False(HomeAssistantRootRelativePath.IsValid(path));
+        Assert.True(HomeAssistantRootRelativePath.IsValid(path.Substring(0, HomeAssistantRootRelativePath.MaximumLength)));
+    }
+
     private static IEnumerable<string> CancelAfterFirstStreamType(CancellationTokenSource cancellation)
     {
         yield return "hls";

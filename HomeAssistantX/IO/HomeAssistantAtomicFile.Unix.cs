@@ -22,7 +22,9 @@ internal static partial class HomeAssistantAtomicFile
     private const int MacCreate = 0x0200;
     private const int MacExclusive = 0x0800;
     private const int MacCloseOnExec = 0x1000000;
-    private const int MaximumMetadataRetries = 4;
+    private const int UnixCurrentWorkingDirectory = -100;
+    private const uint LinuxRenameExchange = 0x2;
+    private const uint MacRenameSwap = 0x2;
 
     private static void CommitUnixOverwrite(
         string temporaryPath,
@@ -30,40 +32,68 @@ internal static partial class HomeAssistantAtomicFile
         CancellationToken cancellationToken,
         Action? beforeMetadataRecheck)
     {
-        for (var attempt = 0; attempt < MaximumMetadataRetries; attempt++)
+        cancellationToken.ThrowIfCancellationRequested();
+        beforeMetadataRecheck?.Invoke();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var exchangeResult = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            ? RenameMac(temporaryPath, destinationPath, MacRenameSwap)
+            : RenameLinux(
+                UnixCurrentWorkingDirectory,
+                temporaryPath,
+                UnixCurrentWorkingDirectory,
+                destinationPath,
+                LinuxRenameExchange);
+        if (exchangeResult == 0)
         {
+            // The displaced destination now has temporaryPath. Reading it after the
+            // atomic exchange removes the compare-to-rename race; the replacement
+            // remains restrictive until those exact permissions are applied.
             cancellationToken.ThrowIfCancellationRequested();
-            var expected = TryReadUnixFileMetadata(destinationPath);
-            if (expected.HasValue)
+            var displaced = ReadUnixFileMetadata(temporaryPath);
+            try
             {
                 ApplyUnixDestinationMetadata(
-                    destinationPath,
                     temporaryPath,
-                    expected.Value,
+                    destinationPath,
+                    displaced,
                     useManagedApis: true);
             }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            beforeMetadataRecheck?.Invoke();
-            beforeMetadataRecheck = null;
-            var current = TryReadUnixFileMetadata(destinationPath);
-            if (!UnixFileMetadata.SameIdentityAndPermissions(expected, current))
+            catch
             {
-                continue;
+                _ = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                    ? RenameMac(destinationPath, temporaryPath, MacRenameSwap)
+                    : RenameLinux(
+                        UnixCurrentWorkingDirectory,
+                        destinationPath,
+                        UnixCurrentWorkingDirectory,
+                        temporaryPath,
+                        LinuxRenameExchange);
+                throw;
             }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            if (Rename(temporaryPath, destinationPath) != 0)
-            {
-                throw new IOException(
-                    "The temporary file could not be committed atomically.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
+            File.Delete(temporaryPath);
             return;
         }
 
+        var exchangeError = Marshal.GetLastWin32Error();
+        if (exchangeError == UnixNoEntry)
+        {
+            try
+            {
+                File.Move(temporaryPath, destinationPath);
+                return;
+            }
+            catch (IOException exception) when (File.Exists(destinationPath))
+            {
+                throw new IOException(
+                    "The destination Unix file appeared while the atomic replacement was being committed; retry the export.",
+                    exception);
+            }
+        }
+
         throw new IOException(
-            "The destination Unix file changed while its ownership and permissions were being preserved.");
+            "The Unix destination could not be exchanged atomically.",
+            new Win32Exception(exchangeError));
     }
 
     private static void PreserveUnixDestinationMetadata(
@@ -476,6 +506,17 @@ internal static partial class HomeAssistantAtomicFile
 
     [DllImport("libc", EntryPoint = "rename", SetLastError = true)]
     private static extern int Rename(string oldPath, string newPath);
+
+    [DllImport("libc", EntryPoint = "renameat2", SetLastError = true)]
+    private static extern int RenameLinux(
+        int oldDirectory,
+        string oldPath,
+        int newDirectory,
+        string newPath,
+        uint flags);
+
+    [DllImport("libc", EntryPoint = "renamex_np", SetLastError = true)]
+    private static extern int RenameMac(string oldPath, string newPath, uint flags);
 
     [DllImport("libc", EntryPoint = "getxattr", SetLastError = true)]
     private static extern IntPtr GetExtendedAttribute(
