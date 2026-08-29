@@ -471,26 +471,27 @@ public sealed class HomeAssistantRecorderClient
                 && (start - periodOrigin.ToUnixTimeMilliseconds()) % expected == 0;
         }
 
-        var minimum = period switch
+        if (start < periodOrigin.ToUnixTimeMilliseconds()
+            || homeTimeZone is null
+            || !IsCalendarBoundary(start, homeTimeZone, period))
         {
-            HomeAssistantStatisticPeriod.Day => TimeSpan.FromHours(23),
-            HomeAssistantStatisticPeriod.Week => TimeSpan.FromHours(167),
-            HomeAssistantStatisticPeriod.Month => TimeSpan.FromDays(27) + TimeSpan.FromHours(23),
+            return false;
+        }
+
+        var localStart = TimeZoneInfo.ConvertTime(
+            DateTimeOffset.FromUnixTimeMilliseconds(start),
+            homeTimeZone);
+        var localSuccessor = period switch
+        {
+            HomeAssistantStatisticPeriod.Day => new DateTime(
+                localStart.Year, localStart.Month, localStart.Day, 0, 0, 0, DateTimeKind.Unspecified).AddDays(1),
+            HomeAssistantStatisticPeriod.Week => new DateTime(
+                localStart.Year, localStart.Month, localStart.Day, 0, 0, 0, DateTimeKind.Unspecified).AddDays(7),
+            HomeAssistantStatisticPeriod.Month => new DateTime(
+                localStart.Year, localStart.Month, 1, 0, 0, 0, DateTimeKind.Unspecified).AddMonths(1),
             _ => throw new ArgumentOutOfRangeException(nameof(period))
         };
-        var maximum = period switch
-        {
-            HomeAssistantStatisticPeriod.Day => TimeSpan.FromHours(25),
-            HomeAssistantStatisticPeriod.Week => TimeSpan.FromHours(169),
-            HomeAssistantStatisticPeriod.Month => TimeSpan.FromDays(31) + TimeSpan.FromHours(1),
-            _ => throw new ArgumentOutOfRangeException(nameof(period))
-        };
-        return start >= periodOrigin.ToUnixTimeMilliseconds()
-            && duration >= minimum.Ticks / TimeSpan.TicksPerMillisecond
-            && duration <= maximum.Ticks / TimeSpan.TicksPerMillisecond
-            && homeTimeZone is not null
-            && IsCalendarBoundary(start, homeTimeZone, period)
-            && IsCalendarBoundary(end, homeTimeZone, period);
+        return ResolveLocalBoundary(localSuccessor, homeTimeZone).ToUnixTimeMilliseconds() == end;
     }
 
     private static bool IsCalendarBoundary(
@@ -499,10 +500,15 @@ public sealed class HomeAssistantRecorderClient
         HomeAssistantStatisticPeriod period)
     {
         var local = TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds), homeTimeZone);
-        return local.TimeOfDay == TimeSpan.Zero
-            && (period == HomeAssistantStatisticPeriod.Day
-                || period == HomeAssistantStatisticPeriod.Week && local.DayOfWeek == DayOfWeek.Monday
-                || period == HomeAssistantStatisticPeriod.Month && local.Day == 1);
+        if (period == HomeAssistantStatisticPeriod.Week && local.DayOfWeek != DayOfWeek.Monday
+            || period == HomeAssistantStatisticPeriod.Month && local.Day != 1)
+        {
+            return false;
+        }
+
+        var localMidnight = new DateTime(
+            local.Year, local.Month, local.Day, 0, 0, 0, DateTimeKind.Unspecified);
+        return ResolveLocalBoundary(localMidnight, homeTimeZone).ToUnixTimeMilliseconds() == unixMilliseconds;
     }
 
     private static bool TryGetUnixMilliseconds(JsonElement value, string propertyName, bool required, out long milliseconds)
@@ -715,15 +721,20 @@ public sealed class HomeAssistantRecorderClient
 
     private static DateTimeOffset ResolveLocalBoundary(DateTime localBoundary, TimeZoneInfo homeTimeZone)
     {
+        TimeSpan offset;
         if (homeTimeZone.IsInvalidTime(localBoundary))
         {
-            throw new HomeAssistantProtocolException(
-                "The requested statistics period begins at a time that does not exist in the Home Assistant time zone.");
+            // Home Assistant uses Python zoneinfo fold=0 semantics. For a local time in a
+            // forward gap, that means the offset immediately before the transition and
+            // therefore normalizes the requested midnight to the first valid local time.
+            offset = homeTimeZone.GetUtcOffset(localBoundary.AddTicks(-1));
         }
-
-        var offset = homeTimeZone.IsAmbiguousTime(localBoundary)
-            ? homeTimeZone.GetAmbiguousTimeOffsets(localBoundary).Max()
-            : homeTimeZone.GetUtcOffset(localBoundary);
+        else
+        {
+            offset = homeTimeZone.IsAmbiguousTime(localBoundary)
+                ? homeTimeZone.GetAmbiguousTimeOffsets(localBoundary).Max()
+                : homeTimeZone.GetUtcOffset(localBoundary);
+        }
         return new DateTimeOffset(localBoundary, offset);
     }
 

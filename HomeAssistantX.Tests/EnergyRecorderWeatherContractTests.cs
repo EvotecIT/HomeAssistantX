@@ -1564,6 +1564,30 @@ public sealed class EnergyRecorderWeatherContractTests
             new HomeAssistantStatisticsQuery(queryStart, HomeAssistantStatisticPeriod.Month, "sensor.energy")));
     }
 
+    [Theory]
+    [InlineData("America/Havana", "2026-03-08T05:00:00Z", "2026-03-09T04:00:00Z")]
+    [InlineData("Antarctica/Troll", "2026-03-29T00:00:00Z", "2026-03-29T22:00:00Z")]
+    [InlineData("Antarctica/Troll", "2026-10-24T22:00:00Z", "2026-10-26T00:00:00Z")]
+    public async Task RecorderDailyStatisticsAcceptHomeAssistantMidnightTransitionBuckets(
+        string timeZone,
+        string rowStartText,
+        string rowEndText)
+    {
+        var rowStart = DateTimeOffset.Parse(rowStartText, CultureInfo.InvariantCulture);
+        var rowEnd = DateTimeOffset.Parse(rowEndText, CultureInfo.InvariantCulture);
+        using var server = new TestHomeAssistantServer
+        {
+            ConfigurationResponseJson = "{\"time_zone\":\"" + timeZone + "\",\"components\":[]}",
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":"
+                + rowStart.ToUnixTimeMilliseconds() + ",\"end\":"
+                + rowEnd.ToUnixTimeMilliseconds() + "}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Single(await client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(rowStart, HomeAssistantStatisticPeriod.Day, "sensor.energy")));
+    }
+
     [Fact]
     public async Task RecorderStatisticsRejectDuplicateNormalizedUnitNamesBeforeDispatch()
     {
