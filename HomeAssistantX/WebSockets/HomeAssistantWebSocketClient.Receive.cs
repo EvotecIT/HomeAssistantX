@@ -281,7 +281,9 @@ public sealed partial class HomeAssistantWebSocketClient
                     HomeAssistantDiagnosticLevel.Error,
                     "websocket.reconnect_permanent_failure",
                     "Home Assistant rejected WebSocket negotiation or returned an invalid protocol response; automatic reconnect stopped.",
-                    CreateSafeReconnectDiagnosticFailure(ex.Failure));
+                    HomeAssistantDiagnosticFailure.Sanitize(
+                        ex.Failure,
+                        "Home Assistant rejected WebSocket feature negotiation."));
                 await FailSubscriptionsAsync(ex.Failure).ConfigureAwait(false);
                 return;
             }
@@ -299,42 +301,6 @@ public sealed partial class HomeAssistantWebSocketClient
         var registrations = _subscriptions.Values.ToArray();
         await Task.WhenAll(registrations.Select(registration => registration.FailAndStopAsync(failure)))
             .ConfigureAwait(false);
-    }
-
-    private static HomeAssistantException CreateSafeReconnectDiagnosticFailure(HomeAssistantException failure)
-    {
-        if (failure is HomeAssistantCommandException commandFailure)
-        {
-            var safeCode = IsSafeCommandCode(commandFailure.Code)
-                ? commandFailure.Code
-                : "unknown_error";
-            return new HomeAssistantCommandException(
-                safeCode,
-                "Home Assistant rejected WebSocket feature negotiation.");
-        }
-
-        return new HomeAssistantProtocolException(
-            "Home Assistant returned an invalid WebSocket feature-negotiation response.");
-    }
-
-    private static bool IsSafeCommandCode(string value)
-    {
-        if (value.Length is < 1 or > 64)
-        {
-            return false;
-        }
-
-        foreach (var character in value)
-        {
-            if ((character < 'a' || character > 'z')
-                && (character < '0' || character > '9')
-                && character != '_')
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private async Task<string> ReceiveTextAsync(ClientWebSocket socket, CancellationToken cancellationToken)

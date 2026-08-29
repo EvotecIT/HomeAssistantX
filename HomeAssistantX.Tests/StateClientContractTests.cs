@@ -247,6 +247,32 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public async Task TerminalReconnectCommandFailureKeepsPrivateDetailsOutOfStateDiagnostics()
+    {
+        const string privateMarker = "private-home-name-and-url";
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+
+        server.SupportedFeaturesErrorCode = "invalid_format";
+        server.SupportedFeaturesErrorMessage = privateMarker;
+        await server.DropWebSocketsAsync();
+
+        var failure = await Assert.ThrowsAsync<HomeAssistantCommandException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(privateMarker, failure.Message, StringComparison.Ordinal);
+        var diagnostic = Assert.Single(
+            diagnostics.Events,
+            value => value.Name == "state.server_subscription_failed");
+        Assert.IsType<HomeAssistantCommandException>(diagnostic.Exception);
+        Assert.Equal("invalid_format", ((HomeAssistantCommandException)diagnostic.Exception!).Code);
+        Assert.DoesNotContain(privateMarker, diagnostic.Exception!.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TerminalReconnectFailureCancelsRunningStateHandlerAndPreservesUpstreamFailure()
     {
         using var server = new TestHomeAssistantServer();

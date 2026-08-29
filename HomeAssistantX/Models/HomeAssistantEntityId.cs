@@ -10,8 +10,16 @@ public static class HomeAssistantEntityId
         string? value,
         string domain,
         out string normalized)
+        => TryNormalizeForDomain(value, domain, default, out normalized);
+
+    internal static bool TryNormalizeForDomain(
+        string? value,
+        string domain,
+        CancellationToken cancellationToken,
+        out string normalized)
     {
-        if (!TryNormalize(value, out normalized) || !TryNormalizeDomain(domain, out var normalizedDomain))
+        if (!TryNormalize(value, cancellationToken, out normalized)
+            || !TryNormalizeDomain(domain, cancellationToken, out var normalizedDomain))
         {
             return false;
         }
@@ -22,9 +30,20 @@ public static class HomeAssistantEntityId
 
     /// <summary>Trims and validates a lowercase Home Assistant domain.</summary>
     public static bool TryNormalizeDomain(string? value, out string normalized)
+        => TryNormalizeDomain(value, default, out normalized);
+
+    internal static bool TryNormalizeDomain(
+        string? value,
+        CancellationToken cancellationToken,
+        out string normalized)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         normalized = value?.Trim() ?? string.Empty;
-        return IsValidSegment(normalized, disallowDoubleUnderscore: true);
+        return IsValidSegment(
+            normalized,
+            disallowBoundaryUnderscore: true,
+            disallowDoubleUnderscore: true,
+            cancellationToken);
     }
 
     internal static string RequireResponseEntityId(string? value)
@@ -41,7 +60,14 @@ public static class HomeAssistantEntityId
 
     /// <summary>Trims and validates a lowercase Home Assistant entity identifier.</summary>
     public static bool TryNormalize(string? value, out string normalized)
+        => TryNormalize(value, default, out normalized);
+
+    internal static bool TryNormalize(
+        string? value,
+        CancellationToken cancellationToken,
+        out string normalized)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         normalized = value?.Trim() ?? string.Empty;
         var separator = normalized.IndexOf('.');
         if (separator <= 0
@@ -53,15 +79,27 @@ public static class HomeAssistantEntityId
 
         var domain = normalized.Substring(0, separator);
         var objectId = normalized.Substring(separator + 1);
-        return IsValidSegment(domain, disallowDoubleUnderscore: true)
-            && IsValidSegment(objectId, disallowDoubleUnderscore: false);
+        return IsValidSegment(
+                domain,
+                disallowBoundaryUnderscore: true,
+                disallowDoubleUnderscore: true,
+                cancellationToken)
+            && IsValidSegment(
+                objectId,
+                disallowBoundaryUnderscore: false,
+                disallowDoubleUnderscore: false,
+                cancellationToken);
     }
 
-    private static bool IsValidSegment(string value, bool disallowDoubleUnderscore)
+    private static bool IsValidSegment(
+        string value,
+        bool disallowBoundaryUnderscore,
+        bool disallowDoubleUnderscore,
+        CancellationToken cancellationToken)
     {
         if (value.Length == 0
-            || value[0] == '_'
-            || value[value.Length - 1] == '_'
+            || (disallowBoundaryUnderscore
+                && (value[0] == '_' || value[value.Length - 1] == '_'))
             || (disallowDoubleUnderscore && value.Contains("__")))
         {
             return false;
@@ -69,6 +107,7 @@ public static class HomeAssistantEntityId
 
         for (var index = 0; index < value.Length; index++)
         {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
             var character = value[index];
 
             if (!((character >= 'a' && character <= 'z')
@@ -79,6 +118,7 @@ public static class HomeAssistantEntityId
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return true;
     }
 

@@ -661,7 +661,10 @@ public sealed class HomeAssistantStateClient : IDisposable
             Fail(
                 exception,
                 "state.server_subscription_failed",
-                "The shared Home Assistant state subscription failed.");
+                "The shared Home Assistant state subscription failed.",
+                HomeAssistantDiagnosticFailure.Sanitize(
+                    exception,
+                    "The shared Home Assistant state subscription failed."));
         }
 
         public void FailOverflow(Exception exception)
@@ -669,10 +672,15 @@ public sealed class HomeAssistantStateClient : IDisposable
             Fail(
                 exception,
                 "state.subscription_overflow",
-                "A state subscription consumer could not keep up with Home Assistant updates.");
+                "A state subscription consumer could not keep up with Home Assistant updates.",
+                exception);
         }
 
-        private void Fail(Exception exception, string diagnosticName, string diagnosticMessage)
+        private void Fail(
+            Exception exception,
+            string diagnosticName,
+            string diagnosticMessage,
+            Exception diagnosticException)
         {
             if (Interlocked.Exchange(ref _stopped, 1) != 0)
             {
@@ -684,7 +692,7 @@ public sealed class HomeAssistantStateClient : IDisposable
                 HomeAssistantDiagnosticLevel.Error,
                 diagnosticName,
                 diagnosticMessage,
-                exception);
+                diagnosticException);
             Volatile.Write(ref _terminalFailure, exception);
             _channel.Writer.TryComplete(exception);
             CancelSource();

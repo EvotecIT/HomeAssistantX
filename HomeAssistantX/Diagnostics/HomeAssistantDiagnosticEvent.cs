@@ -48,3 +48,48 @@ internal sealed class NullHomeAssistantDiagnosticsSink : IHomeAssistantDiagnosti
     {
     }
 }
+
+internal static class HomeAssistantDiagnosticFailure
+{
+    internal static Exception Sanitize(Exception failure, string message)
+    {
+        if (failure is Exceptions.HomeAssistantCommandException commandFailure)
+        {
+            return new Exceptions.HomeAssistantCommandException(
+                IsSafeCommandCode(commandFailure.Code) ? commandFailure.Code : "unknown_error",
+                message);
+        }
+
+        if (failure is Exceptions.HomeAssistantAuthenticationException)
+        {
+            return new Exceptions.HomeAssistantAuthenticationException(message);
+        }
+
+        if (failure is Exceptions.HomeAssistantProtocolException)
+        {
+            return new Exceptions.HomeAssistantProtocolException(message);
+        }
+
+        return new Exceptions.HomeAssistantException(message);
+    }
+
+    private static bool IsSafeCommandCode(string value)
+    {
+        if (value.Length is < 1 or > 64)
+        {
+            return false;
+        }
+
+        foreach (var character in value)
+        {
+            if ((character < 'a' || character > 'z')
+                && (character < '0' || character > '9')
+                && character != '_')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}

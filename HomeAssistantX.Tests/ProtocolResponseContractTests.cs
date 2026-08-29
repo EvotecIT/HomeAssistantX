@@ -13,6 +13,8 @@ public sealed class ProtocolResponseContractTests
         Assert.True(HomeAssistantEntityId.TryNormalize(" light.kitchen ", out var normalized));
         Assert.Equal("light.kitchen", normalized);
         Assert.True(HomeAssistantEntityId.TryNormalize("light.kitchen__ceiling", out _));
+        Assert.True(HomeAssistantEntityId.TryNormalize("sensor._probe", out _));
+        Assert.True(HomeAssistantEntityId.TryNormalize("sensor.probe_", out _));
         Assert.True(HomeAssistantEntityId.TryNormalizeDomain(" light ", out var domain));
         Assert.Equal("light", domain);
         Assert.False(HomeAssistantEntityId.TryNormalize("light.Kitchen", out _));
@@ -22,9 +24,7 @@ public sealed class ProtocolResponseContractTests
         {
             "_light.kitchen",
             "light_.kitchen",
-            "li__ght.kitchen",
-            "light._kitchen",
-            "light.kitchen_"
+            "li__ght.kitchen"
         })
         {
             Assert.False(HomeAssistantEntityId.TryNormalize(invalid, out _));
