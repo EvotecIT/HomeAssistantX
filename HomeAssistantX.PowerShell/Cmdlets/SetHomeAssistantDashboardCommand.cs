@@ -61,7 +61,7 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
             case CreateSet:
                 if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, AllowSingleWord, out var createUrlPath, CancelToken))
                     throw new ArgumentException("Dashboard URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens; a hyphen is required unless AllowSingleWord is enabled.", nameof(UrlPath));
-                var createTitle = Require(Title, nameof(Title));
+                var createTitle = HomeAssistantDashboardIdentifier.RequireTitle(Title, nameof(Title), CancelToken);
                 var createIcon = Icon is null ? null : RequireIcon(Icon, nameof(Icon), CancelToken);
                 target = createUrlPath; action = "Create Home Assistant dashboard";
                 if (!ShouldProcess(target, action)) return;
@@ -69,8 +69,8 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 break;
             case UpdateSet:
                 if (RemoveIcon && Icon is not null) throw new ArgumentException("Icon and RemoveIcon cannot be combined.");
-                var dashboardId = Require(DashboardId, nameof(DashboardId));
-                var updateTitle = Title is null ? null : Require(Title, nameof(Title));
+                var dashboardId = HomeAssistantDashboardIdentifier.RequireSelector(DashboardId, nameof(DashboardId), CancelToken);
+                var updateTitle = Title is null ? null : HomeAssistantDashboardIdentifier.RequireTitle(Title, nameof(Title), CancelToken);
                 var updateIcon = Icon is null ? null : RequireIcon(Icon, nameof(Icon), CancelToken);
                 var update = new HomeAssistantDashboardUpdate { Title = updateTitle, Icon = updateIcon, RemoveIcon = RemoveIcon, ShowInSidebar = ShowInSidebar, RequireAdmin = DashboardRequireAdmin };
                 if (Title is null && Icon is null && !RemoveIcon && !ShowInSidebar.HasValue && !DashboardRequireAdmin.HasValue) throw new ArgumentException("Specify at least one dashboard update.");
@@ -79,7 +79,7 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 result = await Client.Dashboards.UpdateDashboardAsync(dashboardId, update, CancelToken).ConfigureAwait(false);
                 break;
             case ResourceCreateSet:
-                var createResourceUrl = Require(ResourceUrl, nameof(ResourceUrl));
+                var createResourceUrl = HomeAssistantDashboardIdentifier.RequireResourceUrl(ResourceUrl, nameof(ResourceUrl), CancelToken);
                 ValidateResourceType(ResourceType, required: true);
                 target = createResourceUrl; action = "Create Home Assistant dashboard resource";
                 if (!ShouldProcess(target, action)) return;
@@ -87,8 +87,8 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 break;
             case ResourceUpdateSet:
                 if (ResourceUrl is null && !ResourceType.HasValue) throw new ArgumentException("Specify ResourceUrl or ResourceType.");
-                var resourceId = Require(ResourceId, nameof(ResourceId));
-                var updateResourceUrl = ResourceUrl is null ? null : Require(ResourceUrl, nameof(ResourceUrl));
+                var resourceId = HomeAssistantDashboardIdentifier.RequireSelector(ResourceId, nameof(ResourceId), CancelToken);
+                var updateResourceUrl = ResourceUrl is null ? null : HomeAssistantDashboardIdentifier.RequireResourceUrl(ResourceUrl, nameof(ResourceUrl), CancelToken);
                 ValidateResourceType(ResourceType, required: false);
                 target = resourceId; action = "Update Home Assistant dashboard resource";
                 if (!ShouldProcess(target, action)) return;
@@ -120,12 +120,6 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
     {
         if (required && !value.HasValue) throw new ArgumentException("A dashboard resource type is required.", nameof(ResourceType));
         if (value.HasValue && !Enum.IsDefined(typeof(HomeAssistantDashboardResourceType), value.Value)) throw new ArgumentOutOfRangeException(nameof(ResourceType));
-    }
-
-    private static string Require(string? value, string parameterName)
-    {
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", parameterName);
-        return value!.Trim();
     }
 
     private static string RequireIcon(string value, string parameterName, CancellationToken cancellationToken)

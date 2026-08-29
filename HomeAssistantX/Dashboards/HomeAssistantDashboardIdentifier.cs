@@ -7,6 +7,8 @@ namespace HomeAssistantX.Dashboards;
 public static class HomeAssistantDashboardIdentifier
 {
     private const int MaximumSelectorLength = 255;
+    private const int MaximumTitleLength = 255;
+    private const int MaximumResourceUrlLength = 8192;
 
     internal static bool TryNormalizeUrlPath(
         string? value,
@@ -89,6 +91,44 @@ public static class HomeAssistantDashboardIdentifier
         string? value,
         out string normalized,
         CancellationToken cancellationToken)
+        => TryNormalizeBounded(value, MaximumSelectorLength, out normalized, cancellationToken);
+
+    internal static string RequireSelector(
+        string? value,
+        string parameterName,
+        CancellationToken cancellationToken)
+        => RequireBounded(value, MaximumSelectorLength, parameterName, cancellationToken);
+
+    internal static string RequireTitle(
+        string? value,
+        string parameterName,
+        CancellationToken cancellationToken)
+        => RequireBounded(value, MaximumTitleLength, parameterName, cancellationToken);
+
+    internal static string RequireResourceUrl(
+        string? value,
+        string parameterName,
+        CancellationToken cancellationToken)
+        => RequireBounded(value, MaximumResourceUrlLength, parameterName, cancellationToken);
+
+    private static string RequireBounded(
+        string? value,
+        int maximumLength,
+        string parameterName,
+        CancellationToken cancellationToken)
+    {
+        if (!TryNormalizeBounded(value, maximumLength, out var normalized, cancellationToken))
+            throw new ArgumentException(
+                "A non-empty value no longer than " + maximumLength + " characters is required.",
+                parameterName);
+        return normalized;
+    }
+
+    private static bool TryNormalizeBounded(
+        string? value,
+        int maximumLength,
+        out string normalized,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value is null)
@@ -112,7 +152,7 @@ public static class HomeAssistantDashboardIdentifier
 
         cancellationToken.ThrowIfCancellationRequested();
         var length = end - start + 1;
-        if (length <= 0 || length > MaximumSelectorLength)
+        if (length <= 0 || length > maximumLength)
         {
             normalized = string.Empty;
             return false;

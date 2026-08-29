@@ -334,18 +334,22 @@ public sealed class CamerasDashboardsAutomationContractTests
     [Fact]
     public async Task DashboardSlugValidationObservesCancellationDuringTraversal()
     {
-        var longValue = "house-" + new string('a', 16_000_000);
+        var longValue = new string(' ', 16_000_000) + "house-main";
         using var cancellation = new CancellationTokenSource();
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var operation = Task.Run(() =>
-        {
-            started.TrySetResult(true);
-            return HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(
-                longValue,
-                allowSingleWord: false,
-                out _,
-                cancellation.Token);
-        });
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(
+                    longValue,
+                    allowSingleWord: false,
+                    out _,
+                    cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
         await started.Task;
         cancellation.Cancel();
 
@@ -379,6 +383,26 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task DashboardMutationValuesAreBoundedBeforeCopyAndCorrelation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate
+            {
+                UrlPath = "house-main",
+                Title = " " + new string('a', 256)
+            }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateResourceAsync(
+            " " + new string('a', 8193),
+            HomeAssistantDashboardResourceType.Module));
+
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/resources/create"));
+    }
+
+    [Fact]
     public async Task AutomationIdentifierNormalizationObservesCancellationDuringTraversal()
     {
         var longValue = "automation-" + new string('a', 16_000_000);
@@ -402,12 +426,16 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
         using var cancellation = new CancellationTokenSource();
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var entityId = "automation." + new string('a', 16_000_000);
-        var operation = Task.Run(async () =>
-        {
-            started.TrySetResult(true);
-            await client.Automations.GetAsync(entityId, cancellation.Token);
-        });
+        var entityId = new string(' ', 16_000_000) + "automation.front";
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.TrySetResult(true);
+                await client.Automations.GetAsync(entityId, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
         await started.Task;
         cancellation.Cancel();
 
