@@ -269,6 +269,21 @@ public sealed class CoreRestApiContractTests
             new HomeAssistantLogbookQuery { StartTime = start }));
     }
 
+    [Theory]
+    [InlineData("[{\"when\":\"2026-08-24T00:00:00Z\",\"when\":\"2026-08-24T00:00:01Z\"}]")]
+    [InlineData("[{\"when\":\"2026-08-24T00:00:00Z\",\"entity_id\":\"light.one\",\"entity_id\":\"light.two\"}]")]
+    public async Task LogbookRejectsDuplicateFieldsBeforeTypedProjection(string responseJson)
+    {
+        using var server = new TestHomeAssistantServer { LogbookResponseJson = responseJson };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery
+            {
+                StartTime = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero)
+            }));
+    }
+
     [Fact]
     public async Task LogbookRejectsEntriesOutsideTheSnapshottedRequestedRange()
     {

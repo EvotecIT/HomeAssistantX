@@ -86,11 +86,21 @@ public sealed partial class HomeAssistantRestClient
                 expectedEntityId));
         }
 
-        var entries = await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
+        var rawEntries = await SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Get,
             AppendQuery(path, parameters),
             null,
             cancellationToken).ConfigureAwait(false);
+        if (rawEntries.ValueKind != JsonValueKind.Array
+            || HomeAssistantJson.HasDuplicateProperties(rawEntries, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant logbook response contained duplicate properties or was not an array.");
+        }
+        var entries = HomeAssistantJson.DeserializeResponse<HomeAssistantLogbookEntry[]>(
+            rawEntries,
+            "The Home Assistant logbook response could not be decoded.",
+            cancellationToken: cancellationToken);
         ValidateLogbookEntries(entries, startTime, endTime, expectedEntityId, cancellationToken);
         return entries;
     }

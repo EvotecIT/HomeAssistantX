@@ -694,6 +694,24 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderImportSnapshotsMutableRowsByValueDuringEnumeration()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Recorder.ImportStatisticsAsync(
+            CreateSumImportMetadata(),
+            new ReusedMutableStatisticRows());
+
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/import_statistics")));
+        var rows = command.RootElement.GetProperty("stats");
+        Assert.Equal("2026-08-26T10:00:00.0000000+00:00", rows[0].GetProperty("start").GetString());
+        Assert.Equal(1.5, rows[0].GetProperty("sum").GetDouble());
+        Assert.Equal("2026-08-26T11:00:00.0000000+00:00", rows[1].GetProperty("start").GetString());
+        Assert.Equal(2.5, rows[1].GetProperty("sum").GetDouble());
+    }
+
+    [Fact]
     public void RecorderImportValidationObservesCancellationAfterEnumerationCompletes()
     {
         using var cancellation = new CancellationTokenSource();
@@ -1381,6 +1399,61 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderStatisticsPreservesSubMillisecondExclusiveEndTime()
+    {
+        var start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero);
+        var rowStart = start.AddHours(1);
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":"
+                + rowStart.ToUnixTimeMilliseconds() + ",\"end\":"
+                + rowStart.AddHours(1).ToUnixTimeMilliseconds() + "}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+        var query = new HomeAssistantStatisticsQuery(start, HomeAssistantStatisticPeriod.Hour, "sensor.energy")
+        {
+            EndTime = rowStart.AddTicks(5)
+        };
+
+        var result = await client.Recorder.GetStatisticsAsync(query);
+
+        Assert.Single(Assert.Single(result).Rows);
+    }
+
+    [Fact]
+    public async Task FossilEnergyRejectsUndefinedPeriodBeforeConfigurationIo()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 26, 10, 0, 0, TimeSpan.Zero);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            start,
+            start.AddHours(1),
+            new[] { "sensor.energy" },
+            "sensor.co2",
+            (HomeAssistantEnergyPeriod)99));
+
+        Assert.Equal(0, server.AuthenticatedRequestCount);
+        Assert.Null(server.GetLastWebSocketCommand("energy/fossil_energy_consumption"));
+    }
+
+    [Fact]
+    public void UnavailableWeatherForecastObservesCancellationBeforeProjection()
+    {
+        using var document = JsonDocument.Parse("{\"forecast\":null,\"provider_payload\":[" + string.Join(",", Enumerable.Repeat("0", 10000)) + "]}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() => HomeAssistantWeatherClient.ParseUpdate(
+            "weather.home",
+            HomeAssistantWeatherForecastType.Hourly,
+            document.RootElement.GetProperty("forecast"),
+            document.RootElement,
+            cancellation.Token));
+    }
+
+    [Fact]
     public void RecorderStatisticsSortingPreservesCancellationExceptions()
     {
         var series = new List<HomeAssistantStatisticSeries>
@@ -2032,6 +2105,22 @@ public sealed class EnergyRecorderWeatherContractTests
                 throw new InvalidOperationException("The caller-owned row collection was enumerated more than once.");
             yield return CreateSumRow(10, 1.5);
             yield return CreateSumRow(11, 2.5);
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class ReusedMutableStatisticRows : IReadOnlyCollection<HomeAssistantStatisticImportRow>
+    {
+        public int Count => 2;
+
+        public IEnumerator<HomeAssistantStatisticImportRow> GetEnumerator()
+        {
+            var row = CreateSumRow(10, 1.5);
+            yield return row;
+            row.Start = row.Start.AddHours(1);
+            row.Sum = 2.5;
+            yield return row;
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();

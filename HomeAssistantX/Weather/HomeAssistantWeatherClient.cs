@@ -323,7 +323,7 @@ public sealed class HomeAssistantWeatherClient
             "The Home Assistant weather state contained an invalid wind-bearing attribute.");
     }
 
-    private static HomeAssistantWeatherForecastUpdate ParseUpdate(
+    internal static HomeAssistantWeatherForecastUpdate ParseUpdate(
         string entityId,
         HomeAssistantWeatherForecastType type,
         JsonElement forecast,
@@ -331,7 +331,10 @@ public sealed class HomeAssistantWeatherClient
         CancellationToken cancellationToken)
     {
         if (forecast.ValueKind == JsonValueKind.Null)
-            return new HomeAssistantWeatherForecastUpdate { EntityId = entityId, Type = type, IsAvailable = false, Raw = raw.Clone() };
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantWeatherForecastUpdate { EntityId = entityId, Type = type, IsAvailable = false, Raw = raw };
+        }
         if (forecast.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The weather forecast was not an array.");
         foreach (var value in forecast.EnumerateArray())

@@ -159,7 +159,7 @@ public sealed class HomeAssistantRecorderClient
             ValidateStatisticRows(
                 property.Value,
                 GetPeriodStart(startTime, period, homeTimeZone),
-                endTime?.ToUnixTimeMilliseconds(),
+                endTime,
                 period,
                 homeTimeZone,
                 cancellationToken);
@@ -240,7 +240,21 @@ public sealed class HomeAssistantRecorderClient
         foreach (var row in rows)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            rowSnapshot.Add(row);
+            if (row is null)
+            {
+                rowSnapshot.Add(null!);
+                continue;
+            }
+            rowSnapshot.Add(new HomeAssistantStatisticImportRow
+            {
+                Start = row.Start,
+                Mean = row.Mean,
+                Minimum = row.Minimum,
+                Maximum = row.Maximum,
+                LastReset = row.LastReset,
+                State = row.State,
+                Sum = row.Sum
+            });
         }
         cancellationToken.ThrowIfCancellationRequested();
         metadata.ValidateRows(rowSnapshot, cancellationToken);
@@ -372,7 +386,7 @@ public sealed class HomeAssistantRecorderClient
     private static void ValidateStatisticRows(
         JsonElement value,
         DateTimeOffset earliestPeriodStart,
-        long? endTimeExclusive,
+        DateTimeOffset? endTimeExclusive,
         HomeAssistantStatisticPeriod period,
         TimeZoneInfo? homeTimeZone,
         CancellationToken cancellationToken)
@@ -415,7 +429,8 @@ public sealed class HomeAssistantRecorderClient
             }
 
             if (end <= earliestPeriodStart.ToUnixTimeMilliseconds()
-                || endTimeExclusive.HasValue && start >= endTimeExclusive.Value)
+                || endTimeExclusive.HasValue
+                    && DateTimeOffset.FromUnixTimeMilliseconds(start) >= endTimeExclusive.Value)
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a row outside the requested time window.");
             }

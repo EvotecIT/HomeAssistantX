@@ -136,6 +136,8 @@ public sealed class HomeAssistantEnergyClient
         CancellationToken cancellationToken = default)
     {
         if (end <= start) throw new ArgumentOutOfRangeException(nameof(end), "The end must be after the start.");
+        if (!Enum.IsDefined(typeof(HomeAssistantEnergyPeriod), period))
+            throw new ArgumentOutOfRangeException(nameof(period));
         var ids = RequireIds(energyStatisticIds, nameof(energyStatisticIds), cancellationToken);
         var normalizedCo2StatisticId = RequireStatisticId(co2StatisticId, nameof(co2StatisticId));
         TimeZoneInfo? homeTimeZone = null;
