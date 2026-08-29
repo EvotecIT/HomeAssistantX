@@ -29,7 +29,7 @@ public sealed class MediaAndRemoteContractTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task TypedStateProjectionStopsDuringRequiredStateScanning(bool mediaPlayer)
+    public void TypedStateProjectionStopsDuringRequiredStateScanning(bool mediaPlayer)
     {
         using var cancellation = new CancellationTokenSource();
         var state = new HomeAssistantState
@@ -37,25 +37,19 @@ public sealed class MediaAndRemoteContractTests
             EntityId = mediaPlayer ? "media_player.kitchen" : "remote.lounge",
             State = new string(' ', 16_000_000)
         };
-        var operation = Task.Factory.StartNew(
-            () =>
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+        {
+            if (mediaPlayer)
             {
-                if (mediaPlayer)
-                {
-                    _ = HomeAssistantMediaPlayerStatus.FromState(state, cancellation.Token);
-                }
-                else
-                {
-                    _ = HomeAssistantRemoteStatus.FromState(state, cancellation.Token);
-                }
-            },
-            CancellationToken.None,
-            TaskCreationOptions.LongRunning,
-            TaskScheduler.Default);
-
-        cancellation.Cancel();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+                _ = HomeAssistantMediaPlayerStatus.FromState(state, cancellation.Token);
+            }
+            else
+            {
+                _ = HomeAssistantRemoteStatus.FromState(state, cancellation.Token);
+            }
+        });
     }
 
     [Fact]
