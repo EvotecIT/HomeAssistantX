@@ -79,13 +79,7 @@ internal static partial class HomeAssistantAtomicFile
             return CreateSecureUnixTemporaryFileStream(temporaryPath);
         }
 
-        return new FileStream(
-            temporaryPath,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            81920,
-            useAsync: true);
+        return CreateSecureWindowsTemporaryFileStream(temporaryPath);
     }
 
     internal static void PreserveDestinationPermissions(string destinationPath, string temporaryPath)

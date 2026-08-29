@@ -9,6 +9,7 @@ namespace HomeAssistantX.Media;
 /// <summary>Browses and resolves global media sources and media exposed by individual players.</summary>
 public sealed class HomeAssistantMediaBrowserClient
 {
+    private const int MaximumResolvedUrlLength = 16 * 1024;
     private readonly HomeAssistantWebSocketClient _webSocket;
 
     internal HomeAssistantMediaBrowserClient(HomeAssistantWebSocketClient webSocket) => _webSocket = webSocket;
@@ -242,6 +243,7 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
         if (value is null
             || value.Length == 0
+            || value.Length > MaximumResolvedUrlLength
             || char.IsWhiteSpace(value[0])
             || char.IsWhiteSpace(value[value.Length - 1])
             || ContainsWhitespace(value, cancellationToken))
@@ -253,7 +255,7 @@ public sealed class HomeAssistantMediaBrowserClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (value.StartsWith("//", StringComparison.Ordinal)
-                || value.Contains('\\')
+                || ContainsCharacter(value, '\\', cancellationToken)
                 || !Uri.TryCreate(value, UriKind.Relative, out _))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -275,6 +277,20 @@ public sealed class HomeAssistantMediaBrowserClient
             && string.IsNullOrEmpty(absolute.UserInfo);
         cancellationToken.ThrowIfCancellationRequested();
         return valid;
+    }
+
+    private static bool ContainsCharacter(
+        string value,
+        char expected,
+        CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] == expected) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
     }
 
     private static bool IsCanonicalActionableSelector(string? value, CancellationToken cancellationToken)

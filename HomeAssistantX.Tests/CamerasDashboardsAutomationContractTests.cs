@@ -828,6 +828,13 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void ResolvedMediaUrlValidationRejectsUnboundedProviderValues()
+    {
+        Assert.False(HomeAssistantMediaBrowserClient.IsValidResolvedUrl(
+            "/api/media/" + new string('a', 16 * 1024)));
+    }
+
+    [Fact]
     public async Task CameraAndAutomationBulkReadsRejectMalformedServerEntityIds()
     {
         using var server = new TestHomeAssistantServer();
@@ -1227,6 +1234,38 @@ public sealed class CamerasDashboardsAutomationContractTests
                         | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
                         | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
             }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WindowsTemporaryExportsApplyProtectedDaclBeforeWriting()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-secure-windows-temp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        var destination = Path.Combine(directory, "snapshot.jpg");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                Assert.True(HomeAssistantAtomicFile.IsWindowsTemporaryDaclProtected(stream));
+                stream.WriteByte(42);
+            }
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None);
+
+            Assert.Equal(new byte[] { 42 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
         }
         finally
         {
