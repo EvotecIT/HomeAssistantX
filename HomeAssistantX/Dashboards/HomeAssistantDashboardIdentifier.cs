@@ -7,8 +7,6 @@ namespace HomeAssistantX.Dashboards;
 public static class HomeAssistantDashboardIdentifier
 {
     private const int MaximumSelectorLength = 255;
-    private const int MaximumTitleLength = 255;
-    private const int MaximumResourceUrlLength = 8192;
 
     internal static bool TryNormalizeUrlPath(
         string? value,
@@ -103,13 +101,43 @@ public static class HomeAssistantDashboardIdentifier
         string? value,
         string parameterName,
         CancellationToken cancellationToken)
-        => RequireBounded(value, MaximumTitleLength, parameterName, cancellationToken);
+        => RequireText(value, parameterName, cancellationToken);
 
     internal static string RequireResourceUrl(
         string? value,
         string parameterName,
         CancellationToken cancellationToken)
-        => RequireBounded(value, MaximumResourceUrlLength, parameterName, cancellationToken);
+        => RequireText(value, parameterName, cancellationToken);
+
+    private static string RequireText(
+        string? value,
+        string parameterName,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null) throw new ArgumentException("A non-empty value is required.", parameterName);
+        var start = 0;
+        while (start < value.Length && char.IsWhiteSpace(value[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+        var end = value.Length - 1;
+        while (end >= start && char.IsWhiteSpace(value[end]))
+        {
+            if (((value.Length - 1 - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+        var length = end - start + 1;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (length <= 0) throw new ArgumentException("A non-empty value is required.", parameterName);
+        for (var index = start; index <= end; index++)
+        {
+            if (((index - start) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return start == 0 && length == value.Length ? value : value.Substring(start, length);
+    }
 
     private static string RequireBounded(
         string? value,

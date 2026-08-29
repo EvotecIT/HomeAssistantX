@@ -383,23 +383,13 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
-    public async Task DashboardMutationValuesAreBoundedBeforeCopyAndCorrelation()
+    public void DashboardMutationValuesFollowHomeAssistantWithoutClientOnlyCaps()
     {
-        using var server = new TestHomeAssistantServer();
-        using var client = TestClientFactory.Create(server);
+        var title = new string('T', 512);
+        var resourceUrl = "/local/" + new string('a', 10_000) + ".js";
 
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(
-            new HomeAssistantDashboardCreate
-            {
-                UrlPath = "house-main",
-                Title = " " + new string('a', 256)
-            }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateResourceAsync(
-            " " + new string('a', 8193),
-            HomeAssistantDashboardResourceType.Module));
-
-        Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
-        Assert.Null(server.GetLastWebSocketCommand("lovelace/resources/create"));
+        Assert.Equal(title, HomeAssistantDashboardIdentifier.RequireTitle(title, "title", CancellationToken.None));
+        Assert.Equal(resourceUrl, HomeAssistantDashboardIdentifier.RequireResourceUrl(resourceUrl, "url", CancellationToken.None));
     }
 
     [Fact]
@@ -653,6 +643,8 @@ public sealed class CamerasDashboardsAutomationContractTests
     [Theory]
     [InlineData("application/json;charset=utf-8")]
     [InlineData("audio/mpeg; profile=\"provider-v1\"")]
+    [InlineData("text/plain ; charset=utf-8")]
+    [InlineData("image/png\t;name=preview")]
     public async Task MediaResolveAcceptsParameterizedMimeTypes(string mimeType)
     {
         using var server = new TestHomeAssistantServer
@@ -688,6 +680,35 @@ public sealed class CamerasDashboardsAutomationContractTests
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
         Assert.Null(server.GetLastWebSocketCommand("get_states"));
+    }
+
+    [Fact]
+    public async Task CameraStatusAttributeLookupObservesCancellation()
+    {
+        using var document = JsonDocument.Parse("0");
+        var attributes = Enumerable.Range(0, 250_000)
+            .ToDictionary(index => "provider_" + index, _ => document.RootElement.Clone(), StringComparer.Ordinal);
+        var state = new HomeAssistantState
+        {
+            EntityId = "camera.front",
+            State = "idle",
+            Attributes = attributes
+        };
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantCameraClient.ToStatus(state, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
     }
 
     [Fact]

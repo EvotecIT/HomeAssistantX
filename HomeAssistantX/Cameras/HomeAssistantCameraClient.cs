@@ -37,7 +37,7 @@ public sealed class HomeAssistantCameraClient
         foreach (var state in states)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            result.Add(ToStatus(state));
+            result.Add(ToStatus(state, cancellationToken));
         }
         cancellationToken.ThrowIfCancellationRequested();
         var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
@@ -50,7 +50,7 @@ public sealed class HomeAssistantCameraClient
     {
         var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
-        return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId));
+        return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId), cancellationToken);
     }
 
     public async Task<byte[]> GetSnapshotAsync(string entityId, int? width = null, int? height = null, CancellationToken cancellationToken = default)
@@ -240,31 +240,45 @@ public sealed class HomeAssistantCameraClient
     public Task<IHomeAssistantSubscription> SubscribeAsync(Func<HomeAssistantCameraStateChange, CancellationToken, Task> handler, CancellationToken cancellationToken = default)
     {
         if (handler is null) throw new ArgumentNullException(nameof(handler));
-        return _states.SubscribeAsync(HomeAssistantStateFilter.ForDomains("camera"), (change, token) => handler(new HomeAssistantCameraStateChange(change.EntityId, ToOptionalStatus(change.PreviousState), ToOptionalStatus(change.CurrentState)), token), cancellationToken);
+        return _states.SubscribeAsync(HomeAssistantStateFilter.ForDomains("camera"), (change, token) => handler(new HomeAssistantCameraStateChange(change.EntityId, ToOptionalStatus(change.PreviousState, token), ToOptionalStatus(change.CurrentState, token)), token), cancellationToken);
     }
 
-    private static HomeAssistantCameraStatus? ToOptionalStatus(HomeAssistantState? state)
+    private static HomeAssistantCameraStatus? ToOptionalStatus(HomeAssistantState? state, CancellationToken cancellationToken)
     {
         if (state is null) return null;
-        return ToStatus(HomeAssistantEntityId.RequireResponseDomain(state, "camera"));
+        return ToStatus(HomeAssistantEntityId.RequireResponseDomain(state, "camera"), cancellationToken);
     }
 
-    private static HomeAssistantCameraStatus ToStatus(HomeAssistantState state)
+    internal static HomeAssistantCameraStatus ToStatus(HomeAssistantState state, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!string.Equals(state.Domain, "camera", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The entity is not a camera.", nameof(state));
-        if (string.IsNullOrWhiteSpace(state.State)) throw new HomeAssistantProtocolException("The Home Assistant camera state omitted its required state value.");
+        if (!HasNonWhitespace(state.State, cancellationToken)) throw new HomeAssistantProtocolException("The Home Assistant camera state omitted its required state value.");
         return new HomeAssistantCameraStatus
         {
             EntityId = state.EntityId,
-            Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name"),
+            Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name", cancellationToken),
             State = state.State,
-            Brand = HomeAssistantAttributeReader.GetString(state.Attributes, "brand"),
-            Model = HomeAssistantAttributeReader.GetString(state.Attributes, "model_name"),
-            MotionDetectionEnabled = HomeAssistantAttributeReader.GetBoolean(state.Attributes, "motion_detection"),
-            EntityPicture = HomeAssistantAttributeReader.GetString(state.Attributes, "entity_picture"),
-            SupportedFeatures = (HomeAssistantCameraFeature)(HomeAssistantAttributeReader.GetNonNegativeInt32(state.Attributes, "supported_features") ?? 0),
+            Brand = HomeAssistantAttributeReader.GetString(state.Attributes, "brand", cancellationToken),
+            Model = HomeAssistantAttributeReader.GetString(state.Attributes, "model_name", cancellationToken),
+            MotionDetectionEnabled = HomeAssistantAttributeReader.GetBoolean(state.Attributes, "motion_detection", cancellationToken),
+            EntityPicture = HomeAssistantAttributeReader.GetString(state.Attributes, "entity_picture", cancellationToken),
+            SupportedFeatures = (HomeAssistantCameraFeature)(HomeAssistantAttributeReader.GetNonNegativeInt32(state.Attributes, "supported_features", cancellationToken) ?? 0),
             RawState = state
         };
+    }
+
+    private static bool HasNonWhitespace(string? value, CancellationToken cancellationToken)
+    {
+        if (value is null) return false;
+        var found = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            found |= !char.IsWhiteSpace(value[index]);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return found;
     }
 
     private static string NormalizeEntityId(string entityId, CancellationToken cancellationToken)
