@@ -123,9 +123,11 @@ internal sealed partial class TestHomeAssistantServer
                     "[{\"domain\":\"light\",\"services\":{\"turn_on\":{\"fields\":{\"brightness_pct\":{}}}}}]")
                     .ConfigureAwait(false);
                 break;
+            case "GET /api/history/period":
             case "GET /api/history/period/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
                 await WriteHttpResponseAsync(stream, 200, HistoryResponseJson).ConfigureAwait(false);
                 break;
+            case "GET /api/logbook":
             case "GET /api/logbook/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
                 await WriteHttpResponseAsync(stream, 200, LogbookResponseJson).ConfigureAwait(false);
                 break;

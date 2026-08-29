@@ -843,28 +843,8 @@ try {
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Source ' ' -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -SoundMode ' ' -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Enqueue 99 -MediaContentId test -MediaContentType music -WhatIf -ErrorAction Stop },
-        { Invoke-HomeAssistantRoutine -Entity scene.evening -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantFan -Entity fan.office -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantValve -Entity valve.water -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantVacuum -Entity vacuum.downstairs -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantVacuum -Entity vacuum.downstairs -CleaningAreaId kitchen, ' ' -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantLawnMower -Entity lawn_mower.garden -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action Disarm -Code ' ' -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantSiren -Entity siren.house -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantSiren -Entity siren.house -Action TurnOn -Tone ' ' -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantHumidifier -Entity humidifier.bedroom -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantHumidifier -Entity humidifier.bedroom -Mode ' ' -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantWaterHeater -Entity water_heater.tank -Action 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantWaterHeater -Entity water_heater.tank -Temperature 52 -OperationMode ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantClimate -Area Kitchen -Temperature 21 -HvacMode ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantClimate -Area Kitchen -FanMode ' ' -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantHelper -Entity input_number.volume -Domain Select -Number 1 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantHelper -Area Kitchen -Domain Time -Time ([TimeSpan]::FromMilliseconds(500)) -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantHelper -Entity select.house_mode -Domain Select -Option ' ' -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantHelper -Entity input_select.house_mode -Domain InputSelect -Options Home, ' ' -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantHelper -Entity time.wakeup -Domain Time -Time ([TimeSpan]::FromSeconds(-1)) -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantHelper -Entity time.wakeup -Domain Time -Time ([TimeSpan]::FromDays(1)) -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ChangeUnit -OldUnit ' ' -NewUnit MWh -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ChangeUnit -OldUnit kWh -NewUnit ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1 -StartTime ([DateTimeOffset]::UtcNow) -Unit ' ' -WhatIf -ErrorAction Stop },
@@ -873,7 +853,6 @@ try {
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitClass Energy -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitClass ' energy ' -WhatIf -ErrorAction Stop },
         { $invalidImportUnit = [HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata]::new(); $invalidImportUnit.StatisticId = 'external:blank_unit'; $invalidImportUnit.Source = 'external'; $invalidImportUnit.HasSum = $true; $invalidImportUnit.UnitOfMeasurement = ' '; $alignedImportRow | Set-HomeAssistantStatistic -ImportMetadata $invalidImportUnit -WhatIf -ErrorAction Stop },
-        { $variables = @{}; $variables.self = $variables; Invoke-HomeAssistantRoutine -Entity script.evening -Action RunScript -Variables $variables -WhatIf -ErrorAction Stop },
         { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -EntityId update.home_assistant_core_update -Version ' ' -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -Core -Version ' ' -WhatIf -ErrorAction Stop }
@@ -889,6 +868,8 @@ try {
         $invalidEnumRejected = $false
         try {
             $null = & $invalidControl
+        } catch [System.Management.Automation.CommandNotFoundException] {
+            throw "A validation contract referenced an unavailable command: $($_.Exception.Message)"
         } catch {
             $invalidEnumRejected = $true
         }

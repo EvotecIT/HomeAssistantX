@@ -151,8 +151,6 @@ public sealed partial class HomeAssistantRestClient
         DateTimeOffset? endTime,
         string parameterName)
     {
-        if (endTime.HasValue && !startTime.HasValue)
-            throw new ArgumentException("An explicit end time requires an explicit start time.", parameterName);
         if (startTime.HasValue && endTime.HasValue && endTime.Value <= startTime.Value)
             throw new ArgumentOutOfRangeException(parameterName, "The end time must be after the start time.");
     }

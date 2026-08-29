@@ -16,8 +16,6 @@ public sealed class GetHomeAssistantLogbookCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        if (EndTime.HasValue && !StartTime.HasValue)
-            throw new ArgumentException("EndTime requires StartTime so the requested logbook window is explicit.", nameof(EndTime));
         if (StartTime.HasValue && EndTime.HasValue && EndTime <= StartTime) throw new ArgumentOutOfRangeException(nameof(EndTime));
         string? entityId = null;
         if (EntityId is not null && !HomeAssistantEntityId.TryNormalize(EntityId, out entityId))
