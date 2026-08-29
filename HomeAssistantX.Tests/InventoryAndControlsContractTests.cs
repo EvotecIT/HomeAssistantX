@@ -4,6 +4,7 @@ using HomeAssistantX.Controls;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Inventory;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
@@ -508,6 +509,22 @@ public sealed class InventoryAndControlsContractTests
             Array.Empty<HomeAssistantActionDefinition>(),
             cancellation.Token));
         Assert.Equal(1, entities.ReadCount);
+    }
+
+    [Fact]
+    public void InventoryTextComparisonAndHashingHonorLateCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var comparer = new CancellationAwareStringEqualityComparer(cancellation.Token);
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            comparer.GetHashCode(new string('a', 1_000_000)));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            CancellationAwareString.CompareOrdinalIgnoreCase(
+                new string('a', 1_000_000),
+                new string('a', 1_000_000),
+                cancellation.Token));
     }
 
     private sealed class MutatingTargetList : IReadOnlyList<string>

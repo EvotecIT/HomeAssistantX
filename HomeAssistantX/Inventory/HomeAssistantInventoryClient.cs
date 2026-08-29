@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
@@ -81,7 +82,7 @@ public sealed class HomeAssistantInventoryClient
         var statesById = BuildEntityMap(states, state => state.EntityId, cancellationToken);
         var integrationsById = BuildMap(registries.ConfigEntries, x => x.EntryId, cancellationToken);
 
-        var entityIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var entityIds = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
         AddKeys(entityIds, entriesById.Keys, cancellationToken);
         AddKeys(entityIds, statesById.Keys, cancellationToken);
         var entities = new List<HomeAssistantEntityInfo>(entityIds.Count);
@@ -103,10 +104,10 @@ public sealed class HomeAssistantInventoryClient
             entities,
             (left, right) =>
             {
-                var byName = string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
+                var byName = CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken);
                 return byName != 0
                     ? byName
-                    : string.Compare(left.EntityId, right.EntityId, StringComparison.OrdinalIgnoreCase);
+                    : CancellationAwareString.CompareOrdinalIgnoreCase(left.EntityId, right.EntityId, cancellationToken);
             },
             cancellationToken);
 
@@ -134,7 +135,7 @@ public sealed class HomeAssistantInventoryClient
             devices.Add(new HomeAssistantDeviceInfo
             {
                 DeviceId = device.Id,
-                Name = FirstNonEmpty(device.NameByUser, device.Name, device.Model, device.Id),
+                Name = FirstNonEmpty(cancellationToken, device.NameByUser, device.Name, device.Model, device.Id),
                 AreaId = area?.AreaId,
                 AreaName = area?.Name,
                 FloorId = floor?.FloorId,
@@ -146,7 +147,7 @@ public sealed class HomeAssistantInventoryClient
                 Raw = device
             });
         }
-        Sort(devices, (left, right) => string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase), cancellationToken);
+        Sort(devices, (left, right) => CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken), cancellationToken);
 
         var areas = new List<HomeAssistantAreaInfo>(registries.Areas.Count);
         foreach (var area in registries.Areas)
@@ -155,14 +156,14 @@ public sealed class HomeAssistantInventoryClient
             floorsById.TryGetValue(area.FloorId ?? string.Empty, out var floor);
             var areaEntities = SelectMatching(entities, entity => entity.AreaId, area.AreaId, cancellationToken);
             var areaDevices = SelectMatching(devices, device => device.AreaId, area.AreaId, cancellationToken);
-            var domains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var domains = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
             foreach (var entity in areaEntities)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 domains.Add(entity.Domain);
             }
             var orderedDomains = domains.ToList();
-            Sort(orderedDomains, (left, right) => string.Compare(left, right, StringComparison.OrdinalIgnoreCase), cancellationToken);
+            Sort(orderedDomains, (left, right) => CancellationAwareString.CompareOrdinalIgnoreCase(left, right, cancellationToken), cancellationToken);
 
             areas.Add(new HomeAssistantAreaInfo
             {
@@ -177,7 +178,7 @@ public sealed class HomeAssistantInventoryClient
                 Raw = area
             });
         }
-        Sort(areas, (left, right) => string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase), cancellationToken);
+        Sort(areas, (left, right) => CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken), cancellationToken);
 
         var floors = new List<HomeAssistantFloorInfo>(registries.Floors.Count);
         foreach (var floor in registries.Floors)
@@ -202,7 +203,7 @@ public sealed class HomeAssistantInventoryClient
                 var byLevel = (left.Level ?? int.MaxValue).CompareTo(right.Level ?? int.MaxValue);
                 return byLevel != 0
                     ? byLevel
-                    : string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
+                    : CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken);
             },
             cancellationToken);
 
@@ -247,7 +248,7 @@ public sealed class HomeAssistantInventoryClient
         Func<T, string> getId,
         CancellationToken cancellationToken)
     {
-        var result = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, T>(new CancellationAwareStringEqualityComparer(cancellationToken));
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -280,7 +281,7 @@ public sealed class HomeAssistantInventoryClient
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.Equals(selector(value), expected, StringComparison.OrdinalIgnoreCase))
+            if (CancellationAwareString.EqualsOrdinalIgnoreCase(selector(value), expected, cancellationToken))
             {
                 result.Add(value);
             }
@@ -319,22 +320,24 @@ public sealed class HomeAssistantInventoryClient
         entries.TryGetValue(entityId, out var entry);
         states.TryGetValue(entityId, out var state);
         devices.TryGetValue(entry?.DeviceId ?? string.Empty, out var device);
-        var effectiveAreaId = FirstNonEmptyOrNull(entry?.AreaId, device?.AreaId);
+        var effectiveAreaId = FirstNonEmptyOrNull(cancellationToken, entry?.AreaId, device?.AreaId);
         areas.TryGetValue(effectiveAreaId ?? string.Empty, out var area);
         floors.TryGetValue(area?.FloorId ?? string.Empty, out var floor);
         integrations.TryGetValue(entry?.ConfigEntryId ?? string.Empty, out var integration);
         var friendlyName = TryGetFriendlyName(state);
-        var registryName = GetRegistryFullName(entry, device);
-        var name = FirstNonEmpty(friendlyName, registryName, entityId);
+        var registryName = GetRegistryFullName(entry, device, cancellationToken);
+        var name = FirstNonEmpty(cancellationToken, friendlyName, registryName, entityId);
         var aliases = new List<string>();
-        var uniqueAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var uniqueAliases = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
         if (entry is not null)
         {
             foreach (var alias in entry.Aliases)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var candidate = string.IsNullOrWhiteSpace(alias) ? registryName : alias!.Trim();
-                if (!string.IsNullOrWhiteSpace(candidate) && uniqueAliases.Add(candidate!))
+                var candidate = CancellationAwareString.IsNullOrWhiteSpace(alias, cancellationToken)
+                    ? registryName
+                    : CancellationAwareString.Trim(alias!, cancellationToken);
+                if (!CancellationAwareString.IsNullOrWhiteSpace(candidate, cancellationToken) && uniqueAliases.Add(candidate!))
                 {
                     aliases.Add(candidate!);
                 }
@@ -346,7 +349,7 @@ public sealed class HomeAssistantInventoryClient
         foreach (var action in actions)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.Equals(action.Domain, domain, StringComparison.OrdinalIgnoreCase))
+            if (CancellationAwareString.EqualsOrdinalIgnoreCase(action.Domain, domain, cancellationToken))
             {
                 domainActions.Add(action);
             }
@@ -361,7 +364,7 @@ public sealed class HomeAssistantInventoryClient
             Domain = domain,
             State = state?.State,
             DeviceId = device?.Id,
-            DeviceName = device is null ? null : FirstNonEmpty(device.NameByUser, device.Name, device.Model, device.Id),
+            DeviceName = device is null ? null : FirstNonEmpty(cancellationToken, device.NameByUser, device.Name, device.Model, device.Id),
             AreaId = area?.AreaId,
             AreaName = area?.Name,
             FloorId = floor?.FloorId,
@@ -536,34 +539,35 @@ public sealed class HomeAssistantInventoryClient
 
     private static string? GetRegistryFullName(
         HomeAssistantEntityRegistryEntry? entry,
-        HomeAssistantDeviceRegistryEntry? device)
+        HomeAssistantDeviceRegistryEntry? device,
+        CancellationToken cancellationToken)
     {
         if (entry is null)
         {
             return null;
         }
 
-        if (!string.IsNullOrWhiteSpace(entry.Name))
+        if (!CancellationAwareString.IsNullOrWhiteSpace(entry.Name, cancellationToken))
         {
             return entry.Name;
         }
 
         if (!entry.HasEntityName)
         {
-            return FirstNonEmptyOrNull(entry.OriginalName, entry.EntityId);
+            return FirstNonEmptyOrNull(cancellationToken, entry.OriginalName, entry.EntityId);
         }
 
         var deviceName = device is null
             ? null
-            : FirstNonEmptyOrNull(device.NameByUser, device.Name, device.Model);
-        if (!string.IsNullOrWhiteSpace(deviceName))
+            : FirstNonEmptyOrNull(cancellationToken, device.NameByUser, device.Name, device.Model);
+        if (!CancellationAwareString.IsNullOrWhiteSpace(deviceName, cancellationToken))
         {
-            return string.IsNullOrWhiteSpace(entry.OriginalName)
+            return CancellationAwareString.IsNullOrWhiteSpace(entry.OriginalName, cancellationToken)
                 ? deviceName
-                : deviceName + " " + entry.OriginalName;
+                : CancellationAwareString.Concat(deviceName!, " ", entry.OriginalName!, cancellationToken);
         }
 
-        return FirstNonEmptyOrNull(entry.OriginalName, entry.EntityId);
+        return FirstNonEmptyOrNull(cancellationToken, entry.OriginalName, entry.EntityId);
     }
 
     private static string GetDomain(string entityId)
@@ -577,13 +581,21 @@ public sealed class HomeAssistantInventoryClient
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string FirstNonEmpty(params string?[] values)
+    private static string FirstNonEmpty(CancellationToken cancellationToken, params string?[] values)
     {
-        return values.First(x => !string.IsNullOrWhiteSpace(x))!;
+        foreach (var value in values)
+        {
+            if (!CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)) return value!;
+        }
+        throw new InvalidOperationException("At least one non-empty value is required.");
     }
 
-    private static string? FirstNonEmptyOrNull(params string?[] values)
+    private static string? FirstNonEmptyOrNull(CancellationToken cancellationToken, params string?[] values)
     {
-        return values.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+        foreach (var value in values)
+        {
+            if (!CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)) return value;
+        }
+        return null;
     }
 }
