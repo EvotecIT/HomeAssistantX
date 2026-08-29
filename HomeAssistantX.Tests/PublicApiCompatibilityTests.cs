@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -133,6 +134,56 @@ public sealed class PublicApiCompatibilityTests
         var contract = UnmanagedCallersOnlyContract(method);
         Assert.Contains("entry=\"hax_entry\"", contract, StringComparison.Ordinal);
         Assert.Contains("CallConvCdecl", contract, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MethodFormatterPreservesUnmanagedCallingConventionMetadata()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(UnmanagedCallConventionFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var contract = UnmanagedCallConvContract(method);
+        Assert.Contains("CallConvStdcall", contract, StringComparison.Ordinal);
+        Assert.Contains("CallConvSuppressGCTransition", contract, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatterPreservesTrimmingAndDynamicCodeRequirements()
+    {
+        var method = typeof(RequiresCodeFixture).GetMethod(nameof(RequiresCodeFixture.Invoke))!;
+        var constructor = typeof(RequiresCodeFixture).GetConstructors().Single();
+        var property = typeof(RequiresCodeFixture).GetProperty(nameof(RequiresCodeFixture.Value))!;
+
+        Assert.Contains("requires-unreferenced-code(message=\"type trim\",url=\"https://example.invalid/type-trim\")", RequiresCodeContract(typeof(RequiresCodeFixture)), StringComparison.Ordinal);
+        Assert.Contains("requires-unreferenced-code(message=\"member trim\",url=\"https://example.invalid/member-trim\")", RequiresCodeContract(method), StringComparison.Ordinal);
+        Assert.Contains("requires-dynamic-code(message=\"member dynamic\",url=\"https://example.invalid/member-dynamic\")", RequiresCodeContract(method), StringComparison.Ordinal);
+        Assert.Contains("requires-dynamic-code(message=\"constructor dynamic\",url=null)", FormatConstructor(constructor), StringComparison.Ordinal);
+        Assert.Contains("requires-unreferenced-code(message=\"getter trim\",url=null)", FormatProperty(property), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TypeFormatterPreservesComIdentityAndDispatchMetadata()
+    {
+        var interfaceContract = TypeInteropContract(typeof(ComInterfaceFixture));
+        Assert.Contains("guid(\"5E0D079B-34C4-4586-A933-46D1F9987E26\")", interfaceContract, StringComparison.Ordinal);
+        Assert.Contains("com-import", interfaceContract, StringComparison.Ordinal);
+        Assert.Contains("interface-type(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)", interfaceContract, StringComparison.Ordinal);
+        Assert.Contains("class-interface(System.Runtime.InteropServices.ClassInterfaceType.AutoDispatch)", TypeInteropContract(typeof(ComClassFixture)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TypeFormatterPreservesNativeIntegerAnnotations()
+    {
+        var fixture = CreateNativeIntegerFixtureType();
+        var method = fixture.GetMethod("Invoke", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal("nint", FormatReturnType(method));
+        Assert.Equal(
+            "nuint value, System.Collections.Generic.IReadOnlyList<nint[]> nested",
+            FormatParameters(method.GetParameters()));
+        Assert.EndsWith("nint Field", FormatField(fixture.GetField("Field")!), StringComparison.Ordinal);
+        Assert.Contains("nuint Property", FormatProperty(fixture.GetProperty("Property")!), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -626,7 +677,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PlatformContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -657,7 +708,7 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -771,14 +822,15 @@ public sealed class PublicApiCompatibilityTests
         var nullability = new NullabilityCursor(ReadNullableFlags(type), ReadNullableContext(type));
         var tupleNames = new TupleNameCursor(ReadTupleNames(type));
         var dynamicFlags = new DynamicCursor(ReadDynamicFlags(type));
+        var nativeIntegerFlags = new NativeIntegerCursor(ReadNativeIntegerFlags(type));
         if (type.BaseType is not null && type.BaseType != typeof(object) && type.BaseType != typeof(ValueType))
         {
-            contracts.Add(FormatAnnotatedType(type.BaseType, nullability, tupleNames, dynamicFlags));
+            contracts.Add(FormatAnnotatedType(type.BaseType, nullability, tupleNames, dynamicFlags, nativeIntegerFlags));
         }
 
         foreach (var contract in GetDirectInterfaces(type))
         {
-            contracts.Add(FormatAnnotatedType(contract, nullability, tupleNames, dynamicFlags));
+            contracts.Add(FormatAnnotatedType(contract, nullability, tupleNames, dynamicFlags, nativeIntegerFlags));
         }
 
         return contracts.OrderBy(value => value, StringComparer.Ordinal).ToArray();
@@ -791,7 +843,7 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + UnmanagedCallersOnlyContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + RequiresCodeContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static string AttributeUsageContract(Type type)
@@ -846,6 +898,75 @@ public sealed class PublicApiCompatibilityTests
             + ",call-convs=" + string.Join("|", conventions) + ") ";
     }
 
+    private static string UnmanagedCallConvContract(MethodBase method)
+    {
+        var attribute = GetCustomAttributes(method).FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Runtime.InteropServices.UnmanagedCallConvAttribute",
+            StringComparison.Ordinal));
+        if (attribute is null) return string.Empty;
+
+        var callingConventions = attribute.NamedArguments.FirstOrDefault(value => value.MemberName == "CallConvs").TypedValue.Value;
+        var conventions = callingConventions is IEnumerable<CustomAttributeTypedArgument> values
+            ? values.Select(value => value.Value is Type type ? FormatType(type) : FormatAttributeArgument(value)).ToArray()
+            : Array.Empty<string>();
+        return "unmanaged-call-conv(" + string.Join("|", conventions) + ") ";
+    }
+
+    private static string TypeInteropContract(Type type)
+    {
+        var contracts = new List<string>();
+        foreach (var attribute in GetCustomAttributes(type))
+        {
+            switch (attribute.AttributeType.FullName)
+            {
+                case "System.Runtime.InteropServices.GuidAttribute" when attribute.ConstructorArguments.Count == 1:
+                    contracts.Add("guid(" + FormatAttributeArgument(attribute.ConstructorArguments[0]) + ")");
+                    break;
+                case "System.Runtime.InteropServices.ComImportAttribute":
+                    contracts.Add("com-import");
+                    break;
+                case "System.Runtime.InteropServices.InterfaceTypeAttribute" when attribute.ConstructorArguments.Count == 1:
+                    contracts.Add("interface-type(" + FormatAttributeArgument(attribute.ConstructorArguments[0]) + ")");
+                    break;
+                case "System.Runtime.InteropServices.ClassInterfaceAttribute" when attribute.ConstructorArguments.Count == 1:
+                    contracts.Add("class-interface(" + FormatAttributeArgument(attribute.ConstructorArguments[0]) + ")");
+                    break;
+            }
+        }
+        return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts.OrderBy(value => value, StringComparer.Ordinal)) + " ";
+    }
+
+    private static string RequiresCodeContract(params ICustomAttributeProvider?[] providers)
+    {
+        var contracts = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var provider in providers.Where(value => value is not null))
+        {
+            foreach (var attribute in GetCustomAttributes(provider!).Where(value =>
+                         value.AttributeType.FullName is "System.Diagnostics.CodeAnalysis.RequiresUnreferencedCodeAttribute"
+                             or "System.Diagnostics.CodeAnalysis.RequiresDynamicCodeAttribute"))
+            {
+                var name = attribute.AttributeType.Name == "RequiresUnreferencedCodeAttribute"
+                    ? "requires-unreferenced-code"
+                    : "requires-dynamic-code";
+                var message = attribute.ConstructorArguments.Count == 1
+                    ? attribute.ConstructorArguments[0].Value
+                    : null;
+                var url = attribute.NamedArguments.FirstOrDefault(value => value.MemberName == "Url").TypedValue.Value;
+                contracts.Add(name + "(message=" + FormatDefault(message) + ",url=" + FormatDefault(url) + ")");
+            }
+        }
+        return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
+    }
+
+    private static string FormatAttributeArgument(CustomAttributeTypedArgument argument)
+    {
+        if (argument.Value is null) return "null";
+        if (!argument.ArgumentType.IsEnum) return FormatDefault(argument.Value);
+        var value = Enum.ToObject(argument.ArgumentType, argument.Value);
+        return FormatDefault(value);
+    }
+
     private static MethodImportAttributes ReadMethodImportAttributes(MethodBase method)
     {
         using var stream = File.OpenRead(method.Module.FullyQualifiedName);
@@ -857,7 +978,7 @@ public sealed class PublicApiCompatibilityTests
 
     private static string FormatConstructor(ConstructorInfo constructor)
         => "C " + ConstructorAccess(constructor) + ObsoleteContract(constructor)
-            + ExperimentalContract(constructor) + PlatformContract(constructor)
+            + ExperimentalContract(constructor) + PlatformContract(constructor) + RequiresCodeContract(constructor)
             + OverloadResolutionPriorityContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
             + FormatType(constructor.DeclaringType!) + "(" + FormatParameters(constructor.GetParameters()) + ")";
 
@@ -870,7 +991,7 @@ public sealed class PublicApiCompatibilityTests
             property,
             getter,
             setter)
-            + ExperimentalContract(property, getter, setter) + PlatformContract(property, getter, setter)
+            + ExperimentalContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
@@ -922,6 +1043,32 @@ public sealed class PublicApiCompatibilityTests
     {
     }
 
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvStdcall), typeof(CallConvSuppressGCTransition) })]
+    private static void UnmanagedCallConventionFixture()
+    {
+    }
+
+    [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("type trim", Url = "https://example.invalid/type-trim")]
+    private sealed class RequiresCodeFixture
+    {
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("constructor dynamic")]
+        public RequiresCodeFixture()
+        {
+        }
+
+        public static int Value
+        {
+            [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("getter trim")]
+            get => 1;
+        }
+
+        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("member trim", Url = "https://example.invalid/member-trim")]
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("member dynamic", Url = "https://example.invalid/member-dynamic")]
+        public static void Invoke()
+        {
+        }
+    }
+
     private static unsafe void FunctionPointerFixture(delegate* unmanaged[Cdecl]<int, void> callback)
     {
     }
@@ -961,6 +1108,18 @@ public sealed class PublicApiCompatibilityTests
         public static bool IsWindows => true;
     }
 #endif
+
+    [ComImport]
+    [Guid("5E0D079B-34C4-4586-A933-46D1F9987E26")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface ComInterfaceFixture
+    {
+    }
+
+    [ClassInterface(ClassInterfaceType.AutoDispatch)]
+    private sealed class ComClassFixture
+    {
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MarshalAsFieldFixture
@@ -2069,7 +2228,8 @@ public sealed class PublicApiCompatibilityTests
                 constraint,
                 new NullabilityCursor(nullableFlags, 0),
                 new TupleNameCursor(Array.Empty<string?>()),
-                new DynamicCursor(Array.Empty<bool>()));
+                new DynamicCursor(Array.Empty<bool>()),
+                new NativeIntegerCursor(Array.Empty<bool>()));
 
     private static IReadOnlyList<byte[]> ReadGenericConstraintNullability(Type argument)
     {
@@ -2183,19 +2343,21 @@ public sealed class PublicApiCompatibilityTests
         var context = ReadNullableContext(provider);
         var tupleNames = ReadTupleNames(provider);
         var dynamicFlags = ReadDynamicFlags(provider);
-        return FormatAnnotatedType(type, new NullabilityCursor(flags, context), new TupleNameCursor(tupleNames), new DynamicCursor(dynamicFlags));
+        var nativeIntegerFlags = ReadNativeIntegerFlags(provider);
+        return FormatAnnotatedType(type, new NullabilityCursor(flags, context), new TupleNameCursor(tupleNames), new DynamicCursor(dynamicFlags), new NativeIntegerCursor(nativeIntegerFlags));
     }
 
-    private static string FormatAnnotatedType(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames, DynamicCursor dynamicFlags)
+    private static string FormatAnnotatedType(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames, DynamicCursor dynamicFlags, NativeIntegerCursor nativeIntegerFlags)
     {
         var flag = cursor.Next();
         var isDynamic = dynamicFlags.Next();
+        var isNativeInteger = nativeIntegerFlags.Next();
 #if NET10_0
-        if (type.IsFunctionPointer) return FormatFunctionPointer(type);
+        if (type.IsFunctionPointer) return FormatFunctionPointer(type, cursor, tupleNames, dynamicFlags, nativeIntegerFlags);
 #endif
         if (type.IsArray)
         {
-            var array = FormatAnnotatedType(type.GetElementType()!, cursor, tupleNames, dynamicFlags) + ArraySuffix(type);
+            var array = FormatAnnotatedType(type.GetElementType()!, cursor, tupleNames, dynamicFlags, nativeIntegerFlags) + ArraySuffix(type);
             return flag == 2 ? array + "?" : array;
         }
 
@@ -2204,16 +2366,22 @@ public sealed class PublicApiCompatibilityTests
             var definition = type.GetGenericTypeDefinition();
             if (IsTupleDefinition(definition) && tupleNames.HasNames)
             {
-                return FormatTuple(type, cursor, tupleNames, dynamicFlags);
+                return FormatTuple(type, cursor, tupleNames, dynamicFlags, nativeIntegerFlags);
             }
             var arguments = type.GetGenericArguments()
-                .Select(argument => FormatAnnotatedType(argument, cursor, tupleNames, dynamicFlags))
+                .Select(argument => FormatAnnotatedType(argument, cursor, tupleNames, dynamicFlags, nativeIntegerFlags))
                 .ToArray();
             var formatted = FormatGenericTypeName(type, arguments);
             return !type.IsValueType && flag == 2 ? formatted + "?" : formatted;
         }
 
-        var result = type == typeof(object) && isDynamic ? "dynamic" : type.FullName ?? type.Name;
+        var result = type == typeof(object) && isDynamic
+            ? "dynamic"
+            : isNativeInteger && type == typeof(IntPtr)
+                ? "nint"
+                : isNativeInteger && type == typeof(UIntPtr)
+                    ? "nuint"
+                    : type.FullName ?? type.Name;
         return (!type.IsValueType || type.IsGenericParameter) && flag == 2 ? result + "?" : result;
     }
 
@@ -2232,12 +2400,27 @@ public sealed class PublicApiCompatibilityTests
                 : "unmanaged[" + string.Join(",", conventions) + "]")
             + "<" + string.Join(",", signature) + ">";
     }
+
+    private static string FormatFunctionPointer(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames, DynamicCursor dynamicFlags, NativeIntegerCursor nativeIntegerFlags)
+    {
+        var conventions = type.GetFunctionPointerCallingConventions()
+            .Select(FormatType)
+            .ToArray();
+        var signature = type.GetFunctionPointerParameterTypes()
+            .Select(value => FormatAnnotatedType(value, cursor, tupleNames, dynamicFlags, nativeIntegerFlags))
+            .Append(FormatAnnotatedType(type.GetFunctionPointerReturnType(), cursor, tupleNames, dynamicFlags, nativeIntegerFlags));
+        return "delegate* "
+            + (conventions.Length == 0
+                ? (type.IsUnmanagedFunctionPointer ? "unmanaged" : "managed")
+                : "unmanaged[" + string.Join(",", conventions) + "]")
+            + "<" + string.Join(",", signature) + ">";
+    }
 #endif
 
-    private static string FormatTuple(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames, DynamicCursor dynamicFlags)
+    private static string FormatTuple(Type type, NullabilityCursor cursor, TupleNameCursor tupleNames, DynamicCursor dynamicFlags, NativeIntegerCursor nativeIntegerFlags)
     {
         var elements = new List<string>();
-        AddTupleElements(type, cursor, tupleNames, dynamicFlags, elements);
+        AddTupleElements(type, cursor, tupleNames, dynamicFlags, nativeIntegerFlags, elements);
         return "(" + string.Join(", ", elements) + ")";
     }
 
@@ -2246,6 +2429,7 @@ public sealed class PublicApiCompatibilityTests
         NullabilityCursor cursor,
         TupleNameCursor tupleNames,
         DynamicCursor dynamicFlags,
+        NativeIntegerCursor nativeIntegerFlags,
         ICollection<string> elements)
     {
         var arguments = tupleType.GetGenericArguments();
@@ -2253,7 +2437,7 @@ public sealed class PublicApiCompatibilityTests
         for (var index = 0; index < logicalCount; index++)
         {
             var elementName = tupleNames.Next();
-            var formatted = FormatAnnotatedType(arguments[index], cursor, tupleNames, dynamicFlags);
+            var formatted = FormatAnnotatedType(arguments[index], cursor, tupleNames, dynamicFlags, nativeIntegerFlags);
             elements.Add(formatted + (string.IsNullOrEmpty(elementName) ? string.Empty : " " + elementName));
         }
 
@@ -2261,7 +2445,8 @@ public sealed class PublicApiCompatibilityTests
         {
             _ = cursor.Next();
             _ = dynamicFlags.Next();
-            AddTupleElements(arguments[7], cursor, tupleNames, dynamicFlags, elements);
+            _ = nativeIntegerFlags.Next();
+            AddTupleElements(arguments[7], cursor, tupleNames, dynamicFlags, nativeIntegerFlags, elements);
         }
     }
 
@@ -2356,6 +2541,19 @@ public sealed class PublicApiCompatibilityTests
         return Array.Empty<bool>();
     }
 
+    private static bool[] ReadNativeIntegerFlags(ICustomAttributeProvider provider)
+    {
+        var attribute = GetCustomAttributes(provider).FirstOrDefault(value =>
+            string.Equals(value.AttributeType.FullName, "System.Runtime.CompilerServices.NativeIntegerAttribute", StringComparison.Ordinal));
+        if (attribute is null) return Array.Empty<bool>();
+        if (attribute.ConstructorArguments.Count == 0) return new[] { true };
+        var argument = attribute.ConstructorArguments[0];
+        if (argument.Value is bool single) return new[] { single };
+        if (argument.Value is IEnumerable<CustomAttributeTypedArgument> values)
+            return values.Select(value => Convert.ToBoolean(value.Value, CultureInfo.InvariantCulture)).ToArray();
+        return Array.Empty<bool>();
+    }
+
     private static IList<CustomAttributeData> GetCustomAttributes(ICustomAttributeProvider provider)
         => provider switch
         {
@@ -2413,7 +2611,78 @@ public sealed class PublicApiCompatibilityTests
         public bool Next() => _index < _flags.Length && _flags[_index++];
     }
 
+    private sealed class NativeIntegerCursor
+    {
+        private readonly bool[] _flags;
+        private int _index;
+
+        public NativeIntegerCursor(bool[] flags)
+        {
+            _flags = flags;
+        }
+
+        public bool Next() => _index < _flags.Length && _flags[_index++];
+    }
+
 #if NET10_0
+    private static Type CreateNativeIntegerFixtureType()
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("HomeAssistantX.NativeIntegerFixture." + Guid.NewGuid().ToString("N")),
+            AssemblyBuilderAccess.Run);
+        var module = assembly.DefineDynamicModule("Main");
+        var attributeBuilder = module.DefineType(
+            "System.Runtime.CompilerServices.NativeIntegerAttribute",
+            TypeAttributes.Class | TypeAttributes.Sealed | TypeAttributes.NotPublic,
+            typeof(Attribute));
+        var attributeConstructor = attributeBuilder.DefineConstructor(
+            MethodAttributes.Public,
+            CallingConventions.Standard,
+            new[] { typeof(bool[]) });
+        var attributeIl = attributeConstructor.GetILGenerator();
+        attributeIl.Emit(OpCodes.Ldarg_0);
+        attributeIl.Emit(OpCodes.Call, typeof(Attribute).GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null)!);
+        attributeIl.Emit(OpCodes.Ret);
+        var attributeType = attributeBuilder.CreateType()!;
+        var nativeConstructor = attributeType.GetConstructor(new[] { typeof(bool[]) })!;
+
+        var fixtureBuilder = module.DefineType(
+            "NativeIntegerFixture",
+            TypeAttributes.Class | TypeAttributes.Abstract | TypeAttributes.Sealed | TypeAttributes.NotPublic);
+        var nestedType = typeof(IReadOnlyList<>).MakeGenericType(typeof(IntPtr[]));
+        var methodBuilder = fixtureBuilder.DefineMethod(
+            "Invoke",
+            MethodAttributes.Private | MethodAttributes.Static,
+            typeof(IntPtr),
+            new[] { typeof(UIntPtr), nestedType });
+        methodBuilder.DefineParameter(0, ParameterAttributes.Retval, null).SetCustomAttribute(
+            new CustomAttributeBuilder(nativeConstructor, new object[] { new[] { true } }));
+        methodBuilder.DefineParameter(1, ParameterAttributes.None, "value").SetCustomAttribute(
+            new CustomAttributeBuilder(nativeConstructor, new object[] { new[] { true } }));
+        methodBuilder.DefineParameter(2, ParameterAttributes.None, "nested").SetCustomAttribute(
+            new CustomAttributeBuilder(nativeConstructor, new object[] { new[] { false, false, true } }));
+        var methodIl = methodBuilder.GetILGenerator();
+        methodIl.Emit(OpCodes.Ldsfld, typeof(IntPtr).GetField(nameof(IntPtr.Zero))!);
+        methodIl.Emit(OpCodes.Ret);
+
+        var field = fixtureBuilder.DefineField("Field", typeof(IntPtr), FieldAttributes.Public);
+        field.SetCustomAttribute(new CustomAttributeBuilder(nativeConstructor, new object[] { new[] { true } }));
+
+        var property = fixtureBuilder.DefineProperty("Property", PropertyAttributes.None, typeof(UIntPtr), Type.EmptyTypes);
+        property.SetCustomAttribute(new CustomAttributeBuilder(nativeConstructor, new object[] { new[] { true } }));
+        var getter = fixtureBuilder.DefineMethod(
+            "get_Property",
+            MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
+            typeof(UIntPtr),
+            Type.EmptyTypes);
+        var getterIl = getter.GetILGenerator();
+        getterIl.Emit(OpCodes.Ldsfld, typeof(UIntPtr).GetField(nameof(UIntPtr.Zero))!);
+        getterIl.Emit(OpCodes.Ret);
+        property.SetGetMethod(getter);
+
+        return fixtureBuilder.CreateType()!;
+    }
+
     [System.Runtime.CompilerServices.CollectionBuilder(typeof(CollectionBuilderFixtureBuilder), nameof(CollectionBuilderFixtureBuilder.Create))]
     private sealed class CollectionBuilderFixture : List<int>
     {
