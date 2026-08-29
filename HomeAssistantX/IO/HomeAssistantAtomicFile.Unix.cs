@@ -30,7 +30,8 @@ internal static partial class HomeAssistantAtomicFile
         string temporaryPath,
         string destinationPath,
         CancellationToken cancellationToken,
-        Action? beforeMetadataRecheck)
+        Action? beforeMetadataRecheck,
+        Action? afterExchange)
     {
         cancellationToken.ThrowIfCancellationRequested();
         beforeMetadataRecheck?.Invoke();
@@ -53,6 +54,7 @@ internal static partial class HomeAssistantAtomicFile
             {
                 // Once the paths have been exchanged this is a non-cancellable
                 // commit section: either finish or restore the displaced file.
+                afterExchange?.Invoke();
                 var displaced = ReadUnixFileMetadata(temporaryPath);
                 ApplyUnixDestinationMetadata(
                     temporaryPath,

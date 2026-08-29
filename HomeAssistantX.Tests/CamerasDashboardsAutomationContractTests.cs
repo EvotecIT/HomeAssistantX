@@ -1332,6 +1332,39 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void UnixAtomicExportsRestoreTheDisplacedDestinationWhenCommitFinalizationFails()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-exchange-rollback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+
+            var exception = Assert.Throws<IOException>(() =>
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None,
+                    beforeUnixMetadataRecheck: null,
+                    beforeWindowsNoReplaceMove: null,
+                    afterUnixExchange: () => throw new InvalidOperationException("Injected finalization failure.")));
+
+            Assert.Contains("original destination was restored", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void LinuxAtomicExportsReapplyAccessAclWhenIdentityAndModeStayStable()
     {
         if (!OperatingSystem.IsLinux()
