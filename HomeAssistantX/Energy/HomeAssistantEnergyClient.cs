@@ -155,6 +155,7 @@ public sealed class HomeAssistantEnergyClient
             cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantTimestamp.TryParse(property.Name, out var timestamp)
                 || !IsWithinRequestedWindow(timestamp, start, end, period)
+                || period == HomeAssistantEnergyPeriod.Hour && !IsUtcHourBoundary(timestamp)
                 || property.Value.ValueKind != JsonValueKind.Number
                 || !property.Value.TryGetDouble(out var amount)
                 || double.IsNaN(amount)
@@ -179,6 +180,15 @@ public sealed class HomeAssistantEnergyClient
         });
         cancellationToken.ThrowIfCancellationRequested();
         return result;
+    }
+
+    private static bool IsUtcHourBoundary(DateTimeOffset value)
+    {
+        var utc = value.UtcDateTime;
+        return utc.Minute == 0
+            && utc.Second == 0
+            && utc.Millisecond == 0
+            && utc.Ticks % TimeSpan.TicksPerMillisecond == 0;
     }
 
     internal static void SortFossilEnergyPeriods(

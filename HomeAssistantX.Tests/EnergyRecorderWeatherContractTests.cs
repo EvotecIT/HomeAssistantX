@@ -1510,6 +1510,23 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderFixedStatisticsUseUtcBucketOriginsForFractionalOffsets()
+    {
+        var queryStart = new DateTimeOffset(2026, 8, 26, 10, 30, 0, TimeSpan.FromHours(5.5));
+        var rowStart = new DateTimeOffset(2026, 8, 26, 5, 0, 0, TimeSpan.Zero);
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":"
+                + rowStart.ToUnixTimeMilliseconds() + ",\"end\":"
+                + rowStart.AddHours(1).ToUnixTimeMilliseconds() + "}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Single(await client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(queryStart, HomeAssistantStatisticPeriod.Hour, "sensor.energy")));
+    }
+
+    [Fact]
     public async Task RecorderDailyStatisticsRejectNoonToNoonIntervals()
     {
         var start = new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero);
@@ -1711,6 +1728,23 @@ public sealed class EnergyRecorderWeatherContractTests
         using var server = new TestHomeAssistantServer
         {
             FossilEnergyResponseJson = "{\"" + timestamp + "\":0.42}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            new DateTimeOffset(2026, 8, 26, 9, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero),
+            new[] { "sensor.energy" },
+            "sensor.co2",
+            HomeAssistantEnergyPeriod.Hour));
+    }
+
+    [Fact]
+    public async Task FossilEnergyRejectsNonHourlyKeysForHourlyRequests()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FossilEnergyResponseJson = "{\"2026-08-26T10:17:00Z\":0.42}"
         };
         using var client = TestClientFactory.Create(server);
 

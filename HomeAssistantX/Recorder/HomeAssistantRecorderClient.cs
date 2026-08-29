@@ -687,22 +687,28 @@ public sealed class HomeAssistantRecorderClient
         HomeAssistantStatisticPeriod period,
         TimeZoneInfo? homeTimeZone)
     {
+        if (period is HomeAssistantStatisticPeriod.FiveMinute or HomeAssistantStatisticPeriod.Hour)
+        {
+            var utcValue = value.ToUniversalTime();
+            var utcMinute = period == HomeAssistantStatisticPeriod.FiveMinute
+                ? utcValue.Minute - utcValue.Minute % 5
+                : 0;
+            return new DateTimeOffset(
+                utcValue.Year,
+                utcValue.Month,
+                utcValue.Day,
+                utcValue.Hour,
+                utcMinute,
+                0,
+                TimeSpan.Zero);
+        }
+
         var localValue = homeTimeZone is null
             ? value
             : TimeZoneInfo.ConvertTime(value, homeTimeZone);
-        var minute = period == HomeAssistantStatisticPeriod.FiveMinute
-            ? localValue.Minute - localValue.Minute % 5
-            : 0;
         if (homeTimeZone is null)
         {
-            return period switch
-            {
-                HomeAssistantStatisticPeriod.FiveMinute => new DateTimeOffset(
-                    localValue.Year, localValue.Month, localValue.Day, localValue.Hour, minute, 0, localValue.Offset),
-                HomeAssistantStatisticPeriod.Hour => new DateTimeOffset(
-                    localValue.Year, localValue.Month, localValue.Day, localValue.Hour, 0, 0, localValue.Offset),
-                _ => throw new ArgumentOutOfRangeException(nameof(period))
-            };
+            throw new ArgumentOutOfRangeException(nameof(period));
         }
 
         var localBoundary = period switch
