@@ -38,10 +38,16 @@ internal static class HomeAssistantUri
 
     internal static string EscapeDataString(string value, CancellationToken cancellationToken)
     {
-        if (value is null) throw new ArgumentNullException(nameof(value));
+        if (value is null)
+        {
+            throw new ArgumentNullException(nameof(value));
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         if (value.Length <= EscapeChunkLength)
+        {
             return Uri.EscapeDataString(value);
+        }
 
         var escaped = new StringBuilder(value.Length);
         for (var offset = 0; offset < value.Length;)

@@ -2,6 +2,7 @@
 using System.Text.Json;
 using System.Collections.Concurrent;
 using System.Net.Http;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Operations;
@@ -12,6 +13,38 @@ namespace HomeAssistantX.Tests;
 
 public sealed class OperationsContractTests
 {
+    [Fact]
+    public void SharedUriEscapingSupportsLongValuesAndCancellation()
+    {
+        var value = new string('a', 40000) + " /";
+        var escaped = HomeAssistantUri.EscapeDataString(value, CancellationToken.None);
+
+        Assert.StartsWith(new string('a', 40000), escaped);
+        Assert.EndsWith("%20%2F", escaped);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.Throws<OperationCanceledException>(() =>
+            HomeAssistantUri.EscapeDataString(value, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task DiagnosticAndIntegrationPathValidationHonorsCancellationBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var identifier = new string(' ', 40000);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Operations.Diagnostics.GetConfigEntryAsync(identifier, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Operations.Integrations.ReloadAsync(identifier, cancellation.Token));
+
+        Assert.Null(server.LastRequestPath);
+    }
+
     [Fact]
     public async Task TypedDomainListingsRejectDuplicateEntityIdentities()
     {
