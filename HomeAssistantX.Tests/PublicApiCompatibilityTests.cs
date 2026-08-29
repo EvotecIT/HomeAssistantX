@@ -160,6 +160,14 @@ public sealed class PublicApiCompatibilityTests
         Assert.Contains("requires-dynamic-code(message=\"member dynamic\",url=\"https://example.invalid/member-dynamic\")", RequiresCodeContract(method), StringComparison.Ordinal);
         Assert.Contains("requires-dynamic-code(message=\"constructor dynamic\",url=null)", FormatConstructor(constructor), StringComparison.Ordinal);
         Assert.Contains("requires-unreferenced-code(message=\"getter trim\",url=null)", FormatProperty(property), StringComparison.Ordinal);
+        Assert.Contains("requires-assembly-files(message=\"member files\",url=null)", RequiresCodeContract(method), StringComparison.Ordinal);
+
+        var annotated = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(DynamicallyAccessedMembersFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Contains("dam(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods)", FormatMethod(annotated), StringComparison.Ordinal);
+        Assert.Contains("dam(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicConstructors)", FormatReturnType(annotated), StringComparison.Ordinal);
+        Assert.Contains("dam(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties)", FormatParameters(annotated.GetParameters()), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -841,7 +849,7 @@ public sealed class PublicApiCompatibilityTests
         var genericArguments = method.IsGenericMethod ? method.GetGenericArguments() : Type.EmptyTypes;
         var genericList = genericArguments.Length == 0
             ? string.Empty
-            : "<" + string.Join(",", genericArguments.Select(argument => argument.Name)) + ">";
+            : "<" + string.Join(",", genericArguments.Select(argument => DynamicallyAccessedMembersContract(argument) + argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
         return ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + RequiresCodeContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
@@ -944,11 +952,15 @@ public sealed class PublicApiCompatibilityTests
         {
             foreach (var attribute in GetCustomAttributes(provider!).Where(value =>
                          value.AttributeType.FullName is "System.Diagnostics.CodeAnalysis.RequiresUnreferencedCodeAttribute"
-                             or "System.Diagnostics.CodeAnalysis.RequiresDynamicCodeAttribute"))
+                             or "System.Diagnostics.CodeAnalysis.RequiresDynamicCodeAttribute"
+                             or "System.Diagnostics.CodeAnalysis.RequiresAssemblyFilesAttribute"))
             {
-                var name = attribute.AttributeType.Name == "RequiresUnreferencedCodeAttribute"
-                    ? "requires-unreferenced-code"
-                    : "requires-dynamic-code";
+                var name = attribute.AttributeType.Name switch
+                {
+                    "RequiresUnreferencedCodeAttribute" => "requires-unreferenced-code",
+                    "RequiresDynamicCodeAttribute" => "requires-dynamic-code",
+                    _ => "requires-assembly-files"
+                };
                 var message = attribute.ConstructorArguments.Count == 1
                     ? attribute.ConstructorArguments[0].Value
                     : null;
@@ -957,6 +969,17 @@ public sealed class PublicApiCompatibilityTests
             }
         }
         return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
+    }
+
+    private static string DynamicallyAccessedMembersContract(ICustomAttributeProvider provider)
+    {
+        var attribute = GetCustomAttributes(provider).FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembersAttribute",
+            StringComparison.Ordinal));
+        return attribute?.ConstructorArguments.Count == 1
+            ? "dam(" + FormatAttributeArgument(attribute.ConstructorArguments[0]) + ") "
+            : string.Empty;
     }
 
     private static string FormatAttributeArgument(CustomAttributeTypedArgument argument)
@@ -1064,10 +1087,17 @@ public sealed class PublicApiCompatibilityTests
 
         [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("member trim", Url = "https://example.invalid/member-trim")]
         [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("member dynamic", Url = "https://example.invalid/member-dynamic")]
+        [System.Diagnostics.CodeAnalysis.RequiresAssemblyFiles("member files")]
         public static void Invoke()
         {
         }
     }
+
+    [return: System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicConstructors)]
+    private static Type DynamicallyAccessedMembersFixture<
+        [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods)] T>(
+        [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties)] Type value)
+        => value;
 
     private static unsafe void FunctionPointerFixture(delegate* unmanaged[Cdecl]<int, void> callback)
     {
@@ -1661,7 +1691,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
     private static string ExperimentalContract(params ICustomAttributeProvider?[] providers)
@@ -1898,7 +1928,7 @@ public sealed class PublicApiCompatibilityTests
         var suffix = parameter.HasDefaultValue
             ? " = " + FormatDefault(parameter.DefaultValue)
             : parameter.IsOptional ? " [optional]" : string.Empty;
-        return MarshalAsContract(parameter) + NullableFlowContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
+        return MarshalAsContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
     }));
 
     private static string FormatParameterType(ParameterInfo parameter)
@@ -1968,7 +1998,7 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatReturnType(MethodInfo method, ICustomAttributeProvider owner)
     {
         var parameter = method.ReturnParameter;
-        var safetyPrefix = MarshalAsContract(parameter) + NullableFlowContract(parameter) + RefSafetyPrefix(parameter)
+        var safetyPrefix = MarshalAsContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + RefSafetyPrefix(parameter)
             + (HasAttribute(owner, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")
                 || HasAttribute(method, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
         if (!method.ReturnType.IsByRef)
@@ -2073,6 +2103,7 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatPropertyType(PropertyInfo property)
     {
         var propertyFlow = NullableFlowContract(property);
+        var dynamicallyAccessedMembers = DynamicallyAccessedMembersContract(property);
         var getter = IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
         var setter = IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
         var getterFlow = getter is null
@@ -2082,7 +2113,7 @@ public sealed class PublicApiCompatibilityTests
         var setterFlow = setterValue is null ? string.Empty : NamedFlowContract("set", setterValue);
         if (property.PropertyType.IsByRef && property.GetMethod is not null)
         {
-            if (getter is not null) return propertyFlow + setterFlow + FormatReturnType(getter, property);
+            if (getter is not null) return propertyFlow + setterFlow + dynamicallyAccessedMembers + FormatReturnType(getter, property);
             var parameter = property.GetMethod.ReturnParameter;
             var safety = RefSafetyPrefix(parameter)
                 + (HasAttribute(property, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
@@ -2091,12 +2122,12 @@ public sealed class PublicApiCompatibilityTests
                     modifier.FullName,
                     "System.Runtime.InteropServices.InAttribute",
                     StringComparison.Ordinal));
-            return propertyFlow + setterFlow + safety + (readOnly ? "ref readonly " : "ref ")
+            return propertyFlow + setterFlow + dynamicallyAccessedMembers + safety + (readOnly ? "ref readonly " : "ref ")
                 + FormatAnnotatedType(property.PropertyType.GetElementType()!, parameter);
         }
         var safetyPrefix = HasAttribute(property, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty;
         var returnMarshalling = getter is null ? string.Empty : MarshalAsContract(getter.ReturnParameter);
-        return propertyFlow + getterFlow + setterFlow + safetyPrefix + returnMarshalling + FormatAnnotatedType(property.PropertyType, property);
+        return propertyFlow + getterFlow + setterFlow + dynamicallyAccessedMembers + safetyPrefix + returnMarshalling + FormatAnnotatedType(property.PropertyType, property);
     }
 
     private static string NamedFlowContract(string name, ICustomAttributeProvider provider)
@@ -2153,7 +2184,7 @@ public sealed class PublicApiCompatibilityTests
                 : variance == GenericParameterAttributes.Contravariant
                     ? "in "
                     : string.Empty;
-            return prefix + argument.Name;
+            return prefix + DynamicallyAccessedMembersContract(argument) + argument.Name;
         }).ToArray();
         return FormatGenericTypeName(type, arguments);
     }
