@@ -84,21 +84,29 @@ public sealed class HomeAssistantMobileAppRegistration
 
 public sealed class HomeAssistantMobileAppRegistrationUpdate
 {
+    public HomeAssistantMobileAppRegistrationUpdate(
+        string appVersion,
+        string deviceName,
+        string manufacturer,
+        string model)
+    {
+        AppVersion = Required(appVersion, nameof(appVersion));
+        DeviceName = Required(deviceName, nameof(deviceName));
+        Manufacturer = Required(manufacturer, nameof(manufacturer));
+        Model = Required(model, nameof(model));
+    }
+
     [JsonPropertyName("app_version")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? AppVersion { get; set; }
+    public string AppVersion { get; }
 
     [JsonPropertyName("device_name")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? DeviceName { get; set; }
+    public string DeviceName { get; }
 
     [JsonPropertyName("manufacturer")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Manufacturer { get; set; }
+    public string Manufacturer { get; }
 
     [JsonPropertyName("model")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Model { get; set; }
+    public string Model { get; }
 
     [JsonPropertyName("os_version")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -110,13 +118,13 @@ public sealed class HomeAssistantMobileAppRegistrationUpdate
 
     internal void Validate()
     {
-        if (AppVersion is null && DeviceName is null && Manufacturer is null && Model is null && OperatingSystemVersion is null && AppData is null)
-            throw new ArgumentException("At least one registration field is required.");
-        Optional(AppVersion, nameof(AppVersion));
-        Optional(DeviceName, nameof(DeviceName));
-        Optional(Manufacturer, nameof(Manufacturer));
-        Optional(Model, nameof(Model));
         Optional(OperatingSystemVersion, nameof(OperatingSystemVersion));
+    }
+
+    private static string Required(string value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A required value cannot be empty.", name);
+        return value;
     }
 
     private static void Optional(string? value, string name)

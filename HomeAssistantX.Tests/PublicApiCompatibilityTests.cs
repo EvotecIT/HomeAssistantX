@@ -448,6 +448,21 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void MemberFormatterPreservesSpecialNameAcrossMemberKinds()
+    {
+        var type = typeof(SpecialNameMemberFixture);
+        var constructor = type.GetConstructors().Single();
+        var field = type.GetField(nameof(SpecialNameMemberFixture.Field))!;
+        var property = type.GetProperty(nameof(SpecialNameMemberFixture.Property))!;
+        var eventInfo = type.GetEvent(nameof(SpecialNameMemberFixture.Changed))!;
+
+        Assert.Contains("special-name ", FormatConstructor(constructor), StringComparison.Ordinal);
+        Assert.Contains("special-name ", FormatField(field), StringComparison.Ordinal);
+        Assert.Contains("special-name ", FormatProperty(property), StringComparison.Ordinal);
+        Assert.Equal("special-name ", SpecialNameContract(eventInfo));
+    }
+
+    [Fact]
     public void MemberFormatterPreservesProtectedInheritanceContracts()
     {
         var type = typeof(ProtectedSurfaceFixture);
@@ -717,7 +732,7 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(eventInfo) + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -855,8 +870,15 @@ public sealed class PublicApiCompatibilityTests
         return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + RequiresCodeContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
-    private static string SpecialNameContract(MethodBase method)
-        => method is MethodInfo && method.IsSpecialName ? "special-name " : string.Empty;
+    private static string SpecialNameContract(MemberInfo member)
+        => member switch
+        {
+            MethodBase method when method.IsSpecialName => "special-name ",
+            FieldInfo field when field.IsSpecialName => "special-name ",
+            PropertyInfo property when property.IsSpecialName => "special-name ",
+            EventInfo eventInfo when eventInfo.IsSpecialName => "special-name ",
+            _ => string.Empty
+        };
 
     private static string DefaultMemberContract(Type type)
     {
@@ -1012,7 +1034,7 @@ public sealed class PublicApiCompatibilityTests
     }
 
     private static string FormatConstructor(ConstructorInfo constructor)
-        => "C " + ConstructorAccess(constructor) + ObsoleteContract(constructor)
+        => "C " + ConstructorAccess(constructor) + SpecialNameContract(constructor) + ObsoleteContract(constructor)
             + ExperimentalContract(constructor) + PlatformContract(constructor) + RequiresCodeContract(constructor)
             + OverloadResolutionPriorityContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
             + FormatType(constructor.DeclaringType!) + "(" + FormatParameters(constructor.GetParameters()) + ")";
@@ -1022,7 +1044,7 @@ public sealed class PublicApiCompatibilityTests
         var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
         var getter = IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
         var setter = IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
-        return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + ObsoleteContract(
+        return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(property) + ObsoleteContract(
             property,
             getter,
             setter)
@@ -1412,6 +1434,24 @@ public sealed class PublicApiCompatibilityTests
         public string this[string key] => key;
     }
 
+    private sealed class SpecialNameMemberFixture
+    {
+        public SpecialNameMemberFixture()
+        {
+        }
+
+        [SpecialName]
+        public int Field = 1;
+
+        [SpecialName]
+        public int Property { get; set; }
+
+        [SpecialName]
+        public event EventHandler? Changed;
+
+        public void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     private readonly struct OperatorFixture
     {
         public OperatorFixture(int value) => Value = value;
@@ -1703,7 +1743,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
     }
 
     private static string ExperimentalContract(params ICustomAttributeProvider?[] providers)

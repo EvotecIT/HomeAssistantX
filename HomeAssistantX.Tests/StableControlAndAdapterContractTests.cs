@@ -1169,7 +1169,8 @@ public sealed class StableControlAndAdapterContractTests
             Assert.True(string.IsNullOrEmpty(server.LastAuthorization));
 
             var updateAppData = new Dictionary<string, object?> { ["push_token"] = "updated", ["attempts"] = 1 };
-            var registrationUpdate = new HomeAssistantMobileAppRegistrationUpdate
+            var registrationUpdate = new HomeAssistantMobileAppRegistrationUpdate(
+                "1.0", "CasaRay", "Evotec", "Windows")
             {
                 OperatingSystemVersion = "11.0",
                 AppData = updateAppData
@@ -1182,10 +1183,10 @@ public sealed class StableControlAndAdapterContractTests
             var updateData = updateBody.RootElement.GetProperty("data");
             Assert.Equal("11.0", updateData.GetProperty("os_version").GetString());
             Assert.Equal("updated", updateData.GetProperty("app_data").GetProperty("push_token").GetString());
-            Assert.False(updateData.TryGetProperty("app_version", out _));
-            Assert.False(updateData.TryGetProperty("device_name", out _));
-            Assert.False(updateData.TryGetProperty("manufacturer", out _));
-            Assert.False(updateData.TryGetProperty("model", out _));
+            Assert.Equal("1.0", updateData.GetProperty("app_version").GetString());
+            Assert.Equal("CasaRay", updateData.GetProperty("device_name").GetString());
+            Assert.Equal("Evotec", updateData.GetProperty("manufacturer").GetString());
+            Assert.Equal("Windows", updateData.GetProperty("model").GetString());
         }
 
         var encrypted = await client.MobileApp.RegisterAsync(RegistrationRequest(true));
@@ -1204,7 +1205,8 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Equal(JsonValueKind.Object, plaintextBody.RootElement.ValueKind);
         Assert.Empty(plaintextBody.RootElement.EnumerateObject());
 
-        await protectedWebhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate
+        await protectedWebhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate(
+            "1.0", "CasaRay", "Evotec", "Windows")
         {
             OperatingSystemVersion = "12.0",
             AppData = new Dictionary<string, object?> { ["push_token"] = "encrypted-update" }
@@ -1218,7 +1220,8 @@ public sealed class StableControlAndAdapterContractTests
         Assert.False(updatePlaintextBody.RootElement.TryGetProperty("type", out _));
         Assert.False(updatePlaintextBody.RootElement.TryGetProperty("data", out _));
 
-        await Assert.ThrowsAsync<ArgumentException>(() => protectedWebhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate()));
+        Assert.Throws<ArgumentException>(() => new HomeAssistantMobileAppRegistrationUpdate(
+            " ", "CasaRay", "Evotec", "Windows"));
     }
 
     [Fact]
@@ -1366,12 +1369,9 @@ public sealed class StableControlAndAdapterContractTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             webhook.SendAsync("custom", cyclic, cancellation.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate
+            webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate(
+                "1.0", "CasaRay", "Evotec", "Windows")
             {
-                AppVersion = "1.0",
-                DeviceName = "Test",
-                Manufacturer = "Evotec",
-                Model = "Test",
                 AppData = cyclic
             }, cancellation.Token));
         var registration = RegistrationRequest(false);
@@ -1539,7 +1539,8 @@ public sealed class StableControlAndAdapterContractTests
         });
 
         var error = await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantCommandException>(
-            () => webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate
+            () => webhook.UpdateRegistrationAsync(new HomeAssistantMobileAppRegistrationUpdate(
+                "1.0", "CasaRay", "Evotec", "Windows")
             {
                 AppData = new Dictionary<string, object?> { ["push_token"] = "sensitive" }
             }));
