@@ -430,10 +430,13 @@ public sealed class PublicApiCompatibilityTests
     {
         var operatorMethod = typeof(OperatorFixture).GetMethod("op_Addition", BindingFlags.Public | BindingFlags.Static)!;
         var propertyGetter = typeof(OperatorFixture).GetProperty(nameof(OperatorFixture.Value))!.GetMethod!;
+        var specialMethod = typeof(SpecialNameMemberFixture).GetMethod(nameof(SpecialNameMemberFixture.SpecialHook))!;
 
         Assert.True(ShouldIncludeMethod(operatorMethod));
         Assert.False(ShouldIncludeMethod(propertyGetter));
         Assert.StartsWith("special-name op_Addition(", FormatMethod(operatorMethod), StringComparison.Ordinal);
+        Assert.True(ShouldIncludeMethod(specialMethod));
+        Assert.StartsWith("special-name SpecialHook(", FormatMethod(specialMethod), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1449,6 +1452,11 @@ public sealed class PublicApiCompatibilityTests
         [SpecialName]
         public event EventHandler? Changed;
 
+        [SpecialName]
+        public void SpecialHook()
+        {
+        }
+
         public void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1940,8 +1948,19 @@ public sealed class PublicApiCompatibilityTests
         => method is not null && (method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly);
 
     private static bool ShouldIncludeMethod(MethodInfo method)
-        => IsExternallyAccessibleMethod(method)
-            && (!method.IsSpecialName || method.Name.StartsWith("op_", StringComparison.Ordinal));
+        => IsExternallyAccessibleMethod(method) && !IsPropertyOrEventAccessor(method);
+
+    private static bool IsPropertyOrEventAccessor(MethodInfo method)
+    {
+        if (!method.IsSpecialName || method.DeclaringType is null) return false;
+        const BindingFlags members = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public
+            | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+        return method.DeclaringType.GetProperties(members)
+                .Any(property => property.GetMethod == method || property.SetMethod == method)
+            || method.DeclaringType.GetEvents(members)
+                .Any(eventInfo => eventInfo.AddMethod == method || eventInfo.RemoveMethod == method
+                    || eventInfo.RaiseMethod == method);
+    }
 
     private static bool IsExternallyAccessibleField(FieldInfo field)
         => field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly;
