@@ -9,6 +9,19 @@ internal static partial class HomeAssistantAtomicFile
         string destinationPath,
         bool overwrite,
         CancellationToken cancellationToken)
+        => CommitTemporaryFile(
+            temporaryPath,
+            destinationPath,
+            overwrite,
+            cancellationToken,
+            beforeUnixMetadataRecheck: null);
+
+    internal static void CommitTemporaryFile(
+        string temporaryPath,
+        string destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken,
+        Action? beforeUnixMetadataRecheck)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!overwrite)
@@ -32,9 +45,27 @@ internal static partial class HomeAssistantAtomicFile
             return;
         }
 
-        PreserveDestinationPermissions(destinationPath, temporaryPath);
-        cancellationToken.ThrowIfCancellationRequested();
-        CommitUnixOverwrite(temporaryPath, destinationPath);
+        CommitUnixOverwrite(
+            temporaryPath,
+            destinationPath,
+            cancellationToken,
+            beforeUnixMetadataRecheck);
+    }
+
+    internal static FileStream CreateSecureTemporaryFileStream(string temporaryPath)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return CreateSecureUnixTemporaryFileStream(temporaryPath);
+        }
+
+        return new FileStream(
+            temporaryPath,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            81920,
+            useAsync: true);
     }
 
     internal static void PreserveDestinationPermissions(string destinationPath, string temporaryPath)

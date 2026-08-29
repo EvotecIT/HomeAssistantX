@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.Win32.SafeHandles;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
@@ -12,15 +13,57 @@ internal static partial class HomeAssistantAtomicFile
     private const int LinuxNoData = 61;
     private const int LinuxOperationNotSupported = 95;
     private const int MacExtendedAcl = 0x00000100;
+    private const uint OwnerReadWriteMode = 0x180;
+    private const int LinuxWriteOnly = 0x0001;
+    private const int LinuxCreate = 0x0040;
+    private const int LinuxExclusive = 0x0080;
+    private const int LinuxCloseOnExec = 0x80000;
+    private const int MacWriteOnly = 0x0001;
+    private const int MacCreate = 0x0200;
+    private const int MacExclusive = 0x0800;
+    private const int MacCloseOnExec = 0x1000000;
+    private const int MaximumMetadataRetries = 4;
 
-    private static void CommitUnixOverwrite(string temporaryPath, string destinationPath)
+    private static void CommitUnixOverwrite(
+        string temporaryPath,
+        string destinationPath,
+        CancellationToken cancellationToken,
+        Action? beforeMetadataRecheck)
     {
-        if (Rename(temporaryPath, destinationPath) != 0)
+        for (var attempt = 0; attempt < MaximumMetadataRetries; attempt++)
         {
-            throw new IOException(
-                "The temporary file could not be committed atomically.",
-                new Win32Exception(Marshal.GetLastWin32Error()));
+            cancellationToken.ThrowIfCancellationRequested();
+            var expected = TryReadUnixFileMetadata(destinationPath);
+            if (expected.HasValue)
+            {
+                ApplyUnixDestinationMetadata(
+                    destinationPath,
+                    temporaryPath,
+                    expected.Value,
+                    useManagedApis: true);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            beforeMetadataRecheck?.Invoke();
+            beforeMetadataRecheck = null;
+            var current = TryReadUnixFileMetadata(destinationPath);
+            if (!UnixFileMetadata.SameIdentityAndPermissions(expected, current))
+            {
+                continue;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Rename(temporaryPath, destinationPath) != 0)
+            {
+                throw new IOException(
+                    "The temporary file could not be committed atomically.",
+                    new Win32Exception(Marshal.GetLastWin32Error()));
+            }
+            return;
         }
+
+        throw new IOException(
+            "The destination Unix file changed while its ownership and permissions were being preserved.");
     }
 
     private static void PreserveUnixDestinationMetadata(
@@ -28,18 +71,17 @@ internal static partial class HomeAssistantAtomicFile
         string temporaryPath,
         bool useManagedApis)
     {
-        UnixFileMetadata metadata;
-        try
-        {
-            metadata = ReadUnixFileMetadata(destinationPath);
-        }
-        catch (IOException exception) when (
-            exception.InnerException is Win32Exception native
-            && native.NativeErrorCode == UnixNoEntry)
-        {
-            return;
-        }
+        var metadata = TryReadUnixFileMetadata(destinationPath);
+        if (!metadata.HasValue) return;
+        ApplyUnixDestinationMetadata(destinationPath, temporaryPath, metadata.Value, useManagedApis);
+    }
 
+    private static void ApplyUnixDestinationMetadata(
+        string destinationPath,
+        string temporaryPath,
+        UnixFileMetadata metadata,
+        bool useManagedApis)
+    {
         if (Chown(temporaryPath, metadata.UserId, metadata.GroupId) != 0)
         {
             throw new IOException(
@@ -67,6 +109,45 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
+    private static FileStream CreateSecureUnixTemporaryFileStream(string temporaryPath)
+    {
+        var flags = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            ? MacWriteOnly | MacCreate | MacExclusive | MacCloseOnExec
+            : LinuxWriteOnly | LinuxCreate | LinuxExclusive | LinuxCloseOnExec;
+        var descriptor = Open(temporaryPath, flags, OwnerReadWriteMode);
+        if (descriptor < 0)
+        {
+            throw new IOException(
+                "The secure temporary file could not be created.",
+                new Win32Exception(Marshal.GetLastWin32Error()));
+        }
+
+        var handle = new SafeFileHandle(new IntPtr(descriptor), ownsHandle: true);
+        try
+        {
+            return new FileStream(handle, FileAccess.Write, 81920, isAsync: false);
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
+    }
+
+    private static UnixFileMetadata? TryReadUnixFileMetadata(string path)
+    {
+        try
+        {
+            return ReadUnixFileMetadata(path);
+        }
+        catch (IOException exception) when (
+            exception.InnerException is Win32Exception native
+            && native.NativeErrorCode == UnixNoEntry)
+        {
+            return null;
+        }
+    }
+
     private static UnixFileMetadata ReadUnixFileMetadata(string path)
     {
         var offsets = UnixMetadataOffsets();
@@ -86,6 +167,8 @@ internal static partial class HomeAssistantAtomicFile
             }
 
             return new UnixFileMetadata(
+                ReadNativeUnsigned(buffer, offsets.Device, offsets.DeviceIs32Bit),
+                ReadNativeUnsigned(buffer, offsets.Inode, offsets.InodeIs32Bit),
                 unchecked((uint)(Marshal.ReadInt32(buffer, offsets.Mode) & PermissionBits)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.UserId)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)));
@@ -95,6 +178,11 @@ internal static partial class HomeAssistantAtomicFile
             Marshal.FreeHGlobal(buffer);
         }
     }
+
+    private static ulong ReadNativeUnsigned(IntPtr buffer, int offset, bool is32Bit)
+        => is32Bit
+            ? unchecked((uint)Marshal.ReadInt32(buffer, offset))
+            : unchecked((ulong)Marshal.ReadInt64(buffer, offset));
 
     private static bool TrySetUnixModeWithManagedApi(string path, uint mode)
     {
@@ -195,15 +283,18 @@ internal static partial class HomeAssistantAtomicFile
     internal static UnixMetadataOffset UnixMetadataOffsets(string operatingSystem, string architecture)
     {
         if (string.Equals(operatingSystem, "OSX", StringComparison.Ordinal))
-            return new UnixMetadataOffset(4, 16, 20);
+            return new UnixMetadataOffset(0, 8, 4, 16, 20, deviceIs32Bit: true, inodeIs32Bit: false);
         if (!string.Equals(operatingSystem, "Linux", StringComparison.Ordinal))
             throw new PlatformNotSupportedException("Unix metadata preservation supports Linux and macOS.");
 
         return architecture switch
         {
-            "X64" or "S390x" or "Ppc64le" => new UnixMetadataOffset(24, 28, 32),
-            "X86" or "Arm" or "Arm64" or "Armv6" or "LoongArch64" or "RiscV64" =>
-                new UnixMetadataOffset(16, 24, 28),
+            "X64" or "S390x" or "Ppc64le" =>
+                new UnixMetadataOffset(0, 8, 24, 28, 32, deviceIs32Bit: false, inodeIs32Bit: false),
+            "X86" or "Arm" or "Armv6" =>
+                new UnixMetadataOffset(0, 12, 16, 24, 28, deviceIs32Bit: false, inodeIs32Bit: true),
+            "Arm64" or "LoongArch64" or "RiscV64" =>
+                new UnixMetadataOffset(0, 8, 16, 24, 28, deviceIs32Bit: false, inodeIs32Bit: false),
             _ => throw new PlatformNotSupportedException(
                 "Unix metadata preservation does not recognize the current Linux architecture.")
         };
@@ -211,31 +302,69 @@ internal static partial class HomeAssistantAtomicFile
 
     internal readonly struct UnixMetadataOffset
     {
-        internal UnixMetadataOffset(int mode, int userId, int groupId)
+        internal UnixMetadataOffset(
+            int device,
+            int inode,
+            int mode,
+            int userId,
+            int groupId,
+            bool deviceIs32Bit,
+            bool inodeIs32Bit)
         {
+            Device = device;
+            Inode = inode;
             Mode = mode;
             UserId = userId;
             GroupId = groupId;
+            DeviceIs32Bit = deviceIs32Bit;
+            InodeIs32Bit = inodeIs32Bit;
         }
 
+        internal int Device { get; }
+        internal int Inode { get; }
         internal int Mode { get; }
         internal int UserId { get; }
         internal int GroupId { get; }
+        internal bool DeviceIs32Bit { get; }
+        internal bool InodeIs32Bit { get; }
     }
 
     private readonly struct UnixFileMetadata
     {
-        internal UnixFileMetadata(uint mode, uint userId, uint groupId)
+        internal UnixFileMetadata(ulong device, ulong inode, uint mode, uint userId, uint groupId)
         {
+            Device = device;
+            Inode = inode;
             Mode = mode;
             UserId = userId;
             GroupId = groupId;
         }
 
+        internal ulong Device { get; }
+        internal ulong Inode { get; }
         internal uint Mode { get; }
         internal uint UserId { get; }
         internal uint GroupId { get; }
+
+        internal static bool SameIdentityAndPermissions(
+            UnixFileMetadata? expected,
+            UnixFileMetadata? current)
+        {
+            if (!expected.HasValue || !current.HasValue)
+            {
+                return expected.HasValue == current.HasValue;
+            }
+
+            return expected.Value.Device == current.Value.Device
+                && expected.Value.Inode == current.Value.Inode
+                && expected.Value.Mode == current.Value.Mode
+                && expected.Value.UserId == current.Value.UserId
+                && expected.Value.GroupId == current.Value.GroupId;
+        }
     }
+
+    [DllImport("libc", EntryPoint = "open", SetLastError = true)]
+    private static extern int Open(string path, int flags, uint mode);
 
     [DllImport("libc", EntryPoint = "stat", SetLastError = true)]
     private static extern int Stat(string path, IntPtr buffer);

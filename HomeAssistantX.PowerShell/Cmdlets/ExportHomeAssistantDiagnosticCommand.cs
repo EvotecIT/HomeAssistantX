@@ -65,13 +65,7 @@ public sealed class ExportHomeAssistantDiagnosticCommand : HomeAssistantCmdlet
             "." + System.IO.Path.GetFileName(_resolvedPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
-            using (var stream = new FileStream(
-                temporaryPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                81920,
-                useAsync: true))
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporaryPath))
             {
                 await stream.WriteAsync(bytes, 0, bytes.Length, CancelToken).ConfigureAwait(false);
                 await stream.FlushAsync(CancelToken).ConfigureAwait(false);

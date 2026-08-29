@@ -1208,6 +1208,75 @@ public sealed class CamerasDashboardsAutomationContractTests
         }
     }
 
+    [Fact]
+    public void UnixTemporaryExportsAreRestrictiveWhileBeingWritten()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-secure-temp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        try
+        {
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(42);
+                var mode = File.GetUnixFileMode(temporary);
+                Assert.Equal(
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                    mode & (UnixFileMode.UserRead | UnixFileMode.UserWrite
+                        | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void UnixAtomicExportsReapplyMetadataWhenDestinationIdentityChanges()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-metadata-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(2);
+            }
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None,
+                beforeUnixMetadataRecheck: () =>
+                {
+                    File.Delete(destination);
+                    File.WriteAllBytes(destination, new byte[] { 3 });
+                    RunUnixCommand("/bin/chmod", "600", destination);
+                });
+
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.Equal(
+                UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                File.GetUnixFileMode(destination)
+                    & (UnixFileMode.UserRead | UnixFileMode.UserWrite
+                        | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("Linux", "X64", 24)]
     [InlineData("Linux", "Ppc64le", 24)]
@@ -1315,6 +1384,20 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+    }
+
+    [Fact]
+    public async Task DashboardResponsesPreserveProviderTitleWhitespace()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardListResponseJson = "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"  House  \",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var dashboard = Assert.Single(await client.Dashboards.GetDashboardsAsync());
+
+        Assert.Equal("  House  ", dashboard.Title);
     }
 
     [Theory]

@@ -405,7 +405,7 @@ public sealed class HomeAssistantDashboardClient
     private static void ValidateListedDashboard(HomeAssistantDashboard dashboard, CancellationToken cancellationToken)
     {
         dashboard.UrlPath = RequireResponseUrlPath(dashboard.UrlPath, "A dashboard did not contain a canonical URL path.", cancellationToken);
-        if (!IsCanonicalTrimmed(dashboard.Title, cancellationToken)
+        if (!HasNonWhitespace(dashboard.Title, cancellationToken)
             || !IsCanonicalTrimmed(dashboard.Mode, cancellationToken))
             throw new HomeAssistantProtocolException("A dashboard did not contain its required fields.");
         if (dashboard.Mode == "storage")
@@ -427,6 +427,20 @@ public sealed class HomeAssistantDashboardClient
         {
             throw new HomeAssistantProtocolException("A dashboard contained a noncanonical icon.");
         }
+    }
+
+    private static bool HasNonWhitespace(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null) return false;
+        var found = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            found |= !char.IsWhiteSpace(value[index]);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return found;
     }
 
     internal static void RequireDashboardVisibility(
