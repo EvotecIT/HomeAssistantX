@@ -168,7 +168,7 @@ public sealed class HomeAssistantEnergyClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantTimestamp.TryParse(property.Name, out var timestamp)
-                || !IsWithinRequestedWindow(timestamp, start, end, period)
+                || !IsWithinRequestedWindow(timestamp, start, end, period, homeTimeZone)
                 || !IsPeriodBoundary(timestamp, period, homeTimeZone)
                 || property.Value.ValueKind != JsonValueKind.Number
                 || !property.Value.TryGetDouble(out var amount)
@@ -234,16 +234,26 @@ public sealed class HomeAssistantEnergyClient
         DateTimeOffset timestamp,
         DateTimeOffset start,
         DateTimeOffset end,
-        HomeAssistantEnergyPeriod period)
+        HomeAssistantEnergyPeriod period,
+        TimeZoneInfo? homeTimeZone)
     {
         var earliest = period switch
         {
             // Home Assistant 2026.8 accepts `5minute` but currently reduces every
             // period other than hour/day into calendar-month buckets.
-            HomeAssistantEnergyPeriod.FiveMinute => start.AddDays(-33),
+            HomeAssistantEnergyPeriod.FiveMinute => HomeAssistantCalendarTime.GetContainingBoundary(
+                start,
+                homeTimeZone ?? throw new ArgumentNullException(nameof(homeTimeZone)),
+                HomeAssistantCalendarPeriod.Month),
             HomeAssistantEnergyPeriod.Hour => start.AddHours(-1),
-            HomeAssistantEnergyPeriod.Day => start.AddHours(-27),
-            HomeAssistantEnergyPeriod.Month => start.AddDays(-33),
+            HomeAssistantEnergyPeriod.Day => HomeAssistantCalendarTime.GetContainingBoundary(
+                start,
+                homeTimeZone ?? throw new ArgumentNullException(nameof(homeTimeZone)),
+                HomeAssistantCalendarPeriod.Day),
+            HomeAssistantEnergyPeriod.Month => HomeAssistantCalendarTime.GetContainingBoundary(
+                start,
+                homeTimeZone ?? throw new ArgumentNullException(nameof(homeTimeZone)),
+                HomeAssistantCalendarPeriod.Month),
             _ => throw new ArgumentOutOfRangeException(nameof(period))
         };
         return timestamp >= earliest && timestamp < end;

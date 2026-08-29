@@ -857,9 +857,27 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("\"wind_bearing\":true")]
     [InlineData("\"wind_bearing\":{}")]
     [InlineData("\"wind_bearing\":1e400")]
+    [InlineData("\"wind_bearing\":-1")]
+    [InlineData("\"wind_bearing\":361")]
+    [InlineData("\"wind_bearing\":\" north \"")]
     public async Task WeatherCurrentReadsRejectImpossiblePercentagesAndWindBearingShapes(string attribute)
     {
         var state = "{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{" + attribute + "}}";
+        using var server = new TestHomeAssistantServer { ExactStateResponseJson = state };
+        server.SetStates("[" + state + "]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync("weather.home"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" sunny ")]
+    public async Task WeatherCurrentReadsRejectNoncanonicalConditions(string condition)
+    {
+        var state = "{\"entity_id\":\"weather.home\",\"state\":\"" + condition + "\",\"attributes\":{}}";
         using var server = new TestHomeAssistantServer { ExactStateResponseJson = state };
         server.SetStates("[" + state + "]");
         using var client = TestClientFactory.Create(server);
@@ -958,6 +976,8 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"humidity\":-1}")]
     [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"cloud_coverage\":101}")]
     [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"precipitation_probability\":101}")]
+    [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"condition\":\" rainy \"}")]
+    [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"condition\":\" \"}")]
     public async Task WeatherForecastRejectsAmbiguousOrImpossiblePeriods(string period)
     {
         using var server = new TestHomeAssistantServer
@@ -1658,6 +1678,25 @@ public sealed class EnergyRecorderWeatherContractTests
                 cancellation.Token));
     }
 
+    [Fact]
+    public void RecorderEntityGlobNormalizationIsOrdinalDuplicateSafeAndCancellable()
+    {
+        Assert.Equal(
+            new[] { "sensor.*", "Sensor.*" },
+            HomeAssistantRecorderClient.NormalizePurgeEntityGlobs(
+                new[] { "sensor.*", "sensor.*", "Sensor.*" },
+                "EntityGlob",
+                default));
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRecorderClient.NormalizePurgeEntityGlobs(
+                new[] { new string('x', 1_000_000) },
+                "EntityGlob",
+                cancellation.Token));
+    }
+
     [Theory]
     [InlineData("temperature_unit")]
     [InlineData("pressure_unit")]
@@ -1876,6 +1915,10 @@ public sealed class EnergyRecorderWeatherContractTests
     [InlineData("[]")]
     [InlineData("true")]
     [InlineData("false")]
+    [InlineData("-1")]
+    [InlineData("361")]
+    [InlineData("\" north \"")]
+    [InlineData("\" \"")]
     public async Task WeatherForecastRejectsUnsupportedWindBearingShapes(string value)
     {
         using var server = new TestHomeAssistantServer
@@ -1894,7 +1937,7 @@ public sealed class EnergyRecorderWeatherContractTests
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var comparer = new HomeAssistantX.Protocol.CancellationAwareStringComparer(
-            StringComparer.OrdinalIgnoreCase,
+            StringComparison.OrdinalIgnoreCase,
             cancellation.Token);
 
         Assert.ThrowsAny<OperationCanceledException>(() => comparer.Compare("weather.a", "weather.b"));
@@ -1997,6 +2040,27 @@ public sealed class EnergyRecorderWeatherContractTests
             new[] { "sensor.energy" },
             "sensor.co2",
             period);
+
+        Assert.Single(result);
+    }
+
+    [Fact]
+    public async Task FossilEnergyAcceptsAHistoricFortySevenHourLocalDayBucket()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var server = new TestHomeAssistantServer
+        {
+            ConfigurationResponseJson = "{\"time_zone\":\"Pacific/Kwajalein\",\"components\":[]}",
+            FossilEnergyResponseJson = "{\"1969-09-29T13:00:00Z\":0.42}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var result = await client.Energy.GetFossilEnergyConsumptionAsync(
+            new DateTimeOffset(1969, 10, 1, 11, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(1969, 10, 1, 13, 0, 0, TimeSpan.Zero),
+            new[] { "sensor.energy" },
+            "sensor.co2",
+            HomeAssistantEnergyPeriod.Day);
 
         Assert.Single(result);
     }

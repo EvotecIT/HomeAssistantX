@@ -198,7 +198,7 @@ public sealed class HomeAssistantWeatherClient
         List<HomeAssistantWeatherObservation> observations,
         CancellationToken cancellationToken)
     {
-        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        var comparer = new CancellationAwareStringComparer(StringComparison.OrdinalIgnoreCase, cancellationToken);
         CancellationAwareSort.Sort(observations, (left, right) => comparer.Compare(left.EntityId, right.EntityId));
     }
 
@@ -209,7 +209,7 @@ public sealed class HomeAssistantWeatherClient
         cancellationToken.ThrowIfCancellationRequested();
         if (!string.Equals(state.Domain, "weather", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("The entity is not a weather entity.", nameof(state));
-        if (!HasNonWhitespace(state.State, cancellationToken))
+        if (!IsCanonicalProviderText(state.State, cancellationToken))
             throw new HomeAssistantProtocolException("The Home Assistant weather state omitted its required state value.");
         var humidity = ReadCurrentPercentage(state.Attributes, "humidity", cancellationToken);
         var cloudCoverage = ReadCurrentPercentage(state.Attributes, "cloud_coverage", cancellationToken);
@@ -353,7 +353,7 @@ public sealed class HomeAssistantWeatherClient
 
         if (raw.ValueKind == JsonValueKind.String
             && raw.GetString() is string text
-            && HasNonWhitespace(text, cancellationToken))
+            && IsCanonicalProviderText(text, cancellationToken))
         {
             return text;
         }
@@ -361,7 +361,9 @@ public sealed class HomeAssistantWeatherClient
         if (raw.ValueKind == JsonValueKind.Number
             && raw.TryGetDouble(out var number)
             && !double.IsNaN(number)
-            && !double.IsInfinity(number))
+            && !double.IsInfinity(number)
+            && number >= 0d
+            && number <= 360d)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return raw.GetRawText();
@@ -450,6 +452,10 @@ public sealed class HomeAssistantWeatherClient
                 || !value.TryGetProperty("datetime", out var timestamp)
                 || timestamp.ValueKind != JsonValueKind.String
                 || !HasValidTimestamp(timestamp.GetString(), cancellationToken)
+                || value.TryGetProperty("condition", out var condition)
+                    && (condition.ValueKind != JsonValueKind.String
+                        || condition.GetString() is not string conditionText
+                        || !IsCanonicalProviderText(conditionText, cancellationToken))
                 || !HasFiniteForecastNumbers(value, cancellationToken)
                 || !HasValidForecastPercentages(value, cancellationToken))
             {
@@ -548,11 +554,13 @@ public sealed class HomeAssistantWeatherClient
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind == JsonValueKind.Null) return true;
         if (value.ValueKind == JsonValueKind.String)
-            return HasNonWhitespace(value.GetString(), cancellationToken);
+            return value.GetString() is string text && IsCanonicalProviderText(text, cancellationToken);
         return value.ValueKind == JsonValueKind.Number
             && value.TryGetDouble(out var bearing)
             && !double.IsNaN(bearing)
-            && !double.IsInfinity(bearing);
+            && !double.IsInfinity(bearing)
+            && bearing >= 0d
+            && bearing <= 360d;
     }
 
     private static bool HasFiniteOptionalNumber(

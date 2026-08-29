@@ -177,7 +177,7 @@ public sealed class HomeAssistantRecorderClient
                 cancellationToken: cancellationToken);
             series.Add(new HomeAssistantStatisticSeries { StatisticId = normalizedStatisticId, Rows = rows });
         }
-        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        var comparer = new CancellationAwareStringComparer(StringComparison.OrdinalIgnoreCase, cancellationToken);
         SortSeries(series, comparer);
         cancellationToken.ThrowIfCancellationRequested();
         return series;
@@ -618,6 +618,7 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var normalized = new List<string>(values.Count);
+        var seen = new HashSet<string>(new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -628,19 +629,7 @@ public sealed class HomeAssistantRecorderClient
                     name);
             }
 
-            var duplicate = false;
-            foreach (var existing in normalized)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
-                        existing,
-                        entityGlob,
-                        cancellationToken)) continue;
-                duplicate = true;
-                break;
-            }
-
-            if (!duplicate) normalized.Add(entityGlob);
+            if (seen.Add(entityGlob)) normalized.Add(entityGlob);
         }
 
         cancellationToken.ThrowIfCancellationRequested();

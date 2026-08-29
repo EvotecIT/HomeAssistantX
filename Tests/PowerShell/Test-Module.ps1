@@ -353,7 +353,7 @@ try {
     }
 
     $endOnlyLogbook = @(Get-HomeAssistantLogbook -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop)
-    $endOnlyHistory = @(Get-HomeAssistantHistory -EntityId sensor.temperature -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop)
+    $endOnlyHistory = @(Get-HomeAssistantHistory -EntityId sensor.kitchen_temperature -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop)
     if ($endOnlyLogbook.Count -ne 1 -or $endOnlyLogbook[0].Message -ne 'turned on') {
         throw 'The logbook cmdlet did not preserve Home Assistant default-start behavior for an end-only query.'
     }

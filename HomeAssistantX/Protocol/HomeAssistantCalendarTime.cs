@@ -69,4 +69,27 @@ internal static class HomeAssistantCalendarTime
         }
         return new DateTimeOffset(localBoundary, offset);
     }
+
+    internal static DateTimeOffset GetContainingBoundary(
+        DateTimeOffset value,
+        TimeZoneInfo homeTimeZone,
+        HomeAssistantCalendarPeriod period)
+    {
+        var local = TimeZoneInfo.ConvertTime(value, homeTimeZone);
+        var localBoundary = new DateTime(
+            local.Year,
+            local.Month,
+            period == HomeAssistantCalendarPeriod.Month ? 1 : local.Day,
+            0,
+            0,
+            0,
+            DateTimeKind.Unspecified);
+        if (period == HomeAssistantCalendarPeriod.Week)
+        {
+            var daysSinceMonday = ((int)local.DayOfWeek + 6) % 7;
+            localBoundary = localBoundary.AddDays(-daysSinceMonday);
+        }
+
+        return ResolveBoundary(localBoundary, homeTimeZone);
+    }
 }
