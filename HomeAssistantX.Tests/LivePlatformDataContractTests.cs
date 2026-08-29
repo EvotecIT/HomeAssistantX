@@ -357,6 +357,9 @@ public sealed class LivePlatformDataContractTests
         Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=WEEKLY;INTERVAL=0");
         Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=WEEKLY;BYDAY=MONDAY");
         Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=WEEKLY;COUNT=5;UNTIL=20261231");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=DAILY;BYSECOND=30");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=DAILY;BYMINUTE=15");
+        Assert.Throws<ArgumentException>(() => input.RecurrenceRule = "FREQ=DAILY;BYHOUR=8");
         input.RecurrenceRule = "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR;COUNT=10";
         Assert.Equal("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR;COUNT=10", input.RecurrenceRule);
         Assert.Throws<ArgumentException>(() => new HomeAssistantCalendarEventReference("event-1") { RecurrenceRange = "THISANDFUTURE" }.Validate());

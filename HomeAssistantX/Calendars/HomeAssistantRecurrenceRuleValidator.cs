@@ -104,6 +104,11 @@ internal static class HomeAssistantRecurrenceRuleValidator
         bool isAllDay,
         string parameterName)
     {
+        if (isAllDay && name is "BYSECOND" or "BYMINUTE" or "BYHOUR")
+        {
+            throw Invalid(parameterName, name + " cannot be used with an all-day recurrence.");
+        }
+
         switch (name)
         {
             case "FREQ":
