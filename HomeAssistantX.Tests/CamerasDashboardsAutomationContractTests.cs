@@ -456,6 +456,46 @@ public sealed class CamerasDashboardsAutomationContractTests
             client.Media.ResolveAsync("media-source://media_source/local/file.mp3"));
     }
 
+    [Theory]
+    [InlineData("application/json;charset=utf-8")]
+    [InlineData("audio/mpeg; profile=\"provider-v1\"")]
+    public async Task MediaResolveAcceptsParameterizedMimeTypes(string mimeType)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ResolvedMediaResponseJson = JsonSerializer.Serialize(new { url = "/api/media/file", mime_type = mimeType })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(
+            mimeType,
+            (await client.Media.ResolveAsync("media-source://media_source/local/file.mp3")).MimeType);
+    }
+
+    [Fact]
+    public async Task CameraEntityValidationObservesCancellationDuringTraversal()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var entityId = "camera." + new string('a', 16_000_000);
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.TrySetResult(true);
+                await client.Cameras.GetAsync(entityId, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        Assert.Null(server.GetLastWebSocketCommand("get_states"));
+    }
+
     [Fact]
     public async Task MediaClassFiltersPreserveOrderWhileDeduplicatingCaseInsensitively()
     {

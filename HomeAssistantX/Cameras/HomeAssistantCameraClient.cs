@@ -48,19 +48,18 @@ public sealed class HomeAssistantCameraClient
 
     public async Task<HomeAssistantCameraStatus> GetAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
-        var normalizedEntityId = entityId.Trim();
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
         return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId));
     }
 
     public async Task<byte[]> GetSnapshotAsync(string entityId, int? width = null, int? height = null, CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         ValidateDimensions(width, height);
         var snapshot = width.HasValue
-            ? await _rest.GetCameraImageAsync(entityId.Trim(), width.Value, height!.Value, cancellationToken).ConfigureAwait(false)
-            : await _rest.GetCameraImageAsync(entityId.Trim(), cancellationToken).ConfigureAwait(false);
+            ? await _rest.GetCameraImageAsync(normalizedEntityId, width.Value, height!.Value, cancellationToken).ConfigureAwait(false)
+            : await _rest.GetCameraImageAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
         if (snapshot.Length == 0)
             throw new HomeAssistantProtocolException("Home Assistant returned an empty camera snapshot.");
         return snapshot;
@@ -68,8 +67,8 @@ public sealed class HomeAssistantCameraClient
 
     public async Task<HomeAssistantCameraCapabilities> GetCapabilitiesAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
-        var value = await _webSocket.RequestAsync("camera/capabilities", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim() }, cancellationToken).ConfigureAwait(false);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
+        var value = await _webSocket.RequestAsync("camera/capabilities", new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId }, cancellationToken).ConfigureAwait(false);
         RequireNoDuplicateProperties(value, "The camera capabilities contained duplicate JSON properties.", cancellationToken);
         if (value.ValueKind != JsonValueKind.Object
             || !value.TryGetProperty("frontend_stream_types", out var frontendStreamTypes)
@@ -93,8 +92,8 @@ public sealed class HomeAssistantCameraClient
 
     public async Task<HomeAssistantCameraStream> GetStreamAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
-        var value = await _webSocket.RequestAsync("camera/stream", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim(), ["format"] = "hls" }, cancellationToken).ConfigureAwait(false);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
+        var value = await _webSocket.RequestAsync("camera/stream", new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId, ["format"] = "hls" }, cancellationToken).ConfigureAwait(false);
         RequireNoDuplicateProperties(value, "The camera stream response contained duplicate JSON properties.", cancellationToken);
         var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraStream>(
             value,
@@ -104,25 +103,25 @@ public sealed class HomeAssistantCameraClient
         {
             throw new HomeAssistantProtocolException("Home Assistant did not return a valid root-relative camera stream path.");
         }
-        stream.EntityId = entityId.Trim();
+        stream.EntityId = normalizedEntityId;
         stream.Format = "hls";
         return stream;
     }
 
     public async Task<HomeAssistantCameraPreferences> GetPreferencesAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
-        var value = await _webSocket.RequestAsync("camera/get_prefs", new Dictionary<string, object?> { ["entity_id"] = entityId.Trim() }, cancellationToken).ConfigureAwait(false);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
+        var value = await _webSocket.RequestAsync("camera/get_prefs", new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId }, cancellationToken).ConfigureAwait(false);
         return DecodePreferences(value, "The camera preferences could not be decoded.", cancellationToken);
     }
 
     public async Task<HomeAssistantCameraPreferences> SavePreferencesAsync(string entityId, HomeAssistantCameraPreferencesUpdate update, CancellationToken cancellationToken = default)
     {
-        ValidateEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         if (update is null) throw new ArgumentNullException(nameof(update));
         var expectedPreloadStream = update.PreloadStream;
         var expectedOrientation = update.Orientation;
-        var payload = update.ToPayload(entityId.Trim());
+        var payload = update.ToPayload(normalizedEntityId);
         var value = await _webSocket.RequestAsync("camera/update_prefs", payload, cancellationToken).ConfigureAwait(false);
         var preferences = DecodePreferences(value, "The updated camera preferences could not be decoded.", cancellationToken);
         if (expectedPreloadStream.HasValue
@@ -191,8 +190,9 @@ public sealed class HomeAssistantCameraClient
 
     public async Task<string> GetSignedImagePathAsync(string entityId, TimeSpan? expiration = null, int? width = null, int? height = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ValidateDimensions(width, height);
-        var path = "/api/camera_proxy/" + Uri.EscapeDataString(ValidateEntityId(entityId));
+        var path = "/api/camera_proxy/" + Uri.EscapeDataString(NormalizeEntityId(entityId, cancellationToken));
         var signedPath = await _system.SignPathAsync(path, expiration, cancellationToken).ConfigureAwait(false);
         if (!width.HasValue) return signedPath;
 
@@ -204,7 +204,7 @@ public sealed class HomeAssistantCameraClient
 
     public async Task<string> GetSignedMjpegStreamPathAsync(string entityId, TimeSpan? expiration = null, double? intervalSeconds = null, CancellationToken cancellationToken = default)
     {
-        var validated = ValidateEntityId(entityId);
+        var validated = NormalizeEntityId(entityId, cancellationToken);
         if (intervalSeconds.HasValue && (double.IsNaN(intervalSeconds.Value) || double.IsInfinity(intervalSeconds.Value) || intervalSeconds.Value < 0.5))
             throw new ArgumentOutOfRangeException(nameof(intervalSeconds), "Camera stream interval must be at least 0.5 seconds.");
         var path = "/api/camera_proxy_stream/" + Uri.EscapeDataString(validated);
@@ -245,9 +245,9 @@ public sealed class HomeAssistantCameraClient
         };
     }
 
-    private static string ValidateEntityId(string entityId)
+    private static string NormalizeEntityId(string entityId, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", out var normalized))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", cancellationToken, out var normalized))
             throw new ArgumentException("A camera entity identifier is required.", nameof(entityId));
         return normalized;
     }

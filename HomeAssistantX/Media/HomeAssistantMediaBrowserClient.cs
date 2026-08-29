@@ -330,20 +330,34 @@ public sealed class HomeAssistantMediaBrowserClient
             return false;
         }
 
-        var separator = -1;
         for (var index = 0; index < value.Length; index++)
         {
             if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (value[index] != '/') continue;
+            if (value[index] is '\r' or '\n') return false;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(value, out var parsed)
+            || string.IsNullOrEmpty(parsed.MediaType))
+        {
+            return false;
+        }
+
+        var mediaType = parsed.MediaType!;
+        var separator = -1;
+        for (var index = 0; index < mediaType.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (mediaType[index] != '/') continue;
             if (separator >= 0) return false;
             separator = index;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         return separator > 0
-            && separator < value.Length - 1
-            && IsMediaTypeToken(value.AsSpan(0, separator), cancellationToken)
-            && IsMediaTypeToken(value.AsSpan(separator + 1), cancellationToken);
+            && separator < mediaType.Length - 1
+            && IsMediaTypeToken(mediaType.AsSpan(0, separator), cancellationToken)
+            && IsMediaTypeToken(mediaType.AsSpan(separator + 1), cancellationToken);
     }
 
     private static bool IsMediaTypeToken(ReadOnlySpan<char> value, CancellationToken cancellationToken)
