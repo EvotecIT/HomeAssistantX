@@ -1758,7 +1758,7 @@ public sealed class EnergyRecorderWeatherContractTests
 
     [Theory]
     [InlineData(HomeAssistantEnergyPeriod.FiveMinute, "2026-10-01T00:00:00+02:00")]
-    [InlineData(HomeAssistantEnergyPeriod.Day, "2026-10-24T23:00:00+00:00")]
+    [InlineData(HomeAssistantEnergyPeriod.Day, "2026-10-25T23:00:00+00:00")]
     [InlineData(HomeAssistantEnergyPeriod.Month, "2026-10-01T00:00:00+02:00")]
     public async Task FossilEnergyAcceptsHomeAssistantCalendarBucketStarts(
         HomeAssistantEnergyPeriod period,
@@ -1778,6 +1778,46 @@ public sealed class EnergyRecorderWeatherContractTests
             period);
 
         Assert.Single(result);
+    }
+
+    [Theory]
+    [InlineData(HomeAssistantEnergyPeriod.FiveMinute, "2026-10-02T00:00:00+02:00")]
+    [InlineData(HomeAssistantEnergyPeriod.Day, "2026-10-25T10:17:00+01:00")]
+    [InlineData(HomeAssistantEnergyPeriod.Month, "2026-10-02T00:00:00+02:00")]
+    public async Task FossilEnergyRejectsNonBoundaryCalendarBuckets(
+        HomeAssistantEnergyPeriod period,
+        string timestamp)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FossilEnergyResponseJson = "{\"" + timestamp + "\":0.42}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            new DateTimeOffset(2026, 10, 26, 1, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 10, 26, 3, 30, 0, TimeSpan.Zero),
+            new[] { "sensor.energy" },
+            "sensor.co2",
+            period));
+    }
+
+    [Theory]
+    [InlineData("{\"components\":[]}")]
+    [InlineData("{\"time_zone\":\"Not/A-Time-Zone\",\"components\":[]}")]
+    public async Task FossilEnergyRequiresSupportedHomeTimeZoneForCalendarBuckets(string configuration)
+    {
+        using var server = new TestHomeAssistantServer { ConfigurationResponseJson = configuration };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetFossilEnergyConsumptionAsync(
+            new DateTimeOffset(2026, 10, 26, 1, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 10, 26, 3, 30, 0, TimeSpan.Zero),
+            new[] { "sensor.energy" },
+            "sensor.co2",
+            HomeAssistantEnergyPeriod.Day));
+
+        Assert.Null(server.GetLastWebSocketCommand("energy/fossil_energy_consumption"));
     }
 
     [Theory]

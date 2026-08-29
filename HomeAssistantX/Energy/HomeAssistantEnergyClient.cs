@@ -4,6 +4,7 @@ using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Recorder;
+using HomeAssistantX.Rest;
 using HomeAssistantX.WebSockets;
 
 namespace HomeAssistantX.Energy;
@@ -12,10 +13,12 @@ namespace HomeAssistantX.Energy;
 public sealed class HomeAssistantEnergyClient
 {
     private readonly HomeAssistantWebSocketClient _webSocket;
+    private readonly HomeAssistantRestClient _rest;
 
-    internal HomeAssistantEnergyClient(HomeAssistantWebSocketClient webSocket)
+    internal HomeAssistantEnergyClient(HomeAssistantWebSocketClient webSocket, HomeAssistantRestClient rest)
     {
         _webSocket = webSocket;
+        _rest = rest;
     }
 
     public async Task<HomeAssistantEnergyPreferences> GetPreferencesAsync(CancellationToken cancellationToken = default)
@@ -135,6 +138,14 @@ public sealed class HomeAssistantEnergyClient
         if (end <= start) throw new ArgumentOutOfRangeException(nameof(end), "The end must be after the start.");
         var ids = RequireIds(energyStatisticIds, nameof(energyStatisticIds), cancellationToken);
         var normalizedCo2StatisticId = RequireStatisticId(co2StatisticId, nameof(co2StatisticId));
+        TimeZoneInfo? homeTimeZone = null;
+        if (period != HomeAssistantEnergyPeriod.Hour)
+        {
+            var configuration = await _rest.GetConfigurationAsync(cancellationToken).ConfigureAwait(false);
+            homeTimeZone = HomeAssistantCalendarTime.RequireTimeZone(
+                configuration.TimeZone,
+                "fossil-energy calendar periods");
+        }
         var value = await _webSocket.RequestAsync("energy/fossil_energy_consumption", new Dictionary<string, object?>
         {
             ["start_time"] = start.ToString("O", CultureInfo.InvariantCulture),
@@ -155,7 +166,7 @@ public sealed class HomeAssistantEnergyClient
             cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantTimestamp.TryParse(property.Name, out var timestamp)
                 || !IsWithinRequestedWindow(timestamp, start, end, period)
-                || period == HomeAssistantEnergyPeriod.Hour && !IsUtcHourBoundary(timestamp)
+                || !IsPeriodBoundary(timestamp, period, homeTimeZone)
                 || property.Value.ValueKind != JsonValueKind.Number
                 || !property.Value.TryGetDouble(out var amount)
                 || double.IsNaN(amount)
@@ -190,6 +201,24 @@ public sealed class HomeAssistantEnergyClient
             && utc.Millisecond == 0
             && utc.Ticks % TimeSpan.TicksPerMillisecond == 0;
     }
+
+    private static bool IsPeriodBoundary(
+        DateTimeOffset value,
+        HomeAssistantEnergyPeriod period,
+        TimeZoneInfo? homeTimeZone)
+        => period switch
+        {
+            HomeAssistantEnergyPeriod.Hour => IsUtcHourBoundary(value),
+            HomeAssistantEnergyPeriod.Day => HomeAssistantCalendarTime.IsBoundary(
+                value,
+                homeTimeZone ?? throw new ArgumentNullException(nameof(homeTimeZone)),
+                HomeAssistantCalendarPeriod.Day),
+            HomeAssistantEnergyPeriod.Month or HomeAssistantEnergyPeriod.FiveMinute => HomeAssistantCalendarTime.IsBoundary(
+                value,
+                homeTimeZone ?? throw new ArgumentNullException(nameof(homeTimeZone)),
+                HomeAssistantCalendarPeriod.Month),
+            _ => throw new ArgumentOutOfRangeException(nameof(period))
+        };
 
     internal static void SortFossilEnergyPeriods(
         List<HomeAssistantFossilEnergyPeriod> periods,
