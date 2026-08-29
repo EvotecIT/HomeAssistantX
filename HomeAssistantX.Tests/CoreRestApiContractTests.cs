@@ -284,6 +284,25 @@ public sealed class CoreRestApiContractTests
             new HomeAssistantLogbookQuery { StartTime = start, EndTime = end }));
     }
 
+    [Theory]
+    [InlineData("[{\"when\":\"2026-08-24T00:30:00+00:00\"}]")]
+    [InlineData("[{\"when\":\"2026-08-24T00:30:00+00:00\",\"entity_id\":\"sensor.Bad\"}]")]
+    [InlineData("[{\"when\":\"2026-08-24T00:30:00+00:00\",\"entity_id\":\"sensor.other\"}]")]
+    public async Task FilteredLogbookCorrelatesEveryReturnedEntity(string responseJson)
+    {
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+        using var server = new TestHomeAssistantServer { LogbookResponseJson = responseJson };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery
+            {
+                StartTime = start,
+                EndTime = start.AddHours(1),
+                EntityId = "sensor.energy"
+            }));
+    }
+
     [Fact]
     public void LogbookValidationObservesCancellationDuringProjection()
     {
@@ -291,7 +310,7 @@ public sealed class CoreRestApiContractTests
         var entries = new CancellingLogbookEntries(cancellation);
 
         Assert.ThrowsAny<OperationCanceledException>(() =>
-            HomeAssistantRestClient.ValidateLogbookEntries(entries, null, null, cancellation.Token));
+            HomeAssistantRestClient.ValidateLogbookEntries(entries, null, null, null, cancellation.Token));
         Assert.InRange(entries.ReadCount, 1, 2);
     }
 

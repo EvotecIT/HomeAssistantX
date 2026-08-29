@@ -68,6 +68,7 @@ public sealed partial class HomeAssistantRestClient
         var startTime = query.StartTime;
         var endTime = query.EndTime;
         var entityId = query.EntityId;
+        string? expectedEntityId = null;
         ValidateOptionalTimeRange(startTime, endTime, nameof(query));
         var path = "api/logbook";
         if (startTime.HasValue)
@@ -79,9 +80,10 @@ public sealed partial class HomeAssistantRestClient
         AddTimestamp(parameters, "end_time", endTime);
         if (entityId is not null)
         {
+            expectedEntityId = NormalizeEntityId(entityId, cancellationToken);
             parameters.Add(new KeyValuePair<string, string?>(
                 "entity",
-                NormalizeEntityId(entityId, cancellationToken)));
+                expectedEntityId));
         }
 
         var entries = await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
@@ -89,7 +91,7 @@ public sealed partial class HomeAssistantRestClient
             AppendQuery(path, parameters),
             null,
             cancellationToken).ConfigureAwait(false);
-        ValidateLogbookEntries(entries, startTime, endTime, cancellationToken);
+        ValidateLogbookEntries(entries, startTime, endTime, expectedEntityId, cancellationToken);
         return entries;
     }
 
@@ -97,6 +99,7 @@ public sealed partial class HomeAssistantRestClient
         IEnumerable<HomeAssistantLogbookEntry?> entries,
         DateTimeOffset? startTime,
         DateTimeOffset? endTime,
+        string? expectedEntityId,
         CancellationToken cancellationToken)
     {
         foreach (var entry in entries)
@@ -113,6 +116,15 @@ public sealed partial class HomeAssistantRestClient
             {
                 throw new HomeAssistantProtocolException(
                     "The Home Assistant logbook response contained an entry outside the requested time range.");
+            }
+
+            if (expectedEntityId is not null
+                && (!HomeAssistantEntityId.TryNormalize(entry.EntityId, out var returnedEntityId)
+                    || !string.Equals(returnedEntityId, entry.EntityId, StringComparison.Ordinal)
+                    || !string.Equals(returnedEntityId, expectedEntityId, StringComparison.Ordinal)))
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant logbook response contained an entry for an unexpected entity.");
             }
         }
         cancellationToken.ThrowIfCancellationRequested();

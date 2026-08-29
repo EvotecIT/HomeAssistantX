@@ -1510,6 +1510,23 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderDailyStatisticsRejectNoonToNoonIntervals()
+    {
+        var start = new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero);
+        var rowStart = start.AddHours(12).ToUnixTimeMilliseconds();
+        var rowEnd = start.AddDays(1).AddHours(12).ToUnixTimeMilliseconds();
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":"
+                + rowStart + ",\"end\":" + rowEnd + "}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(start, HomeAssistantStatisticPeriod.Day, "sensor.energy")));
+    }
+
+    [Fact]
     public async Task RecorderStatisticsRejectDuplicateNormalizedUnitNamesBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

@@ -143,7 +143,7 @@ public sealed class HomeAssistantRecorderClient
                 throw new HomeAssistantProtocolException("Recorder statistics contained an unexpected or duplicate statistic identifier.");
             ValidateStatisticRows(
                 property.Value,
-                GetPeriodStart(startTime, period).ToUnixTimeMilliseconds(),
+                GetPeriodStart(startTime, period),
                 endTime?.ToUnixTimeMilliseconds(),
                 period,
                 cancellationToken);
@@ -355,7 +355,7 @@ public sealed class HomeAssistantRecorderClient
 
     private static void ValidateStatisticRows(
         JsonElement value,
-        long earliestPeriodStart,
+        DateTimeOffset earliestPeriodStart,
         long? endTimeExclusive,
         HomeAssistantStatisticPeriod period,
         CancellationToken cancellationToken)
@@ -397,7 +397,7 @@ public sealed class HomeAssistantRecorderClient
                     "A Recorder statistics series contained an interval that did not match the requested period.");
             }
 
-            if (end <= earliestPeriodStart
+            if (end <= earliestPeriodStart.ToUnixTimeMilliseconds()
                 || endTimeExclusive.HasValue && start >= endTimeExclusive.Value)
             {
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a row outside the requested time window.");
@@ -429,7 +429,7 @@ public sealed class HomeAssistantRecorderClient
     private static bool IsValidPeriodInterval(
         long start,
         long end,
-        long periodOrigin,
+        DateTimeOffset periodOrigin,
         HomeAssistantStatisticPeriod period)
     {
         var duration = end - start;
@@ -438,7 +438,9 @@ public sealed class HomeAssistantRecorderClient
             var expected = period == HomeAssistantStatisticPeriod.FiveMinute
                 ? TimeSpan.FromMinutes(5).Ticks / TimeSpan.TicksPerMillisecond
                 : TimeSpan.FromHours(1).Ticks / TimeSpan.TicksPerMillisecond;
-            return duration == expected && (start - periodOrigin) % expected == 0;
+            return duration == expected
+                && start >= periodOrigin.ToUnixTimeMilliseconds()
+                && (start - periodOrigin.ToUnixTimeMilliseconds()) % expected == 0;
         }
 
         var minimum = period switch
@@ -455,8 +457,34 @@ public sealed class HomeAssistantRecorderClient
             HomeAssistantStatisticPeriod.Month => TimeSpan.FromDays(31) + TimeSpan.FromHours(1),
             _ => throw new ArgumentOutOfRangeException(nameof(period))
         };
-        return duration >= minimum.Ticks / TimeSpan.TicksPerMillisecond
-            && duration <= maximum.Ticks / TimeSpan.TicksPerMillisecond;
+        return start >= periodOrigin.ToUnixTimeMilliseconds()
+            && duration >= minimum.Ticks / TimeSpan.TicksPerMillisecond
+            && duration <= maximum.Ticks / TimeSpan.TicksPerMillisecond
+            && IsCalendarBoundary(start, periodOrigin.Offset, period)
+            && IsCalendarBoundary(end, periodOrigin.Offset, period);
+    }
+
+    private static bool IsCalendarBoundary(
+        long unixMilliseconds,
+        TimeSpan originOffset,
+        HomeAssistantStatisticPeriod period)
+    {
+        var instant = DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds);
+        for (var deltaMinutes = -120; deltaMinutes <= 120; deltaMinutes += 15)
+        {
+            var offset = originOffset + TimeSpan.FromMinutes(deltaMinutes);
+            if (offset < TimeSpan.FromHours(-14) || offset > TimeSpan.FromHours(14)) continue;
+            var local = instant.ToOffset(offset);
+            if (local.TimeOfDay != TimeSpan.Zero) continue;
+            if (period == HomeAssistantStatisticPeriod.Day
+                || period == HomeAssistantStatisticPeriod.Week && local.DayOfWeek == DayOfWeek.Monday
+                || period == HomeAssistantStatisticPeriod.Month && local.Day == 1)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryGetUnixMilliseconds(JsonElement value, string propertyName, bool required, out long milliseconds)
