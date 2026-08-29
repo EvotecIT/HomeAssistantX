@@ -433,7 +433,7 @@ public sealed class PublicApiCompatibilityTests
 
         Assert.True(ShouldIncludeMethod(operatorMethod));
         Assert.False(ShouldIncludeMethod(propertyGetter));
-        Assert.StartsWith("op_Addition(", FormatMethod(operatorMethod), StringComparison.Ordinal);
+        Assert.StartsWith("special-name op_Addition(", FormatMethod(operatorMethod), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -444,6 +444,7 @@ public sealed class PublicApiCompatibilityTests
 
         Assert.Equal("[System.String key]", FormatIndexerParameters(indexer));
         Assert.Equal("protected ", ConstructorAccess(protectedConstructor));
+        Assert.Equal("default-member(\"Item\") ", DefaultMemberContract(typeof(IndexerFixture)));
     }
 
     [Fact]
@@ -685,7 +686,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -851,7 +852,18 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => DynamicallyAccessedMembersContract(argument) + argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + RequiresCodeContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + RequiresCodeContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+    }
+
+    private static string SpecialNameContract(MethodBase method)
+        => method is MethodInfo && method.IsSpecialName ? "special-name " : string.Empty;
+
+    private static string DefaultMemberContract(Type type)
+    {
+        var attribute = type.GetCustomAttribute<DefaultMemberAttribute>(inherit: true);
+        return attribute is null
+            ? string.Empty
+            : "default-member(" + FormatDefault(attribute.MemberName) + ") ";
     }
 
     private static string AttributeUsageContract(Type type)
