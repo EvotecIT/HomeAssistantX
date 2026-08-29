@@ -191,7 +191,9 @@ public sealed class HomeAssistantCalendarClient
         foreach (var item in events)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(item.Summary) || item.Start is null || item.End is null)
+            if (IsNullOrWhiteSpace(item.Summary, cancellationToken)
+                || item.Start is null
+                || item.End is null)
             {
                 throw new HomeAssistantProtocolException("Home Assistant returned an incomplete calendar event.");
             }
@@ -199,7 +201,7 @@ public sealed class HomeAssistantCalendarClient
             var allDay = item.Start.Date is not null && item.End.Date is not null;
             var timed = item.Start.DateTime.HasValue && item.End.DateTime.HasValue;
             if ((!allDay && !timed)
-                || (allDay && string.CompareOrdinal(item.End.Date, item.Start.Date) <= 0)
+                || (allDay && CompareOrdinal(item.End.Date!, item.Start.Date!, cancellationToken) <= 0)
                 || (timed && item.End.DateTime <= item.Start.DateTime))
             {
                 throw new HomeAssistantProtocolException("Home Assistant returned a calendar event with an invalid range.");
@@ -207,6 +209,51 @@ public sealed class HomeAssistantCalendarClient
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static bool IsNullOrWhiteSpace(
+        string? value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null)
+        {
+            return true;
+        }
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (!char.IsWhiteSpace(value[index]))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return false;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return true;
+    }
+
+    private static int CompareOrdinal(
+        string left,
+        string right,
+        CancellationToken cancellationToken)
+    {
+        var length = Math.Min(left.Length, right.Length);
+        for (var index = 0; index < length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var comparison = left[index].CompareTo(right[index]);
+            if (comparison != 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return comparison;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return left.Length.CompareTo(right.Length);
     }
 
     private static string NormalizeEntityId(
