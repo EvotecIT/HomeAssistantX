@@ -3,19 +3,26 @@ using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
+using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
 using HomeAssistantX.WebSockets;
+using TimeZoneConverter;
 
 namespace HomeAssistantX.Recorder;
 
 /// <summary>Provides Recorder history, logbook, statistics, and maintenance operations.</summary>
 public sealed class HomeAssistantRecorderClient
 {
+    private readonly HomeAssistantRestClient _rest;
     private readonly HomeAssistantWebSocketClient _webSocket;
     private readonly HomeAssistantServiceClient _services;
 
-    internal HomeAssistantRecorderClient(HomeAssistantWebSocketClient webSocket, HomeAssistantServiceClient services)
+    internal HomeAssistantRecorderClient(
+        HomeAssistantRestClient rest,
+        HomeAssistantWebSocketClient webSocket,
+        HomeAssistantServiceClient services)
     {
+        _rest = rest;
         _webSocket = webSocket;
         _services = services;
     }
@@ -128,6 +135,24 @@ public sealed class HomeAssistantRecorderClient
             payload["units"] = units;
         }
 
+        TimeZoneInfo? homeTimeZone = null;
+        if (period is HomeAssistantStatisticPeriod.Day or HomeAssistantStatisticPeriod.Week or HomeAssistantStatisticPeriod.Month)
+        {
+            var configuration = await _rest.GetConfigurationAsync(cancellationToken).ConfigureAwait(false);
+            var timeZoneId = configuration.TimeZone;
+            if (string.IsNullOrWhiteSpace(timeZoneId))
+                throw new HomeAssistantProtocolException("Home Assistant did not provide the time zone required to validate calendar statistics.");
+            try
+            {
+                homeTimeZone = TZConvert.GetTimeZoneInfo(timeZoneId!);
+            }
+            catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+            {
+                throw new HomeAssistantProtocolException(
+                    "Home Assistant provided an unsupported time zone for calendar statistics.");
+            }
+        }
+
         var value = await _webSocket.RequestAsync("recorder/statistics_during_period", payload, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Recorder statistics were not an object.");
         var series = new List<HomeAssistantStatisticSeries>();
@@ -143,9 +168,10 @@ public sealed class HomeAssistantRecorderClient
                 throw new HomeAssistantProtocolException("Recorder statistics contained an unexpected or duplicate statistic identifier.");
             ValidateStatisticRows(
                 property.Value,
-                GetPeriodStart(startTime, period),
+                GetPeriodStart(startTime, period, homeTimeZone),
                 endTime?.ToUnixTimeMilliseconds(),
                 period,
+                homeTimeZone,
                 cancellationToken);
             var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(
                 property.Value,
@@ -358,6 +384,7 @@ public sealed class HomeAssistantRecorderClient
         DateTimeOffset earliestPeriodStart,
         long? endTimeExclusive,
         HomeAssistantStatisticPeriod period,
+        TimeZoneInfo? homeTimeZone,
         CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Array)
@@ -391,7 +418,7 @@ public sealed class HomeAssistantRecorderClient
             }
 
 
-            if (!IsValidPeriodInterval(start, end, earliestPeriodStart, period))
+            if (!IsValidPeriodInterval(start, end, earliestPeriodStart, period, homeTimeZone))
             {
                 throw new HomeAssistantProtocolException(
                     "A Recorder statistics series contained an interval that did not match the requested period.");
@@ -430,7 +457,8 @@ public sealed class HomeAssistantRecorderClient
         long start,
         long end,
         DateTimeOffset periodOrigin,
-        HomeAssistantStatisticPeriod period)
+        HomeAssistantStatisticPeriod period,
+        TimeZoneInfo? homeTimeZone)
     {
         var duration = end - start;
         if (period is HomeAssistantStatisticPeriod.FiveMinute or HomeAssistantStatisticPeriod.Hour)
@@ -460,31 +488,21 @@ public sealed class HomeAssistantRecorderClient
         return start >= periodOrigin.ToUnixTimeMilliseconds()
             && duration >= minimum.Ticks / TimeSpan.TicksPerMillisecond
             && duration <= maximum.Ticks / TimeSpan.TicksPerMillisecond
-            && IsCalendarBoundary(start, periodOrigin.Offset, period)
-            && IsCalendarBoundary(end, periodOrigin.Offset, period);
+            && homeTimeZone is not null
+            && IsCalendarBoundary(start, homeTimeZone, period)
+            && IsCalendarBoundary(end, homeTimeZone, period);
     }
 
     private static bool IsCalendarBoundary(
         long unixMilliseconds,
-        TimeSpan originOffset,
+        TimeZoneInfo homeTimeZone,
         HomeAssistantStatisticPeriod period)
     {
-        var instant = DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds);
-        for (var deltaMinutes = -120; deltaMinutes <= 120; deltaMinutes += 15)
-        {
-            var offset = originOffset + TimeSpan.FromMinutes(deltaMinutes);
-            if (offset < TimeSpan.FromHours(-14) || offset > TimeSpan.FromHours(14)) continue;
-            var local = instant.ToOffset(offset);
-            if (local.TimeOfDay != TimeSpan.Zero) continue;
-            if (period == HomeAssistantStatisticPeriod.Day
+        var local = TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds), homeTimeZone);
+        return local.TimeOfDay == TimeSpan.Zero
+            && (period == HomeAssistantStatisticPeriod.Day
                 || period == HomeAssistantStatisticPeriod.Week && local.DayOfWeek == DayOfWeek.Monday
-                || period == HomeAssistantStatisticPeriod.Month && local.Day == 1)
-            {
-                return true;
-            }
-        }
-
-        return false;
+                || period == HomeAssistantStatisticPeriod.Month && local.Day == 1);
     }
 
     private static bool TryGetUnixMilliseconds(JsonElement value, string propertyName, bool required, out long milliseconds)
@@ -660,8 +678,13 @@ public sealed class HomeAssistantRecorderClient
 
     private static DateTimeOffset GetPeriodStart(
         DateTimeOffset value,
-        HomeAssistantStatisticPeriod period)
+        HomeAssistantStatisticPeriod period,
+        TimeZoneInfo? homeTimeZone)
     {
+        if (homeTimeZone is not null)
+        {
+            value = TimeZoneInfo.ConvertTime(value, homeTimeZone);
+        }
         var minute = period == HomeAssistantStatisticPeriod.FiveMinute
             ? value.Minute - value.Minute % 5
             : 0;

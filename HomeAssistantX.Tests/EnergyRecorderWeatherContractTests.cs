@@ -1527,6 +1527,25 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderCalendarStatisticsUseTheHomeAssistantTimeZone()
+    {
+        var queryStart = new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero);
+        var rowStart = new DateTimeOffset(2026, 8, 26, 15, 0, 0, TimeSpan.Zero);
+        var rowEnd = rowStart.AddDays(1);
+        using var server = new TestHomeAssistantServer
+        {
+            ConfigurationResponseJson = "{\"time_zone\":\"Asia/Tokyo\",\"components\":[]}",
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":"
+                + rowStart.ToUnixTimeMilliseconds() + ",\"end\":"
+                + rowEnd.ToUnixTimeMilliseconds() + "}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Single(await client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(queryStart, HomeAssistantStatisticPeriod.Day, "sensor.energy")));
+    }
+
+    [Fact]
     public async Task RecorderStatisticsRejectDuplicateNormalizedUnitNamesBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

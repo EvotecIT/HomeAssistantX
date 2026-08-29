@@ -37,7 +37,7 @@ public sealed class HomeAssistantClient : IDisposable
         Calendars = new HomeAssistantCalendarClient(Rest, WebSocket);
         Notifications = new HomeAssistantNotificationClient(Services, WebSocket);
         Energy = new HomeAssistantEnergyClient(WebSocket);
-        Recorder = new HomeAssistantRecorderClient(WebSocket, Services);
+        Recorder = new HomeAssistantRecorderClient(Rest, WebSocket, Services);
         Weather = new HomeAssistantWeatherClient(States, Services, WebSocket);
         Inventory = new HomeAssistantInventoryClient(Registries, States, Services);
         Controls = new HomeAssistantControlsClient(Services, States, options);
