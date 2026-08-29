@@ -458,11 +458,11 @@ public sealed class EnergyRecorderWeatherContractTests
                 row.GetProperty("last_reset").GetString());
         }
 
-        await client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { " sensor.* ", "binary_sensor.door_?", "sensor.room_[0-9]", "sensor.*" });
+        await client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { " sensor.* ", " ", "", "*", "sensor*", "binary_sensor.door_?", "sensor.room_[0-9]", "sensor.*" });
         using (var purge = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody)))
         {
             Assert.Equal(
-                new[] { "sensor.*", "binary_sensor.door_?", "sensor.room_[0-9]" },
+                new[] { " sensor.* ", " ", "", "*", "sensor*", "binary_sensor.door_?", "sensor.room_[0-9]", "sensor.*" },
                 purge.RootElement.GetProperty("service_data").GetProperty("entity_globs").EnumerateArray().Select(value => value.GetString()).ToArray());
         }
         server.ClearLastServiceCall();
@@ -630,13 +630,6 @@ public sealed class EnergyRecorderWeatherContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(new[] { "sensor.Kitchen" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(domains: new[] { "SENSOR" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(domains: new[] { "sensor__bad" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { " " }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "Sensor.*" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor*" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor.[bad" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor__bad.*" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor_.kitchen" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Recorder.PurgeEntitiesAsync(entityGlobs: new[] { "sensor._kitchen" }));
         Assert.Null(server.GetLastWebSocketCommand("recorder/clear_statistics"));
         Assert.Null(server.LastServiceCallBody);
     }
@@ -773,6 +766,22 @@ public sealed class EnergyRecorderWeatherContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("true")]
+    [InlineData("1")]
+    [InlineData("\"invalid\"")]
+    public async Task WeatherReadsRejectNonObjectStateAttributes(string attributesJson)
+    {
+        var state = "{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":" + attributesJson + "}";
+        using var server = new TestHomeAssistantServer { ExactStateResponseJson = state };
+        server.SetStates("[" + state + "]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync("weather.home"));
     }
 
     [Theory]

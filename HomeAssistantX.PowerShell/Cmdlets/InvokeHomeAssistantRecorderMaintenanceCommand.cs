@@ -26,7 +26,7 @@ public sealed class InvokeHomeAssistantRecorderMaintenanceCommand : HomeAssistan
     [Parameter(Mandatory = true, ParameterSetName = EntitiesSet)][ValidateSwitchPresent] public SwitchParameter PurgeEntities { get; set; }
     [Parameter(ParameterSetName = EntitiesSet)][ValidateNotNullOrEmpty] public string[]? EntityId { get; set; }
     [Parameter(ParameterSetName = EntitiesSet)][ValidateNotNullOrEmpty] public string[]? Domain { get; set; }
-    [Parameter(ParameterSetName = EntitiesSet)][ValidateNotNullOrEmpty] public string[]? EntityGlob { get; set; }
+    [Parameter(ParameterSetName = EntitiesSet)][ValidateNotNull] public string[]? EntityGlob { get; set; }
 
     [Parameter(Mandatory = true, ParameterSetName = EnableSet)][ValidateSwitchPresent] public SwitchParameter Enable { get; set; }
     [Parameter(Mandatory = true, ParameterSetName = DisableSet)][ValidateSwitchPresent] public SwitchParameter Disable { get; set; }

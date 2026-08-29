@@ -563,21 +563,29 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var normalized = new List<string>(values.Count);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantRecorderEntityGlob.TryNormalize(value, out var entityGlob))
+            if (!HomeAssistantRecorderEntityGlob.TryNormalize(value, out var entityGlob, cancellationToken))
             {
                 throw new ArgumentException(
-                    "Entity globs must use lowercase Home Assistant entity patterns such as 'sensor.*' or 'sensor.kitchen_*'.",
+                    "Entity globs must be Home Assistant fnmatch pattern strings such as '*', 'sensor*', or 'sensor.kitchen_*'.",
                     name);
             }
 
-            if (seen.Add(entityGlob))
+            var duplicate = false;
+            foreach (var existing in normalized)
             {
-                normalized.Add(entityGlob);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                        existing,
+                        entityGlob,
+                        cancellationToken)) continue;
+                duplicate = true;
+                break;
             }
+
+            if (!duplicate) normalized.Add(entityGlob);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
