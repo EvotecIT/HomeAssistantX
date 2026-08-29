@@ -352,19 +352,13 @@ try {
         throw 'The logbook cmdlet broadened a blank entity filter to the whole installation.'
     }
 
-    foreach ($invalidHistoricalRange in @(
-        { Get-HomeAssistantLogbook -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop },
-        { Get-HomeAssistantHistory -EntityId sensor.temperature -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop }
-    )) {
-        $rangeRejected = $false
-        try {
-            & $invalidHistoricalRange
-        } catch {
-            $rangeRejected = $true
-        }
-        if (-not $rangeRejected) {
-            throw 'A historical query accepted EndTime without an explicit StartTime.'
-        }
+    $endOnlyLogbook = @(Get-HomeAssistantLogbook -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop)
+    $endOnlyHistory = @(Get-HomeAssistantHistory -EntityId sensor.temperature -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop)
+    if ($endOnlyLogbook.Count -ne 1 -or $endOnlyLogbook[0].Message -ne 'turned on') {
+        throw 'The logbook cmdlet did not preserve Home Assistant default-start behavior for an end-only query.'
+    }
+    if ($endOnlyHistory.Count -ne 1 -or $endOnlyHistory[0].EntityId -ne 'sensor.kitchen_temperature') {
+        throw 'The history cmdlet did not preserve Home Assistant default-start behavior for an end-only query.'
     }
 
     $floors = @(Get-HomeAssistantFloor)
