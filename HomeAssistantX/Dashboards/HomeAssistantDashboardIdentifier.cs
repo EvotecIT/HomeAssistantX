@@ -36,12 +36,12 @@ public static class HomeAssistantDashboardIdentifier
         }
 
         var length = end - start + 1;
-        if (length <= 0 || length > MaximumSelectorLength)
+        if (length <= 0)
         {
             normalized = string.Empty;
             return false;
         }
-        normalized = start == 0 && length == value.Length ? value : value.Substring(start, length);
+        normalized = CancellationAwareString.Slice(value, start, length, cancellationToken);
         if (normalized.Length == 0 || normalized[0] == '-' || normalized[normalized.Length - 1] == '-') return false;
 
         var hasHyphen = false;

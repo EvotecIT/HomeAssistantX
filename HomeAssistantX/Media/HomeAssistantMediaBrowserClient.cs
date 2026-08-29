@@ -427,50 +427,43 @@ public sealed class HomeAssistantMediaBrowserClient
             return false;
         }
 
-        for (var index = 0; index < value.Length; index++)
-        {
-            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (value[index] is '\r' or '\n') return false;
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(value, out var parsed)
-            || string.IsNullOrEmpty(parsed.MediaType))
+        var index = 0;
+        if (!ReadMediaTypeToken(value, ref index, cancellationToken)
+            || index >= value.Length
+            || value[index++] != '/'
+            || !ReadMediaTypeToken(value, ref index, cancellationToken))
         {
             return false;
         }
 
-        var mediaType = parsed.MediaType!;
-        var parameterSeparator = value.IndexOf(';');
-        var declaredLength = parameterSeparator < 0 ? value.Length : parameterSeparator;
-        while (declaredLength > 0 && value[declaredLength - 1] is ' ' or '\t')
+        while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            declaredLength--;
-        }
-        var declaredMediaType = value.Substring(0, declaredLength);
-        if (!string.Equals(declaredMediaType, mediaType, StringComparison.Ordinal)) return false;
-        var separator = -1;
-        for (var index = 0; index < mediaType.Length; index++)
-        {
-            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (mediaType[index] != '/') continue;
-            if (separator >= 0) return false;
-            separator = index;
-        }
+            SkipOptionalWhitespace(value, ref index, cancellationToken);
+            if (index == value.Length)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return true;
+            }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        return separator > 0
-            && separator < mediaType.Length - 1
-            && IsMediaTypeToken(mediaType.AsSpan(0, separator), cancellationToken)
-            && IsMediaTypeToken(mediaType.AsSpan(separator + 1), cancellationToken);
+            if (value[index++] != ';') return false;
+            SkipOptionalWhitespace(value, ref index, cancellationToken);
+            if (!ReadMediaTypeToken(value, ref index, cancellationToken)) return false;
+            SkipOptionalWhitespace(value, ref index, cancellationToken);
+            if (index >= value.Length || value[index++] != '=') return false;
+            SkipOptionalWhitespace(value, ref index, cancellationToken);
+            if (!ReadMediaTypeParameterValue(value, ref index, cancellationToken)) return false;
+        }
     }
 
-    private static bool IsMediaTypeToken(ReadOnlySpan<char> value, CancellationToken cancellationToken)
+    private static bool ReadMediaTypeToken(
+        string value,
+        ref int index,
+        CancellationToken cancellationToken)
     {
-        for (var index = 0; index < value.Length; index++)
+        var start = index;
+        while (index < value.Length)
         {
-            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (((index - start) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
             var character = value[index];
             if (character is >= 'A' and <= 'Z'
                 || character is >= 'a' and <= 'z'
@@ -478,14 +471,74 @@ public sealed class HomeAssistantMediaBrowserClient
                 || character is '!' or '#' or '$' or '%' or '&' or '\'' or '*'
                     or '+' or '-' or '.' or '^' or '_' or '`' or '|' or '~')
             {
+                index++;
                 continue;
             }
-
-            return false;
+            break;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return true;
+        return index > start;
+    }
+
+    private static bool ReadMediaTypeParameterValue(
+        string value,
+        ref int index,
+        CancellationToken cancellationToken)
+    {
+        if (index >= value.Length) return false;
+        if (value[index] != '"') return ReadMediaTypeToken(value, ref index, cancellationToken);
+
+        index++;
+        var escaped = false;
+        var contentLength = 0;
+        while (index < value.Length)
+        {
+            if ((contentLength & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var character = value[index++];
+            contentLength++;
+            if (escaped)
+            {
+                if (IsInvalidQuotedCharacter(character)) return false;
+                escaped = false;
+                continue;
+            }
+
+            if (character == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if (character == '"')
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return true;
+            }
+            if (IsInvalidQuotedCharacter(character))
+            {
+                return false;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
+    private static bool IsInvalidQuotedCharacter(char value)
+        => value is '\r' or '\n' or < ' ' && value != '\t' || value == '\u007f';
+
+    private static void SkipOptionalWhitespace(
+        string value,
+        ref int index,
+        CancellationToken cancellationToken)
+    {
+        var start = index;
+        while (index < value.Length && value[index] is ' ' or '\t')
+        {
+            if (((index - start) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            index++;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static bool ContainsWhitespace(string value, CancellationToken cancellationToken)

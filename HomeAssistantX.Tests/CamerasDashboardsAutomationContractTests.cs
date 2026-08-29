@@ -450,9 +450,16 @@ public sealed class CamerasDashboardsAutomationContractTests
     {
         var title = new string('T', 512);
         var resourceUrl = "/local/" + new string('a', 10_000) + ".js";
+        var urlPath = "house-" + new string('a', 512);
 
         Assert.Equal(title, HomeAssistantDashboardIdentifier.RequireTitle(title, "title", CancellationToken.None));
         Assert.Equal(resourceUrl, HomeAssistantDashboardIdentifier.RequireResourceUrl(resourceUrl, "url", CancellationToken.None));
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(
+            urlPath,
+            allowSingleWord: false,
+            out var normalizedUrlPath,
+            CancellationToken.None));
+        Assert.Equal(urlPath, normalizedUrlPath);
         Assert.Equal(
             "  " + resourceUrl + "  ",
             HomeAssistantDashboardIdentifier.RequireResourceUrl("  " + resourceUrl + "  ", "url", CancellationToken.None));
@@ -694,6 +701,14 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("audio /mpeg")]
     [InlineData("audio")]
     [InlineData("audio/mpeg/extra")]
+    [InlineData("audio/mpeg; charset")]
+    [InlineData("audio/mpeg; =utf-8")]
+    [InlineData("audio/mpeg; charset=\"unterminated")]
+    [InlineData("audio/mpeg; charset=utf-8 garbage")]
+    [InlineData("audio/mpeg; charset=\"bad\rvalue\"")]
+    [InlineData("audio/mpeg; name=\"bad\\\u0000value\"")]
+    [InlineData("audio/mpeg; name=\"bad\\\u0001value\"")]
+    [InlineData("audio/mpeg; name=\"bad\\\u007fvalue\"")]
     public async Task MediaResolveRejectsMalformedMimeTypes(string mimeType)
     {
         using var server = new TestHomeAssistantServer

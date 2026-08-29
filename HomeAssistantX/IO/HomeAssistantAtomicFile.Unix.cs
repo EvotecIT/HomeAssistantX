@@ -127,21 +127,17 @@ internal static partial class HomeAssistantAtomicFile
         UnixFileMetadata metadata,
         bool useManagedApis)
     {
+        // Keep the publicly named staging inode inaccessible while ownership is
+        // changing. Transfer ownership before applying the destination ACL so an
+        // ACL update can never expose the exchanged inode under the exporter identity.
+        // Applying an ACL can update POSIX mode bits, so expose the final mode last.
+        SetUnixMode(temporaryPath, 0, useManagedApis: false);
+
         if (Chown(temporaryPath, metadata.UserId, metadata.GroupId) != 0)
         {
             throw new IOException(
                 "The temporary Unix file ownership could not be preserved.",
                 new Win32Exception(Marshal.GetLastWin32Error()));
-        }
-
-        if (!useManagedApis || !TrySetUnixModeWithManagedApi(temporaryPath, metadata.Mode))
-        {
-            if (Chmod(temporaryPath, metadata.Mode) != 0)
-            {
-                throw new IOException(
-                    "The temporary Unix file mode could not be preserved.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
         }
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
@@ -154,6 +150,22 @@ internal static partial class HomeAssistantAtomicFile
                 temporaryPath,
                 metadata.MacAccessAcl
                     ?? throw new IOException("The snapshotted macOS access ACL was unavailable."));
+        }
+
+        SetUnixMode(temporaryPath, 0, useManagedApis: false);
+        SetUnixMode(temporaryPath, metadata.Mode, useManagedApis);
+    }
+
+    private static void SetUnixMode(string path, uint mode, bool useManagedApis)
+    {
+        if (!useManagedApis || !TrySetUnixModeWithManagedApi(path, mode))
+        {
+            if (Chmod(path, mode) != 0)
+            {
+                throw new IOException(
+                    "The temporary Unix file mode could not be preserved.",
+                    new Win32Exception(Marshal.GetLastWin32Error()));
+            }
         }
     }
 
