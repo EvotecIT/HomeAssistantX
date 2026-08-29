@@ -414,6 +414,15 @@ public sealed class PublicApiCompatibilityTests
             nameof(WarningObsoleteFixture),
             BindingFlags.NonPublic | BindingFlags.Static)!;
         Assert.StartsWith("obsolete ", FormatMethod(warning), StringComparison.Ordinal);
+#if NET10_0
+        var diagnostic = typeof(PublicApiCompatibilityTests).GetMethod(
+            "DiagnosticObsoleteFixture",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.StartsWith(
+            "obsolete(id=\"HAX001\",url=\"https://example.invalid/diagnostics/{0}\") ",
+            FormatMethod(diagnostic),
+            StringComparison.Ordinal);
+#endif
     }
 
     [Fact]
@@ -1297,6 +1306,16 @@ public sealed class PublicApiCompatibilityTests
     {
     }
 
+#if NET10_0
+    [Obsolete(
+        "Diagnostic compatibility contract",
+        DiagnosticId = "HAX001",
+        UrlFormat = "https://example.invalid/diagnostics/{0}")]
+    private static void DiagnosticObsoleteFixture()
+    {
+    }
+#endif
+
     [DllImport(
         "native-test",
         EntryPoint = "native_entry",
@@ -1878,18 +1897,31 @@ public sealed class PublicApiCompatibilityTests
     private static string ObsoleteContract(params ICustomAttributeProvider?[] providers)
     {
         var found = false;
+        var isError = false;
+        var metadata = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var provider in providers.Where(value => value is not null))
         {
             var attribute = GetCustomAttributes(provider!).FirstOrDefault(value =>
                 string.Equals(value.AttributeType.FullName, typeof(ObsoleteAttribute).FullName, StringComparison.Ordinal));
-            found |= attribute is not null;
-            var isError = attribute is not null
-                && attribute.ConstructorArguments.Count > 1
+            if (attribute is null) continue;
+            found = true;
+            isError |= attribute.ConstructorArguments.Count > 1
                 && attribute.ConstructorArguments[1].Value is bool value
                 && value;
-            if (isError) return "error obsolete ";
+            var diagnosticId = attribute.NamedArguments
+                .FirstOrDefault(value => value.MemberName == "DiagnosticId")
+                .TypedValue.Value;
+            var urlFormat = attribute.NamedArguments
+                .FirstOrDefault(value => value.MemberName == "UrlFormat")
+                .TypedValue.Value;
+            if (diagnosticId is not null || urlFormat is not null)
+            {
+                metadata.Add("id=" + FormatDefault(diagnosticId) + ",url=" + FormatDefault(urlFormat));
+            }
         }
-        return found ? "obsolete " : string.Empty;
+        if (!found) return string.Empty;
+        var details = metadata.Count == 0 ? string.Empty : "(" + string.Join(";", metadata) + ")";
+        return (isError ? "error " : string.Empty) + "obsolete" + details + " ";
     }
 
     private static string MarshalAsContract(ICustomAttributeProvider provider)
