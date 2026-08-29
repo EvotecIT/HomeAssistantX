@@ -192,9 +192,11 @@ public sealed class ProtocolResponseContractTests
             + "\"end\":{\"dateTime\":\"2026-08-27T19:00:00Z\"},\"provider_payload\":["
             + string.Join(",", Enumerable.Repeat("0", 1_000_000))
             + "]}]";
-        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json), writable: false);
         using var cancellation = new CancellationTokenSource();
-        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+        using var stream = new CancelAfterReadStream(
+            System.Text.Encoding.UTF8.GetBytes(json),
+            cancellation,
+            cancelAfterBytes: 1_024);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             JsonSerializer.DeserializeAsync<HomeAssistantCalendarEvent[]>(
@@ -202,6 +204,7 @@ public sealed class ProtocolResponseContractTests
                     HomeAssistantJson.CreateCancellationAwareResponseOptions(cancellation.Token),
                     cancellation.Token)
                 .AsTask());
+        Assert.True(stream.CancellationTriggered);
     }
 
     [Fact]
@@ -210,9 +213,11 @@ public sealed class ProtocolResponseContractTests
         var json = "[{\"notification_id\":\"notice\",\"message\":\"Ready\",\"provider_payload\":["
             + string.Join(",", Enumerable.Repeat("0", 1_000_000))
             + "]}]";
-        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json), writable: false);
         using var cancellation = new CancellationTokenSource();
-        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+        using var stream = new CancelAfterReadStream(
+            System.Text.Encoding.UTF8.GetBytes(json),
+            cancellation,
+            cancelAfterBytes: 1_024);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             JsonSerializer.DeserializeAsync<HomeAssistantPersistentNotification[]>(
@@ -220,6 +225,7 @@ public sealed class ProtocolResponseContractTests
                     HomeAssistantJson.CreateCancellationAwareResponseOptions(cancellation.Token),
                     cancellation.Token)
                 .AsTask());
+        Assert.True(stream.CancellationTriggered);
     }
 
     [Fact]
@@ -411,5 +417,92 @@ public sealed class ProtocolResponseContractTests
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancelAfterReadStream : Stream
+    {
+        private const int MaximumReadSize = 128;
+        private readonly MemoryStream _inner;
+        private readonly CancellationTokenSource _cancellation;
+        private readonly int _cancelAfterBytes;
+        private int _bytesRead;
+        private int _cancellationTriggered;
+
+        internal CancelAfterReadStream(
+            byte[] content,
+            CancellationTokenSource cancellation,
+            int cancelAfterBytes)
+        {
+            _inner = new MemoryStream(content, writable: false);
+            _cancellation = cancellation;
+            _cancelAfterBytes = cancelAfterBytes;
+        }
+
+        internal bool CancellationTriggered => Volatile.Read(ref _cancellationTriggered) != 0;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = _inner.Read(buffer, offset, Math.Min(count, MaximumReadSize));
+            Observe(read);
+            return read;
+        }
+
+        public override async Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var read = await _inner.ReadAsync(
+                buffer,
+                offset,
+                Math.Min(count, MaximumReadSize),
+                cancellationToken).ConfigureAwait(false);
+            Observe(read);
+            return read;
+        }
+
+#if NET10_0
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var read = await _inner.ReadAsync(
+                buffer.Slice(0, Math.Min(buffer.Length, MaximumReadSize)),
+                cancellationToken).ConfigureAwait(false);
+            Observe(read);
+            return read;
+        }
+#endif
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _inner.Dispose();
+            base.Dispose(disposing);
+        }
+
+        private void Observe(int count)
+        {
+            if (count <= 0) return;
+            var total = Interlocked.Add(ref _bytesRead, count);
+            if (total >= _cancelAfterBytes
+                && Interlocked.Exchange(ref _cancellationTriggered, 1) == 0)
+            {
+                _cancellation.Cancel();
+            }
+        }
     }
 }
