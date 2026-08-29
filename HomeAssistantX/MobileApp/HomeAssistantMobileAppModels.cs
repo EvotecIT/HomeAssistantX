@@ -6,6 +6,12 @@ namespace HomeAssistantX.MobileApp;
 /// <summary>Describes a Home Assistant mobile-app registration owned by the calling application.</summary>
 public sealed class HomeAssistantMobileAppRegistrationRequest
 {
+    private static readonly HashSet<string> KnownPropertyNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "app_id", "app_name", "app_version", "device_name", "manufacturer", "model",
+        "device_id", "os_name", "os_version", "supports_encryption", "app_data"
+    };
+
     [JsonPropertyName("app_id")]
     public string AppId { get; set; } = string.Empty;
 
@@ -41,21 +47,39 @@ public sealed class HomeAssistantMobileAppRegistrationRequest
     [JsonPropertyName("app_data")]
     public IReadOnlyDictionary<string, object?> AppData { get; set; } = new Dictionary<string, object?>();
 
-    internal void Validate()
+    /// <summary>Preserves provider-specific top-level registration fields not yet modeled by HomeAssistantX.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, object?> AdditionalData { get; set; } = new(StringComparer.Ordinal);
+
+    internal void Validate(CancellationToken cancellationToken)
     {
-        Required(AppId, nameof(AppId));
-        Required(AppName, nameof(AppName));
-        Required(AppVersion, nameof(AppVersion));
-        Required(DeviceName, nameof(DeviceName));
-        Required(Manufacturer, nameof(Manufacturer));
-        Required(Model, nameof(Model));
-        Required(OperatingSystemName, nameof(OperatingSystemName));
+        Required(AppId, nameof(AppId), cancellationToken);
+        Required(AppName, nameof(AppName), cancellationToken);
+        Required(AppVersion, nameof(AppVersion), cancellationToken);
+        Required(DeviceName, nameof(DeviceName), cancellationToken);
+        Required(Manufacturer, nameof(Manufacturer), cancellationToken);
+        Required(Model, nameof(Model), cancellationToken);
+        Required(OperatingSystemName, nameof(OperatingSystemName), cancellationToken);
         if (AppData is null) throw new ArgumentNullException(nameof(AppData));
+        if (AdditionalData is null) throw new ArgumentNullException(nameof(AdditionalData));
+        foreach (var property in AdditionalData)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(property.Key))
+                throw new ArgumentException("Additional registration field names cannot be blank.", nameof(AdditionalData));
+            if (KnownPropertyNames.Contains(property.Key))
+                throw new ArgumentException(
+                    "Additional registration fields cannot replace a modeled registration field.",
+                    nameof(AdditionalData));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
-    private static void Required(string value, string name)
+    private static void Required(string value, string name, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", name);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 }
 

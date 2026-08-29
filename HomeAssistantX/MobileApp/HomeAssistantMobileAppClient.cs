@@ -22,7 +22,12 @@ public sealed class HomeAssistantMobileAppClient
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         cancellationToken.ThrowIfCancellationRequested();
-        request.Validate();
+        request.Validate(cancellationToken);
+        var frozenAdditionalData = HomeAssistantJson.FreezeObject(
+            request.AdditionalData,
+            nameof(request.AdditionalData),
+            "Additional registration data",
+            cancellationToken)!;
         var frozenRequest = new HomeAssistantMobileAppRegistrationRequest
         {
             AppId = request.AppId,
@@ -35,7 +40,11 @@ public sealed class HomeAssistantMobileAppClient
             OperatingSystemName = request.OperatingSystemName,
             OperatingSystemVersion = request.OperatingSystemVersion,
             SupportsEncryption = request.SupportsEncryption,
-            AppData = HomeAssistantJson.FreezeObject(request.AppData, nameof(request.AppData), "AppData", cancellationToken)!
+            AppData = HomeAssistantJson.FreezeObject(request.AppData, nameof(request.AppData), "AppData", cancellationToken)!,
+            AdditionalData = frozenAdditionalData.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.Ordinal)
         };
         var registration = await _rest.SendAsync<HomeAssistantMobileAppRegistration>(HttpMethod.Post, "api/mobile_app/registrations", frozenRequest, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(registration.WebhookId))

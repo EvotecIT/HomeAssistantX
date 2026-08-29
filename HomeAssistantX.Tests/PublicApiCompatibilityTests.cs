@@ -686,11 +686,29 @@ public sealed class PublicApiCompatibilityTests
             context.Unload();
         }
     }
+
+    [Fact]
+    public void AssemblyFormatterPreservesInteropRuntimeContracts()
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("HomeAssistantX.AssemblyInteropFixture." + Guid.NewGuid().ToString("N")),
+            AssemblyBuilderAccess.Run);
+        assembly.SetCustomAttribute(new CustomAttributeBuilder(
+            typeof(DisableRuntimeMarshallingAttribute).GetConstructor(Type.EmptyTypes)!,
+            Array.Empty<object>()));
+        assembly.SetCustomAttribute(new CustomAttributeBuilder(
+            typeof(DefaultDllImportSearchPathsAttribute).GetConstructor(new[] { typeof(DllImportSearchPath) })!,
+            new object[] { DllImportSearchPath.SafeDirectories | DllImportSearchPath.AssemblyDirectory }));
+
+        Assert.Equal(
+            "A default-dll-import-search-paths(System.Runtime.InteropServices.DllImportSearchPath.AssemblyDirectory, SafeDirectories)\nA disable-runtime-marshalling",
+            BuildSurface(assembly));
+    }
 #endif
 
     private static string BuildSurface(Assembly assembly)
     {
-        var lines = new List<string>();
+        var lines = new List<string>(FormatAssemblyContracts(assembly));
         foreach (var type in assembly.GetTypes().Where(IsExternallyAccessibleType).OrderBy(FormatType, StringComparer.Ordinal))
         {
             var kind = FormatTypeKind(type);
@@ -742,6 +760,28 @@ public sealed class PublicApiCompatibilityTests
                 lines.Add("  M " + MemberAccess(method) + MemberScope(method) + " " + FormatReturnType(method) + " " + FormatMethod(method));
         }
         return string.Join("\n", lines);
+    }
+
+    private static IEnumerable<string> FormatAssemblyContracts(Assembly assembly)
+    {
+        var contracts = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var attribute in GetCustomAttributes(assembly))
+        {
+            switch (attribute.AttributeType.FullName)
+            {
+                case "System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute":
+                    contracts.Add("A disable-runtime-marshalling");
+                    break;
+                case "System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute"
+                    when attribute.ConstructorArguments.Count == 1:
+                    contracts.Add(
+                        "A default-dll-import-search-paths("
+                        + FormatAttributeArgument(attribute.ConstructorArguments[0])
+                        + ")");
+                    break;
+            }
+        }
+        return contracts;
     }
 
     private static IEnumerable<Type> GetDirectInterfaces(Type type)

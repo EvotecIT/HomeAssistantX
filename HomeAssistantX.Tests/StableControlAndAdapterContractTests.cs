@@ -1150,6 +1150,7 @@ public sealed class StableControlAndAdapterContractTests
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
         var request = RegistrationRequest(false);
+        request.AdditionalData["future_registration_field"] = "preserved-request";
         var registration = await client.MobileApp.RegisterAsync(request);
 
         Assert.Equal("test-webhook", registration.WebhookId);
@@ -1161,6 +1162,9 @@ public sealed class StableControlAndAdapterContractTests
             Assert.Equal("com.example.app", registrationBody.RootElement.GetProperty("app_id").GetString());
             Assert.Equal("Windows", registrationBody.RootElement.GetProperty("os_name").GetString());
             Assert.False(registrationBody.RootElement.GetProperty("supports_encryption").GetBoolean());
+            Assert.Equal(
+                "preserved-request",
+                registrationBody.RootElement.GetProperty("future_registration_field").GetString());
         }
         using (var webhook = client.MobileApp.CreateWebhookClient(registration))
         {
@@ -1238,6 +1242,28 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task MobileAppRegistrationRejectsInvalidAdditionalDataBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var request = RegistrationRequest(false);
+        request.AdditionalData = null!;
+        await Assert.ThrowsAsync<ArgumentNullException>(() => client.MobileApp.RegisterAsync(request));
+
+        request = RegistrationRequest(false);
+        request.AdditionalData["APP_ID"] = "replacement";
+        await Assert.ThrowsAsync<ArgumentException>(() => client.MobileApp.RegisterAsync(request));
+
+        request = RegistrationRequest(false);
+        var cyclic = new Dictionary<string, object?>();
+        cyclic["self"] = cyclic;
+        request.AdditionalData["future"] = cyclic;
+        await Assert.ThrowsAsync<ArgumentException>(() => client.MobileApp.RegisterAsync(request));
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
     public async Task MobileAppRegistrationAllowsHomeAssistantsOptionalOperatingSystemVersion()
     {
         using var server = new TestHomeAssistantServer();
@@ -1284,16 +1310,19 @@ public sealed class StableControlAndAdapterContractTests
         request = RegistrationRequest(false);
         var appData = new Dictionary<string, object?> { ["push_token"] = "original" };
         request.AppData = appData;
+        request.AdditionalData["future_registration_field"] = "original";
         var registration = delayedClient.MobileApp.RegisterAsync(request);
         await tokenProvider.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
         appData["push_token"] = "changed";
         request.AppData = new Dictionary<string, object?> { ["push_token"] = "replacement" };
+        request.AdditionalData["future_registration_field"] = "changed";
         request.AppName = "Changed app";
         tokenProvider.Release.TrySetResult(TestHomeAssistantServer.AccessToken);
         _ = await registration;
 
         using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
         Assert.Equal("original", body.RootElement.GetProperty("app_data").GetProperty("push_token").GetString());
+        Assert.Equal("original", body.RootElement.GetProperty("future_registration_field").GetString());
         Assert.Equal("Example", body.RootElement.GetProperty("app_name").GetString());
 
         server.MobileRegistrationResponseJson = "{\"webhook_id\":\"test-webhook\",\"secret\":null}";

@@ -829,6 +829,7 @@ T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistration
   M override System.String ToString()
 T sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationRequest
   C special-name HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationRequest()
+  P instance System.Collections.Generic.Dictionary<System.String,System.Object?> AdditionalData {get;set;}
   P instance System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?> AppData {get;set;}
   P instance System.String AppId {get;set;}
   P instance System.String AppName {get;set;}
