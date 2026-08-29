@@ -46,7 +46,9 @@ public sealed class HomeAssistantAutomationClient
     {
         var normalizedEntityId = ValidateEntityId(entityId, cancellationToken);
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
-        return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId), cancellationToken);
+        return ToStatus(
+            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId, cancellationToken),
+            cancellationToken);
     }
 
     /// <summary>Runs one or more automation entities without changing their configuration.</summary>
@@ -74,14 +76,19 @@ public sealed class HomeAssistantAutomationClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
             if (property.NameEquals("id"))
             {
                 responseIds.Add(property.Value);
             }
         }
+        var responseId = responseIds.Count == 1 && responseIds[0].ValueKind == JsonValueKind.String
+            ? responseIds[0].GetString()
+            : null;
+        HomeAssistantJson.ThrowIfStringTraversalCanceled(responseId, cancellationToken);
         if (responseIds.Count != 1
-            || responseIds[0].ValueKind != JsonValueKind.String
-            || !string.Equals(responseIds[0].GetString(), id, StringComparison.Ordinal))
+            || responseId is null
+            || !string.Equals(responseId, id, StringComparison.Ordinal))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with a mismatched identifier.");
         }

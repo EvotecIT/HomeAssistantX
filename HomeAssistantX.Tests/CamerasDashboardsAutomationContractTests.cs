@@ -1277,6 +1277,82 @@ public sealed class CamerasDashboardsAutomationContractTests
         }
     }
 
+    [Fact]
+    public void LinuxAtomicExportsReapplyAccessAclWhenIdentityAndModeStayStable()
+    {
+        if (!OperatingSystem.IsLinux()
+            || !File.Exists("/usr/bin/setfacl")
+            || !File.Exists("/usr/bin/getfacl"))
+        {
+            return;
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-acl-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            RunUnixCommand("/usr/bin/setfacl", "-m", "u:nobody:r--,m::rw-", destination);
+            string? expectedAcl = null;
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None,
+                beforeUnixMetadataRecheck: () =>
+                {
+                    RunUnixCommand("/usr/bin/setfacl", "-m", "u:nobody:rw-,m::rw-", destination);
+                    expectedAcl = RunUnixCommand("/usr/bin/getfacl", "-cp", destination);
+                });
+
+            Assert.Equal(expectedAcl, RunUnixCommand("/usr/bin/getfacl", "-cp", destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WindowsAtomicExportsRetryWhenDestinationAppearsBeforeNoReplaceMove()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-windows-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            var callbackCount = 0;
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None,
+                beforeUnixMetadataRecheck: null,
+                beforeWindowsNoReplaceMove: () =>
+                {
+                    callbackCount++;
+                    File.WriteAllBytes(destination, new byte[] { 3 });
+                });
+
+            Assert.Equal(1, callbackCount);
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("Linux", "X64", 24)]
     [InlineData("Linux", "Ppc64le", 24)]

@@ -50,7 +50,9 @@ public sealed class HomeAssistantCameraClient
     {
         var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
-        return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId), cancellationToken);
+        return ToStatus(
+            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId, cancellationToken),
+            cancellationToken);
     }
 
     public async Task<byte[]> GetSnapshotAsync(string entityId, int? width = null, int? height = null, CancellationToken cancellationToken = default)

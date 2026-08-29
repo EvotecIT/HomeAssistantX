@@ -101,11 +101,14 @@ internal static partial class HomeAssistantAtomicFile
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            CopyLinuxAccessAcl(destinationPath, temporaryPath);
+            ApplyLinuxAccessAcl(temporaryPath, metadata.LinuxAccessAcl);
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            CopyMacAccessAcl(destinationPath, temporaryPath);
+            ApplyMacAccessAcl(
+                temporaryPath,
+                metadata.MacAccessAcl
+                    ?? throw new IOException("The snapshotted macOS access ACL was unavailable."));
         }
     }
 
@@ -166,12 +169,20 @@ internal static partial class HomeAssistantAtomicFile
                     new Win32Exception(Marshal.GetLastWin32Error()));
             }
 
+            var linuxAccessAcl = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                ? ReadLinuxAccessAcl(path)
+                : null;
+            var macAccessAcl = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                ? ReadMacAccessAcl(path)
+                : null;
             return new UnixFileMetadata(
                 ReadNativeUnsigned(buffer, offsets.Device, offsets.DeviceIs32Bit),
                 ReadNativeUnsigned(buffer, offsets.Inode, offsets.InodeIs32Bit),
                 unchecked((uint)(Marshal.ReadInt32(buffer, offsets.Mode) & PermissionBits)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.UserId)),
-                unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)));
+                unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)),
+                linuxAccessAcl,
+                macAccessAcl);
         }
         finally
         {
@@ -205,16 +216,16 @@ internal static partial class HomeAssistantAtomicFile
         return true;
     }
 
-    private static void CopyLinuxAccessAcl(string sourcePath, string destinationPath)
+    private static byte[]? ReadLinuxAccessAcl(string sourcePath)
     {
         var size = GetExtendedAttribute(sourcePath, LinuxAccessAclAttribute, IntPtr.Zero, UIntPtr.Zero).ToInt64();
         if (size < 0)
         {
             var error = Marshal.GetLastWin32Error();
-            if (error == LinuxNoData || error == LinuxOperationNotSupported) return;
+            if (error == LinuxNoData || error == LinuxOperationNotSupported) return null;
             throw new IOException("The destination Unix access ACL could not be read.", new Win32Exception(error));
         }
-        if (size == 0) return;
+        if (size == 0) return Array.Empty<byte>();
 
         var buffer = Marshal.AllocHGlobal(checked((int)size));
         try
@@ -230,11 +241,42 @@ internal static partial class HomeAssistantAtomicFile
                     "The destination Unix access ACL changed while it was being read.",
                     new Win32Exception(Marshal.GetLastWin32Error()));
             }
+            var result = new byte[checked((int)size)];
+            Marshal.Copy(buffer, result, 0, result.Length);
+            return result;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private static void ApplyLinuxAccessAcl(string destinationPath, byte[]? accessAcl)
+    {
+        if (accessAcl is null)
+        {
+            if (RemoveExtendedAttribute(destinationPath, LinuxAccessAclAttribute) != 0)
+            {
+                var error = Marshal.GetLastWin32Error();
+                if (error != LinuxNoData && error != LinuxOperationNotSupported)
+                {
+                    throw new IOException(
+                        "The temporary Unix access ACL could not be cleared.",
+                        new Win32Exception(error));
+                }
+            }
+            return;
+        }
+
+        var buffer = Marshal.AllocHGlobal(accessAcl.Length);
+        try
+        {
+            if (accessAcl.Length > 0) Marshal.Copy(accessAcl, 0, buffer, accessAcl.Length);
             if (SetExtendedAttribute(
                     destinationPath,
                     LinuxAccessAclAttribute,
                     buffer,
-                    new UIntPtr(unchecked((ulong)size)),
+                    new UIntPtr(unchecked((ulong)accessAcl.Length)),
                     0) != 0)
             {
                 throw new IOException(
@@ -248,13 +290,46 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
-    private static void CopyMacAccessAcl(string sourcePath, string destinationPath)
+    private static string ReadMacAccessAcl(string sourcePath)
     {
         var acl = AclGetFile(sourcePath, MacExtendedAcl);
         if (acl == IntPtr.Zero)
         {
             throw new IOException(
                 "The destination macOS access ACL could not be read.",
+                new Win32Exception(Marshal.GetLastWin32Error()));
+        }
+        try
+        {
+            var text = AclToText(acl, out _);
+            if (text == IntPtr.Zero)
+            {
+                throw new IOException(
+                    "The destination macOS access ACL could not be snapshotted.",
+                    new Win32Exception(Marshal.GetLastWin32Error()));
+            }
+            try
+            {
+                return Marshal.PtrToStringAnsi(text) ?? string.Empty;
+            }
+            finally
+            {
+                AclFree(text);
+            }
+        }
+        finally
+        {
+            AclFree(acl);
+        }
+    }
+
+    private static void ApplyMacAccessAcl(string destinationPath, string accessAcl)
+    {
+        var acl = AclFromText(accessAcl);
+        if (acl == IntPtr.Zero)
+        {
+            throw new IOException(
+                "The snapshotted macOS access ACL could not be decoded.",
                 new Win32Exception(Marshal.GetLastWin32Error()));
         }
         try
@@ -331,13 +406,22 @@ internal static partial class HomeAssistantAtomicFile
 
     private readonly struct UnixFileMetadata
     {
-        internal UnixFileMetadata(ulong device, ulong inode, uint mode, uint userId, uint groupId)
+        internal UnixFileMetadata(
+            ulong device,
+            ulong inode,
+            uint mode,
+            uint userId,
+            uint groupId,
+            byte[]? linuxAccessAcl,
+            string? macAccessAcl)
         {
             Device = device;
             Inode = inode;
             Mode = mode;
             UserId = userId;
             GroupId = groupId;
+            LinuxAccessAcl = linuxAccessAcl;
+            MacAccessAcl = macAccessAcl;
         }
 
         internal ulong Device { get; }
@@ -345,6 +429,8 @@ internal static partial class HomeAssistantAtomicFile
         internal uint Mode { get; }
         internal uint UserId { get; }
         internal uint GroupId { get; }
+        internal byte[]? LinuxAccessAcl { get; }
+        internal string? MacAccessAcl { get; }
 
         internal static bool SameIdentityAndPermissions(
             UnixFileMetadata? expected,
@@ -359,7 +445,20 @@ internal static partial class HomeAssistantAtomicFile
                 && expected.Value.Inode == current.Value.Inode
                 && expected.Value.Mode == current.Value.Mode
                 && expected.Value.UserId == current.Value.UserId
-                && expected.Value.GroupId == current.Value.GroupId;
+                && expected.Value.GroupId == current.Value.GroupId
+                && EqualBytes(expected.Value.LinuxAccessAcl, current.Value.LinuxAccessAcl)
+                && string.Equals(expected.Value.MacAccessAcl, current.Value.MacAccessAcl, StringComparison.Ordinal);
+        }
+
+        private static bool EqualBytes(byte[]? left, byte[]? right)
+        {
+            if (ReferenceEquals(left, right)) return true;
+            if (left is null || right is null || left.Length != right.Length) return false;
+            for (var index = 0; index < left.Length; index++)
+            {
+                if (left[index] != right[index]) return false;
+            }
+            return true;
         }
     }
 
@@ -393,11 +492,20 @@ internal static partial class HomeAssistantAtomicFile
         UIntPtr size,
         int flags);
 
+    [DllImport("libc", EntryPoint = "removexattr", SetLastError = true)]
+    private static extern int RemoveExtendedAttribute(string path, string name);
+
     [DllImport("libc", EntryPoint = "acl_get_file", SetLastError = true)]
     private static extern IntPtr AclGetFile(string path, int type);
 
     [DllImport("libc", EntryPoint = "acl_set_file", SetLastError = true)]
     private static extern int AclSetFile(string path, int type, IntPtr acl);
+
+    [DllImport("libc", EntryPoint = "acl_to_text", SetLastError = true)]
+    private static extern IntPtr AclToText(IntPtr acl, out IntPtr length);
+
+    [DllImport("libc", EntryPoint = "acl_from_text", SetLastError = true)]
+    private static extern IntPtr AclFromText(string text);
 
     [DllImport("libc", EntryPoint = "acl_free", SetLastError = true)]
     private static extern int AclFree(IntPtr acl);

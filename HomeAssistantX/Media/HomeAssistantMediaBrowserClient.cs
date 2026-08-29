@@ -141,6 +141,7 @@ public sealed class HomeAssistantMediaBrowserClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
             if (property.NameEquals("media_class")) mediaClass = property.Value;
             else if (property.NameEquals("media_content_id")) mediaContentId = property.Value;
             else if (property.NameEquals("media_content_type")) mediaContentType = property.Value;

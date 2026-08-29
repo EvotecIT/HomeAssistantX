@@ -14,7 +14,8 @@ internal static partial class HomeAssistantAtomicFile
             destinationPath,
             overwrite,
             cancellationToken,
-            beforeUnixMetadataRecheck: null);
+            beforeUnixMetadataRecheck: null,
+            beforeWindowsNoReplaceMove: null);
 
     internal static void CommitTemporaryFile(
         string temporaryPath,
@@ -22,6 +23,21 @@ internal static partial class HomeAssistantAtomicFile
         bool overwrite,
         CancellationToken cancellationToken,
         Action? beforeUnixMetadataRecheck)
+        => CommitTemporaryFile(
+            temporaryPath,
+            destinationPath,
+            overwrite,
+            cancellationToken,
+            beforeUnixMetadataRecheck,
+            beforeWindowsNoReplaceMove: null);
+
+    internal static void CommitTemporaryFile(
+        string temporaryPath,
+        string destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken,
+        Action? beforeUnixMetadataRecheck,
+        Action? beforeWindowsNoReplaceMove)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!overwrite)
@@ -41,7 +57,11 @@ internal static partial class HomeAssistantAtomicFile
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            CommitWindowsOverwrite(temporaryPath, destinationPath, cancellationToken);
+            CommitWindowsOverwrite(
+                temporaryPath,
+                destinationPath,
+                cancellationToken,
+                beforeWindowsNoReplaceMove);
             return;
         }
 
