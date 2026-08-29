@@ -245,10 +245,12 @@ public sealed class HomeAssistantCameraClient
         return _states.SubscribeAsync(HomeAssistantStateFilter.ForDomains("camera"), (change, token) => handler(new HomeAssistantCameraStateChange(change.EntityId, ToOptionalStatus(change.PreviousState, token), ToOptionalStatus(change.CurrentState, token)), token), cancellationToken);
     }
 
-    private static HomeAssistantCameraStatus? ToOptionalStatus(HomeAssistantState? state, CancellationToken cancellationToken)
+    internal static HomeAssistantCameraStatus? ToOptionalStatus(HomeAssistantState? state, CancellationToken cancellationToken)
     {
         if (state is null) return null;
-        return ToStatus(HomeAssistantEntityId.RequireResponseDomain(state, "camera"), cancellationToken);
+        return ToStatus(
+            HomeAssistantEntityId.RequireResponseDomain(state, "camera", cancellationToken),
+            cancellationToken);
     }
 
     internal static HomeAssistantCameraStatus ToStatus(HomeAssistantState state, CancellationToken cancellationToken)

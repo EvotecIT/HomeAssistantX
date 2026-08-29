@@ -17,6 +17,21 @@ namespace HomeAssistantX.Tests;
 public sealed class CamerasDashboardsAutomationContractTests
 {
     [Fact]
+    public void CameraSubscriptionStateProjectionPreservesIdentityCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var state = new HomeAssistantState
+        {
+            EntityId = new string('x', 1_000_000),
+            State = "idle"
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCameraClient.ToOptionalStatus(state, cancellation.Token));
+    }
+
+    [Fact]
     public void FrontendPanelSortingHonorsCancellation()
     {
         using var cancellation = new CancellationTokenSource();
