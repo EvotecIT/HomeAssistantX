@@ -344,6 +344,9 @@ public sealed class HomeAssistantMediaBrowserClient
         }
 
         var mediaType = parsed.MediaType!;
+        var parameterSeparator = value.IndexOf(';');
+        var declaredMediaType = parameterSeparator < 0 ? value : value.Substring(0, parameterSeparator);
+        if (!string.Equals(declaredMediaType, mediaType, StringComparison.Ordinal)) return false;
         var separator = -1;
         for (var index = 0; index < mediaType.Length; index++)
         {
