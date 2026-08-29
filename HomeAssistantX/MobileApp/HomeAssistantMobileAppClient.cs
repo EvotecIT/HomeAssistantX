@@ -55,12 +55,12 @@ public sealed class HomeAssistantMobileAppClient
             AdditionalData = frozenAdditionalFields
         };
         var registration = await _rest.SendAsync<HomeAssistantMobileAppRegistration>(HttpMethod.Post, "api/mobile_app/registrations", frozenRequest, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(registration.WebhookId))
+        if (IsNullOrWhiteSpace(registration.WebhookId, cancellationToken))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned a mobile-app registration without a webhook identifier.");
         }
 
-        if (frozenRequest.SupportsEncryption && string.IsNullOrWhiteSpace(registration.Secret))
+        if (frozenRequest.SupportsEncryption && IsNullOrWhiteSpace(registration.Secret, cancellationToken))
         {
             throw new HomeAssistantProtocolException("Home Assistant did not return the requested mobile-app encryption secret.");
         }
@@ -70,9 +70,10 @@ public sealed class HomeAssistantMobileAppClient
             throw new HomeAssistantProtocolException("Home Assistant returned a mobile-app encryption secret for a registration that did not request encryption.");
         }
 
-        RequireHttpUri(registration.CloudhookUri, "cloudhook URL");
-        RequireHttpUri(registration.RemoteUiUri, "remote UI URL");
+        RequireHttpUri(registration.CloudhookUri, "cloudhook URL", cancellationToken);
+        RequireHttpUri(registration.RemoteUiUri, "remote UI URL", cancellationToken);
 
+        cancellationToken.ThrowIfCancellationRequested();
         return registration;
     }
 
@@ -131,14 +132,39 @@ public sealed class HomeAssistantMobileAppClient
         }
     }
 
-    private static void RequireHttpUri(Uri? value, string name)
+    private static bool IsNullOrWhiteSpace(
+        string? value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null) return true;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (!char.IsWhiteSpace(value[index]))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return false;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return true;
+    }
+
+    private static void RequireHttpUri(
+        Uri? value,
+        string name,
+        CancellationToken cancellationToken)
     {
         if (value is null) return;
+        HomeAssistantJson.ThrowIfStringTraversalCanceled(value.OriginalString, cancellationToken);
         if (!value.IsAbsoluteUri
             || (value.Scheme != Uri.UriSchemeHttp && value.Scheme != Uri.UriSchemeHttps)
             || !string.IsNullOrEmpty(value.UserInfo))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned an invalid mobile-app " + name + ".");
         }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 }

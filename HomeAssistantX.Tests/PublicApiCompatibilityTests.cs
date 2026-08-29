@@ -87,6 +87,14 @@ public sealed class PublicApiCompatibilityTests
             typeof(DispatchFixture).GetMethod(nameof(DispatchFixture.Invoke))!));
         Assert.Equal("dispid(43) ", DispIdContract(
             typeof(DispatchFixture).GetProperty(nameof(DispatchFixture.Value))!));
+        Assert.StartsWith(
+            "dispid(44) ",
+            FormatEnumField(typeof(EnumStorageFixture), nameof(EnumStorageFixture.Value)),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "nonserialized ",
+            FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.Transient))!),
+            StringComparison.Ordinal);
         Assert.Contains(
             FormatAssemblyContracts(typeof(HomeAssistantClient).Assembly),
             value => value.StartsWith("A assembly-identity(\"HomeAssistantX, Version=", StringComparison.Ordinal));
@@ -850,9 +858,7 @@ public sealed class PublicApiCompatibilityTests
             {
                 foreach (var name in Enum.GetNames(type))
                 {
-                    var value = Enum.Parse(type, name);
-                    var field = type.GetField(name, BindingFlags.Public | BindingFlags.Static)!;
-                    lines.Add("  F " + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type)));
+                    lines.Add("  F " + FormatEnumField(type, name));
                 }
                 continue;
             }
@@ -1643,6 +1649,7 @@ public sealed class PublicApiCompatibilityTests
 
     private enum EnumStorageFixture : ulong
     {
+        [DispId(44)]
         Value = ulong.MaxValue
     }
 
@@ -1686,6 +1693,8 @@ public sealed class PublicApiCompatibilityTests
         public const decimal DecimalConstant = 1.25m;
         public static readonly string ReadOnly = string.Empty;
         public string[,,]? Mutable = new string[1, 1, 1];
+        [NonSerialized]
+        public string? Transient = string.Empty;
         public volatile int Volatile = 1;
     }
 
@@ -2052,8 +2061,23 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
     }
+
+    private static string FormatEnumField(Type type, string name)
+    {
+        var value = Enum.Parse(type, name);
+        var field = type.GetField(name, BindingFlags.Public | BindingFlags.Static)!;
+        return DispIdContract(field) + ObsoleteContract(field) + ExperimentalContract(field)
+            + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field)
+            + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type));
+    }
+
+    private static string NonSerializedContract(FieldInfo field)
+        => (field.Attributes & (FieldAttributes)0x0080) != 0
+            || HasAttribute(field, "System.NonSerializedAttribute")
+            ? "nonserialized "
+            : string.Empty;
 
     private static string FormatFieldType(FieldInfo field)
     {
