@@ -58,6 +58,26 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task GlobalMediaSelectorNormalizationObservesCancellationDuringTraversal()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var selector = new string(' ', 16_000_000) + "media-source://media_source";
+        var operation = Task.Run(async () =>
+        {
+            started.TrySetResult(true);
+            await client.Media.BrowseSourcesAsync(selector, cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.GetLastWebSocketCommand("media_source/browse_media"));
+    }
+
+    [Fact]
     public async Task CameraSurfaceIsTypedBoundedSignedAndPushCapable()
     {
         using var server = new TestHomeAssistantServer();
@@ -306,6 +326,25 @@ public sealed class CamerasDashboardsAutomationContractTests
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
+    public async Task AutomationEntityNormalizationObservesCancellationDuringTraversal()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entityId = "automation." + new string('a', 16_000_000);
+        var operation = Task.Run(async () =>
+        {
+            started.TrySetResult(true);
+            await client.Automations.GetAsync(entityId, cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
     }
 
     [Theory]

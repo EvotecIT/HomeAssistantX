@@ -44,7 +44,7 @@ public sealed class HomeAssistantAutomationClient
 
     public async Task<HomeAssistantAutomationStatus> GetAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = ValidateEntityId(entityId);
+        var normalizedEntityId = ValidateEntityId(entityId, cancellationToken);
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
         return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId));
     }
@@ -136,9 +136,9 @@ public sealed class HomeAssistantAutomationClient
         };
     }
 
-    private static string ValidateEntityId(string entityId)
+    private static string ValidateEntityId(string entityId, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "automation", out var normalized))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "automation", cancellationToken, out var normalized))
             throw new ArgumentException("An automation entity identifier is required.", nameof(entityId));
         return normalized;
     }

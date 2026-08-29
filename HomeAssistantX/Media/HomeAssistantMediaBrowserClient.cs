@@ -14,7 +14,7 @@ public sealed class HomeAssistantMediaBrowserClient
     internal HomeAssistantMediaBrowserClient(HomeAssistantWebSocketClient webSocket) => _webSocket = webSocket;
 
     public Task<HomeAssistantMediaItem> BrowseSourcesAsync(string? mediaContentId = null, CancellationToken cancellationToken = default)
-        => RequestItemAsync("media_source/browse_media", OptionalContentId(mediaContentId), cancellationToken);
+        => RequestItemAsync("media_source/browse_media", OptionalContentId(mediaContentId, cancellationToken), cancellationToken);
 
     public async Task<IReadOnlyList<HomeAssistantMediaItem>> SearchSourcesAsync(string searchQuery, string? mediaContentId = null, IReadOnlyCollection<string>? mediaClasses = null, CancellationToken cancellationToken = default)
         => (await SearchSourcesResponseAsync(searchQuery, mediaContentId, mediaClasses, cancellationToken).ConfigureAwait(false)).Items;
@@ -23,15 +23,15 @@ public sealed class HomeAssistantMediaBrowserClient
     public Task<HomeAssistantMediaSearchResponse> SearchSourcesResponseAsync(string searchQuery, string? mediaContentId = null, IReadOnlyCollection<string>? mediaClasses = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var payload = OptionalContentId(mediaContentId);
-        payload["search_query"] = Require(searchQuery, nameof(searchQuery));
+        var payload = OptionalContentId(mediaContentId, cancellationToken);
+        payload["search_query"] = Require(searchQuery, nameof(searchQuery), cancellationToken);
         AddMediaClasses(payload, mediaClasses, cancellationToken);
         return RequestSearchAsync("media_source/search_media", payload, cancellationToken);
     }
 
     public async Task<HomeAssistantResolvedMedia> ResolveAsync(string mediaContentId, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
     {
-        var payload = new Dictionary<string, object?> { ["media_content_id"] = Require(mediaContentId, nameof(mediaContentId)) };
+        var payload = new Dictionary<string, object?> { ["media_content_id"] = Require(mediaContentId, nameof(mediaContentId), cancellationToken) };
         if (expiration.HasValue)
         {
             if (expiration.Value <= TimeSpan.Zero || expiration.Value.TotalSeconds > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(expiration));
@@ -53,7 +53,7 @@ public sealed class HomeAssistantMediaBrowserClient
 
     public Task<HomeAssistantMediaItem> BrowsePlayerAsync(string entityId, string? mediaContentType = null, string? mediaContentId = null, CancellationToken cancellationToken = default)
     {
-        var payload = PlayerPayload(entityId, mediaContentType, mediaContentId);
+        var payload = PlayerPayload(entityId, mediaContentType, mediaContentId, cancellationToken);
         return RequestItemAsync("media_player/browse_media", payload, cancellationToken);
     }
 
@@ -64,8 +64,8 @@ public sealed class HomeAssistantMediaBrowserClient
     public Task<HomeAssistantMediaSearchResponse> SearchPlayerResponseAsync(string entityId, string searchQuery, string? mediaContentType = null, string? mediaContentId = null, IReadOnlyCollection<string>? mediaClasses = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var payload = PlayerPayload(entityId, mediaContentType, mediaContentId);
-        payload["search_query"] = Require(searchQuery, nameof(searchQuery));
+        var payload = PlayerPayload(entityId, mediaContentType, mediaContentId, cancellationToken);
+        payload["search_query"] = Require(searchQuery, nameof(searchQuery), cancellationToken);
         AddMediaClasses(payload, mediaClasses, cancellationToken);
         return RequestSearchAsync("media_player/search_media", payload, cancellationToken);
     }
@@ -258,26 +258,35 @@ public sealed class HomeAssistantMediaBrowserClient
             && !string.IsNullOrWhiteSpace(value)
             && string.Equals(value, value.Trim(), StringComparison.Ordinal);
 
-    private static Dictionary<string, object?> PlayerPayload(string entityId, string? mediaContentType, string? mediaContentId)
+    private static Dictionary<string, object?> PlayerPayload(
+        string entityId,
+        string? mediaContentType,
+        string? mediaContentId,
+        CancellationToken cancellationToken)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "media_player", out entityId))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "media_player", cancellationToken, out entityId))
             throw new ArgumentException("A media-player entity identifier is required.", nameof(entityId));
         var payload = new Dictionary<string, object?> { ["entity_id"] = entityId };
         if (mediaContentType is not null)
         {
-            payload["media_content_type"] = Require(mediaContentType, nameof(mediaContentType));
+            payload["media_content_type"] = Require(mediaContentType, nameof(mediaContentType), cancellationToken);
         }
         if (mediaContentId is not null)
         {
-            payload["media_content_id"] = Require(mediaContentId, nameof(mediaContentId));
+            payload["media_content_id"] = Require(mediaContentId, nameof(mediaContentId), cancellationToken);
         }
         return payload;
     }
 
-    private static Dictionary<string, object?> OptionalContentId(string? mediaContentId)
+    private static Dictionary<string, object?> OptionalContentId(
+        string? mediaContentId,
+        CancellationToken cancellationToken)
     {
         var payload = new Dictionary<string, object?>();
-        if (mediaContentId is not null) payload["media_content_id"] = Require(mediaContentId, nameof(mediaContentId));
+        if (mediaContentId is not null)
+        {
+            payload["media_content_id"] = Require(mediaContentId, nameof(mediaContentId), cancellationToken);
+        }
         return payload;
     }
 
@@ -312,10 +321,30 @@ public sealed class HomeAssistantMediaBrowserClient
             throw new HomeAssistantProtocolException(failureMessage);
     }
 
-    private static string Require(string value, string parameterName)
+    private static string Require(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", parameterName);
-        return value.Trim();
+        if (value is null) throw new ArgumentNullException(parameterName);
+        cancellationToken.ThrowIfCancellationRequested();
+        var start = 0;
+        while (start < value.Length && char.IsWhiteSpace(value[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+        var end = value.Length - 1;
+        while (end >= start && char.IsWhiteSpace(value[end]))
+        {
+            if (((value.Length - 1 - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (end < start) throw new ArgumentException("A non-empty value is required.", parameterName);
+        return start == 0 && end == value.Length - 1
+            ? value
+            : value.Substring(start, end - start + 1);
     }
 
     internal static bool IsValidMediaType(
