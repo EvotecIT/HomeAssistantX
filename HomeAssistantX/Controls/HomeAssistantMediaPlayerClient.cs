@@ -556,10 +556,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         return HomeAssistantJson.FreezeObject(extra, parameterName, "MediaExtra", cancellationToken);
     }
 
-    private static string? NormalizeOptional(
-        string? value,
-        string name,
-        CancellationToken cancellationToken)
+    private static string? NormalizeOptional(string? value, string name, CancellationToken cancellationToken)
         => value is null ? null : ControlValidation.Required(value, name, cancellationToken);
 
     private static string? PreserveOptional(

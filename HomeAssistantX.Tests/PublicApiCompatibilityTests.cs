@@ -730,10 +730,88 @@ public sealed class PublicApiCompatibilityTests
         assembly.SetCustomAttribute(new CustomAttributeBuilder(
             typeof(DefaultDllImportSearchPathsAttribute).GetConstructor(new[] { typeof(DllImportSearchPath) })!,
             new object[] { DllImportSearchPath.SafeDirectories | DllImportSearchPath.AssemblyDirectory }));
+        assembly.SetCustomAttribute(new CustomAttributeBuilder(
+            typeof(ComVisibleAttribute).GetConstructor(new[] { typeof(bool) })!,
+            new object[] { false }));
+        assembly.SetCustomAttribute(new CustomAttributeBuilder(
+            typeof(CLSCompliantAttribute).GetConstructor(new[] { typeof(bool) })!,
+            new object[] { true }));
 
+        var surface = BuildSurface(assembly);
+        Assert.Contains("A cls-compliant(true)", surface, StringComparison.Ordinal);
+        Assert.Contains("A com-visible(false)", surface, StringComparison.Ordinal);
+        Assert.Contains("A default-dll-import-search-paths(System.Runtime.InteropServices.DllImportSearchPath.AssemblyDirectory, SafeDirectories)", surface, StringComparison.Ordinal);
+        Assert.Contains("A disable-runtime-marshalling", surface, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatterPreservesPreviewFeaturesAndIteratorCancellation()
+    {
+        var preview = typeof(PublicApiCompatibilityTests)
+            .GetNestedType("PreviewFeatureFixture", BindingFlags.NonPublic)!
+            .GetMethod("Invoke")!;
+        var iterator = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(IteratorCancellationFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Contains(
+            "requires-preview-features(message=\"Preview contract\",url=\"https://example.invalid/preview\")",
+            FormatMethod(preview),
+            StringComparison.Ordinal);
+        Assert.Contains("enumerator-cancellation ", FormatParameters(iterator.GetParameters()), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatterPreservesEventAccessorsAndReadonlyRefFields()
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("HomeAssistantX.AccessorFixture." + Guid.NewGuid().ToString("N")),
+            AssemblyBuilderAccess.Run);
+        var module = assembly.DefineDynamicModule("main");
+        var typeBuilder = module.DefineType(
+            "AccessorFixture",
+            TypeAttributes.Public | TypeAttributes.Class);
+        var add = DefineEventAccessor(typeBuilder, "add_Changed", MethodAttributes.Public);
+        var remove = DefineEventAccessor(typeBuilder, "remove_Changed", MethodAttributes.Family);
+        var eventBuilder = typeBuilder.DefineEvent("Changed", EventAttributes.None, typeof(EventHandler));
+        eventBuilder.SetAddOnMethod(add);
+        eventBuilder.SetRemoveOnMethod(remove);
+        var eventType = typeBuilder.CreateType()!;
+        var refTypeBuilder = module.DefineType(
+            "ReadonlyRefFieldFixture",
+            TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.SequentialLayout,
+            typeof(ValueType));
+        refTypeBuilder.SetCustomAttribute(new CustomAttributeBuilder(
+            typeof(IsByRefLikeAttribute).GetConstructor(Type.EmptyTypes)!,
+            Array.Empty<object>()));
+        refTypeBuilder.DefineField(
+            "ReadOnlyReference",
+            typeof(int).MakeByRefType(),
+            new[] { typeof(IsReadOnlyAttribute) },
+            Type.EmptyTypes,
+            FieldAttributes.Public);
+        var refType = refTypeBuilder.CreateType()!;
+
+        Assert.Equal("add;protected remove;", FormatEventAccessors(eventType.GetEvent("Changed")!));
+        Assert.Contains(
+            "ref readonly System.Int32 ReadOnlyReference",
+            FormatField(refType.GetField("ReadOnlyReference")!),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatterPreservesTypeForwardersAndInteropDeclarations()
+    {
+        var runtime = Assembly.Load("System.Runtime");
+        Assert.Contains(
+            FormatAssemblyContracts(runtime),
+            value => value.StartsWith("A type-forwarded-to(", StringComparison.Ordinal)
+                && value.Contains(",assembly=", StringComparison.Ordinal));
+        Assert.Contains("com-visible(false)", TypeInteropContract(typeof(InteropMetadataFixture)), StringComparison.Ordinal);
+        Assert.Equal("cls-compliant(false) ", ClsComplianceContract(typeof(InteropMetadataFixture)));
         Assert.Equal(
-            "A default-dll-import-search-paths(System.Runtime.InteropServices.DllImportSearchPath.AssemblyDirectory, SafeDirectories)\nA disable-runtime-marshalling",
-            BuildSurface(assembly));
+            "cls-compliant(false) ",
+            ClsComplianceContract(typeof(InteropMetadataFixture).GetMethod(nameof(InteropMetadataFixture.Invoke))!));
     }
 #endif
 
@@ -753,14 +831,14 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
                 {
                     var value = Enum.Parse(type, name);
                     var field = type.GetField(name, BindingFlags.Public | BindingFlags.Static)!;
-                    lines.Add("  F " + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type)));
+                    lines.Add("  F " + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type)));
                 }
                 continue;
             }
@@ -784,7 +862,7 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(eventInfo) + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name);
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(eventInfo) + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name + " {" + FormatEventAccessors(eventInfo) + "}");
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -796,10 +874,24 @@ public sealed class PublicApiCompatibilityTests
     private static IEnumerable<string> FormatAssemblyContracts(Assembly assembly)
     {
         var contracts = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var forwardedType in GetForwardedTypes(assembly).OrderBy(FormatType, StringComparer.Ordinal))
+        {
+            contracts.Add("A type-forwarded-to(" + FormatType(forwardedType)
+                + ",assembly=" + FormatDefault(forwardedType.Assembly.FullName) + ")");
+        }
         foreach (var attribute in GetCustomAttributes(assembly))
         {
             switch (attribute.AttributeType.FullName)
             {
+                case "System.CLSCompliantAttribute" when TryGetBooleanArgument(attribute, out var isCompliant):
+                    contracts.Add("A cls-compliant(" + FormatBoolean(isCompliant) + ")");
+                    break;
+                case "System.Runtime.InteropServices.ComVisibleAttribute" when TryGetBooleanArgument(attribute, out var isVisible):
+                    contracts.Add("A com-visible(" + FormatBoolean(isVisible) + ")");
+                    break;
+                case "System.Runtime.Versioning.RequiresPreviewFeaturesAttribute":
+                    contracts.Add("A " + FormatPreviewFeature(attribute));
+                    break;
                 case "System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute":
                     contracts.Add("A disable-runtime-marshalling");
                     break;
@@ -813,6 +905,25 @@ public sealed class PublicApiCompatibilityTests
             }
         }
         return contracts;
+    }
+
+    private static IReadOnlyList<Type> GetForwardedTypes(Assembly assembly)
+    {
+        var method = typeof(Assembly).GetMethod(
+            "GetForwardedTypes",
+            BindingFlags.Instance | BindingFlags.Public,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
+        if (method is null) return Type.EmptyTypes;
+        try
+        {
+            return method.Invoke(assembly, null) as Type[] ?? Type.EmptyTypes;
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is NotImplementedException or NotSupportedException)
+        {
+            return Type.EmptyTypes;
+        }
     }
 
     private static IEnumerable<Type> GetDirectInterfaces(Type type)
@@ -941,7 +1052,7 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => DynamicallyAccessedMembersContract(argument) + argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + RequiresCodeContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static string SpecialNameContract(MemberInfo member)
@@ -1054,6 +1165,9 @@ public sealed class PublicApiCompatibilityTests
                 case "System.Runtime.InteropServices.ClassInterfaceAttribute" when attribute.ConstructorArguments.Count == 1:
                     contracts.Add("class-interface(" + FormatAttributeArgument(attribute.ConstructorArguments[0]) + ")");
                     break;
+                case "System.Runtime.InteropServices.ComVisibleAttribute" when TryGetBooleanArgument(attribute, out var isVisible):
+                    contracts.Add("com-visible(" + FormatBoolean(isVisible) + ")");
+                    break;
             }
         }
         return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts.OrderBy(value => value, StringComparer.Ordinal)) + " ";
@@ -1115,7 +1229,8 @@ public sealed class PublicApiCompatibilityTests
 
     private static string FormatConstructor(ConstructorInfo constructor)
         => "C " + ConstructorAccess(constructor) + SpecialNameContract(constructor) + ObsoleteContract(constructor)
-            + ExperimentalContract(constructor) + PlatformContract(constructor) + RequiresCodeContract(constructor)
+            + ExperimentalContract(constructor) + PreviewFeatureContract(constructor) + PlatformContract(constructor) + RequiresCodeContract(constructor)
+            + ClsComplianceContract(constructor) + ComVisibilityContract(constructor)
             + OverloadResolutionPriorityContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
             + FormatType(constructor.DeclaringType!) + "(" + FormatParameters(constructor.GetParameters()) + ")";
 
@@ -1128,7 +1243,8 @@ public sealed class PublicApiCompatibilityTests
             property,
             getter,
             setter)
-            + ExperimentalContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
+            + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
+            + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
@@ -1778,6 +1894,50 @@ public sealed class PublicApiCompatibilityTests
     private sealed class AllowsRefStructFixture<T> where T : allows ref struct
     {
     }
+
+    private static class PreviewFeatureFixture
+    {
+        [System.Runtime.Versioning.RequiresPreviewFeatures(
+            "Preview contract",
+            Url = "https://example.invalid/preview")]
+        public static void Invoke()
+        {
+        }
+    }
+
+    #pragma warning disable CS3021
+    [ComVisible(false)]
+    [CLSCompliant(false)]
+    private sealed class InteropMetadataFixture
+    {
+        [CLSCompliant(false)]
+        public void Invoke()
+        {
+        }
+    }
+    #pragma warning restore CS3021
+
+    private static async IAsyncEnumerable<int> IteratorCancellationFixture(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await Task.Yield();
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return 1;
+    }
+
+    private static MethodBuilder DefineEventAccessor(
+        TypeBuilder typeBuilder,
+        string name,
+        MethodAttributes access)
+    {
+        var method = typeBuilder.DefineMethod(
+            name,
+            access | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
+            typeof(void),
+            new[] { typeof(EventHandler) });
+        method.GetILGenerator().Emit(OpCodes.Ret);
+        return method;
+    }
 #endif
 
     private static string MemberScope(MethodBase method)
@@ -1848,7 +2008,77 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PlatformContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatAnnotatedType(field.FieldType, field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
+    }
+
+    private static string FormatFieldType(FieldInfo field)
+    {
+        if (!field.FieldType.IsByRef)
+        {
+            return FormatAnnotatedType(field.FieldType, field);
+        }
+
+        var readOnly = field.GetRequiredCustomModifiers().Any(modifier => modifier.FullName is
+            "System.Runtime.CompilerServices.IsReadOnlyAttribute" or
+            "System.Runtime.InteropServices.InAttribute");
+        return (readOnly ? "ref readonly " : "ref ")
+            + FormatAnnotatedType(field.FieldType.GetElementType()!, field);
+    }
+
+    private static string PreviewFeatureContract(params ICustomAttributeProvider?[] providers)
+    {
+        var contracts = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var provider in providers.Where(value => value is not null))
+        {
+            foreach (var attribute in GetCustomAttributes(provider!).Where(value => string.Equals(
+                         value.AttributeType.FullName,
+                         "System.Runtime.Versioning.RequiresPreviewFeaturesAttribute",
+                         StringComparison.Ordinal)))
+            {
+                contracts.Add(FormatPreviewFeature(attribute));
+            }
+        }
+        return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
+    }
+
+    private static string FormatPreviewFeature(CustomAttributeData attribute)
+    {
+        var message = attribute.ConstructorArguments.Count == 1
+            ? attribute.ConstructorArguments[0].Value
+            : null;
+        var url = attribute.NamedArguments
+            .FirstOrDefault(value => value.MemberName == "Url")
+            .TypedValue.Value;
+        return "requires-preview-features(message=" + FormatDefault(message)
+            + ",url=" + FormatDefault(url) + ")";
+    }
+
+    private static string ClsComplianceContract(params ICustomAttributeProvider?[] providers)
+        => BooleanAttributeContract("cls-compliant", "System.CLSCompliantAttribute", providers);
+
+    private static string ComVisibilityContract(params ICustomAttributeProvider?[] providers)
+        => BooleanAttributeContract("com-visible", "System.Runtime.InteropServices.ComVisibleAttribute", providers);
+
+    private static string BooleanAttributeContract(
+        string contractName,
+        string attributeName,
+        params ICustomAttributeProvider?[] providers)
+    {
+        var contracts = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var provider in providers.Where(value => value is not null))
+        {
+            foreach (var attribute in GetCustomAttributes(provider!).Where(value => string.Equals(
+                         value.AttributeType.FullName,
+                         attributeName,
+                         StringComparison.Ordinal)))
+            {
+                if (TryGetBooleanArgument(attribute, out var value))
+                {
+                    contracts.Add(contractName + "(" + FormatBoolean(value) + ")");
+                }
+            }
+        }
+        return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
     }
 
     private static string ExperimentalContract(params ICustomAttributeProvider?[] providers)
@@ -2026,6 +2256,13 @@ public sealed class PublicApiCompatibilityTests
         return getter + FormatAccessor(property.SetMethod, propertyAccess, isInitOnly ? "init;" : "set;");
     }
 
+    private static string FormatEventAccessors(EventInfo eventInfo)
+    {
+        var eventAccess = MemberAccess(MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!);
+        return FormatAccessor(eventInfo.AddMethod, eventAccess, "add;")
+            + FormatAccessor(eventInfo.RemoveMethod, eventAccess, "remove;");
+    }
+
     private static string RequiredMember(MemberInfo member)
         => member.CustomAttributes.Any(attribute => string.Equals(
             attribute.AttributeType.FullName,
@@ -2109,7 +2346,7 @@ public sealed class PublicApiCompatibilityTests
         var suffix = parameter.HasDefaultValue
             ? " = " + FormatDefault(parameter.DefaultValue)
             : parameter.IsOptional ? " [optional]" : string.Empty;
-        return MarshalAsContract(parameter) + ParameterDirectionContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
+        return MarshalAsContract(parameter) + ClsComplianceContract(parameter) + ParameterDirectionContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
     }));
 
     private static string ParameterDirectionContract(ParameterInfo parameter)
@@ -2126,11 +2363,14 @@ public sealed class PublicApiCompatibilityTests
                 ? "params "
                 : string.Empty;
         var callerPrefix = CallerInformationContract(parameter);
+        var iteratorCancellationPrefix = HasAttribute(parameter, "System.Runtime.CompilerServices.EnumeratorCancellationAttribute")
+            ? "enumerator-cancellation "
+            : string.Empty;
         var handlerPrefix = InterpolatedStringHandlerArguments(parameter);
         var safetyPrefix = RefSafetyPrefix(parameter);
         if (!parameter.ParameterType.IsByRef)
         {
-            return paramsPrefix + callerPrefix + handlerPrefix + safetyPrefix + FormatAnnotatedType(parameter.ParameterType, parameter);
+            return paramsPrefix + callerPrefix + iteratorCancellationPrefix + handlerPrefix + safetyPrefix + FormatAnnotatedType(parameter.ParameterType, parameter);
         }
 
         var direction = HasAttribute(parameter, "System.Runtime.CompilerServices.RequiresLocationAttribute")
@@ -2140,7 +2380,7 @@ public sealed class PublicApiCompatibilityTests
             : parameter.IsIn
                 ? "in "
                 : "ref ";
-        return paramsPrefix + callerPrefix + handlerPrefix + safetyPrefix + direction + FormatAnnotatedType(parameter.ParameterType.GetElementType()!, parameter);
+        return paramsPrefix + callerPrefix + iteratorCancellationPrefix + handlerPrefix + safetyPrefix + direction + FormatAnnotatedType(parameter.ParameterType.GetElementType()!, parameter);
     }
 
     private static string CallerInformationContract(ParameterInfo parameter)
@@ -2186,7 +2426,7 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatReturnType(MethodInfo method, ICustomAttributeProvider owner)
     {
         var parameter = method.ReturnParameter;
-        var safetyPrefix = MarshalAsContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + RefSafetyPrefix(parameter)
+        var safetyPrefix = MarshalAsContract(parameter) + ClsComplianceContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + RefSafetyPrefix(parameter)
             + (HasAttribute(owner, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")
                 || HasAttribute(method, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
         if (!method.ReturnType.IsByRef)

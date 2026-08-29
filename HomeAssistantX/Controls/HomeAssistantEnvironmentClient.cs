@@ -33,7 +33,7 @@ public sealed class HomeAssistantHumidifierClient : HomeAssistantControlClientBa
         => CallAsync("set_humidity", target, call => call.WithData("humidity", ControlValidation.Percent(humidityPercent, nameof(humidityPercent))!.Value), cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> SetModeAsync(HomeAssistantTarget target, string mode, CancellationToken cancellationToken = default)
-        => CallAsync("set_mode", target, call => call.WithData("mode", ControlValidation.RequiredUnchanged(mode, nameof(mode))), cancellationToken);
+        => CallAsync("set_mode", target, call => call.WithData("mode", ControlValidation.RequiredUnchanged(mode, nameof(mode), cancellationToken)), cancellationToken);
 }
 
 /// <summary>Controls standard water-heater values without exposing raw payload dictionaries.</summary>
@@ -53,11 +53,11 @@ public sealed class HomeAssistantWaterHeaterClient : HomeAssistantControlClientB
         => CallAsync("set_temperature", target, call =>
         {
             call.WithData("temperature", ControlValidation.Finite(temperature, nameof(temperature))!.Value);
-            if (operationMode is not null) call.WithData("operation_mode", ControlValidation.RequiredUnchanged(operationMode, nameof(operationMode)));
+            if (operationMode is not null) call.WithData("operation_mode", ControlValidation.RequiredUnchanged(operationMode, nameof(operationMode), cancellationToken));
         }, cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> SetOperationModeAsync(HomeAssistantTarget target, string operationMode, CancellationToken cancellationToken = default)
-        => CallAsync("set_operation_mode", target, call => call.WithData("operation_mode", ControlValidation.RequiredUnchanged(operationMode, nameof(operationMode))), cancellationToken);
+        => CallAsync("set_operation_mode", target, call => call.WithData("operation_mode", ControlValidation.RequiredUnchanged(operationMode, nameof(operationMode), cancellationToken)), cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> SetAwayModeAsync(HomeAssistantTarget target, bool enabled, CancellationToken cancellationToken = default)
         => CallAsync("set_away_mode", target, call => call.WithData("away_mode", enabled), cancellationToken);

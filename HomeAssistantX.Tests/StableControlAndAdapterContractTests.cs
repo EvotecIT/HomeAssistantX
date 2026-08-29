@@ -1599,6 +1599,29 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task IntegrationDefinedControlValuesObserveCancellationDuringValidation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var mode = new string(' ', 16_000_000);
+        var operation = Task.Run(async () =>
+        {
+            started.TrySetResult(true);
+            await client.Controls.Humidifiers.SetModeAsync(
+                HomeAssistantTarget.ForEntity("humidifier.bedroom"),
+                mode,
+                cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task MobileAppWebhookUsesOnlyAnOwnedCredentialFreeTransport()
     {
         using var server = new TestHomeAssistantServer();

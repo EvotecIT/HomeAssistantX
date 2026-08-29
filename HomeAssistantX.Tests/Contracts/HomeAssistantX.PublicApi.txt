@@ -1667,7 +1667,7 @@ T sealed class HomeAssistantX.WebSockets.HomeAssistantConnectionStateChangedEven
 T sealed class HomeAssistantX.WebSockets.HomeAssistantWebSocketClient : System.IDisposable
   C special-name HomeAssistantX.WebSockets.HomeAssistantWebSocketClient(HomeAssistantX.Configuration.HomeAssistantClientOptions options)
   P instance HomeAssistantX.WebSockets.HomeAssistantConnectionState State {get;}
-  E instance System.EventHandler<HomeAssistantX.WebSockets.HomeAssistantConnectionStateChangedEventArgs>? ConnectionStateChanged
+  E instance System.EventHandler<HomeAssistantX.WebSockets.HomeAssistantConnectionStateChangedEventArgs>? ConnectionStateChanged {add;remove;}
   M instance System.Threading.Tasks.Task ConnectAsync(System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task DisconnectAsync(System.Threading.CancellationToken cancellationToken = null)
   M instance System.Void Dispose()

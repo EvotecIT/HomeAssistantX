@@ -42,7 +42,7 @@ public sealed class HomeAssistantHelperClient
     public Task<HomeAssistantServiceCallResult> SelectOptionAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, string option, CancellationToken cancellationToken = default)
     {
         RequireDomain(domain, HomeAssistantHelperDomain.Select, HomeAssistantHelperDomain.InputSelect);
-        return CallAsync(domain, "select_option", target, call => call.WithData("option", ControlValidation.RequiredUnchanged(option, nameof(option))), cancellationToken);
+        return CallAsync(domain, "select_option", target, call => call.WithData("option", ControlValidation.RequiredUnchanged(option, nameof(option), cancellationToken)), cancellationToken);
     }
 
     public Task<HomeAssistantServiceCallResult> SetSelectOptionsAsync(HomeAssistantTarget target, IReadOnlyList<string> options, CancellationToken cancellationToken = default)

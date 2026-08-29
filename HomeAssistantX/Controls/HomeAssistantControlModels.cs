@@ -192,7 +192,11 @@ public sealed class HomeAssistantClimateOptions
     internal bool HasTemperature => Temperature.HasValue || TargetTemperatureLow.HasValue || TargetTemperatureHigh.HasValue;
 
     internal void Validate()
+        => Validate(default);
+
+    internal void Validate(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ControlValidation.Finite(Temperature, nameof(Temperature));
         ControlValidation.Finite(TargetTemperatureLow, nameof(TargetTemperatureLow));
         ControlValidation.Finite(TargetTemperatureHigh, nameof(TargetTemperatureHigh));
@@ -214,31 +218,56 @@ public sealed class HomeAssistantClimateOptions
             throw new ArgumentException("TargetTemperatureLow cannot be greater than TargetTemperatureHigh.");
         }
 
-        HvacMode = NormalizeOptional(HvacMode, nameof(HvacMode));
-        FanMode = PreserveOptional(FanMode, nameof(FanMode));
-        PresetMode = PreserveOptional(PresetMode, nameof(PresetMode));
+        HvacMode = NormalizeOptional(HvacMode, nameof(HvacMode), cancellationToken);
+        FanMode = PreserveOptional(FanMode, nameof(FanMode), cancellationToken);
+        PresetMode = PreserveOptional(PresetMode, nameof(PresetMode), cancellationToken);
     }
 
-    private static string? NormalizeOptional(string? value, string name)
-        => value is null ? null : ControlValidation.Required(value, name);
+    private static string? NormalizeOptional(string? value, string name, CancellationToken cancellationToken)
+        => value is null ? null : ControlValidation.Required(value, name, cancellationToken);
 
-    private static string? PreserveOptional(string? value, string name)
-        => value is null ? null : ControlValidation.RequiredUnchanged(value, name);
+    private static string? PreserveOptional(string? value, string name, CancellationToken cancellationToken)
+        => value is null ? null : ControlValidation.RequiredUnchanged(value, name, cancellationToken);
 }
 
 internal static class ControlValidation
 {
+    public static string Required(string? value, string name)
+        => Required(value, name, default);
+
     public static string Required(
         string? value,
         string name,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
-        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null)
         {
             throw new ArgumentException("A non-empty value is required.", name);
         }
 
-        return CancellationAwareString.Trim(value!, cancellationToken);
+        var start = 0;
+        while (start < value.Length && char.IsWhiteSpace(value[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+        if (start == value.Length)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new ArgumentException("A non-empty value is required.", name);
+        }
+
+        var end = value.Length - 1;
+        while (end > start && char.IsWhiteSpace(value[end]))
+        {
+            if (((value.Length - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return start == 0 && end == value.Length - 1
+            ? value
+            : value.Substring(start, end - start + 1);
     }
 
     public static string RequiredUnchanged(
@@ -318,13 +347,9 @@ internal static class ControlValidation
         for (var index = 0; index < values.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var value = values[index];
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                throw new ArgumentException("At least one non-empty value is required.", name);
-            }
-
-            normalized[index] = preserveWhitespace ? value : value.Trim();
+            normalized[index] = preserveWhitespace
+                ? RequiredUnchanged(values[index], name, cancellationToken)
+                : Required(values[index], name, cancellationToken);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
