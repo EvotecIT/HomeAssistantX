@@ -681,29 +681,50 @@ public sealed class HomeAssistantRecorderClient
         HomeAssistantStatisticPeriod period,
         TimeZoneInfo? homeTimeZone)
     {
-        if (homeTimeZone is not null)
-        {
-            value = TimeZoneInfo.ConvertTime(value, homeTimeZone);
-        }
+        var localValue = homeTimeZone is null
+            ? value
+            : TimeZoneInfo.ConvertTime(value, homeTimeZone);
         var minute = period == HomeAssistantStatisticPeriod.FiveMinute
-            ? value.Minute - value.Minute % 5
+            ? localValue.Minute - localValue.Minute % 5
             : 0;
-        var start = period switch
+        if (homeTimeZone is null)
         {
-            HomeAssistantStatisticPeriod.FiveMinute => new DateTimeOffset(
-                value.Year, value.Month, value.Day, value.Hour, minute, 0, value.Offset),
-            HomeAssistantStatisticPeriod.Hour => new DateTimeOffset(
-                value.Year, value.Month, value.Day, value.Hour, 0, 0, value.Offset),
-            HomeAssistantStatisticPeriod.Day => new DateTimeOffset(
-                value.Year, value.Month, value.Day, 0, 0, 0, value.Offset),
-            HomeAssistantStatisticPeriod.Week => new DateTimeOffset(
-                value.Year, value.Month, value.Day, 0, 0, 0, value.Offset)
-                .AddDays(-((7 + (int)value.DayOfWeek - (int)DayOfWeek.Monday) % 7)),
-            HomeAssistantStatisticPeriod.Month => new DateTimeOffset(
-                value.Year, value.Month, 1, 0, 0, 0, value.Offset),
+            return period switch
+            {
+                HomeAssistantStatisticPeriod.FiveMinute => new DateTimeOffset(
+                    localValue.Year, localValue.Month, localValue.Day, localValue.Hour, minute, 0, localValue.Offset),
+                HomeAssistantStatisticPeriod.Hour => new DateTimeOffset(
+                    localValue.Year, localValue.Month, localValue.Day, localValue.Hour, 0, 0, localValue.Offset),
+                _ => throw new ArgumentOutOfRangeException(nameof(period))
+            };
+        }
+
+        var localBoundary = period switch
+        {
+            HomeAssistantStatisticPeriod.Day => new DateTime(
+                localValue.Year, localValue.Month, localValue.Day, 0, 0, 0, DateTimeKind.Unspecified),
+            HomeAssistantStatisticPeriod.Week => new DateTime(
+                localValue.Year, localValue.Month, localValue.Day, 0, 0, 0, DateTimeKind.Unspecified)
+                .AddDays(-((7 + (int)localValue.DayOfWeek - (int)DayOfWeek.Monday) % 7)),
+            HomeAssistantStatisticPeriod.Month => new DateTime(
+                localValue.Year, localValue.Month, 1, 0, 0, 0, DateTimeKind.Unspecified),
             _ => throw new ArgumentOutOfRangeException(nameof(period))
         };
-        return start;
+        return ResolveLocalBoundary(localBoundary, homeTimeZone);
+    }
+
+    private static DateTimeOffset ResolveLocalBoundary(DateTime localBoundary, TimeZoneInfo homeTimeZone)
+    {
+        if (homeTimeZone.IsInvalidTime(localBoundary))
+        {
+            throw new HomeAssistantProtocolException(
+                "The requested statistics period begins at a time that does not exist in the Home Assistant time zone.");
+        }
+
+        var offset = homeTimeZone.IsAmbiguousTime(localBoundary)
+            ? homeTimeZone.GetAmbiguousTimeOffsets(localBoundary).Max()
+            : homeTimeZone.GetUtcOffset(localBoundary);
+        return new DateTimeOffset(localBoundary, offset);
     }
 
     private static string PeriodName(HomeAssistantStatisticPeriod value) => value switch

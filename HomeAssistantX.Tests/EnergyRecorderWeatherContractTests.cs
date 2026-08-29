@@ -1546,6 +1546,25 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderMonthlyStatisticsResolveTheBucketOffsetAtTheBoundary()
+    {
+        var queryStart = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.FromHours(-5));
+        var rowStart = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.FromHours(-4));
+        var rowEnd = new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.FromHours(-5));
+        using var server = new TestHomeAssistantServer
+        {
+            ConfigurationResponseJson = "{\"time_zone\":\"America/New_York\",\"components\":[]}",
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":"
+                + rowStart.ToUnixTimeMilliseconds() + ",\"end\":"
+                + rowEnd.ToUnixTimeMilliseconds() + "}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Single(await client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(queryStart, HomeAssistantStatisticPeriod.Month, "sensor.energy")));
+    }
+
+    [Fact]
     public async Task RecorderStatisticsRejectDuplicateNormalizedUnitNamesBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();
