@@ -420,6 +420,25 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdWeightedSelectionCanReachEveryZeroWeightRecord()
+    {
+        var draws = new Queue<int>(new[] { 1, 0 });
+        var aggregate = new DnsDiscoveryAggregate(weightedSelector: maximum =>
+        {
+            var draw = draws.Dequeue();
+            Assert.InRange(draw, 0, maximum - 1);
+            return draw;
+        });
+        aggregate.AddInstance("Test._home-assistant._tcp.local");
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 0, "zero-a.local", 8123), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 0, "zero-b.local", 8123), aggregate);
+        DnsDiscoveryPacket.ReadInto(CreateSrvOnlyPacket(120, 1, 9, "positive.local", 8123), aggregate);
+
+        Assert.Equal("zero-b.local", Assert.Single(aggregate.Build()).HostName);
+        Assert.Empty(draws);
+    }
+
+    [Fact]
     public void DnsSdNoServiceSrvSuppressesTheAdvertisedInstance()
     {
         var aggregate = new DnsDiscoveryAggregate(clock: () => TimeSpan.Zero);
@@ -1755,6 +1774,36 @@ public sealed class StableControlAndAdapterContractTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             webhook.SendAsync("test", new Dictionary<string, object?> { ["value"] = "payload" }, cancellation.Token));
 
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task MobileAppWebhookCommandValidationObservesCancellationDuringNormalization()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "cancel-command",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/cancel-command")
+            });
+        using var cancellation = new CancellationTokenSource();
+        var command = new string(' ', 16_000_000);
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.TrySetResult(true);
+                await webhook.SendAsync(command, null, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
         Assert.Null(server.LastRequestBody);
     }
 

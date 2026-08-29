@@ -823,6 +823,16 @@ internal sealed class DnsDiscoveryAggregate
             .OrderBy(value => value.Weight == 0 ? 0 : 1)
             .ThenBy(value => value.DataKey, StringComparer.Ordinal)
             .ToArray();
+        var zeroWeightCount = candidates.TakeWhile(value => value.Weight == 0).Count();
+        if (zeroWeightCount > 1)
+        {
+            var rotation = _weightedSelector(zeroWeightCount);
+            if (rotation < 0 || rotation >= zeroWeightCount)
+                throw new InvalidOperationException("The weighted service selector returned an out-of-range value.");
+            var orderedZeroWeights = candidates.Take(zeroWeightCount).ToArray();
+            for (var index = 0; index < zeroWeightCount; index++)
+                candidates[index] = orderedZeroWeights[(index + rotation) % zeroWeightCount];
+        }
         var totalWeight = candidates.Sum(value => value.Weight);
         if (totalWeight == 0)
         {

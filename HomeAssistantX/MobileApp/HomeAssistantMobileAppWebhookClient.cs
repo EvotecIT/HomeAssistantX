@@ -104,9 +104,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     /// <summary>Calls a forward-compatible mobile-app webhook command. The command data is encrypted when the registration contains a secret.</summary>
     public async Task<JsonElement> SendAsync(string commandType, object? data, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(commandType)) throw new ArgumentException("A webhook command type is required.", nameof(commandType));
-        cancellationToken.ThrowIfCancellationRequested();
-        var command = commandType.Trim();
+        var command = RequireCommandType(commandType, cancellationToken);
         var frozenData = data is null
             ? HomeAssistantJson.FreezeValue(new Dictionary<string, object?>(), nameof(data), "Data", cancellationToken)
             : HomeAssistantJson.FreezeValue(data, nameof(data), "Data", cancellationToken);
@@ -289,6 +287,31 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         {
             throw new HomeAssistantConnectionException("The Home Assistant mobile-app webhook response could not be read.", ex);
         }
+    }
+
+    private static string RequireCommandType(string commandType, CancellationToken cancellationToken)
+    {
+        if (commandType is null) throw new ArgumentNullException(nameof(commandType));
+        cancellationToken.ThrowIfCancellationRequested();
+        var start = 0;
+        while (start < commandType.Length && char.IsWhiteSpace(commandType[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+
+        var end = commandType.Length - 1;
+        while (end >= start && char.IsWhiteSpace(commandType[end]))
+        {
+            if (((commandType.Length - 1 - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (end < start) throw new ArgumentException("A webhook command type is required.", nameof(commandType));
+        return start == 0 && end == commandType.Length - 1
+            ? commandType
+            : commandType.Substring(start, end - start + 1);
     }
 
     public void Dispose()
