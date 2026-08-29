@@ -146,18 +146,20 @@ public sealed class HomeAssistantWeatherClient
             if (property.Value.ValueKind != JsonValueKind.Array)
                 throw new HomeAssistantProtocolException("A weather convertible-unit list was not an array.");
             var names = new List<string>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var item in property.Value.EnumerateArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var name = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
-                HomeAssistantJson.ThrowIfStringTraversalCanceled(name, cancellationToken);
                 if (name is null
-                    || string.IsNullOrWhiteSpace(name)
-                    || !string.Equals(name, name.Trim(), StringComparison.Ordinal))
+                    || name.Length == 0
+                    || char.IsWhiteSpace(name[0])
+                    || char.IsWhiteSpace(name[name.Length - 1]))
                     throw new HomeAssistantProtocolException("A weather convertible-unit list contained a noncanonical value.");
-                if (!seen.Add(name))
-                    throw new HomeAssistantProtocolException("A weather convertible-unit list contained a duplicate value.");
+                foreach (var existing in names)
+                {
+                    if (CancellationAwareString.EqualsOrdinal(existing, name, cancellationToken))
+                        throw new HomeAssistantProtocolException("A weather convertible-unit list contained a duplicate value.");
+                }
                 names.Add(name);
             }
             result[property.Name] = names;
