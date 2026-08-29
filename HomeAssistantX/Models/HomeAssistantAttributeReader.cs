@@ -8,13 +8,19 @@ namespace HomeAssistantX.Models;
 internal static class HomeAssistantAttributeReader
 {
     public static string? GetString(IReadOnlyDictionary<string, JsonElement> attributes, string name)
+        => GetString(attributes, name, default);
+
+    internal static string? GetString(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        CancellationToken cancellationToken)
     {
-        if (!TryGetValue(attributes, name, out var value))
+        if (!TryGetValue(attributes, name, out var value, cancellationToken))
         {
             return null;
         }
 
-        return value.ValueKind switch
+        var result = value.ValueKind switch
         {
             JsonValueKind.String => value.GetString(),
             JsonValueKind.Number => value.GetRawText(),
@@ -22,11 +28,19 @@ internal static class HomeAssistantAttributeReader
             JsonValueKind.False => "false",
             _ => null
         };
+        ObserveString(result, cancellationToken);
+        return result;
     }
 
     public static double? GetDouble(IReadOnlyDictionary<string, JsonElement> attributes, string name)
+        => GetDouble(attributes, name, default);
+
+    internal static double? GetDouble(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        CancellationToken cancellationToken)
     {
-        if (!TryGetValue(attributes, name, out var value))
+        if (!TryGetValue(attributes, name, out var value, cancellationToken))
         {
             return null;
         }
@@ -36,8 +50,10 @@ internal static class HomeAssistantAttributeReader
             return IsFinite(number) ? number : null;
         }
 
-        if (value.ValueKind == JsonValueKind.String
-            && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number)
+        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        ObserveString(text, cancellationToken);
+        if (text is not null
+            && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out number)
             && IsFinite(number))
         {
             return number;
@@ -47,8 +63,14 @@ internal static class HomeAssistantAttributeReader
     }
 
     public static long? GetInt64(IReadOnlyDictionary<string, JsonElement> attributes, string name)
+        => GetInt64(attributes, name, default);
+
+    internal static long? GetInt64(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        CancellationToken cancellationToken)
     {
-        if (!TryGetValue(attributes, name, out var value))
+        if (!TryGetValue(attributes, name, out var value, cancellationToken))
         {
             return null;
         }
@@ -59,8 +81,9 @@ internal static class HomeAssistantAttributeReader
             return integer;
         }
 
-        if (value.ValueKind == JsonValueKind.String
-            && TryParseIntegralInt64(value.GetString(), out integer))
+        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        ObserveString(text, cancellationToken);
+        if (text is not null && TryParseIntegralInt64(text, out integer))
         {
             return integer;
         }
@@ -71,8 +94,14 @@ internal static class HomeAssistantAttributeReader
     public static long? GetNonNegativeInt64(
         IReadOnlyDictionary<string, JsonElement> attributes,
         string name)
+        => GetNonNegativeInt64(attributes, name, default);
+
+    internal static long? GetNonNegativeInt64(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        CancellationToken cancellationToken)
     {
-        var value = GetInt64(attributes, name);
+        var value = GetInt64(attributes, name, cancellationToken);
         return value >= 0 ? value : null;
     }
 
@@ -87,21 +116,31 @@ internal static class HomeAssistantAttributeReader
     }
 
     public static bool? GetBoolean(IReadOnlyDictionary<string, JsonElement> attributes, string name)
+        => GetBoolean(attributes, name, default);
+
+    internal static bool? GetBoolean(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        CancellationToken cancellationToken)
     {
-        if (!TryGetValue(attributes, name, out var value))
+        if (!TryGetValue(attributes, name, out var value, cancellationToken))
         {
             return null;
         }
 
-        return value.ValueKind switch
+        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        ObserveString(text, cancellationToken);
+        bool? parsed = value.ValueKind switch
         {
             JsonValueKind.True => true,
             JsonValueKind.False => false,
-            JsonValueKind.String when bool.TryParse(value.GetString(), out var result) => result,
-            JsonValueKind.String when string.Equals(value.GetString(), "yes", StringComparison.OrdinalIgnoreCase) => true,
-            JsonValueKind.String when string.Equals(value.GetString(), "no", StringComparison.OrdinalIgnoreCase) => false,
+            JsonValueKind.String when bool.TryParse(text, out var parsedBoolean) => parsedBoolean,
+            JsonValueKind.String when string.Equals(text, "yes", StringComparison.OrdinalIgnoreCase) => true,
+            JsonValueKind.String when string.Equals(text, "no", StringComparison.OrdinalIgnoreCase) => false,
             _ => null
         };
+        cancellationToken.ThrowIfCancellationRequested();
+        return parsed;
     }
 
     public static IReadOnlyList<string> GetStringList(
@@ -115,8 +154,9 @@ internal static class HomeAssistantAttributeReader
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!TryGetValue(attributes, name, out var value) || value.ValueKind != JsonValueKind.Array)
+        if (!TryGetValue(attributes, name, out var value, cancellationToken) || value.ValueKind != JsonValueKind.Array)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Array.Empty<string>();
         }
 
@@ -126,7 +166,7 @@ internal static class HomeAssistantAttributeReader
             cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind == JsonValueKind.String
                 && item.GetString() is string text
-                && !string.IsNullOrWhiteSpace(text))
+                && HasNonWhitespace(text, cancellationToken))
             {
                 result.Add(text);
             }
@@ -139,12 +179,46 @@ internal static class HomeAssistantAttributeReader
     public static DateTimeOffset? GetDateTimeOffset(
         IReadOnlyDictionary<string, JsonElement> attributes,
         string name)
+        => GetDateTimeOffset(attributes, name, default);
+
+    internal static DateTimeOffset? GetDateTimeOffset(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        CancellationToken cancellationToken)
     {
-        return TryGetValue(attributes, name, out var value)
-            && value.ValueKind == JsonValueKind.String
-            && HomeAssistantTimestamp.TryParse(value.GetString(), out var result)
+        if (!TryGetValue(attributes, name, out var value, cancellationToken)
+            || value.ValueKind != JsonValueKind.String)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return null;
+        }
+        var text = value.GetString();
+        ObserveString(text, cancellationToken);
+        return HomeAssistantTimestamp.TryParse(text, out var result)
             ? result
             : null;
+    }
+
+    private static bool HasNonWhitespace(string value, CancellationToken cancellationToken)
+    {
+        var found = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            found |= !char.IsWhiteSpace(value[index]);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return found;
+    }
+
+    private static void ObserveString(string? value, CancellationToken cancellationToken)
+    {
+        if (value is null) return;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static bool IsFinite(double value)
@@ -238,10 +312,19 @@ internal static class HomeAssistantAttributeReader
     private static bool IsAsciiDigit(char value) => value >= '0' && value <= '9';
 
     internal static bool TryGetValue(IReadOnlyDictionary<string, JsonElement> attributes, string name, out JsonElement value)
+        => TryGetValue(attributes, name, out value, default);
+
+    internal static bool TryGetValue(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        out JsonElement value,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (attributes.TryGetValue(name, out value)) return true;
         foreach (var attribute in attributes)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.Equals(attribute.Key, name, StringComparison.OrdinalIgnoreCase))
             {
                 value = attribute.Value;
@@ -250,6 +333,7 @@ internal static class HomeAssistantAttributeReader
         }
 
         value = default;
+        cancellationToken.ThrowIfCancellationRequested();
         return false;
     }
 }

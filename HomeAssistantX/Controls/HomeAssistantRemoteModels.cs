@@ -151,9 +151,9 @@ public sealed class HomeAssistantRemoteStatus
                 : string.Equals(state.State, "off", StringComparison.OrdinalIgnoreCase)
                     ? false
                     : null,
-            FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name"),
-            SupportedFeatures = (HomeAssistantRemoteFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features") ?? 0),
-            CurrentActivity = HomeAssistantAttributeReader.GetString(attributes, "current_activity"),
+            FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name", cancellationToken),
+            SupportedFeatures = (HomeAssistantRemoteFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features", cancellationToken) ?? 0),
+            CurrentActivity = HomeAssistantAttributeReader.GetString(attributes, "current_activity", cancellationToken),
             Activities = HomeAssistantAttributeReader.GetStringList(attributes, "activity_list", cancellationToken)
         };
     }

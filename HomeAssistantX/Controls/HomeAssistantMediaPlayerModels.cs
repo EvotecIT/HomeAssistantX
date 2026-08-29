@@ -318,46 +318,46 @@ public sealed class HomeAssistantMediaPlayerStatus
         }
 
         var attributes = state.Attributes;
-        var duration = HomeAssistantAttributeReader.GetDouble(attributes, "media_duration");
-        var position = HomeAssistantAttributeReader.GetDouble(attributes, "media_position");
+        var duration = HomeAssistantAttributeReader.GetDouble(attributes, "media_duration", cancellationToken);
+        var position = HomeAssistantAttributeReader.GetDouble(attributes, "media_position", cancellationToken);
         return new HomeAssistantMediaPlayerStatus(state)
         {
             State = ParseState(state.State),
-            FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name"),
-            DeviceClass = HomeAssistantAttributeReader.GetString(attributes, "device_class"),
-            SupportedFeatures = (HomeAssistantMediaPlayerFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features") ?? 0),
-            VolumeLevel = GetNormalizedVolume(attributes, "volume_level"),
-            VolumeStep = GetNormalizedVolume(attributes, "volume_step"),
-            IsVolumeMuted = HomeAssistantAttributeReader.GetBoolean(attributes, "is_volume_muted"),
-            Source = HomeAssistantAttributeReader.GetString(attributes, "source"),
+            FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name", cancellationToken),
+            DeviceClass = HomeAssistantAttributeReader.GetString(attributes, "device_class", cancellationToken),
+            SupportedFeatures = (HomeAssistantMediaPlayerFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features", cancellationToken) ?? 0),
+            VolumeLevel = GetNormalizedVolume(attributes, "volume_level", cancellationToken),
+            VolumeStep = GetNormalizedVolume(attributes, "volume_step", cancellationToken),
+            IsVolumeMuted = HomeAssistantAttributeReader.GetBoolean(attributes, "is_volume_muted", cancellationToken),
+            Source = HomeAssistantAttributeReader.GetString(attributes, "source", cancellationToken),
             Sources = HomeAssistantAttributeReader.GetStringList(attributes, "source_list", cancellationToken),
-            SoundMode = HomeAssistantAttributeReader.GetString(attributes, "sound_mode"),
+            SoundMode = HomeAssistantAttributeReader.GetString(attributes, "sound_mode", cancellationToken),
             SoundModes = HomeAssistantAttributeReader.GetStringList(attributes, "sound_mode_list", cancellationToken),
-            MediaContentId = HomeAssistantAttributeReader.GetString(attributes, "media_content_id"),
-            MediaContentType = HomeAssistantAttributeReader.GetString(attributes, "media_content_type"),
+            MediaContentId = HomeAssistantAttributeReader.GetString(attributes, "media_content_id", cancellationToken),
+            MediaContentType = HomeAssistantAttributeReader.GetString(attributes, "media_content_type", cancellationToken),
             MediaDuration = ToTimeSpan(duration),
             MediaPosition = ToTimeSpan(position),
-            MediaPositionUpdatedAt = HomeAssistantAttributeReader.GetDateTimeOffset(attributes, "media_position_updated_at"),
-            MediaTitle = HomeAssistantAttributeReader.GetString(attributes, "media_title"),
-            MediaArtist = HomeAssistantAttributeReader.GetString(attributes, "media_artist"),
-            MediaAlbumName = HomeAssistantAttributeReader.GetString(attributes, "media_album_name"),
-            MediaAlbumArtist = HomeAssistantAttributeReader.GetString(attributes, "media_album_artist"),
-            MediaTrack = HomeAssistantAttributeReader.GetInt64(attributes, "media_track"),
-            MediaSeriesTitle = HomeAssistantAttributeReader.GetString(attributes, "media_series_title"),
-            MediaSeason = HomeAssistantAttributeReader.GetString(attributes, "media_season"),
-            MediaEpisode = HomeAssistantAttributeReader.GetString(attributes, "media_episode"),
-            MediaChannel = HomeAssistantAttributeReader.GetString(attributes, "media_channel"),
-            MediaPlaylist = HomeAssistantAttributeReader.GetString(attributes, "media_playlist"),
-            AppId = HomeAssistantAttributeReader.GetString(attributes, "app_id"),
-            AppName = HomeAssistantAttributeReader.GetString(attributes, "app_name"),
-            Shuffle = HomeAssistantAttributeReader.GetBoolean(attributes, "shuffle"),
-            Repeat = HomeAssistantAttributeReader.GetString(attributes, "repeat"),
+            MediaPositionUpdatedAt = HomeAssistantAttributeReader.GetDateTimeOffset(attributes, "media_position_updated_at", cancellationToken),
+            MediaTitle = HomeAssistantAttributeReader.GetString(attributes, "media_title", cancellationToken),
+            MediaArtist = HomeAssistantAttributeReader.GetString(attributes, "media_artist", cancellationToken),
+            MediaAlbumName = HomeAssistantAttributeReader.GetString(attributes, "media_album_name", cancellationToken),
+            MediaAlbumArtist = HomeAssistantAttributeReader.GetString(attributes, "media_album_artist", cancellationToken),
+            MediaTrack = HomeAssistantAttributeReader.GetInt64(attributes, "media_track", cancellationToken),
+            MediaSeriesTitle = HomeAssistantAttributeReader.GetString(attributes, "media_series_title", cancellationToken),
+            MediaSeason = HomeAssistantAttributeReader.GetString(attributes, "media_season", cancellationToken),
+            MediaEpisode = HomeAssistantAttributeReader.GetString(attributes, "media_episode", cancellationToken),
+            MediaChannel = HomeAssistantAttributeReader.GetString(attributes, "media_channel", cancellationToken),
+            MediaPlaylist = HomeAssistantAttributeReader.GetString(attributes, "media_playlist", cancellationToken),
+            AppId = HomeAssistantAttributeReader.GetString(attributes, "app_id", cancellationToken),
+            AppName = HomeAssistantAttributeReader.GetString(attributes, "app_name", cancellationToken),
+            Shuffle = HomeAssistantAttributeReader.GetBoolean(attributes, "shuffle", cancellationToken),
+            Repeat = HomeAssistantAttributeReader.GetString(attributes, "repeat", cancellationToken),
             GroupMembers = GetGroupMembers(attributes, cancellationToken),
-            MediaImageUrl = HomeAssistantAttributeReader.GetString(attributes, "media_image_url"),
-            EntityPicture = HomeAssistantAttributeReader.GetString(attributes, "entity_picture"),
-            EntityPictureLocal = HomeAssistantAttributeReader.GetString(attributes, "entity_picture_local"),
-            Manufacturer = HomeAssistantAttributeReader.GetString(attributes, "manufacturer"),
-            ModelName = HomeAssistantAttributeReader.GetString(attributes, "model_name")
+            MediaImageUrl = HomeAssistantAttributeReader.GetString(attributes, "media_image_url", cancellationToken),
+            EntityPicture = HomeAssistantAttributeReader.GetString(attributes, "entity_picture", cancellationToken),
+            EntityPictureLocal = HomeAssistantAttributeReader.GetString(attributes, "entity_picture_local", cancellationToken),
+            Manufacturer = HomeAssistantAttributeReader.GetString(attributes, "manufacturer", cancellationToken),
+            ModelName = HomeAssistantAttributeReader.GetString(attributes, "model_name", cancellationToken)
         };
     }
 
@@ -378,13 +378,18 @@ public sealed class HomeAssistantMediaPlayerStatus
         };
     }
 
-    private static IReadOnlyList<string> GetGroupMembers(
+    internal static IReadOnlyList<string> GetGroupMembers(
         IReadOnlyDictionary<string, JsonElement> attributes,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!HomeAssistantAttributeReader.TryGetValue(attributes, "group_members", out var value))
+        if (!HomeAssistantAttributeReader.TryGetValue(
+                attributes,
+                "group_members",
+                out var value,
+                cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return Array.Empty<string>();
         }
 
@@ -415,9 +420,10 @@ public sealed class HomeAssistantMediaPlayerStatus
 
     private static double? GetNormalizedVolume(
         IReadOnlyDictionary<string, System.Text.Json.JsonElement> attributes,
-        string name)
+        string name,
+        CancellationToken cancellationToken)
     {
-        var value = HomeAssistantAttributeReader.GetDouble(attributes, name);
+        var value = HomeAssistantAttributeReader.GetDouble(attributes, name, cancellationToken);
         return value.HasValue && value.Value >= 0d && value.Value <= 1d ? value : null;
     }
 

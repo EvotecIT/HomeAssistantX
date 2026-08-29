@@ -10,6 +10,39 @@ namespace HomeAssistantX.Tests;
 public sealed class MediaAndRemoteContractTests
 {
     [Fact]
+    public async Task SharedOptionalAttributeTraversalObservesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var attributes = new CancellationProbeAttributeDictionary(cancellation, "activity_list");
+        var operation = Task.Factory.StartNew(
+            () => HomeAssistantAttributeReader.GetStringList(
+                attributes,
+                "activity_list",
+                cancellation.Token),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        Assert.InRange(attributes.ReadCount, 1, 64);
+    }
+
+    [Fact]
+    public async Task MediaGroupMemberLookupStopsAtCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var attributes = new CancellationProbeAttributeDictionary(cancellation);
+        var operation = Task.Factory.StartNew(
+            () => HomeAssistantMediaPlayerStatus.GetGroupMembers(attributes, cancellation.Token),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        Assert.InRange(attributes.ReadCount, 1, 64);
+    }
+
+    [Fact]
     public void MediaStatusParsesFeaturesMetadataAndForwardCompatibleRawAttributes()
     {
         var raw = DeserializeState(MediaPlayingStateJson);
@@ -1330,6 +1363,56 @@ public sealed class MediaAndRemoteContractTests
                 if (ReadCount == 1) _cancellation.Cancel();
                 if (ReadCount > 64) throw new InvalidOperationException("Enumeration continued after cancellation.");
                 yield return _value;
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+
+    private sealed class CancellationProbeAttributeDictionary : IReadOnlyDictionary<string, JsonElement>
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private readonly string _missingKey;
+
+        internal CancellationProbeAttributeDictionary(
+            CancellationTokenSource cancellation,
+            string missingKey = "group_members")
+        {
+            _cancellation = cancellation;
+            _missingKey = missingKey;
+        }
+
+        internal int ReadCount { get; private set; }
+
+        public int Count => 1000;
+
+        public IEnumerable<string> Keys => throw new NotSupportedException();
+
+        public IEnumerable<JsonElement> Values => throw new NotSupportedException();
+
+        public JsonElement this[string key] => default;
+
+        public bool ContainsKey(string key) => !string.Equals(key, _missingKey, StringComparison.Ordinal);
+
+        public bool TryGetValue(string key, out JsonElement value)
+        {
+            value = default;
+            return !string.Equals(key, _missingKey, StringComparison.Ordinal);
+        }
+
+        public IEnumerator<KeyValuePair<string, JsonElement>> GetEnumerator()
+        {
+            for (var index = 0; index < Count; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 64)
+                {
+                    throw new InvalidOperationException("Attribute traversal continued after cancellation.");
+                }
+
+                yield return new KeyValuePair<string, JsonElement>("provider_" + index, default);
             }
         }
 
