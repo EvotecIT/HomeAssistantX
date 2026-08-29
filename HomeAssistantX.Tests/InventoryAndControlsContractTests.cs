@@ -472,6 +472,62 @@ public sealed class InventoryAndControlsContractTests
         });
     }
 
+    [Fact]
+    public async Task CompoundClimateControlPinsOneRequestTimeoutBeforeTargetPreparation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(3));
+        var target = new HomeAssistantTarget
+        {
+            EntityIds = new MutatingTargetList(
+                () => client.Options.RequestTimeout = TimeSpan.Zero,
+                "climate.living_room")
+        };
+
+        var results = await client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { Temperature = 21, FanMode = "auto" });
+
+        Assert.Equal(2, results.Count);
+    }
+
+    private sealed class MutatingTargetList : IReadOnlyList<string>
+    {
+        private readonly Action _onRead;
+        private readonly string _value;
+        private int _read;
+
+        internal MutatingTargetList(Action onRead, string value)
+        {
+            _onRead = onRead;
+            _value = value;
+        }
+
+        public int Count => 1;
+
+        public string this[int index]
+        {
+            get
+            {
+                MutateOnce();
+                return _value;
+            }
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            MutateOnce();
+            yield return _value;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        private void MutateOnce()
+        {
+            if (Interlocked.Exchange(ref _read, 1) == 0) _onRead();
+        }
+    }
+
     private sealed class SingleEnumerationList : IReadOnlyList<string>
     {
         private readonly string[] _values;

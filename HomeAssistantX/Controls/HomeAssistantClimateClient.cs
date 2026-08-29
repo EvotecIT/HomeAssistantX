@@ -36,9 +36,9 @@ public sealed class HomeAssistantClimateClient : HomeAssistantControlClientBase
             throw new ArgumentException("At least one climate value is required.", nameof(options));
         }
 
+        var context = CaptureContext(cancellationToken);
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
             .NormalizeForDomain(Domain, cancellationToken);
-        var context = CaptureContext(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (hasTemperature)
         {
