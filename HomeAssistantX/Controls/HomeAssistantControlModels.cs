@@ -83,6 +83,8 @@ public sealed class HomeAssistantLightOptions
         set => _transition = ControlValidation.Duration(value, nameof(Transition), TimeSpan.FromSeconds(6553));
     }
 
+    internal void SetValidatedEffect(string? value) => _effect = value;
+
     internal void Apply(HomeAssistantX.Services.HomeAssistantServiceCall call)
     {
         if (BrightnessPercent.HasValue)

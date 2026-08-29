@@ -476,6 +476,8 @@ public sealed class PublicApiCompatibilityTests
 
         var property = typeof(MarshalAsPropertyFixture).GetProperty(nameof(MarshalAsPropertyFixture.Enabled))!;
         Assert.Contains("marshal-as(type=Bool", FormatProperty(property), StringComparison.Ordinal);
+        var settable = typeof(MarshalAsPropertyFixture).GetProperty(nameof(MarshalAsPropertyFixture.Settable))!;
+        Assert.Contains("set-marshal-as(type=Bool", FormatProperty(settable), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -637,6 +639,23 @@ public sealed class PublicApiCompatibilityTests
 
         Assert.Equal("get;set;", FormatPropertyAccessors(mutable));
         Assert.Equal("get;init;", FormatPropertyAccessors(initOnly));
+    }
+
+    [Fact]
+    public void PropertyFormatterPreservesAccessorAbiAndIndependentDispatch()
+    {
+        var property = typeof(AccessorAbiFixture).GetProperty(nameof(AccessorAbiFixture.Enabled))!;
+        var accessors = FormatPropertyAccessors(property);
+
+        Assert.Contains("dispid(47) preserve-sig get;", accessors, StringComparison.Ordinal);
+        Assert.Contains("dispid(48) preserve-sig set;", accessors, StringComparison.Ordinal);
+
+        var overridden = typeof(AccessorDispatchDerivedFixture)
+            .GetProperty(nameof(AccessorDispatchDerivedFixture.Value))!
+            .GetMethod!;
+        Assert.Equal(
+            "override get;",
+            FormatAccessor(overridden, MemberAccess(overridden), "instance", "get;"));
     }
 
     [Fact]
@@ -1465,6 +1484,37 @@ public sealed class PublicApiCompatibilityTests
             [return: MarshalAs(UnmanagedType.Bool)]
             get => true;
         }
+
+        public bool Settable
+        {
+            get => true;
+            [param: MarshalAs(UnmanagedType.Bool)]
+            set { }
+        }
+    }
+
+    private sealed class AccessorAbiFixture
+    {
+        public bool Enabled
+        {
+            [DispId(47)]
+            [PreserveSig]
+            get => true;
+
+            [DispId(48)]
+            [PreserveSig]
+            set { }
+        }
+    }
+
+    private class AccessorDispatchBaseFixture
+    {
+        public virtual int Value { get; protected set; }
+    }
+
+    private sealed class AccessorDispatchDerivedFixture : AccessorDispatchBaseFixture
+    {
+        public override int Value { get; protected set; }
     }
 
     [Obsolete("Warning-only compatibility contract")]
@@ -2311,8 +2361,10 @@ public sealed class PublicApiCompatibilityTests
 
     private static string FormatPropertyAccessors(PropertyInfo property)
     {
-        var propertyAccess = MemberAccess(MostAccessible(property.GetMethod, property.SetMethod)!);
-        var getter = FormatAccessor(property.GetMethod, propertyAccess, "get;");
+        var representativeAccessor = MostAccessible(property.GetMethod, property.SetMethod)!;
+        var propertyAccess = MemberAccess(representativeAccessor);
+        var propertyScope = MemberScope(representativeAccessor);
+        var getter = FormatAccessor(property.GetMethod, propertyAccess, propertyScope, "get;");
         if (!IsExternallyAccessibleMethod(property.SetMethod)) return getter;
 
         var isInitOnly = property.SetMethod!.ReturnParameter
@@ -2321,14 +2373,16 @@ public sealed class PublicApiCompatibilityTests
                 modifier.FullName,
                 "System.Runtime.CompilerServices.IsExternalInit",
                 StringComparison.Ordinal));
-        return getter + FormatAccessor(property.SetMethod, propertyAccess, isInitOnly ? "init;" : "set;");
+        return getter + FormatAccessor(property.SetMethod, propertyAccess, propertyScope, isInitOnly ? "init;" : "set;");
     }
 
     private static string FormatEventAccessors(EventInfo eventInfo)
     {
-        var eventAccess = MemberAccess(MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!);
-        return FormatAccessor(eventInfo.AddMethod, eventAccess, "add;")
-            + FormatAccessor(eventInfo.RemoveMethod, eventAccess, "remove;");
+        var representativeAccessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
+        var eventAccess = MemberAccess(representativeAccessor);
+        var eventScope = MemberScope(representativeAccessor);
+        return FormatAccessor(eventInfo.AddMethod, eventAccess, eventScope, "add;")
+            + FormatAccessor(eventInfo.RemoveMethod, eventAccess, eventScope, "remove;");
     }
 
     private static string RequiredMember(MemberInfo member)
@@ -2402,11 +2456,26 @@ public sealed class PublicApiCompatibilityTests
     private static string FieldAccess(FieldInfo field)
         => field.IsPublic ? string.Empty : field.IsFamilyOrAssembly ? "protected internal " : "protected ";
 
-    private static string FormatAccessor(MethodInfo? accessor, string propertyAccess, string text)
+    private static string FormatAccessor(
+        MethodInfo? accessor,
+        string propertyAccess,
+        string propertyScope,
+        string text)
     {
         if (!IsExternallyAccessibleMethod(accessor)) return string.Empty;
         var accessorAccess = MemberAccess(accessor!);
-        return (string.Equals(accessorAccess, propertyAccess, StringComparison.Ordinal) ? string.Empty : accessorAccess) + text;
+        var accessorScope = MemberScope(accessor!);
+        var independentScope = string.Equals(accessorScope, propertyScope, StringComparison.Ordinal)
+            ? string.Empty
+            : accessorScope + " ";
+        return (string.Equals(accessorAccess, propertyAccess, StringComparison.Ordinal) ? string.Empty : accessorAccess)
+            + independentScope
+            + DispIdContract(accessor!)
+            + DllImportContract(accessor!)
+            + PreserveSigContract(accessor!)
+            + UnmanagedCallersOnlyContract(accessor!)
+            + UnmanagedCallConvContract(accessor!)
+            + text;
     }
 
     private static string FormatParameters(IEnumerable<ParameterInfo> parameters) => string.Join(", ", parameters.Select(parameter =>
@@ -2607,9 +2676,10 @@ public sealed class PublicApiCompatibilityTests
             : NamedFlowContract("get", getter.ReturnParameter);
         var setterValue = setter?.GetParameters().LastOrDefault();
         var setterFlow = setterValue is null ? string.Empty : NamedFlowContract("set", setterValue);
+        var setterMarshalling = setterValue is null ? string.Empty : NamedMarshalAsContract("set", setterValue);
         if (property.PropertyType.IsByRef && property.GetMethod is not null)
         {
-            if (getter is not null) return propertyFlow + setterFlow + dynamicallyAccessedMembers + FormatReturnType(getter, property);
+            if (getter is not null) return propertyFlow + setterFlow + setterMarshalling + dynamicallyAccessedMembers + FormatReturnType(getter, property);
             var parameter = property.GetMethod.ReturnParameter;
             var safety = RefSafetyPrefix(parameter)
                 + (HasAttribute(property, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
@@ -2618,18 +2688,24 @@ public sealed class PublicApiCompatibilityTests
                     modifier.FullName,
                     "System.Runtime.InteropServices.InAttribute",
                     StringComparison.Ordinal));
-            return propertyFlow + setterFlow + dynamicallyAccessedMembers + safety + (readOnly ? "ref readonly " : "ref ")
+            return propertyFlow + setterFlow + setterMarshalling + dynamicallyAccessedMembers + safety + (readOnly ? "ref readonly " : "ref ")
                 + FormatAnnotatedType(property.PropertyType.GetElementType()!, parameter);
         }
         var safetyPrefix = HasAttribute(property, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty;
         var returnMarshalling = getter is null ? string.Empty : MarshalAsContract(getter.ReturnParameter);
-        return propertyFlow + getterFlow + setterFlow + dynamicallyAccessedMembers + safetyPrefix + returnMarshalling + FormatAnnotatedType(property.PropertyType, property);
+        return propertyFlow + getterFlow + setterFlow + setterMarshalling + dynamicallyAccessedMembers + safetyPrefix + returnMarshalling + FormatAnnotatedType(property.PropertyType, property);
     }
 
     private static string NamedFlowContract(string name, ICustomAttributeProvider provider)
     {
         var contract = NullableFlowContract(provider).TrimEnd();
         return contract.Length == 0 ? string.Empty : name + "-flow(" + contract + ") ";
+    }
+
+    private static string NamedMarshalAsContract(string name, ICustomAttributeProvider provider)
+    {
+        var contract = MarshalAsContract(provider).TrimEnd();
+        return contract.Length == 0 ? string.Empty : name + "-" + contract + " ";
     }
 
     private static string NamedMethodFlowContract(string name, ICustomAttributeProvider? provider)

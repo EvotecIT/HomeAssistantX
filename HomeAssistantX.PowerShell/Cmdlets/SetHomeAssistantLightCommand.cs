@@ -51,10 +51,11 @@ public sealed class SetHomeAssistantLightCommand : HomeAssistantTargetCmdlet
         }
 
         var transition = TransitionSeconds.HasValue ? TimeSpan.FromSeconds(TransitionSeconds.Value) : (TimeSpan?)null;
-        var options = CreateOptions(transition);
+        var effect = Effect is null ? null : ControlValidation.RequiredUnchanged(Effect, nameof(Effect), CancelToken);
+        var options = CreateOptions(transition, effect);
         var target = await ResolveTargetAsync("light").ConfigureAwait(false);
         if (Power == HomeAssistantPowerAction.Off
-            && (BrightnessPercent.HasValue || ColorTemperatureKelvin.HasValue || RgbColor is not null || !string.IsNullOrWhiteSpace(Effect)))
+            && (BrightnessPercent.HasValue || ColorTemperatureKelvin.HasValue || RgbColor is not null || effect is not null))
         {
             throw new ArgumentException("Brightness, color, and effect parameters require -Power On or Toggle.");
         }
@@ -83,15 +84,16 @@ public sealed class SetHomeAssistantLightCommand : HomeAssistantTargetCmdlet
         WriteObject(result);
     }
 
-    private HomeAssistantLightOptions CreateOptions(TimeSpan? transition)
+    private HomeAssistantLightOptions CreateOptions(TimeSpan? transition, string? effect)
     {
-        return new HomeAssistantLightOptions
+        var options = new HomeAssistantLightOptions
         {
             BrightnessPercent = BrightnessPercent,
             ColorTemperatureKelvin = ColorTemperatureKelvin,
             RgbColor = RgbColor,
-            Effect = Effect,
             Transition = transition
         };
+        options.SetValidatedEffect(effect);
+        return options;
     }
 }

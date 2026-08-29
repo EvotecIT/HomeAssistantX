@@ -51,7 +51,7 @@ public sealed class SetHomeAssistantHelperCommand : HomeAssistantTargetCmdlet
             + (Date.HasValue ? 1 : 0) + (Time.HasValue ? 1 : 0) + (DateTime.HasValue ? 1 : 0);
         if (operationCount != 1) throw new ArgumentException("Specify exactly one helper value or adjustment.");
         if (MyInvocation.BoundParameters.ContainsKey(nameof(Cycle)) && !Next && !Previous) throw new ArgumentException("Cycle applies only to Next or Previous.", nameof(Cycle));
-        var normalizedOption = Option is null ? null : ControlValidation.RequiredUnchanged(Option, nameof(Option));
+        var normalizedOption = Option is null ? null : ControlValidation.RequiredUnchanged(Option, nameof(Option), CancelToken);
         var normalizedOptions = Options is null
             ? null
             : ControlValidation.RequiredValuesUnchanged(Options, nameof(Options), CancelToken);

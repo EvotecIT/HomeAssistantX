@@ -27,9 +27,7 @@ public sealed class SetHomeAssistantFanCommand : HomeAssistantTargetCmdlet
     {
         var presetMode = PresetMode is null
             ? null
-            : string.IsNullOrWhiteSpace(PresetMode)
-                ? throw new ArgumentException("PresetMode must not be blank.", nameof(PresetMode))
-                : PresetMode;
+            : ControlValidation.RequiredUnchanged(PresetMode, nameof(PresetMode), CancelToken);
         var count = (Action.HasValue ? 1 : 0) + (Percentage.HasValue ? 1 : 0) + (Oscillating.HasValue ? 1 : 0) + (Direction.HasValue ? 1 : 0) + (presetMode is not null ? 1 : 0);
         if (count != 1) throw new ArgumentException("Specify exactly one fan operation.");
         if (Action.HasValue && !Enum.IsDefined(typeof(HomeAssistantFanAction), Action.Value)) throw new ArgumentOutOfRangeException(nameof(Action));

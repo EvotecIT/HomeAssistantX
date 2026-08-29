@@ -20,18 +20,17 @@ public sealed class SetHomeAssistantWaterHeaterCommand : HomeAssistantTargetCmdl
     protected override async Task ProcessTargetRecordAsync()
     {
         if (Temperature.HasValue && (double.IsNaN(Temperature.Value) || double.IsInfinity(Temperature.Value))) throw new ArgumentOutOfRangeException(nameof(Temperature));
-        if (OperationMode is not null)
-        {
-            if (string.IsNullOrWhiteSpace(OperationMode)) throw new ArgumentException("A non-empty operation mode is required.", nameof(OperationMode));
-        }
+        var operationMode = OperationMode is null
+            ? null
+            : ControlValidation.RequiredUnchanged(OperationMode, nameof(OperationMode), CancelToken);
         var count = (Action.HasValue ? 1 : 0) + (Temperature.HasValue ? 1 : 0) + (!Temperature.HasValue && OperationMode is not null ? 1 : 0) + (AwayMode.HasValue ? 1 : 0);
         if (count != 1) throw new ArgumentException("Specify exactly one water-heater operation; OperationMode may accompany Temperature.");
         if (Action.HasValue && !Enum.IsDefined(typeof(HomeAssistantWaterHeaterAction), Action.Value)) throw new ArgumentOutOfRangeException(nameof(Action));
         var target = await ResolveTargetAsync("water_heater").ConfigureAwait(false);
         if (!ShouldProcess(target.Description, "Set water heater")) return;
         WriteObject(Action.HasValue ? await Client.Controls.WaterHeaters.ActAsync(target.Target, Action.Value, CancelToken).ConfigureAwait(false)
-            : Temperature.HasValue ? await Client.Controls.WaterHeaters.SetTemperatureAsync(target.Target, Temperature.Value, OperationMode, CancelToken).ConfigureAwait(false)
+            : Temperature.HasValue ? await Client.Controls.WaterHeaters.SetTemperatureAsync(target.Target, Temperature.Value, operationMode, CancelToken).ConfigureAwait(false)
             : AwayMode.HasValue ? await Client.Controls.WaterHeaters.SetAwayModeAsync(target.Target, AwayMode.Value, CancelToken).ConfigureAwait(false)
-            : await Client.Controls.WaterHeaters.SetOperationModeAsync(target.Target, OperationMode!, CancelToken).ConfigureAwait(false));
+            : await Client.Controls.WaterHeaters.SetOperationModeAsync(target.Target, operationMode!, CancelToken).ConfigureAwait(false));
     }
 }

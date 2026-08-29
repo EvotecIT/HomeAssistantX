@@ -71,6 +71,8 @@ public sealed class HomeAssistantSirenOptions
         }
     }
 
+    internal void SetValidatedTone(string? value) => _tone = value;
+
     internal void Apply(HomeAssistantServiceCall call)
     {
         if (Tone is not null) call.WithData("tone", Tone);

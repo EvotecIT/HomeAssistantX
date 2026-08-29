@@ -19,9 +19,7 @@ public sealed class SetHomeAssistantHumidifierCommand : HomeAssistantTargetCmdle
     {
         var mode = Mode is null
             ? null
-            : string.IsNullOrWhiteSpace(Mode)
-                ? throw new ArgumentException("Mode must not be blank.", nameof(Mode))
-                : Mode;
+            : ControlValidation.RequiredUnchanged(Mode, nameof(Mode), CancelToken);
         var count = (Action.HasValue ? 1 : 0) + (HumidityPercent.HasValue ? 1 : 0) + (mode is not null ? 1 : 0);
         if (count != 1) throw new ArgumentException("Specify exactly one humidifier operation.");
         if (Action.HasValue && !Enum.IsDefined(typeof(HomeAssistantHumidifierAction), Action.Value)) throw new ArgumentOutOfRangeException(nameof(Action));

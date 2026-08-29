@@ -22,11 +22,21 @@ public sealed class SetHomeAssistantSirenCommand : HomeAssistantTargetCmdlet
     protected override async Task ProcessTargetRecordAsync()
     {
         if (!Enum.IsDefined(typeof(HomeAssistantSirenAction), Action)) throw new ArgumentOutOfRangeException(nameof(Action));
-        if (Tone is not null && ToneId.HasValue) throw new ArgumentException("Tone and ToneId cannot be combined.");
-        var hasOptions = Tone is not null || ToneId.HasValue || VolumePercent.HasValue || Duration.HasValue;
+        var tone = Tone is null ? null : ControlValidation.RequiredUnchanged(Tone, nameof(Tone), CancelToken);
+        if (tone is not null && ToneId.HasValue) throw new ArgumentException("Tone and ToneId cannot be combined.");
+        var hasOptions = tone is not null || ToneId.HasValue || VolumePercent.HasValue || Duration.HasValue;
         if (hasOptions && Action != HomeAssistantSirenAction.TurnOn) throw new ArgumentException("Tone, volume, and duration apply only to TurnOn.");
-        if (Duration < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(Duration));
-        var options = hasOptions ? new HomeAssistantSirenOptions { Tone = Tone, ToneId = ToneId, VolumePercent = VolumePercent, Duration = Duration } : null;
+        if (Duration.HasValue
+            && (Duration.Value <= TimeSpan.Zero
+                || Duration.Value.TotalSeconds > int.MaxValue
+                || Duration.Value.TotalSeconds != Math.Truncate(Duration.Value.TotalSeconds)))
+            throw new ArgumentOutOfRangeException(nameof(Duration));
+        HomeAssistantSirenOptions? options = null;
+        if (hasOptions)
+        {
+            options = new HomeAssistantSirenOptions { ToneId = ToneId, VolumePercent = VolumePercent, Duration = Duration };
+            options.SetValidatedTone(tone);
+        }
         var target = await ResolveTargetAsync("siren").ConfigureAwait(false);
         if (ShouldProcess(target.Description, Action.ToString())) WriteObject(await Client.Controls.Sirens.ActAsync(target.Target, Action, options, CancelToken).ConfigureAwait(false));
     }

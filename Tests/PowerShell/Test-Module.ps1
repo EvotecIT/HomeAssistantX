@@ -873,6 +873,8 @@ try {
         if (-not $rejected) { throw "Invalid platform-data input was accepted under WhatIf: $invalidPlatformData" }
     }
 
+    $null = Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityGlob '*', 'sensor*', ' ', '' -WhatIf -ErrorAction Stop
+
     $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
