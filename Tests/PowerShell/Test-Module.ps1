@@ -601,6 +601,22 @@ try {
         throw 'Piped statistics rows were not imported as one complete batch.'
     }
 
+    $reusedImportRow = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
+    & {
+        $reusedImportRow.Start = [DateTimeOffset]::Parse('2026-08-26T03:00:00Z')
+        $reusedImportRow.Sum = 3
+        Write-Output $reusedImportRow
+        $reusedImportRow.Start = [DateTimeOffset]::Parse('2026-08-26T04:00:00Z')
+        $reusedImportRow.Sum = 4
+        Write-Output $reusedImportRow
+    } | Set-HomeAssistantStatistic -ImportMetadata $importMetadata -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_RECORDER_IMPORT')
+    $server.StandardInput.Flush()
+    $reusedImportCommand = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($reusedImportCommand.stats.Count -ne 2 -or $reusedImportCommand.stats[0].sum -ne 3 -or $reusedImportCommand.stats[1].sum -ne 4) {
+        throw 'Piped statistics rows were not snapshotted when each pipeline record arrived.'
+    }
+
     $recorderPreview = @(
         Remove-HomeAssistantStatistic sensor.grid_energy -WhatIf 6>&1
         Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement MWh -WhatIf 6>&1

@@ -208,6 +208,9 @@ public sealed class HomeAssistantStatisticImportMetadata
                 throw new ArgumentException("Mean, Minimum, and Maximum require a non-None MeanType.", nameof(rows));
             if (!HasSum && (row.State.HasValue || row.Sum.HasValue || row.LastReset.HasValue))
                 throw new ArgumentException("State, Sum, and LastReset require HasSum metadata.", nameof(rows));
+            if (row.LastReset.HasValue
+                && row.LastReset.Value.UtcDateTime.Ticks - row.Start.UtcDateTime.Ticks > TimeSpan.TicksPerHour)
+                throw new ArgumentException("Imported statistics LastReset cannot be later than the end of its hourly interval.", nameof(rows));
             ValidateFinite(row.Mean, nameof(row.Mean));
             ValidateFinite(row.Minimum, nameof(row.Minimum));
             ValidateFinite(row.Maximum, nameof(row.Maximum));

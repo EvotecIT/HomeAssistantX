@@ -67,15 +67,14 @@ public sealed class HomeAssistantWeatherClient
             throw new HomeAssistantProtocolException("The weather forecast response did not contain the requested entity.");
         }
 
-        var entities = result.Response.Value.EnumerateObject().ToArray();
-        if (entities.Length != 1
-            || !string.Equals(entities[0].Name, normalizedEntityId, StringComparison.Ordinal)
-            || entities[0].Value.ValueKind != JsonValueKind.Object)
+        var entity = RequireSingleForecastEntity(result.Response.Value, cancellationToken);
+        if (!string.Equals(entity.Name, normalizedEntityId, StringComparison.Ordinal)
+            || entity.Value.ValueKind != JsonValueKind.Object)
         {
             throw new HomeAssistantProtocolException("The weather forecast response did not contain exactly the requested entity.");
         }
 
-        var entityResult = entities[0].Value;
+        var entityResult = entity.Value;
         if (HomeAssistantJson.HasDuplicateProperties(entityResult, cancellationToken))
             throw new HomeAssistantProtocolException("The weather forecast response contained duplicate JSON properties.");
         if (!entityResult.TryGetProperty("forecast", out var forecast))
@@ -84,6 +83,20 @@ public sealed class HomeAssistantWeatherClient
         }
 
         return ParseUpdate(normalizedEntityId, type, forecast, entityResult, cancellationToken);
+    }
+
+    internal static JsonProperty RequireSingleForecastEntity(JsonElement response, CancellationToken cancellationToken)
+    {
+        JsonProperty? entity = null;
+        foreach (var property in response.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (entity.HasValue)
+                throw new HomeAssistantProtocolException("The weather forecast response did not contain exactly the requested entity.");
+            entity = property;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return entity ?? throw new HomeAssistantProtocolException("The weather forecast response did not contain exactly the requested entity.");
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetConvertibleUnitsAsync(CancellationToken cancellationToken = default)

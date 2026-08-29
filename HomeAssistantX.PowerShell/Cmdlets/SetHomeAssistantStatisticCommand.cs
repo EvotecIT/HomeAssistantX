@@ -50,7 +50,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             foreach (var row in ImportRow)
             {
                 CancelToken.ThrowIfCancellationRequested();
-                _importRows.Add(row);
+                _importRows.Add(row is null ? null! : Snapshot(row));
             }
             return;
         }
@@ -156,6 +156,18 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
         normalized.ValidateRows(rows, cancellationToken);
         return normalized;
     }
+
+    private static HomeAssistantStatisticImportRow Snapshot(HomeAssistantStatisticImportRow row)
+        => new()
+        {
+            Start = row.Start,
+            Mean = row.Mean,
+            Minimum = row.Minimum,
+            Maximum = row.Maximum,
+            LastReset = row.LastReset,
+            State = row.State,
+            Sum = row.Sum
+        };
 
     private static void RequireExclusive(
         string? value,

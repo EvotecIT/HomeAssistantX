@@ -1996,6 +1996,32 @@ public sealed class EnergyRecorderWeatherContractTests
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
+    [Fact]
+    public void RecorderImportRejectsLastResetAfterItsHourlyInterval()
+    {
+        var metadata = CreateSumImportMetadata();
+        var row = CreateSumRow(10, 1.5);
+        row.LastReset = row.Start.AddHours(1).AddTicks(1);
+
+        Assert.Throws<ArgumentException>(() => metadata.ValidateRows(new[] { row }));
+
+        row.LastReset = row.Start.AddHours(1);
+        metadata.ValidateRows(new[] { row });
+    }
+
+    [Fact]
+    public void WeatherForecastEntitySelectionHonorsCancellationAndCardinality()
+    {
+        using var response = JsonDocument.Parse("{\"weather.home\":{},\"weather.garden\":{},\"weather.third\":{}}");
+        Assert.Throws<HomeAssistantProtocolException>(() =>
+            HomeAssistantWeatherClient.RequireSingleForecastEntity(response.RootElement, CancellationToken.None));
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantWeatherClient.RequireSingleForecastEntity(response.RootElement, cancellation.Token));
+    }
+
     private static HomeAssistantStatisticImportMetadata CreateSumImportMetadata() => new()
     {
         StatisticId = "external:daily_energy",
