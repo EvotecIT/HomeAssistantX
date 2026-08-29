@@ -56,7 +56,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             "api/states/" + EscapePath(normalizedEntityId, cancellationToken),
             null,
             cancellationToken).ConfigureAwait(false);
-        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
+        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId, cancellationToken);
     }
 
     public Task<JsonElement> GetServicesAsync(CancellationToken cancellationToken = default)
@@ -545,6 +545,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             throw new ArgumentException("A Home Assistant entity identifier is required.", nameof(entityId));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized;
     }
 

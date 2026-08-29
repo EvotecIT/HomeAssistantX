@@ -3,6 +3,8 @@ using System.Text.Json;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Inventory;
+using HomeAssistantX.Models;
+using HomeAssistantX.Registries;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
 
@@ -491,6 +493,23 @@ public sealed class InventoryAndControlsContractTests
         Assert.Equal(2, results.Count);
     }
 
+    [Fact]
+    public void InventoryProjectionStopsWhenRegistryTraversalIsCanceled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var entities = new CancellationProbeList<HomeAssistantEntityRegistryEntry>(
+            cancellation,
+            new HomeAssistantEntityRegistryEntry { EntityId = "light.kitchen" });
+        var registries = new HomeAssistantRegistrySnapshot { Entities = entities };
+
+        Assert.Throws<OperationCanceledException>(() => HomeAssistantInventoryClient.Build(
+            registries,
+            Array.Empty<HomeAssistantState>(),
+            Array.Empty<HomeAssistantActionDefinition>(),
+            cancellation.Token));
+        Assert.Equal(1, entities.ReadCount);
+    }
+
     private sealed class MutatingTargetList : IReadOnlyList<string>
     {
         private readonly Action _onRead;
@@ -549,6 +568,33 @@ public sealed class InventoryAndControlsContractTests
             if (EnumerationCount > 1)
                 throw new InvalidOperationException("The target collection was enumerated more than once.");
             return ((IEnumerable<string>)_values).GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancellationProbeList<T> : IReadOnlyList<T>
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private readonly T _value;
+
+        internal CancellationProbeList(CancellationTokenSource cancellation, T value)
+        {
+            _cancellation = cancellation;
+            _value = value;
+        }
+
+        internal int ReadCount { get; private set; }
+
+        public int Count => 1;
+
+        public T this[int index] => _value;
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            ReadCount++;
+            _cancellation.Cancel();
+            yield return _value;
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();

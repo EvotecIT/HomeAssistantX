@@ -133,6 +133,7 @@ internal static class HomeAssistantJson
             foreach (var property in document.RootElement.EnumerateObject())
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
                 // JsonElement retains its parent document, transferring the immutable
                 // snapshot without an additional uninterruptible deep clone.
                 result.Add(property.Name, property.Value);
@@ -233,6 +234,7 @@ internal static class HomeAssistantJson
                 foreach (var property in value.EnumerateObject())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
                     writer.WritePropertyName(property.Name);
                     WriteJsonElement(writer, property.Value, cancellationToken);
                 }
@@ -248,7 +250,9 @@ internal static class HomeAssistantJson
                 writer.WriteEndArray();
                 break;
             case JsonValueKind.String:
-                writer.WriteStringValue(value.GetString());
+                var stringValue = value.GetString();
+                ThrowIfStringTraversalCanceled(stringValue, cancellationToken);
+                writer.WriteStringValue(stringValue);
                 break;
             case JsonValueKind.Number:
                 writer.WriteRawValue(value.GetRawText(), skipInputValidation: true);
@@ -265,6 +269,22 @@ internal static class HomeAssistantJson
             default:
                 throw new JsonException("Undefined JSON values cannot be snapshotted.");
         }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    internal static void ThrowIfStringTraversalCanceled(
+        string? value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is not null)
+        {
+            for (var index = 0; index < value.Length; index += 64)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
     }
 

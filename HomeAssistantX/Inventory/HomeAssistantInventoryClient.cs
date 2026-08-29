@@ -34,7 +34,8 @@ public sealed class HomeAssistantInventoryClient
         return Build(
             await registriesTask.ConfigureAwait(false),
             await statesTask.ConfigureAwait(false),
-            await actionsTask.ConfigureAwait(false));
+            await actionsTask.ConfigureAwait(false),
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantEntityInfo>> GetEntitiesAsync(
@@ -43,7 +44,7 @@ public sealed class HomeAssistantInventoryClient
     {
         ValidateQuery(query);
         var snapshot = await GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
-        return FilterEntities(snapshot, query).ToArray();
+        return FilterEntities(snapshot, query, cancellationToken).ToArray();
     }
 
     public HomeAssistantFloorInfo ResolveFloor(HomeAssistantInventorySnapshot snapshot, string idOrName)
@@ -66,30 +67,71 @@ public sealed class HomeAssistantInventoryClient
         return ResolveUnique(snapshot.Entities, idOrName, x => x.EntityId, x => x.Name, x => x.Aliases, "entity");
     }
 
-    private static HomeAssistantInventorySnapshot Build(
+    internal static HomeAssistantInventorySnapshot Build(
         HomeAssistantRegistrySnapshot registries,
         IReadOnlyList<HomeAssistantState> states,
-        IReadOnlyList<HomeAssistantActionDefinition> actions)
+        IReadOnlyList<HomeAssistantActionDefinition> actions,
+        CancellationToken cancellationToken)
     {
-        var areasById = registries.Areas.ToDictionary(x => x.AreaId, StringComparer.OrdinalIgnoreCase);
-        var floorsById = registries.Floors.ToDictionary(x => x.FloorId, StringComparer.OrdinalIgnoreCase);
-        var devicesById = registries.Devices.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-        var entriesById = BuildEntityMap(registries.Entities, entry => entry.EntityId);
-        var statesById = BuildEntityMap(states, state => state.EntityId);
-        var integrationsById = registries.ConfigEntries.ToDictionary(x => x.EntryId, StringComparer.OrdinalIgnoreCase);
+        cancellationToken.ThrowIfCancellationRequested();
+        var areasById = BuildMap(registries.Areas, x => x.AreaId, cancellationToken);
+        var floorsById = BuildMap(registries.Floors, x => x.FloorId, cancellationToken);
+        var devicesById = BuildMap(registries.Devices, x => x.Id, cancellationToken);
+        var entriesById = BuildEntityMap(registries.Entities, entry => entry.EntityId, cancellationToken);
+        var statesById = BuildEntityMap(states, state => state.EntityId, cancellationToken);
+        var integrationsById = BuildMap(registries.ConfigEntries, x => x.EntryId, cancellationToken);
 
-        var entities = entriesById.Keys
-            .Union(statesById.Keys, StringComparer.OrdinalIgnoreCase)
-            .Select(entityId => CreateEntity(entityId, entriesById, statesById, devicesById, areasById, floorsById, integrationsById, actions))
-            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.EntityId, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var devices = registries.Devices.Select(device =>
+        var entityIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddKeys(entityIds, entriesById.Keys, cancellationToken);
+        AddKeys(entityIds, statesById.Keys, cancellationToken);
+        var entities = new List<HomeAssistantEntityInfo>(entityIds.Count);
+        foreach (var entityId in entityIds)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            entities.Add(CreateEntity(
+                entityId,
+                entriesById,
+                statesById,
+                devicesById,
+                areasById,
+                floorsById,
+                integrationsById,
+                actions,
+                cancellationToken));
+        }
+        Sort(
+            entities,
+            (left, right) =>
+            {
+                var byName = string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
+                return byName != 0
+                    ? byName
+                    : string.Compare(left.EntityId, right.EntityId, StringComparison.OrdinalIgnoreCase);
+            },
+            cancellationToken);
+
+        var devices = new List<HomeAssistantDeviceInfo>(registries.Devices.Count);
+        foreach (var device in registries.Devices)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             areasById.TryGetValue(device.AreaId ?? string.Empty, out var area);
             floorsById.TryGetValue(area?.FloorId ?? string.Empty, out var floor);
-            return new HomeAssistantDeviceInfo
+            var deviceEntities = SelectMatching(
+                entities,
+                entity => entity.DeviceId,
+                device.Id,
+                cancellationToken);
+            var integrations = new List<HomeAssistantConfigEntry>();
+            foreach (var configEntryId in device.ConfigEntries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (integrationsById.TryGetValue(configEntryId, out var integration))
+                {
+                    integrations.Add(integration);
+                }
+            }
+
+            devices.Add(new HomeAssistantDeviceInfo
             {
                 DeviceId = device.Id,
                 Name = FirstNonEmpty(device.NameByUser, device.Name, device.Model, device.Id),
@@ -99,52 +141,78 @@ public sealed class HomeAssistantInventoryClient
                 FloorName = floor?.Name,
                 Manufacturer = device.Manufacturer,
                 Model = device.Model,
-                Entities = entities.Where(x => string.Equals(x.DeviceId, device.Id, StringComparison.OrdinalIgnoreCase)).ToArray(),
-                Integrations = device.ConfigEntries
-                    .Select(id => integrationsById.TryGetValue(id, out var entry) ? entry : null)
-                    .Where(x => x is not null)
-                    .Cast<HomeAssistantConfigEntry>()
-                    .ToArray(),
+                Entities = deviceEntities,
+                Integrations = integrations.ToArray(),
                 Raw = device
-            };
-        }).OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+            });
+        }
+        Sort(devices, (left, right) => string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase), cancellationToken);
 
-        var areas = registries.Areas.Select(area =>
+        var areas = new List<HomeAssistantAreaInfo>(registries.Areas.Count);
+        foreach (var area in registries.Areas)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             floorsById.TryGetValue(area.FloorId ?? string.Empty, out var floor);
-            var areaEntities = entities.Where(x => string.Equals(x.AreaId, area.AreaId, StringComparison.OrdinalIgnoreCase)).ToArray();
-            return new HomeAssistantAreaInfo
+            var areaEntities = SelectMatching(entities, entity => entity.AreaId, area.AreaId, cancellationToken);
+            var areaDevices = SelectMatching(devices, device => device.AreaId, area.AreaId, cancellationToken);
+            var domains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entity in areaEntities)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                domains.Add(entity.Domain);
+            }
+            var orderedDomains = domains.ToList();
+            Sort(orderedDomains, (left, right) => string.Compare(left, right, StringComparison.OrdinalIgnoreCase), cancellationToken);
+
+            areas.Add(new HomeAssistantAreaInfo
             {
                 AreaId = area.AreaId,
                 Name = area.Name,
                 Aliases = area.Aliases,
                 FloorId = floor?.FloorId,
                 FloorName = floor?.Name,
-                Devices = devices.Where(x => string.Equals(x.AreaId, area.AreaId, StringComparison.OrdinalIgnoreCase)).ToArray(),
+                Devices = areaDevices,
                 Entities = areaEntities,
-                Domains = areaEntities.Select(x => x.Domain).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray(),
+                Domains = orderedDomains.ToArray(),
                 Raw = area
-            };
-        }).OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+            });
+        }
+        Sort(areas, (left, right) => string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase), cancellationToken);
 
-        var floors = registries.Floors.Select(floor => new HomeAssistantFloorInfo
+        var floors = new List<HomeAssistantFloorInfo>(registries.Floors.Count);
+        foreach (var floor in registries.Floors)
         {
-            FloorId = floor.FloorId,
-            Name = floor.Name,
-            Aliases = floor.Aliases,
-            Level = floor.Level,
-            Areas = areas.Where(x => string.Equals(x.FloorId, floor.FloorId, StringComparison.OrdinalIgnoreCase)).ToArray(),
-            Devices = devices.Where(x => string.Equals(x.FloorId, floor.FloorId, StringComparison.OrdinalIgnoreCase)).ToArray(),
-            Entities = entities.Where(x => string.Equals(x.FloorId, floor.FloorId, StringComparison.OrdinalIgnoreCase)).ToArray(),
-            Raw = floor
-        }).OrderBy(x => x.Level ?? int.MaxValue).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+            cancellationToken.ThrowIfCancellationRequested();
+            floors.Add(new HomeAssistantFloorInfo
+            {
+                FloorId = floor.FloorId,
+                Name = floor.Name,
+                Aliases = floor.Aliases,
+                Level = floor.Level,
+                Areas = SelectMatching(areas, area => area.FloorId, floor.FloorId, cancellationToken),
+                Devices = SelectMatching(devices, device => device.FloorId, floor.FloorId, cancellationToken),
+                Entities = SelectMatching(entities, entity => entity.FloorId, floor.FloorId, cancellationToken),
+                Raw = floor
+            });
+        }
+        Sort(
+            floors,
+            (left, right) =>
+            {
+                var byLevel = (left.Level ?? int.MaxValue).CompareTo(right.Level ?? int.MaxValue);
+                return byLevel != 0
+                    ? byLevel
+                    : string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
+            },
+            cancellationToken);
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new HomeAssistantInventorySnapshot
         {
-            Floors = floors,
-            Areas = areas,
-            Devices = devices,
-            Entities = entities,
+            Floors = floors.ToArray(),
+            Areas = areas.ToArray(),
+            Devices = devices.ToArray(),
+            Entities = entities.ToArray(),
             Actions = actions,
             Registries = registries
         };
@@ -152,12 +220,16 @@ public sealed class HomeAssistantInventoryClient
 
     private static Dictionary<string, T> BuildEntityMap<T>(
         IEnumerable<T> values,
-        Func<T, string?> getEntityId)
+        Func<T, string?> getEntityId,
+        CancellationToken cancellationToken)
     {
         var result = new Dictionary<string, T>(StringComparer.Ordinal);
         foreach (var value in values)
         {
-            var entityId = HomeAssistantEntityId.RequireResponseEntityId(getEntityId(value));
+            cancellationToken.ThrowIfCancellationRequested();
+            var entityId = HomeAssistantEntityId.RequireResponseEntityId(
+                getEntityId(value),
+                cancellationToken);
             if (result.ContainsKey(entityId))
             {
                 throw new HomeAssistantProtocolException(
@@ -170,6 +242,68 @@ public sealed class HomeAssistantInventoryClient
         return result;
     }
 
+    private static Dictionary<string, T> BuildMap<T>(
+        IEnumerable<T> values,
+        Func<T, string> getId,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result.Add(getId(value), value);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
+
+    private static void AddKeys(
+        ISet<string> destination,
+        IEnumerable<string> values,
+        CancellationToken cancellationToken)
+    {
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            destination.Add(value);
+        }
+    }
+
+    private static T[] SelectMatching<T>(
+        IEnumerable<T> values,
+        Func<T, string?> selector,
+        string expected,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<T>();
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(selector(value), expected, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(value);
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return result.ToArray();
+    }
+
+    private static void Sort<T>(
+        List<T> values,
+        Comparison<T> comparison,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        values.Sort((left, right) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return comparison(left, right);
+        });
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
     private static HomeAssistantEntityInfo CreateEntity(
         string entityId,
         IReadOnlyDictionary<string, HomeAssistantEntityRegistryEntry> entries,
@@ -178,8 +312,10 @@ public sealed class HomeAssistantInventoryClient
         IReadOnlyDictionary<string, HomeAssistantArea> areas,
         IReadOnlyDictionary<string, HomeAssistantFloor> floors,
         IReadOnlyDictionary<string, HomeAssistantConfigEntry> integrations,
-        IReadOnlyList<HomeAssistantActionDefinition> actions)
+        IReadOnlyList<HomeAssistantActionDefinition> actions,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         entries.TryGetValue(entityId, out var entry);
         states.TryGetValue(entityId, out var state);
         devices.TryGetValue(entry?.DeviceId ?? string.Empty, out var device);
@@ -190,19 +326,39 @@ public sealed class HomeAssistantInventoryClient
         var friendlyName = TryGetFriendlyName(state);
         var registryName = GetRegistryFullName(entry, device);
         var name = FirstNonEmpty(friendlyName, registryName, entityId);
-        var aliases = entry?.Aliases
-            .Select(alias => string.IsNullOrWhiteSpace(alias) ? registryName : alias!.Trim())
-            .Where(alias => !string.IsNullOrWhiteSpace(alias))
-            .Cast<string>()
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray() ?? Array.Empty<string>();
+        var aliases = new List<string>();
+        var uniqueAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (entry is not null)
+        {
+            foreach (var alias in entry.Aliases)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var candidate = string.IsNullOrWhiteSpace(alias) ? registryName : alias!.Trim();
+                if (!string.IsNullOrWhiteSpace(candidate) && uniqueAliases.Add(candidate!))
+                {
+                    aliases.Add(candidate!);
+                }
+            }
+        }
 
+        var domain = GetDomain(entityId);
+        var domainActions = new List<HomeAssistantActionDefinition>();
+        foreach (var action in actions)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(action.Domain, domain, StringComparison.OrdinalIgnoreCase))
+            {
+                domainActions.Add(action);
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         return new HomeAssistantEntityInfo
         {
             EntityId = entityId,
             Name = name,
-            Aliases = aliases,
-            Domain = GetDomain(entityId),
+            Aliases = aliases.ToArray(),
+            Domain = domain,
             State = state?.State,
             DeviceId = device?.Id,
             DeviceName = device is null ? null : FirstNonEmpty(device.NameByUser, device.Name, device.Model, device.Id),
@@ -219,14 +375,16 @@ public sealed class HomeAssistantInventoryClient
             EntityCategory = entry?.EntityCategory,
             CurrentState = state,
             RegistryEntry = entry,
-            DomainActions = actions.Where(action => string.Equals(action.Domain, GetDomain(entityId), StringComparison.OrdinalIgnoreCase)).ToArray()
+            DomainActions = domainActions.ToArray()
         };
     }
 
     private static IEnumerable<HomeAssistantEntityInfo> FilterEntities(
         HomeAssistantInventorySnapshot snapshot,
-        HomeAssistantEntityQuery? query)
+        HomeAssistantEntityQuery? query,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         IEnumerable<HomeAssistantEntityInfo> entities = snapshot.Entities;
         if (query is null)
         {
@@ -290,7 +448,20 @@ public sealed class HomeAssistantInventoryClient
             entities = entities.Where(x => string.IsNullOrEmpty(x.HiddenBy));
         }
 
-        return entities;
+        return EnumerateWithCancellation(entities, cancellationToken);
+    }
+
+    private static IEnumerable<T> EnumerateWithCancellation<T>(
+        IEnumerable<T> values,
+        CancellationToken cancellationToken)
+    {
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return value;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static void ValidateQuery(HomeAssistantEntityQuery? query)
