@@ -145,6 +145,7 @@ public sealed class HomeAssistantRecorderClient
                 property.Value,
                 GetPeriodStart(startTime, period).ToUnixTimeMilliseconds(),
                 endTime?.ToUnixTimeMilliseconds(),
+                period,
                 cancellationToken);
             var rows = HomeAssistantJson.DeserializeResponse<HomeAssistantStatisticRow[]>(
                 property.Value,
@@ -356,6 +357,7 @@ public sealed class HomeAssistantRecorderClient
         JsonElement value,
         long earliestPeriodStart,
         long? endTimeExclusive,
+        HomeAssistantStatisticPeriod period,
         CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Array)
@@ -388,6 +390,13 @@ public sealed class HomeAssistantRecorderClient
                 throw new HomeAssistantProtocolException("A Recorder statistics series contained a non-positive interval.");
             }
 
+
+            if (!IsValidPeriodInterval(start, end, earliestPeriodStart, period))
+            {
+                throw new HomeAssistantProtocolException(
+                    "A Recorder statistics series contained an interval that did not match the requested period.");
+            }
+
             if (end <= earliestPeriodStart
                 || endTimeExclusive.HasValue && start >= endTimeExclusive.Value)
             {
@@ -415,6 +424,39 @@ public sealed class HomeAssistantRecorderClient
             previousStart = start;
             previousEnd = end;
         }
+    }
+
+    private static bool IsValidPeriodInterval(
+        long start,
+        long end,
+        long periodOrigin,
+        HomeAssistantStatisticPeriod period)
+    {
+        var duration = end - start;
+        if (period is HomeAssistantStatisticPeriod.FiveMinute or HomeAssistantStatisticPeriod.Hour)
+        {
+            var expected = period == HomeAssistantStatisticPeriod.FiveMinute
+                ? TimeSpan.FromMinutes(5).Ticks / TimeSpan.TicksPerMillisecond
+                : TimeSpan.FromHours(1).Ticks / TimeSpan.TicksPerMillisecond;
+            return duration == expected && (start - periodOrigin) % expected == 0;
+        }
+
+        var minimum = period switch
+        {
+            HomeAssistantStatisticPeriod.Day => TimeSpan.FromHours(23),
+            HomeAssistantStatisticPeriod.Week => TimeSpan.FromHours(167),
+            HomeAssistantStatisticPeriod.Month => TimeSpan.FromDays(27) + TimeSpan.FromHours(23),
+            _ => throw new ArgumentOutOfRangeException(nameof(period))
+        };
+        var maximum = period switch
+        {
+            HomeAssistantStatisticPeriod.Day => TimeSpan.FromHours(25),
+            HomeAssistantStatisticPeriod.Week => TimeSpan.FromHours(169),
+            HomeAssistantStatisticPeriod.Month => TimeSpan.FromDays(31) + TimeSpan.FromHours(1),
+            _ => throw new ArgumentOutOfRangeException(nameof(period))
+        };
+        return duration >= minimum.Ticks / TimeSpan.TicksPerMillisecond
+            && duration <= maximum.Ticks / TimeSpan.TicksPerMillisecond;
     }
 
     private static bool TryGetUnixMilliseconds(JsonElement value, string propertyName, bool required, out long milliseconds)

@@ -65,18 +65,23 @@ public sealed partial class HomeAssistantRestClient
         CancellationToken cancellationToken = default)
     {
         query ??= new HomeAssistantLogbookQuery();
-        ValidateOptionalTimeRange(query.StartTime, query.EndTime, nameof(query));
+        var startTime = query.StartTime;
+        var endTime = query.EndTime;
+        var entityId = query.EntityId;
+        ValidateOptionalTimeRange(startTime, endTime, nameof(query));
         var path = "api/logbook";
-        if (query.StartTime.HasValue)
+        if (startTime.HasValue)
         {
-            path += "/" + EscapeTimestamp(query.StartTime.Value);
+            path += "/" + EscapeTimestamp(startTime.Value);
         }
 
         var parameters = new List<KeyValuePair<string, string?>>();
-        AddTimestamp(parameters, "end_time", query.EndTime);
-        if (query.EntityId is not null)
+        AddTimestamp(parameters, "end_time", endTime);
+        if (entityId is not null)
         {
-            parameters.Add(new KeyValuePair<string, string?>("entity", NormalizeEntityId(query.EntityId!, cancellationToken)));
+            parameters.Add(new KeyValuePair<string, string?>(
+                "entity",
+                NormalizeEntityId(entityId, cancellationToken)));
         }
 
         var entries = await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
@@ -84,12 +89,14 @@ public sealed partial class HomeAssistantRestClient
             AppendQuery(path, parameters),
             null,
             cancellationToken).ConfigureAwait(false);
-        ValidateLogbookEntries(entries, cancellationToken);
+        ValidateLogbookEntries(entries, startTime, endTime, cancellationToken);
         return entries;
     }
 
     internal static void ValidateLogbookEntries(
         IEnumerable<HomeAssistantLogbookEntry?> entries,
+        DateTimeOffset? startTime,
+        DateTimeOffset? endTime,
         CancellationToken cancellationToken)
     {
         foreach (var entry in entries)
@@ -99,6 +106,13 @@ public sealed partial class HomeAssistantRestClient
             {
                 throw new HomeAssistantProtocolException(
                     "The Home Assistant logbook response contained an entry without a timestamp.");
+            }
+
+            if (startTime.HasValue && entry.When.Value < startTime.Value
+                || endTime.HasValue && entry.When.Value > endTime.Value)
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant logbook response contained an entry outside the requested time range.");
             }
         }
         cancellationToken.ThrowIfCancellationRequested();

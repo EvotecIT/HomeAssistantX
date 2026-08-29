@@ -200,16 +200,16 @@ public sealed class HomeAssistantWeatherClient
             EntityId = state.EntityId,
             Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name"),
             Condition = state.State,
-            Temperature = HomeAssistantAttributeReader.GetDouble(state.Attributes, "temperature"),
-            ApparentTemperature = HomeAssistantAttributeReader.GetDouble(state.Attributes, "apparent_temperature"),
-            DewPoint = HomeAssistantAttributeReader.GetDouble(state.Attributes, "dew_point"),
-            Pressure = HomeAssistantAttributeReader.GetDouble(state.Attributes, "pressure"),
+            Temperature = ReadCurrentNumber(state.Attributes, "temperature"),
+            ApparentTemperature = ReadCurrentNumber(state.Attributes, "apparent_temperature"),
+            DewPoint = ReadCurrentNumber(state.Attributes, "dew_point"),
+            Pressure = ReadCurrentNumber(state.Attributes, "pressure"),
             Humidity = humidity,
             CloudCoverage = cloudCoverage,
-            UvIndex = HomeAssistantAttributeReader.GetDouble(state.Attributes, "uv_index"),
-            Visibility = HomeAssistantAttributeReader.GetDouble(state.Attributes, "visibility"),
-            WindSpeed = HomeAssistantAttributeReader.GetDouble(state.Attributes, "wind_speed"),
-            WindGustSpeed = HomeAssistantAttributeReader.GetDouble(state.Attributes, "wind_gust_speed"),
+            UvIndex = ReadCurrentNumber(state.Attributes, "uv_index"),
+            Visibility = ReadCurrentNumber(state.Attributes, "visibility"),
+            WindSpeed = ReadCurrentNumber(state.Attributes, "wind_speed"),
+            WindGustSpeed = ReadCurrentNumber(state.Attributes, "wind_gust_speed"),
             WindBearing = windBearing,
             TemperatureUnit = ReadCurrentUnit(state.Attributes, "temperature_unit"),
             PressureUnit = ReadCurrentUnit(state.Attributes, "pressure_unit"),
@@ -236,6 +236,26 @@ public sealed class HomeAssistantWeatherClient
         {
             throw new HomeAssistantProtocolException(
                 "The Home Assistant weather state contained an invalid percentage attribute.");
+        }
+
+        return value;
+    }
+
+    private static double? ReadCurrentNumber(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name)
+    {
+        if (!HomeAssistantAttributeReader.TryGetValue(attributes, name, out var raw)
+            || raw.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        var value = HomeAssistantAttributeReader.GetDouble(attributes, name);
+        if (!value.HasValue)
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant weather state contained an invalid numeric attribute.");
         }
 
         return value;

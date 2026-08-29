@@ -270,13 +270,28 @@ public sealed class CoreRestApiContractTests
     }
 
     [Fact]
+    public async Task LogbookRejectsEntriesOutsideTheSnapshottedRequestedRange()
+    {
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+        var end = start.AddHours(1);
+        using var server = new TestHomeAssistantServer
+        {
+            LogbookResponseJson = "[{\"when\":\"2026-08-23T23:59:59+00:00\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery { StartTime = start, EndTime = end }));
+    }
+
+    [Fact]
     public void LogbookValidationObservesCancellationDuringProjection()
     {
         using var cancellation = new CancellationTokenSource();
         var entries = new CancellingLogbookEntries(cancellation);
 
         Assert.ThrowsAny<OperationCanceledException>(() =>
-            HomeAssistantRestClient.ValidateLogbookEntries(entries, cancellation.Token));
+            HomeAssistantRestClient.ValidateLogbookEntries(entries, null, null, cancellation.Token));
         Assert.InRange(entries.ReadCount, 1, 2);
     }
 

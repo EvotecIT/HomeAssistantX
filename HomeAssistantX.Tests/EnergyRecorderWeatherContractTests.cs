@@ -1457,6 +1457,58 @@ public sealed class EnergyRecorderWeatherContractTests
         }
     }
 
+    [Theory]
+    [InlineData("temperature")]
+    [InlineData("apparent_temperature")]
+    [InlineData("dew_point")]
+    [InlineData("pressure")]
+    [InlineData("uv_index")]
+    [InlineData("visibility")]
+    [InlineData("wind_speed")]
+    [InlineData("wind_gust_speed")]
+    public async Task CurrentWeatherRejectsMalformedNumericAttributes(string attributeName)
+    {
+        foreach (var value in new[] { "true", "{}", "[]", "1e400" })
+        {
+            using var server = new TestHomeAssistantServer();
+            server.SetStates(
+                "[{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{\""
+                + attributeName + "\":" + value + "}}]");
+            using var client = TestClientFactory.Create(server);
+
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+        }
+    }
+
+    [Fact]
+    public async Task CurrentWeatherRejectsDuplicateAttributeProperties()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates(
+            "[{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{"
+            + "\"temperature\":20,\"temperature\":21}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+    }
+
+    [Fact]
+    public async Task RecorderStatisticsRejectRowsThatDoNotMatchTheRequestedBucket()
+    {
+        var start = new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero);
+        var rowStart = start.ToUnixTimeMilliseconds();
+        var rowEnd = start.AddMinutes(2).ToUnixTimeMilliseconds();
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderStatisticsResponseJson = "{\"sensor.energy\":[{\"start\":"
+                + rowStart + ",\"end\":" + rowEnd + "}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsAsync(
+            new HomeAssistantStatisticsQuery(start, HomeAssistantStatisticPeriod.Hour, "sensor.energy")));
+    }
+
     [Fact]
     public async Task RecorderStatisticsRejectDuplicateNormalizedUnitNamesBeforeDispatch()
     {
