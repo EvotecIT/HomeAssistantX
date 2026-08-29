@@ -65,8 +65,9 @@ public sealed class HomeAssistantMobileAppRegistrationRequest
         foreach (var property in AdditionalData)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(property.Key))
+            if (!HasNonWhitespace(property.Key, cancellationToken))
                 throw new ArgumentException("Additional registration field names cannot be blank.", nameof(AdditionalData));
+            ObserveString(property.Key, cancellationToken);
             if (KnownPropertyNames.Contains(property.Key))
                 throw new ArgumentException(
                     "Additional registration fields cannot replace a modeled registration field.",
@@ -77,8 +78,30 @@ public sealed class HomeAssistantMobileAppRegistrationRequest
 
     private static void Required(string value, string name, CancellationToken cancellationToken)
     {
+        if (!HasNonWhitespace(value, cancellationToken))
+            throw new ArgumentException("A non-empty value is required.", name);
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", name);
+    }
+
+    private static bool HasNonWhitespace(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null) return false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (!char.IsWhiteSpace(value[index])) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
+    private static void ObserveString(string value, CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+        }
         cancellationToken.ThrowIfCancellationRequested();
     }
 }

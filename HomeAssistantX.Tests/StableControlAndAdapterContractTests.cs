@@ -1434,6 +1434,27 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Null(server.LastRequestBody);
     }
 
+    [Fact]
+    public async Task MobileRegistrationStopsAdditionalFieldTraversalBeforeHashing()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var registration = RegistrationRequest(false);
+        registration.AdditionalData["future_" + new string('a', 16_000_000)] = true;
+        var operation = Task.Run(async () =>
+        {
+            started.TrySetResult(true);
+            await client.MobileApp.RegisterAsync(registration, cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.LastRequestBody);
+    }
+
     [Theory]
     [InlineData("cloudhook_url", "ftp://example.invalid/webhook")]
     [InlineData("remote_ui_url", "file:///private/home-assistant")]
