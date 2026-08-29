@@ -297,6 +297,27 @@ public sealed class CamerasDashboardsAutomationContractTests
             HomeAssistantCameraClient.ValidateStreamTypes(CancelAfterFirstStreamType(cancellation), cancellation.Token));
     }
 
+    [Fact]
+    public async Task CameraStreamTypeValidationObservesCancellationWithinAValue()
+    {
+        var streamType = new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                HomeAssistantCameraClient.ValidateStreamTypes(new[] { streamType }, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
     [Theory]
     [InlineData("House_Main")]
     [InlineData("House-main")]
@@ -332,6 +353,32 @@ public sealed class CamerasDashboardsAutomationContractTests
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
+    public async Task DashboardMutationValuesObserveCancellationDuringNormalization()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var title = new string(' ', 16_000_000);
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.TrySetResult(true);
+                await client.Dashboards.CreateDashboardAsync(
+                    new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = title },
+                    cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
     }
 
     [Fact]

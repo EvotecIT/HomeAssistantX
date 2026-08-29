@@ -127,7 +127,7 @@ public sealed class HomeAssistantDashboardClient
         if (create is null) throw new ArgumentNullException(nameof(create));
         if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(create.UrlPath, create.AllowSingleWord, out var urlPath, cancellationToken))
             throw new ArgumentException("Dashboard URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens; a hyphen is required unless AllowSingleWord is enabled.", nameof(create));
-        var title = Require(create.Title, nameof(create.Title));
+        var title = Require(create.Title, nameof(create.Title), cancellationToken);
         var payload = new Dictionary<string, object?>
         {
             ["url_path"] = urlPath,
@@ -154,9 +154,9 @@ public sealed class HomeAssistantDashboardClient
     {
         if (update is null) throw new ArgumentNullException(nameof(update));
         if (update.RemoveIcon && update.Icon is not null) throw new ArgumentException("Icon and RemoveIcon cannot be combined.", nameof(update));
-        var normalizedDashboardId = Require(dashboardId, nameof(dashboardId));
+        var normalizedDashboardId = Require(dashboardId, nameof(dashboardId), cancellationToken);
         var payload = new Dictionary<string, object?> { ["dashboard_id"] = normalizedDashboardId };
-        var title = update.Title is null ? null : Require(update.Title, nameof(update.Title));
+        var title = update.Title is null ? null : Require(update.Title, nameof(update.Title), cancellationToken);
         var icon = update.Icon is null ? null : RequireIcon(update.Icon, nameof(update.Icon));
         if (title is not null) payload["title"] = title;
         if (icon is not null) payload["icon"] = icon;
@@ -179,7 +179,7 @@ public sealed class HomeAssistantDashboardClient
     public Task<JsonElement> DeleteDashboardAsync(string dashboardId, CancellationToken cancellationToken = default)
         => RequestJsonAsync(
             "lovelace/dashboards/delete",
-            new Dictionary<string, object?> { ["dashboard_id"] = Require(dashboardId, nameof(dashboardId)) },
+            new Dictionary<string, object?> { ["dashboard_id"] = Require(dashboardId, nameof(dashboardId), cancellationToken) },
             "The dashboard deletion response contained duplicate JSON properties.",
             cancellationToken);
 
@@ -274,7 +274,7 @@ public sealed class HomeAssistantDashboardClient
 
     public Task<HomeAssistantDashboardResource> CreateResourceAsync(string url, HomeAssistantDashboardResourceType type, CancellationToken cancellationToken = default)
     {
-        var normalizedUrl = Require(url, nameof(url));
+        var normalizedUrl = Require(url, nameof(url), cancellationToken);
         var normalizedType = ResourceTypeName(type);
         return RequestResourceAsync(
             "lovelace/resources/create",
@@ -286,9 +286,9 @@ public sealed class HomeAssistantDashboardClient
 
     public Task<HomeAssistantDashboardResource> UpdateResourceAsync(string resourceId, string? url = null, HomeAssistantDashboardResourceType? type = null, CancellationToken cancellationToken = default)
     {
-        var normalizedResourceId = Require(resourceId, nameof(resourceId));
+        var normalizedResourceId = Require(resourceId, nameof(resourceId), cancellationToken);
         var payload = new Dictionary<string, object?> { ["resource_id"] = normalizedResourceId };
-        var normalizedUrl = url is null ? null : Require(url, nameof(url));
+        var normalizedUrl = url is null ? null : Require(url, nameof(url), cancellationToken);
         var normalizedType = type.HasValue ? ResourceTypeName(type.Value) : null;
         if (normalizedUrl is not null) payload["url"] = normalizedUrl;
         if (normalizedType is not null) payload["res_type"] = normalizedType;
@@ -305,7 +305,7 @@ public sealed class HomeAssistantDashboardClient
     public Task<JsonElement> DeleteResourceAsync(string resourceId, CancellationToken cancellationToken = default)
         => RequestJsonAsync(
             "lovelace/resources/delete",
-            new Dictionary<string, object?> { ["resource_id"] = Require(resourceId, nameof(resourceId)) },
+            new Dictionary<string, object?> { ["resource_id"] = Require(resourceId, nameof(resourceId), cancellationToken) },
             "The Lovelace resource deletion response contained duplicate JSON properties.",
             cancellationToken);
 
@@ -489,10 +489,32 @@ public sealed class HomeAssistantDashboardClient
         _ => throw new ArgumentOutOfRangeException(nameof(value))
     };
 
-    private static string Require(string value, string parameterName)
+    private static string Require(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", parameterName);
-        return value.Trim();
+        if (value is null) throw new ArgumentNullException(parameterName);
+        cancellationToken.ThrowIfCancellationRequested();
+        var start = 0;
+        while (start < value.Length && char.IsWhiteSpace(value[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+
+        var end = value.Length - 1;
+        while (end >= start && char.IsWhiteSpace(value[end]))
+        {
+            if (((value.Length - 1 - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (end < start) throw new ArgumentException("A non-empty value is required.", parameterName);
+        return start == 0 && end == value.Length - 1
+            ? value
+            : value.Substring(start, end - start + 1);
     }
 
     private static string RequireConfigurationUrlPath(string? value, string parameterName, CancellationToken cancellationToken)

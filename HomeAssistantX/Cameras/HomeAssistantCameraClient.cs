@@ -177,15 +177,38 @@ public sealed class HomeAssistantCameraClient
         foreach (var streamType in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(streamType)
-                || !string.Equals(streamType, streamType.Trim(), StringComparison.Ordinal)
-                || !string.Equals(streamType, streamType.ToLowerInvariant(), StringComparison.Ordinal)
+            if (!IsCanonicalStreamType(streamType, cancellationToken)
                 || !streamTypes.Add(streamType))
             {
                 throw new HomeAssistantProtocolException("The camera capabilities contained an invalid stream type.");
             }
+            cancellationToken.ThrowIfCancellationRequested();
         }
         cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static bool IsCanonicalStreamType(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null
+            || value.Length == 0
+            || char.IsWhiteSpace(value[0])
+            || char.IsWhiteSpace(value[value.Length - 1]))
+        {
+            return false;
+        }
+
+        var hasNonWhitespace = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var character = value[index];
+            if (!char.IsWhiteSpace(character)) hasNonWhitespace = true;
+            if (char.ToLowerInvariant(character) != character) return false;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return hasNonWhitespace;
     }
 
     public async Task<string> GetSignedImagePathAsync(string entityId, TimeSpan? expiration = null, int? width = null, int? height = null, CancellationToken cancellationToken = default)

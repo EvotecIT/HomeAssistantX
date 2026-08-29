@@ -17,8 +17,7 @@ public sealed class SetHomeAssistantCameraCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        if (!HomeAssistantEntityId.TryNormalize(EntityId, out var entityId)
-            || !entityId.StartsWith("camera.", StringComparison.Ordinal))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(EntityId, "camera", CancelToken, out var entityId))
         {
             throw new ArgumentException("A camera entity identifier is required.", nameof(EntityId));
         }
