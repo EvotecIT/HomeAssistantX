@@ -15,7 +15,7 @@ public sealed class RemoveHomeAssistantLabelCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        var labelId = HomeAssistantRegistryValidation.Require(LabelId, nameof(LabelId));
+        var labelId = HomeAssistantRegistryValidation.Require(LabelId, nameof(LabelId), CancelToken);
         if (ShouldProcess(labelId, "Delete Home Assistant label"))
         {
             await Client.Registries.DeleteLabelAsync(labelId, CancelToken).ConfigureAwait(false);

@@ -20,8 +20,8 @@ public sealed class RemoveHomeAssistantCategoryCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        var scope = HomeAssistantRegistryValidation.Require(Scope, nameof(Scope));
-        var categoryId = HomeAssistantRegistryValidation.Require(CategoryId, nameof(CategoryId));
+        var scope = HomeAssistantRegistryValidation.Require(Scope, nameof(Scope), CancelToken);
+        var categoryId = HomeAssistantRegistryValidation.Require(CategoryId, nameof(CategoryId), CancelToken);
         if (ShouldProcess(scope + "/" + categoryId, "Delete Home Assistant category"))
         {
             await Client.Registries.DeleteCategoryAsync(scope, categoryId, CancelToken).ConfigureAwait(false);

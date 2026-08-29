@@ -237,8 +237,13 @@ public sealed class HomeAssistantCategory
 public sealed class HomeAssistantLabelCreate
 {
     public HomeAssistantLabelCreate(string name)
+        : this(name, default)
     {
-        Name = HomeAssistantRegistryValidation.Require(name, nameof(name));
+    }
+
+    internal HomeAssistantLabelCreate(string name, CancellationToken cancellationToken)
+    {
+        Name = HomeAssistantRegistryValidation.Require(name, nameof(name), cancellationToken);
     }
 
     public string Name { get; }
@@ -256,8 +261,11 @@ public sealed class HomeAssistantLabelUpdate
     private readonly Dictionary<string, object?> _changes = new(StringComparer.Ordinal);
 
     public HomeAssistantLabelUpdate WithName(string name)
+        => WithName(name, default);
+
+    internal HomeAssistantLabelUpdate WithName(string name, CancellationToken cancellationToken)
     {
-        _changes["name"] = HomeAssistantRegistryValidation.Require(name, nameof(name));
+        _changes["name"] = HomeAssistantRegistryValidation.Require(name, nameof(name), cancellationToken);
         return this;
     }
 
@@ -286,8 +294,13 @@ public sealed class HomeAssistantLabelUpdate
 public sealed class HomeAssistantCategoryCreate
 {
     public HomeAssistantCategoryCreate(string name)
+        : this(name, default)
     {
-        Name = HomeAssistantRegistryValidation.Require(name, nameof(name));
+    }
+
+    internal HomeAssistantCategoryCreate(string name, CancellationToken cancellationToken)
+    {
+        Name = HomeAssistantRegistryValidation.Require(name, nameof(name), cancellationToken);
     }
 
     public string Name { get; }
@@ -301,8 +314,11 @@ public sealed class HomeAssistantCategoryUpdate
     private readonly Dictionary<string, object?> _changes = new(StringComparer.Ordinal);
 
     public HomeAssistantCategoryUpdate WithName(string name)
+        => WithName(name, default);
+
+    internal HomeAssistantCategoryUpdate WithName(string name, CancellationToken cancellationToken)
     {
-        _changes["name"] = HomeAssistantRegistryValidation.Require(name, nameof(name));
+        _changes["name"] = HomeAssistantRegistryValidation.Require(name, nameof(name), cancellationToken);
         return this;
     }
 
@@ -318,13 +334,20 @@ public sealed class HomeAssistantCategoryUpdate
 internal static class HomeAssistantRegistryValidation
 {
     public static string Require(string value, string parameterName)
+        => Require(value, parameterName, default);
+
+    public static string Require(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null || HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty value is required.", parameterName);
         }
 
-        return value.Trim();
+        return HomeAssistantX.Protocol.CancellationAwareString.Trim(value, cancellationToken);
     }
 }
 

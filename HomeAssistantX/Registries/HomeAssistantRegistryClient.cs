@@ -98,7 +98,7 @@ public sealed class HomeAssistantRegistryClient
         HomeAssistantLabelUpdate update,
         CancellationToken cancellationToken = default)
     {
-        labelId = HomeAssistantRegistryValidation.Require(labelId, nameof(labelId));
+        labelId = HomeAssistantRegistryValidation.Require(labelId, nameof(labelId), cancellationToken);
         if (update is null)
         {
             throw new ArgumentNullException(nameof(update));
@@ -110,14 +110,17 @@ public sealed class HomeAssistantRegistryClient
             "updated label",
             cancellationToken);
         ValidateLabel(updated, cancellationToken);
-        if (!string.Equals(updated.LabelId, labelId, StringComparison.Ordinal))
+        if (!HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                updated.LabelId,
+                labelId,
+                cancellationToken))
             throw new HomeAssistantProtocolException("The updated Home Assistant label did not match the requested identifier.");
         return updated;
     }
 
     public Task DeleteLabelAsync(string labelId, CancellationToken cancellationToken = default)
     {
-        labelId = HomeAssistantRegistryValidation.Require(labelId, nameof(labelId));
+        labelId = HomeAssistantRegistryValidation.Require(labelId, nameof(labelId), cancellationToken);
         return IgnoreResultAsync("config/label_registry/delete", new Dictionary<string, object?> { ["label_id"] = labelId }, cancellationToken);
     }
 
@@ -125,7 +128,7 @@ public sealed class HomeAssistantRegistryClient
         string scope,
         CancellationToken cancellationToken = default)
     {
-        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope), cancellationToken);
         var value = await _webSocket.RequestAsync("config/category_registry/list", new Dictionary<string, object?>
         {
             ["scope"] = scope
@@ -140,7 +143,7 @@ public sealed class HomeAssistantRegistryClient
         HomeAssistantCategoryCreate category,
         CancellationToken cancellationToken = default)
     {
-        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope));
+        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope), cancellationToken);
         if (category is null)
         {
             throw new ArgumentNullException(nameof(category));
@@ -162,8 +165,8 @@ public sealed class HomeAssistantRegistryClient
         HomeAssistantCategoryUpdate update,
         CancellationToken cancellationToken = default)
     {
-        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope));
-        categoryId = HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
+        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope), cancellationToken);
+        categoryId = HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId), cancellationToken);
         if (update is null)
         {
             throw new ArgumentNullException(nameof(update));
@@ -176,15 +179,18 @@ public sealed class HomeAssistantRegistryClient
             "updated category",
             cancellationToken);
         ValidateCategory(updated, cancellationToken);
-        if (!string.Equals(updated.CategoryId, categoryId, StringComparison.Ordinal))
+        if (!HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                updated.CategoryId,
+                categoryId,
+                cancellationToken))
             throw new HomeAssistantProtocolException("The updated Home Assistant category did not match the requested identifier.");
         return updated;
     }
 
     public Task DeleteCategoryAsync(string scope, string categoryId, CancellationToken cancellationToken = default)
     {
-        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope));
-        categoryId = HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId));
+        scope = HomeAssistantRegistryValidation.Require(scope, nameof(scope), cancellationToken);
+        categoryId = HomeAssistantRegistryValidation.Require(categoryId, nameof(categoryId), cancellationToken);
         return IgnoreResultAsync("config/category_registry/delete", new Dictionary<string, object?>
         {
             ["scope"] = scope,
@@ -353,17 +359,17 @@ public sealed class HomeAssistantRegistryClient
             throw new HomeAssistantProtocolException("The Home Assistant " + responseName + " were null.");
         }
 
-        var identities = new HashSet<string>(StringComparer.Ordinal);
+        var identities = new List<string>();
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(value)
-                || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
-                || !identities.Add(value))
+            if (!IsCanonicalTrimmed(value, cancellationToken)
+                || ContainsOrdinal(identities, value, cancellationToken))
             {
                 throw new HomeAssistantProtocolException(
                     "The Home Assistant " + responseName + " contained an invalid or duplicate identifier.");
             }
+            identities.Add(value);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -383,21 +389,42 @@ public sealed class HomeAssistantRegistryClient
     private static void ValidateLabel(HomeAssistantLabel label, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(label.LabelId)
-            || !string.Equals(label.LabelId, label.LabelId.Trim(), StringComparison.Ordinal)
-            || string.IsNullOrWhiteSpace(label.Name)
-            || !string.Equals(label.Name, label.Name.Trim(), StringComparison.Ordinal))
+        if (!IsCanonicalTrimmed(label.LabelId, cancellationToken)
+            || !IsCanonicalTrimmed(label.Name, cancellationToken))
             throw new HomeAssistantProtocolException("A Home Assistant label did not contain its required identifier and name.");
     }
 
     private static void ValidateCategory(HomeAssistantCategory category, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(category.CategoryId)
-            || !string.Equals(category.CategoryId, category.CategoryId.Trim(), StringComparison.Ordinal)
-            || string.IsNullOrWhiteSpace(category.Name)
-            || !string.Equals(category.Name, category.Name.Trim(), StringComparison.Ordinal))
+        if (!IsCanonicalTrimmed(category.CategoryId, cancellationToken)
+            || !IsCanonicalTrimmed(category.Name, cancellationToken))
             throw new HomeAssistantProtocolException("A Home Assistant category did not contain its required identifier and name.");
+    }
+
+    private static bool IsCanonicalTrimmed(string? value, CancellationToken cancellationToken)
+    {
+        if (value is null || HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
+            return false;
+        var trimmed = HomeAssistantX.Protocol.CancellationAwareString.Trim(value, cancellationToken);
+        return HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(value, trimmed, cancellationToken);
+    }
+
+    private static bool ContainsOrdinal(
+        IReadOnlyList<string> values,
+        string candidate,
+        CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < values.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                    values[index],
+                    candidate,
+                    cancellationToken)) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
     }
 
     internal static void ValidateLabels(
@@ -435,12 +462,13 @@ public sealed class HomeAssistantRegistryClient
         string registryName,
         CancellationToken cancellationToken)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new List<string>();
         foreach (var identity in identities)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!seen.Add(identity))
+            if (ContainsOrdinal(seen, identity, cancellationToken))
                 throw new HomeAssistantProtocolException("The Home Assistant " + registryName + " response contained a duplicate identifier.");
+            seen.Add(identity);
         }
         cancellationToken.ThrowIfCancellationRequested();
     }

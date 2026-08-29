@@ -444,6 +444,30 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task RegistryMutationIdentifiersHonorCallerCancellationBeforeNormalization()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var paddedIdentifier = " " + new string('x', 1_000_000) + " ";
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Registries.UpdateLabelAsync(
+                paddedIdentifier,
+                new HomeAssistantLabelUpdate().WithDescription("updated"),
+                cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Registries.DeleteCategoryAsync(
+                paddedIdentifier,
+                paddedIdentifier,
+                cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("config/label_registry/update"));
+        Assert.Null(server.GetLastWebSocketCommand("config/category_registry/delete"));
+    }
+
+    [Fact]
     public async Task RegistrySnapshotIncludesLabelsAndScopedCategoryCrudPreservesTriStateUpdates()
     {
         using var server = new TestHomeAssistantServer();

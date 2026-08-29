@@ -59,7 +59,7 @@ public sealed class SetHomeAssistantLabelCommand : HomeAssistantCmdlet
         }
         if (ParameterSetName == "Create")
         {
-            var create = new HomeAssistantLabelCreate(Name!) { Color = Color, Description = Description, Icon = Icon };
+            var create = new HomeAssistantLabelCreate(Name!, CancelToken) { Color = Color, Description = Description, Icon = Icon };
             if (ShouldProcess(create.Name, "Create Home Assistant label"))
             {
                 WriteObject(await Client.Registries.CreateLabelAsync(create, CancelToken).ConfigureAwait(false));
@@ -68,7 +68,7 @@ public sealed class SetHomeAssistantLabelCommand : HomeAssistantCmdlet
             return;
         }
 
-        var labelId = HomeAssistantRegistryValidation.Require(LabelId, nameof(LabelId));
+        var labelId = HomeAssistantRegistryValidation.Require(LabelId, nameof(LabelId), CancelToken);
         var update = new HomeAssistantLabelUpdate();
         var hasName = MyInvocation.BoundParameters.ContainsKey(nameof(Name));
         var hasColor = MyInvocation.BoundParameters.ContainsKey(nameof(Color)) || ClearColor;
@@ -79,7 +79,7 @@ public sealed class SetHomeAssistantLabelCommand : HomeAssistantCmdlet
             throw new ArgumentException("At least one label field must be supplied for an update.");
         }
 
-        if (hasName) update.WithName(Name!);
+        if (hasName) update.WithName(Name!, CancelToken);
         if (hasColor) update.WithColor(ClearColor ? null : Color);
         if (hasDescription) update.WithDescription(ClearDescription ? null : Description);
         if (hasIcon) update.WithIcon(ClearIcon ? null : Icon);

@@ -19,6 +19,16 @@ internal static class CancellationAwareString
         return true;
     }
 
+    internal static void Observe(string value, CancellationToken cancellationToken)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
     internal static string Trim(
         string value,
         CancellationToken cancellationToken)

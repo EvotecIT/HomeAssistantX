@@ -208,6 +208,44 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
+    public async Task CalendarKnownStringProjectionStopsAfterCancellation()
+    {
+        var json = JsonSerializer.Serialize(new string('x', 16_000_000));
+        var payload = System.Text.Encoding.UTF8.GetBytes(json);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                var reader = new Utf8JsonReader(payload);
+                Assert.True(reader.Read());
+                started.TrySetResult(true);
+                return HomeAssistantCancellationJsonValueReader.ReadString(ref reader, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
+    public void CalendarKnownStringsPreserveEscapedJsonText()
+    {
+        const string json = "{\"summary\":\"Planning \\\"A\\\" \\u263A\",\"start\":{\"date\":\"2026-08-27\"},\"end\":{\"date\":\"2026-08-28\"}}";
+
+        var value = JsonSerializer.Deserialize<HomeAssistantCalendarEvent>(
+            json,
+            HomeAssistantJson.CreateCancellationAwareResponseOptions(CancellationToken.None));
+
+        Assert.NotNull(value);
+        Assert.Equal("Planning \"A\" ☺", value.Summary);
+    }
+
+    [Fact]
     public async Task GenericExtensionProjectionStopsAfterCancellation()
     {
         var json = "[{\"notification_id\":\"notice\",\"message\":\"Ready\",\"provider_payload\":["

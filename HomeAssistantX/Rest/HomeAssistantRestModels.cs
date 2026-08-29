@@ -137,7 +137,7 @@ internal sealed class HomeAssistantCalendarEventJsonConverter : JsonConverter<Ho
         }
 
         var result = new HomeAssistantCalendarEvent();
-        var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+        var propertyNames = new List<string>();
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             _cancellationToken.ThrowIfCancellationRequested();
@@ -146,11 +146,12 @@ internal sealed class HomeAssistantCalendarEventJsonConverter : JsonConverter<Ho
                 throw new JsonException("A Home Assistant calendar event contained an invalid object member.");
             }
 
-            var propertyName = reader.GetString()!;
-            if (!propertyNames.Add(propertyName))
+            var propertyName = HomeAssistantCancellationJsonValueReader.ReadString(ref reader, _cancellationToken);
+            if (ContainsOrdinal(propertyNames, propertyName, _cancellationToken))
             {
                 throw new JsonException("A Home Assistant calendar event contained a duplicate field.");
             }
+            propertyNames.Add(propertyName);
 
             if (!reader.Read())
             {
@@ -158,37 +159,45 @@ internal sealed class HomeAssistantCalendarEventJsonConverter : JsonConverter<Ho
             }
 
             _cancellationToken.ThrowIfCancellationRequested();
-            switch (propertyName)
+            if (CancellationAwareString.EqualsOrdinal(propertyName, "summary", _cancellationToken))
             {
-                case "summary":
-                    result.Summary = ReadRequiredString(ref reader, "summary");
-                    break;
-                case "start":
-                    result.Start = ReadBoundary(ref reader, options);
-                    break;
-                case "end":
-                    result.End = ReadBoundary(ref reader, options);
-                    break;
-                case "description":
-                    result.Description = ReadOptionalString(ref reader, "description");
-                    break;
-                case "location":
-                    result.Location = ReadOptionalString(ref reader, "location");
-                    break;
-                case "uid":
-                    result.Uid = ReadOptionalString(ref reader, "uid");
-                    break;
-                case "recurrence_id":
-                    result.RecurrenceId = ReadOptionalString(ref reader, "recurrence_id");
-                    break;
-                case "rrule":
-                    result.RecurrenceRule = ReadOptionalString(ref reader, "rrule");
-                    break;
-                default:
-                    result.AdditionalData.Add(
-                        propertyName,
-                        HomeAssistantCancellationJsonValueReader.Read(ref reader, _cancellationToken));
-                    break;
+                result.Summary = ReadRequiredString(ref reader, "summary");
+            }
+            else if (CancellationAwareString.EqualsOrdinal(propertyName, "start", _cancellationToken))
+            {
+                result.Start = ReadBoundary(ref reader, options);
+            }
+            else if (CancellationAwareString.EqualsOrdinal(propertyName, "end", _cancellationToken))
+            {
+                result.End = ReadBoundary(ref reader, options);
+            }
+            else if (CancellationAwareString.EqualsOrdinal(propertyName, "description", _cancellationToken))
+            {
+                result.Description = ReadOptionalString(ref reader, "description");
+            }
+            else if (CancellationAwareString.EqualsOrdinal(propertyName, "location", _cancellationToken))
+            {
+                result.Location = ReadOptionalString(ref reader, "location");
+            }
+            else if (CancellationAwareString.EqualsOrdinal(propertyName, "uid", _cancellationToken))
+            {
+                result.Uid = ReadOptionalString(ref reader, "uid");
+            }
+            else if (CancellationAwareString.EqualsOrdinal(propertyName, "recurrence_id", _cancellationToken))
+            {
+                result.RecurrenceId = ReadOptionalString(ref reader, "recurrence_id");
+            }
+            else if (CancellationAwareString.EqualsOrdinal(propertyName, "rrule", _cancellationToken))
+            {
+                result.RecurrenceRule = ReadOptionalString(ref reader, "rrule");
+            }
+            else
+            {
+                HomeAssistantCancellationJsonValueReader.AddExtensionData(
+                    result.AdditionalData,
+                    propertyName,
+                    HomeAssistantCancellationJsonValueReader.Read(ref reader, _cancellationToken),
+                    _cancellationToken);
             }
         }
 
@@ -201,17 +210,17 @@ internal sealed class HomeAssistantCalendarEventJsonConverter : JsonConverter<Ho
         return result;
     }
 
-    private static string ReadRequiredString(ref Utf8JsonReader reader, string propertyName)
+    private string ReadRequiredString(ref Utf8JsonReader reader, string propertyName)
     {
         if (reader.TokenType != JsonTokenType.String)
         {
             throw new JsonException("A Home Assistant calendar " + propertyName + " must be a string.");
         }
 
-        return reader.GetString()!;
+        return HomeAssistantCancellationJsonValueReader.ReadString(ref reader, _cancellationToken);
     }
 
-    private static string? ReadOptionalString(ref Utf8JsonReader reader, string propertyName)
+    private string? ReadOptionalString(ref Utf8JsonReader reader, string propertyName)
     {
         if (reader.TokenType == JsonTokenType.Null)
         {
@@ -265,20 +274,83 @@ internal sealed class HomeAssistantCalendarEventJsonConverter : JsonConverter<Ho
             writer.WriteString(propertyName, value);
         }
     }
+
+    private static bool ContainsOrdinal(
+        IReadOnlyList<string> values,
+        string candidate,
+        CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < values.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (CancellationAwareString.EqualsOrdinal(values[index], candidate, cancellationToken)) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
 }
 
 internal static class HomeAssistantCancellationJsonValueReader
 {
+    private const int CopyChunkLength = 16 * 1024;
+
+    internal static string ReadString(ref Utf8JsonReader reader, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (reader.TokenType is not JsonTokenType.String and not JsonTokenType.PropertyName)
+            throw new JsonException("A JSON string token was required.");
+
+        var sequenceLength = reader.HasValueSequence ? reader.ValueSequence.Length : reader.ValueSpan.Length;
+        if (sequenceLength > int.MaxValue - 2)
+            throw new JsonException("A JSON string token exceeded the supported response size.");
+        var valueLength = (int)sequenceLength;
+        var payload = new byte[checked(valueLength + 2)];
+        payload[0] = (byte)'"';
+        var offset = 1;
+        if (reader.HasValueSequence)
+        {
+            foreach (var segment in reader.ValueSequence)
+            {
+                CopyBytes(segment.Span, payload, ref offset, cancellationToken);
+            }
+        }
+        else
+        {
+            CopyBytes(reader.ValueSpan, payload, ref offset, cancellationToken);
+        }
+        payload[offset] = (byte)'"';
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!cancellationToken.CanBeCanceled || payload.Length <= CopyChunkLength)
+        {
+            var value = JsonSerializer.Deserialize<string>(payload)!;
+            cancellationToken.ThrowIfCancellationRequested();
+            return value;
+        }
+
+        var parseTask = Task.Run(() => JsonSerializer.Deserialize<string>(payload)!);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        var completed = Task.WhenAny(parseTask, canceled.Task).GetAwaiter().GetResult();
+        if (!ReferenceEquals(completed, parseTask))
+        {
+            _ = parseTask.ContinueWith(
+                task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        return parseTask.GetAwaiter().GetResult();
+    }
+
     internal static JsonElement Read(ref Utf8JsonReader reader, CancellationToken cancellationToken)
     {
         ArraySegment<byte> payload;
         using (var buffer = new MemoryStream())
         {
-            using (var writer = new Utf8JsonWriter(buffer))
-            {
-                Copy(ref reader, writer, cancellationToken);
-                writer.Flush();
-            }
+            Copy(ref reader, buffer, cancellationToken);
 
             if (!buffer.TryGetBuffer(out payload))
                 throw new InvalidOperationException("The extension JSON buffer could not be accessed.");
@@ -312,62 +384,172 @@ internal static class HomeAssistantCancellationJsonValueReader
         return parseTask.GetAwaiter().GetResult();
     }
 
-    private static void Copy(ref Utf8JsonReader reader, Utf8JsonWriter writer, CancellationToken cancellationToken)
+    internal static void AddExtensionData(
+        Dictionary<string, JsonElement> target,
+        string propertyName,
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        CancellationAwareString.Observe(propertyName, cancellationToken);
+        if (!cancellationToken.CanBeCanceled || propertyName.Length <= CopyChunkLength)
+        {
+            target.Add(propertyName, value);
+            cancellationToken.ThrowIfCancellationRequested();
+            return;
+        }
+
+        var addTask = Task.Run(() => target.Add(propertyName, value));
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        var completed = Task.WhenAny(addTask, canceled.Task).GetAwaiter().GetResult();
+        if (!ReferenceEquals(completed, addTask))
+        {
+            _ = addTask.ContinueWith(
+                task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        addTask.GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void Copy(ref Utf8JsonReader reader, MemoryStream buffer, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         switch (reader.TokenType)
         {
             case JsonTokenType.StartObject:
-                writer.WriteStartObject();
+                buffer.WriteByte((byte)'{');
+                var firstProperty = true;
                 while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     if (reader.TokenType != JsonTokenType.PropertyName)
                         throw new JsonException("An extension object contained an invalid member.");
-                    writer.WritePropertyName(reader.GetString()!);
+                    if (!firstProperty) buffer.WriteByte((byte)',');
+                    WriteStringToken(ref reader, buffer, cancellationToken);
+                    buffer.WriteByte((byte)':');
                     if (!reader.Read()) throw new JsonException("An extension object was incomplete.");
-                    Copy(ref reader, writer, cancellationToken);
+                    Copy(ref reader, buffer, cancellationToken);
+                    firstProperty = false;
                 }
                 if (reader.TokenType != JsonTokenType.EndObject)
                     throw new JsonException("An extension object was incomplete.");
-                writer.WriteEndObject();
+                buffer.WriteByte((byte)'}');
                 return;
             case JsonTokenType.StartArray:
-                writer.WriteStartArray();
+                buffer.WriteByte((byte)'[');
+                var firstElement = true;
                 while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                 {
-                    Copy(ref reader, writer, cancellationToken);
+                    if (!firstElement) buffer.WriteByte((byte)',');
+                    Copy(ref reader, buffer, cancellationToken);
+                    firstElement = false;
                 }
                 if (reader.TokenType != JsonTokenType.EndArray)
                     throw new JsonException("An extension array was incomplete.");
-                writer.WriteEndArray();
+                buffer.WriteByte((byte)']');
                 return;
             case JsonTokenType.String:
-                writer.WriteStringValue(reader.GetString());
+                WriteStringToken(ref reader, buffer, cancellationToken);
                 return;
             case JsonTokenType.Number:
-                if (reader.HasValueSequence)
-                    writer.WriteRawValue(reader.ValueSequence.ToArray(), skipInputValidation: true);
-                else
-                    writer.WriteRawValue(reader.ValueSpan, skipInputValidation: true);
+                WriteTokenBytes(ref reader, buffer, cancellationToken);
                 return;
             case JsonTokenType.True:
-                writer.WriteBooleanValue(true);
+                WriteAscii(buffer, "true", cancellationToken);
                 return;
             case JsonTokenType.False:
-                writer.WriteBooleanValue(false);
+                WriteAscii(buffer, "false", cancellationToken);
                 return;
             case JsonTokenType.Null:
-                writer.WriteNullValue();
+                WriteAscii(buffer, "null", cancellationToken);
                 return;
             default:
                 throw new JsonException("An extension value contained an invalid JSON token.");
         }
     }
+
+    private static void WriteStringToken(
+        ref Utf8JsonReader reader,
+        MemoryStream buffer,
+        CancellationToken cancellationToken)
+    {
+        buffer.WriteByte((byte)'"');
+        WriteTokenBytes(ref reader, buffer, cancellationToken);
+        buffer.WriteByte((byte)'"');
+    }
+
+    private static void WriteTokenBytes(
+        ref Utf8JsonReader reader,
+        MemoryStream buffer,
+        CancellationToken cancellationToken)
+    {
+        if (reader.HasValueSequence)
+        {
+            foreach (var segment in reader.ValueSequence)
+            {
+                WriteBytes(segment.Span, buffer, cancellationToken);
+            }
+        }
+        else
+        {
+            WriteBytes(reader.ValueSpan, buffer, cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void WriteBytes(
+        ReadOnlySpan<byte> source,
+        MemoryStream buffer,
+        CancellationToken cancellationToken)
+    {
+        for (var offset = 0; offset < source.Length;)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = Math.Min(CopyChunkLength, source.Length - offset);
+            var chunk = source.Slice(offset, count).ToArray();
+            buffer.Write(chunk, 0, chunk.Length);
+            offset += count;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void WriteAscii(
+        MemoryStream buffer,
+        string value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        for (var index = 0; index < value.Length; index++) buffer.WriteByte((byte)value[index]);
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void CopyBytes(
+        ReadOnlySpan<byte> source,
+        byte[] destination,
+        ref int destinationOffset,
+        CancellationToken cancellationToken)
+    {
+        for (var sourceOffset = 0; sourceOffset < source.Length;)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = Math.Min(CopyChunkLength, source.Length - sourceOffset);
+            source.Slice(sourceOffset, count).CopyTo(destination.AsSpan(destinationOffset, count));
+            sourceOffset += count;
+            destinationOffset += count;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
 }
 
 internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter<HomeAssistantCalendarBoundary>
 {
+    private const int MaximumBoundaryTextLength = 128;
     private readonly CancellationToken _cancellationToken;
 
     public HomeAssistantCalendarBoundaryJsonConverter()
@@ -385,8 +567,9 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
         _cancellationToken.ThrowIfCancellationRequested();
         if (reader.TokenType == JsonTokenType.String)
         {
-            var value = reader.GetString();
-            if (string.IsNullOrWhiteSpace(value))
+            var value = HomeAssistantCancellationJsonValueReader.ReadString(ref reader, _cancellationToken);
+            if (value.Length > MaximumBoundaryTextLength
+                || CancellationAwareString.IsNullOrWhiteSpace(value, _cancellationToken))
             {
                 throw new JsonException("A Home Assistant calendar boundary string cannot be blank.");
             }
@@ -420,7 +603,7 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
         var hasDate = false;
         var hasDateTime = false;
         var additionalData = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+        var propertyNames = new List<string>();
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             _cancellationToken.ThrowIfCancellationRequested();
@@ -429,11 +612,12 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
                 throw new JsonException("A Home Assistant calendar boundary contained an invalid object member.");
             }
 
-            var propertyName = reader.GetString()!;
-            if (!propertyNames.Add(propertyName))
+            var propertyName = HomeAssistantCancellationJsonValueReader.ReadString(ref reader, _cancellationToken);
+            if (ContainsOrdinal(propertyNames, propertyName, _cancellationToken))
             {
                 throw new JsonException("A Home Assistant calendar boundary contained a duplicate field.");
             }
+            propertyNames.Add(propertyName);
 
             if (!reader.Read())
             {
@@ -441,7 +625,7 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             }
 
             _cancellationToken.ThrowIfCancellationRequested();
-            if (propertyName == "date")
+            if (CancellationAwareString.EqualsOrdinal(propertyName, "date", _cancellationToken))
             {
                 hasDate = true;
                 if (reader.TokenType != JsonTokenType.String)
@@ -449,8 +633,9 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
                     throw new JsonException("A Home Assistant calendar date must be a string.");
                 }
 
-                dateValue = reader.GetString();
-                if (!DateTime.TryParseExact(
+                dateValue = HomeAssistantCancellationJsonValueReader.ReadString(ref reader, _cancellationToken);
+                if (dateValue.Length > MaximumBoundaryTextLength
+                    || !DateTime.TryParseExact(
                         dateValue,
                         "yyyy-MM-dd",
                         System.Globalization.CultureInfo.InvariantCulture,
@@ -460,22 +645,28 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
                     throw new JsonException("A Home Assistant calendar date must use yyyy-MM-dd.");
                 }
             }
-            else if (propertyName == "dateTime")
+            else if (CancellationAwareString.EqualsOrdinal(propertyName, "dateTime", _cancellationToken))
             {
                 hasDateTime = true;
-                if (reader.TokenType != JsonTokenType.String
-                    || !TryReadWireDateTime(reader.GetString(), out var dateTime))
+                if (reader.TokenType != JsonTokenType.String)
                 {
                     throw new JsonException("A Home Assistant calendar dateTime must be a valid timestamp string.");
                 }
+
+                var dateTimeText = HomeAssistantCancellationJsonValueReader.ReadString(ref reader, _cancellationToken);
+                if (dateTimeText.Length > MaximumBoundaryTextLength
+                    || !TryReadWireDateTime(dateTimeText, out var dateTime))
+                    throw new JsonException("A Home Assistant calendar dateTime must be a valid timestamp string.");
 
                 parsedDateTime = dateTime;
             }
             else
             {
-                additionalData.Add(
+                HomeAssistantCancellationJsonValueReader.AddExtensionData(
+                    additionalData,
                     propertyName,
-                    HomeAssistantCancellationJsonValueReader.Read(ref reader, _cancellationToken));
+                    HomeAssistantCancellationJsonValueReader.Read(ref reader, _cancellationToken),
+                    _cancellationToken);
             }
         }
 
@@ -513,6 +704,20 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
     private static bool TryReadWireDateTime(string? text, out DateTimeOffset result)
     {
         return HomeAssistantTimestamp.TryParse(text, out result);
+    }
+
+    private static bool ContainsOrdinal(
+        IReadOnlyList<string> values,
+        string candidate,
+        CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < values.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (CancellationAwareString.EqualsOrdinal(values[index], candidate, cancellationToken)) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
     }
 
     public override void Write(Utf8JsonWriter writer, HomeAssistantCalendarBoundary value, JsonSerializerOptions options)
