@@ -322,7 +322,7 @@ public sealed class HomeAssistantMediaPlayerStatus
         var position = HomeAssistantAttributeReader.GetDouble(attributes, "media_position", cancellationToken);
         return new HomeAssistantMediaPlayerStatus(state)
         {
-            State = ParseState(state.State),
+            State = ParseState(state.State, cancellationToken),
             FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name", cancellationToken),
             DeviceClass = HomeAssistantAttributeReader.GetString(attributes, "device_class", cancellationToken),
             SupportedFeatures = (HomeAssistantMediaPlayerFeature)(HomeAssistantAttributeReader.GetNonNegativeInt64(attributes, "supported_features", cancellationToken) ?? 0),
@@ -361,21 +361,24 @@ public sealed class HomeAssistantMediaPlayerStatus
         };
     }
 
-    private static HomeAssistantMediaPlayerState ParseState(string state)
+    private static HomeAssistantMediaPlayerState ParseState(
+        string state,
+        CancellationToken cancellationToken)
     {
-        return state.ToLowerInvariant() switch
-        {
-            "unknown" => HomeAssistantMediaPlayerState.Unknown,
-            "unavailable" => HomeAssistantMediaPlayerState.Unavailable,
-            "off" => HomeAssistantMediaPlayerState.Off,
-            "on" => HomeAssistantMediaPlayerState.On,
-            "idle" => HomeAssistantMediaPlayerState.Idle,
-            "playing" => HomeAssistantMediaPlayerState.Playing,
-            "paused" => HomeAssistantMediaPlayerState.Paused,
-            "buffering" => HomeAssistantMediaPlayerState.Buffering,
-            "standby" => HomeAssistantMediaPlayerState.Standby,
-            _ => HomeAssistantMediaPlayerState.Other
-        };
+        cancellationToken.ThrowIfCancellationRequested();
+        HomeAssistantMediaPlayerState result;
+        if (state.Equals("unknown", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.Unknown;
+        else if (state.Equals("unavailable", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.Unavailable;
+        else if (state.Equals("off", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.Off;
+        else if (state.Equals("on", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.On;
+        else if (state.Equals("idle", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.Idle;
+        else if (state.Equals("playing", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.Playing;
+        else if (state.Equals("paused", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.Paused;
+        else if (state.Equals("buffering", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.Buffering;
+        else if (state.Equals("standby", StringComparison.OrdinalIgnoreCase)) result = HomeAssistantMediaPlayerState.Standby;
+        else result = HomeAssistantMediaPlayerState.Other;
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     internal static IReadOnlyList<string> GetGroupMembers(

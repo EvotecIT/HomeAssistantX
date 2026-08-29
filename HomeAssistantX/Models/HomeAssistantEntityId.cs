@@ -48,14 +48,21 @@ public static class HomeAssistantEntityId
     }
 
     internal static string RequireResponseEntityId(string? value)
+        => RequireResponseEntityId(value, default);
+
+    internal static string RequireResponseEntityId(
+        string? value,
+        CancellationToken cancellationToken)
     {
-        if (!TryNormalize(value, out var normalized)
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!TryNormalize(value, cancellationToken, out var normalized)
             || !string.Equals(value, normalized, StringComparison.Ordinal)
             || normalized.Any(character => character >= 'A' && character <= 'Z'))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned a malformed entity identifier.");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized;
     }
 
@@ -127,14 +134,18 @@ public static class HomeAssistantEntityId
         return true;
     }
 
-    internal static HomeAssistantState RequireResponseDomain(HomeAssistantState state, string domain)
+    internal static HomeAssistantState RequireResponseDomain(
+        HomeAssistantState state,
+        string domain,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (state is null)
         {
             throw new HomeAssistantProtocolException("Home Assistant returned an entity outside the requested " + domain + " domain.");
         }
 
-        var entityId = RequireResponseEntityId(state.EntityId);
+        var entityId = RequireResponseEntityId(state.EntityId, cancellationToken);
         var separator = entityId.IndexOf('.');
         if (!string.Equals(entityId.Substring(0, separator), domain, StringComparison.Ordinal))
         {
@@ -144,14 +155,18 @@ public static class HomeAssistantEntityId
         return state;
     }
 
-    internal static HomeAssistantState RequireResponseEntity(HomeAssistantState state, string expectedEntityId)
+    internal static HomeAssistantState RequireResponseEntity(
+        HomeAssistantState state,
+        string expectedEntityId,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (state is null)
         {
             throw new HomeAssistantProtocolException("Home Assistant returned a different entity than requested.");
         }
 
-        var actualEntityId = RequireResponseEntityId(state.EntityId);
+        var actualEntityId = RequireResponseEntityId(state.EntityId, cancellationToken);
         if (!string.Equals(actualEntityId, expectedEntityId, StringComparison.Ordinal))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned a different entity than requested.");
@@ -176,7 +191,7 @@ public static class HomeAssistantEntityId
                     "Home Assistant returned a null entity state.");
             }
 
-            var entityId = RequireResponseEntityId(state.EntityId);
+            var entityId = RequireResponseEntityId(state.EntityId, cancellationToken);
             var separator = entityId.IndexOf('.');
             if (string.Equals(entityId.Substring(0, separator), domain, StringComparison.Ordinal))
             {

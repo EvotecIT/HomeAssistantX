@@ -28,7 +28,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             throw new ArgumentException("A media-player entity identifier is required.", nameof(entityId));
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
         return HomeAssistantMediaPlayerStatus.FromState(
-            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId),
+            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId, cancellationToken),
             cancellationToken);
     }
 
@@ -572,7 +572,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         foreach (var value in entityIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantEntityId.TryNormalizeForDomain(value, "media_player", out var normalized))
+            if (!HomeAssistantEntityId.TryNormalizeForDomain(value, "media_player", cancellationToken, out var normalized))
             {
                 throw new ArgumentException(
                     "At least one media_player entity identifier is required.",

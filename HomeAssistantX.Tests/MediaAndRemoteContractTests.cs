@@ -839,6 +839,28 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public void TypedResponseEntityValidationAndStateParsingHonorCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var state = DeserializeState(
+            "{\"entity_id\":\"media_player.kitchen\",\"state\":\"idle\",\"attributes\":{}}");
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantEntityId.RequireResponseEntity(
+                state,
+                "media_player.kitchen",
+                cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaPlayerStatus.FromState(state, cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaPlayerClient.NormalizeEntityIds(
+                new[] { "media_player.kitchen" },
+                "entityIds",
+                cancellation.Token));
+    }
+
+    [Fact]
     public async Task TypedBulkReadsRejectMalformedServerEntityIds()
     {
         using var server = new TestHomeAssistantServer();
