@@ -101,17 +101,18 @@ public static class HomeAssistantDashboardIdentifier
         string? value,
         string parameterName,
         CancellationToken cancellationToken)
-        => RequireText(value, parameterName, cancellationToken);
+        => RequireText(value, parameterName, preserveWhitespace: true, cancellationToken);
 
     internal static string RequireResourceUrl(
         string? value,
         string parameterName,
         CancellationToken cancellationToken)
-        => RequireText(value, parameterName, cancellationToken);
+        => RequireText(value, parameterName, preserveWhitespace: true, cancellationToken);
 
     private static string RequireText(
         string? value,
         string parameterName,
+        bool preserveWhitespace,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -136,7 +137,9 @@ public static class HomeAssistantDashboardIdentifier
             if (((index - start) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return start == 0 && length == value.Length ? value : value.Substring(start, length);
+        return preserveWhitespace || start == 0 && length == value.Length
+            ? value
+            : value.Substring(start, length);
     }
 
     private static string RequireBounded(

@@ -513,11 +513,18 @@ public sealed class HomeAssistantDashboardClient
         string? resourceMode,
         CancellationToken cancellationToken)
     {
-        if (!IsCanonicalTrimmed(resource.Url, cancellationToken)
+        if (!IsNonBlankPreserved(resource.Url, cancellationToken)
             || !IsCanonicalTrimmed(resource.Type, cancellationToken))
             throw new HomeAssistantProtocolException("A Lovelace resource did not contain its required fields.");
         if (resourceMode == "storage")
             resource.Id = RequireResponseSelector(resource.Id, "A storage Lovelace resource did not contain a canonical identifier.", cancellationToken);
+    }
+
+    private static bool IsNonBlankPreserved(string? value, CancellationToken cancellationToken)
+    {
+        if (value is null || CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)) return false;
+        CancellationAwareString.Observe(value, cancellationToken);
+        return true;
     }
 
     private static void ValidateStorageResource(HomeAssistantDashboardResource resource, CancellationToken cancellationToken)

@@ -453,6 +453,9 @@ public sealed class CamerasDashboardsAutomationContractTests
 
         Assert.Equal(title, HomeAssistantDashboardIdentifier.RequireTitle(title, "title", CancellationToken.None));
         Assert.Equal(resourceUrl, HomeAssistantDashboardIdentifier.RequireResourceUrl(resourceUrl, "url", CancellationToken.None));
+        Assert.Equal(
+            "  " + resourceUrl + "  ",
+            HomeAssistantDashboardIdentifier.RequireResourceUrl("  " + resourceUrl + "  ", "url", CancellationToken.None));
     }
 
     [Fact]
@@ -1563,6 +1566,26 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Equal("  House  ", dashboard.Title);
     }
 
+    [Fact]
+    public async Task DashboardMutationsPreserveCallerTitleWhitespace()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"  House  \",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var dashboard = await client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate
+        {
+            UrlPath = "house-main",
+            Title = "  House  "
+        });
+        using var request = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/dashboards/create")));
+
+        Assert.Equal("  House  ", request.RootElement.GetProperty("title").GetString());
+        Assert.Equal("  House  ", dashboard.Title);
+    }
+
     [Theory]
     [InlineData("[{\"id\":\"one\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"},{\"id\":\"two\",\"url_path\":\"house-main\",\"title\":\"House 2\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]")]
     [InlineData("[{\"id\":\"same\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"},{\"id\":\"same\",\"url_path\":\"garden-main\",\"title\":\"Garden\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]")]
@@ -1605,15 +1628,14 @@ public sealed class CamerasDashboardsAutomationContractTests
             "house-main",
             new HomeAssistantDashboardUpdate { Title = "Updated" }));
 
-        foreach (var response in new[]
-        {
-            "[{\"id\":\"resource-1\",\"url\":\" /local/card.js \",\"type\":\"module\"}]",
-            "[{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\" module \"}]"
-        })
-        {
-            server.DashboardResourceListResponseJson = response;
-            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
-        }
+        server.DashboardResourceListResponseJson =
+            "[{\"id\":\"resource-1\",\"url\":\" /local/card.js \",\"type\":\"module\"}]";
+        var resources = await client.Dashboards.GetResourcesAsync();
+        Assert.Equal(" /local/card.js ", Assert.Single(resources).Url);
+
+        server.DashboardResourceListResponseJson =
+            "[{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\" module \"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
     }
 
     [Theory]
