@@ -120,6 +120,29 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task CancelledSafetyCodesAreNotInspectedBeforeCancellation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var longCode = new string(' ', 1_000_000);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Alarms.ActAsync(
+            HomeAssistantTarget.ForEntity("alarm_control_panel.home"),
+            HomeAssistantAlarmAction.Disarm,
+            longCode,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Locks.ActAsync(
+            HomeAssistantTarget.ForEntity("lock.front"),
+            HomeAssistantLockAction.Unlock,
+            longCode,
+            cancellation.Token));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task RoutineAndHelperControlsKeepDomainsAndValueShapesTyped()
     {
         using var server = new TestHomeAssistantServer();
@@ -1391,6 +1414,25 @@ public sealed class StableControlAndAdapterContractTests
 
         using var call = LastCall(server);
         Assert.Equal("original", call.RootElement.GetProperty("service_data").GetProperty("params").GetProperty("zone").GetString());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("[]")]
+    [InlineData("\"value\"")]
+    public async Task VacuumCommandRejectsNonObjectProviderParametersBeforeDispatch(string json)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var document = JsonDocument.Parse(json);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Vacuums.SendCommandAsync(
+            HomeAssistantTarget.ForEntity("vacuum.downstairs"),
+            "provider_command",
+            document.RootElement));
+
+        Assert.Null(server.LastServiceCallBody);
     }
 
     [Fact]

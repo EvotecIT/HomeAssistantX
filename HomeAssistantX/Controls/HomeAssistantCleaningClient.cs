@@ -51,6 +51,8 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
         cancellationToken.ThrowIfCancellationRequested();
         var normalizedCommand = ControlValidation.RequiredUnchanged(command, nameof(command));
         var frozenParameters = parameters is null ? (System.Text.Json.JsonElement?)null : HomeAssistantJson.FreezeValue(parameters, nameof(parameters), "Parameters", cancellationToken);
+        if (frozenParameters.HasValue && frozenParameters.Value.ValueKind != System.Text.Json.JsonValueKind.Object)
+            throw new ArgumentException("Vacuum command parameters must serialize as a JSON object.", nameof(parameters));
         return CallAsync("send_command", target, call =>
         {
             call.WithData("command", normalizedCommand);

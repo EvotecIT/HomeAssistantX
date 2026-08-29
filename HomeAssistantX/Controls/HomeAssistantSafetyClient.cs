@@ -87,6 +87,7 @@ public sealed class HomeAssistantAlarmClient : HomeAssistantControlClientBase
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantAlarmAction action, string? code = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var normalizedCode = code is null ? null : ControlValidation.RequiredUnchanged(code, nameof(code));
         return CallAsync(action switch
         {

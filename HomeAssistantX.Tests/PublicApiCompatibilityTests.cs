@@ -28,6 +28,18 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void ParameterFormatterPreservesByValueMarshallingDirections()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(ByValueDirectionFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.Equal(
+            "in-flag System.Byte[] input, out-flag System.Byte[] output, in-flag out-flag System.Byte[] inputOutput",
+            FormatParameters(method.GetParameters()));
+    }
+
+    [Fact]
     public void MethodFormatterPreservesParamsAndGenericConstraints()
     {
         var method = typeof(PublicApiCompatibilityTests).GetMethod(
@@ -351,6 +363,16 @@ public sealed class PublicApiCompatibilityTests
         Assert.StartsWith("dll-import(\"native-test\",entry=\"native_entry\",import-flags=", formatted, StringComparison.Ordinal);
         Assert.Contains(",calling=Cdecl,charset=Unicode,exact=true,set-last-error=true", formatted, StringComparison.Ordinal);
         Assert.NotEqual(DllImportContract(omitted), DllImportContract(disabled));
+    }
+
+    [Fact]
+    public void MethodFormatterPreservesManagedPreserveSigContracts()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(PreserveSigManagedFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        Assert.StartsWith("preserve-sig PreserveSigManagedFixture", FormatMethod(method), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -910,7 +932,7 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => DynamicallyAccessedMembersContract(argument) + argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + RequiresCodeContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PlatformContract(method) + RequiresCodeContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static string SpecialNameContract(MemberInfo member)
@@ -965,6 +987,12 @@ public sealed class PublicApiCompatibilityTests
             + ",throw-unmappable=" + FormatBoolean(attribute.ThrowOnUnmappableChar)
             + ",preserve-sig=" + FormatBoolean(attribute.PreserveSig) + ") ";
     }
+
+    private static string PreserveSigContract(MethodBase method)
+        => method.GetCustomAttribute<DllImportAttribute>() is null
+            && (method.MethodImplementationFlags & MethodImplAttributes.PreserveSig) != 0
+                ? "preserve-sig "
+                : string.Empty;
 
     private static string UnmanagedCallersOnlyContract(MethodBase method)
     {
@@ -1103,6 +1131,16 @@ public sealed class PublicApiCompatibilityTests
     {
         output = byReference + input;
     }
+
+    private static void ByValueDirectionFixture(
+        [In] byte[] input,
+        [Out] byte[] output,
+        [In, Out] byte[] inputOutput)
+    {
+    }
+
+    [PreserveSig]
+    private static int PreserveSigManagedFixture() => 0;
 
     private static TResult GenericConstraintFixture<TInput, TResult>(params TInput[] values)
         where TInput : class, IDisposable, new()
@@ -2039,8 +2077,15 @@ public sealed class PublicApiCompatibilityTests
         var suffix = parameter.HasDefaultValue
             ? " = " + FormatDefault(parameter.DefaultValue)
             : parameter.IsOptional ? " [optional]" : string.Empty;
-        return MarshalAsContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
+        return MarshalAsContract(parameter) + ParameterDirectionContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
     }));
+
+    private static string ParameterDirectionContract(ParameterInfo parameter)
+    {
+        if (parameter.ParameterType.IsByRef) return string.Empty;
+        return (parameter.IsIn ? "in-flag " : string.Empty)
+            + (parameter.IsOut ? "out-flag " : string.Empty);
+    }
 
     private static string FormatParameterType(ParameterInfo parameter)
     {
