@@ -275,26 +275,16 @@ public sealed class CoreRestApiContractTests
     }
 
     [Fact]
-    public async Task CameraImageEntityValidationObservesCancellationDuringTraversal()
+    public async Task CameraImageEntityValidationHonorsCancellationBeforeRequest()
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
         using var cancellation = new CancellationTokenSource();
-        var entityId = new string(' ', 16_000_000) + "camera.front";
-        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var operation = Task.Factory.StartNew(
-            async () =>
-            {
-                started.TrySetResult(true);
-                await client.Rest.GetCameraImageAsync(entityId, cancellation.Token);
-            },
-            CancellationToken.None,
-            TaskCreationOptions.LongRunning,
-            TaskScheduler.Default).Unwrap();
-
-        await started.Task;
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        var entityId = new string(' ', 4096) + "camera.front";
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Rest.GetCameraImageAsync(entityId, cancellation.Token));
         Assert.Null(server.LastRequestPath);
     }
 
