@@ -33,7 +33,7 @@ public sealed class HomeAssistantAutomationClient
         foreach (var state in states)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            result.Add(ToStatus(state));
+            result.Add(ToStatus(state, cancellationToken));
         }
         cancellationToken.ThrowIfCancellationRequested();
         var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
@@ -46,7 +46,7 @@ public sealed class HomeAssistantAutomationClient
     {
         var normalizedEntityId = ValidateEntityId(entityId, cancellationToken);
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
-        return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId));
+        return ToStatus(HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId), cancellationToken);
     }
 
     /// <summary>Runs one or more automation entities without changing their configuration.</summary>
@@ -116,24 +116,40 @@ public sealed class HomeAssistantAutomationClient
         return _rest.SendAsync<JsonElement>(HttpMethod.Delete, ConfigurationPath(id, cancellationToken), null, cancellationToken);
     }
 
-    private static HomeAssistantAutomationStatus ToStatus(HomeAssistantState state)
+    internal static HomeAssistantAutomationStatus ToStatus(
+        HomeAssistantState state,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!string.Equals(state.Domain, "automation", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The entity is not an automation.", nameof(state));
-        if (string.IsNullOrWhiteSpace(state.State)) throw new HomeAssistantProtocolException("The Home Assistant automation state omitted its required state value.");
+        if (!HasNonWhitespace(state.State, cancellationToken)) throw new HomeAssistantProtocolException("The Home Assistant automation state omitted its required state value.");
         return new HomeAssistantAutomationStatus
         {
             EntityId = state.EntityId,
-            Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name"),
+            Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name", cancellationToken),
             IsEnabled = string.Equals(state.State, "on", StringComparison.OrdinalIgnoreCase)
                 ? true
                 : string.Equals(state.State, "off", StringComparison.OrdinalIgnoreCase)
                     ? false
                     : null,
-            LastTriggered = HomeAssistantAttributeReader.GetDateTimeOffset(state.Attributes, "last_triggered"),
-            Mode = HomeAssistantAttributeReader.GetString(state.Attributes, "mode"),
-            CurrentRuns = HomeAssistantAttributeReader.GetNonNegativeInt64(state.Attributes, "current"),
+            LastTriggered = HomeAssistantAttributeReader.GetDateTimeOffset(state.Attributes, "last_triggered", cancellationToken),
+            Mode = HomeAssistantAttributeReader.GetString(state.Attributes, "mode", cancellationToken),
+            CurrentRuns = HomeAssistantAttributeReader.GetNonNegativeInt64(state.Attributes, "current", cancellationToken),
             RawState = state
         };
+    }
+
+    private static bool HasNonWhitespace(string? value, CancellationToken cancellationToken)
+    {
+        if (value is null) return false;
+        var found = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            found |= !char.IsWhiteSpace(value[index]);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return found;
     }
 
     private static string ValidateEntityId(string entityId, CancellationToken cancellationToken)

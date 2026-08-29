@@ -29,7 +29,7 @@ public sealed class HomeAssistantDashboardClient
             var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.", cancellationToken);
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
-            RequirePanelBooleans(property.Value);
+            RequirePanelBooleans(property.Value, cancellationToken);
             var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(
                 property.Value,
                 "A frontend panel could not be decoded.",
@@ -103,7 +103,7 @@ public sealed class HomeAssistantDashboardClient
         foreach (var item in value.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            RequireDashboardVisibility(item, "A dashboard did not contain its required visibility fields.");
+            RequireDashboardVisibility(item, "A dashboard did not contain its required visibility fields.", cancellationToken);
         }
         var dashboards = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard[]>(
             value,
@@ -333,7 +333,7 @@ public sealed class HomeAssistantDashboardClient
             "The dashboard response could not be decoded.",
             cancellationToken: cancellationToken);
         ValidateStorageDashboard(dashboard, cancellationToken);
-        RequireDashboardVisibility(value, "A dashboard mutation response did not contain its required visibility fields.");
+        RequireDashboardVisibility(value, "A dashboard mutation response did not contain its required visibility fields.", cancellationToken);
         if (expectedDashboardId is not null && !string.Equals(dashboard.Id, expectedDashboardId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested identifier.");
         if (expectedUrlPath is not null && !string.Equals(dashboard.UrlPath, expectedUrlPath, StringComparison.Ordinal))
@@ -343,12 +343,10 @@ public sealed class HomeAssistantDashboardClient
         if (validateIcon && !string.Equals(dashboard.Icon, expectedIcon, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested icon.");
         if (expectedShowInSidebar.HasValue
-            && (!value.TryGetProperty("show_in_sidebar", out _)
-                || dashboard.ShowInSidebar != expectedShowInSidebar.Value))
+            && dashboard.ShowInSidebar != expectedShowInSidebar.Value)
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested sidebar visibility.");
         if (expectedRequireAdmin.HasValue
-            && (!value.TryGetProperty("require_admin", out _)
-                || dashboard.RequireAdmin != expectedRequireAdmin.Value))
+            && dashboard.RequireAdmin != expectedRequireAdmin.Value)
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested administrator requirement.");
         cancellationToken.ThrowIfCancellationRequested();
         return dashboard;
@@ -431,32 +429,63 @@ public sealed class HomeAssistantDashboardClient
         }
     }
 
-    private static void RequireDashboardVisibility(JsonElement value, string failureMessage)
+    internal static void RequireDashboardVisibility(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
     {
-        if (value.ValueKind != JsonValueKind.Object
-            || !value.TryGetProperty("show_in_sidebar", out var showInSidebar)
-            || showInSidebar.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
-            || !value.TryGetProperty("require_admin", out var requireAdmin)
-            || requireAdmin.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            throw new HomeAssistantProtocolException(failureMessage);
+        }
+
+        var hasShowInSidebar = false;
+        var hasRequireAdmin = false;
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (property.NameEquals("show_in_sidebar"))
+            {
+                hasShowInSidebar = property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False;
+            }
+            else if (property.NameEquals("require_admin"))
+            {
+                hasRequireAdmin = property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False;
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!hasShowInSidebar || !hasRequireAdmin)
         {
             throw new HomeAssistantProtocolException(failureMessage);
         }
     }
 
-    private static void RequirePanelBooleans(JsonElement value)
+    private static void RequirePanelBooleans(JsonElement value, CancellationToken cancellationToken)
     {
-        if (value.ValueKind != JsonValueKind.Object
-            || !HasBooleanProperty(value, "default_visible")
-            || !HasBooleanProperty(value, "require_admin")
-            || !HasBooleanProperty(value, "show_in_sidebar"))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            throw new HomeAssistantProtocolException("A frontend panel did not contain its required Boolean fields.");
+        }
+
+        var hasDefaultVisible = false;
+        var hasRequireAdmin = false;
+        var hasShowInSidebar = false;
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var isBoolean = property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False;
+            if (property.NameEquals("default_visible")) hasDefaultVisible = isBoolean;
+            else if (property.NameEquals("require_admin")) hasRequireAdmin = isBoolean;
+            else if (property.NameEquals("show_in_sidebar")) hasShowInSidebar = isBoolean;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!hasDefaultVisible || !hasRequireAdmin || !hasShowInSidebar)
         {
             throw new HomeAssistantProtocolException("A frontend panel did not contain its required Boolean fields.");
         }
     }
-
-    private static bool HasBooleanProperty(JsonElement value, string propertyName)
-        => value.TryGetProperty(propertyName, out var property)
-            && property.ValueKind is JsonValueKind.True or JsonValueKind.False;
 
     private static void ValidateStorageDashboard(HomeAssistantDashboard dashboard, CancellationToken cancellationToken)
     {

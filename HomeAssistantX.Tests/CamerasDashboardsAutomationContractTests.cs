@@ -32,6 +32,32 @@ public sealed class CamerasDashboardsAutomationContractTests
                 cancellation.Token));
     }
 
+    [Fact]
+    public void DashboardVisibilityValidationHonorsCancellation()
+    {
+        using var document = JsonDocument.Parse("{\"show_in_sidebar\":true,\"require_admin\":false}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantDashboardClient.RequireDashboardVisibility(
+                document.RootElement,
+                "A dashboard did not contain its required visibility fields.",
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void AutomationStatusProjectionHonorsCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationClient.ToStatus(
+                new HomeAssistantState { EntityId = "automation.morning", State = "on" },
+                cancellation.Token));
+    }
+
     [Theory]
     [InlineData(":")]
     [InlineData("mdi:")]
