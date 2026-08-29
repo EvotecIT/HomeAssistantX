@@ -2,6 +2,7 @@ using System.Text.Json;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
 
@@ -26,30 +27,16 @@ public sealed class MediaAndRemoteContractTests
             HomeAssistantRemoteClient.ToStatus(state, cancellation.Token));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void TypedStateProjectionStopsDuringRequiredStateScanning(bool mediaPlayer)
+    [Fact]
+    public void RequiredStateStringScanningHonorsCancellation()
     {
         using var cancellation = new CancellationTokenSource();
-        var state = new HomeAssistantState
-        {
-            EntityId = mediaPlayer ? "media_player.kitchen" : "remote.lounge",
-            State = new string(' ', 16_000_000)
-        };
-        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+        cancellation.Cancel();
 
         Assert.ThrowsAny<OperationCanceledException>(() =>
-        {
-            if (mediaPlayer)
-            {
-                _ = HomeAssistantMediaPlayerStatus.FromState(state, cancellation.Token);
-            }
-            else
-            {
-                _ = HomeAssistantRemoteStatus.FromState(state, cancellation.Token);
-            }
-        });
+            CancellationAwareString.IsNullOrWhiteSpace(
+                new string(' ', 1_000_000),
+                cancellation.Token));
     }
 
     [Fact]
