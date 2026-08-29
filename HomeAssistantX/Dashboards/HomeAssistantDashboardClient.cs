@@ -69,7 +69,7 @@ public sealed class HomeAssistantDashboardClient
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        var comparer = new CancellationAwareStringComparer(StringComparison.OrdinalIgnoreCase, cancellationToken);
         CancellationAwareSort.Sort(panels, (left, right) => comparer.Compare(left.UrlPath, right.UrlPath));
         cancellationToken.ThrowIfCancellationRequested();
         return panels;
@@ -483,21 +483,22 @@ public sealed class HomeAssistantDashboardClient
             throw new HomeAssistantProtocolException("A frontend panel did not contain its required Boolean fields.");
         }
 
-        var hasDefaultVisible = false;
         var hasRequireAdmin = false;
-        var hasShowInSidebar = false;
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
             var isBoolean = property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False;
-            if (property.NameEquals("default_visible")) hasDefaultVisible = isBoolean;
-            else if (property.NameEquals("require_admin")) hasRequireAdmin = isBoolean;
-            else if (property.NameEquals("show_in_sidebar")) hasShowInSidebar = isBoolean;
+            if (property.NameEquals("require_admin")) hasRequireAdmin = isBoolean;
+            else if ((property.NameEquals("default_visible") || property.NameEquals("show_in_sidebar"))
+                && !isBoolean)
+            {
+                throw new HomeAssistantProtocolException("A frontend panel contained an invalid optional Boolean field.");
+            }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        if (!hasDefaultVisible || !hasRequireAdmin || !hasShowInSidebar)
+        if (!hasRequireAdmin)
         {
-            throw new HomeAssistantProtocolException("A frontend panel did not contain its required Boolean fields.");
+            throw new HomeAssistantProtocolException("A frontend panel did not contain its required require_admin field.");
         }
     }
 

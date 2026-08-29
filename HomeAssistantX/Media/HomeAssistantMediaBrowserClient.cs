@@ -32,7 +32,7 @@ public sealed class HomeAssistantMediaBrowserClient
 
     public async Task<HomeAssistantResolvedMedia> ResolveAsync(string mediaContentId, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
     {
-        var payload = new Dictionary<string, object?> { ["media_content_id"] = Require(mediaContentId, nameof(mediaContentId), cancellationToken) };
+        var payload = new Dictionary<string, object?> { ["media_content_id"] = RequirePreserved(mediaContentId, nameof(mediaContentId), cancellationToken) };
         if (expiration.HasValue)
         {
             if (expiration.Value <= TimeSpan.Zero || expiration.Value.TotalSeconds > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(expiration));
@@ -181,7 +181,7 @@ public sealed class HomeAssistantMediaBrowserClient
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
 
         if ((canPlay.GetBoolean() || canExpand.GetBoolean() || canSearch.GetBoolean())
-            && (!IsCanonicalActionableSelector(mediaContentId.GetString(), cancellationToken)
+            && (!IsActionableContentId(mediaContentId.GetString(), cancellationToken)
                 || !IsCanonicalActionableSelector(mediaContentType.GetString(), cancellationToken)))
             throw new HomeAssistantProtocolException("An actionable media response contained a noncanonical selector.");
 
@@ -207,7 +207,7 @@ public sealed class HomeAssistantMediaBrowserClient
         if (item.ChildrenMediaClass is not null && !IsCanonicalMediaClass(item.ChildrenMediaClass, cancellationToken))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
         if ((item.CanPlay || item.CanExpand || item.CanSearch)
-            && (!IsCanonicalActionableSelector(item.MediaContentId, cancellationToken)
+            && (!IsActionableContentId(item.MediaContentId, cancellationToken)
                 || !IsCanonicalActionableSelector(item.MediaContentType, cancellationToken)))
             throw new HomeAssistantProtocolException("The media response contained an item without a media content identifier or type.");
         if (item.Children is null)
@@ -311,7 +311,7 @@ public sealed class HomeAssistantMediaBrowserClient
         }
         if (mediaContentId is not null)
         {
-            payload["media_content_id"] = Require(mediaContentId, nameof(mediaContentId), cancellationToken);
+            payload["media_content_id"] = RequirePreserved(mediaContentId, nameof(mediaContentId), cancellationToken);
         }
         return payload;
     }
@@ -323,7 +323,7 @@ public sealed class HomeAssistantMediaBrowserClient
         var payload = new Dictionary<string, object?>();
         if (mediaContentId is not null)
         {
-            payload["media_content_id"] = Require(mediaContentId, nameof(mediaContentId), cancellationToken);
+            payload["media_content_id"] = RequirePreserved(mediaContentId, nameof(mediaContentId), cancellationToken);
         }
         return payload;
     }
@@ -384,6 +384,18 @@ public sealed class HomeAssistantMediaBrowserClient
             : value.Substring(start, end - start + 1);
     }
 
+    private static string RequirePreserved(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
+    {
+        if (value is null) throw new ArgumentNullException(parameterName);
+        if (!HasNonWhitespace(value, cancellationToken))
+            throw new ArgumentException("A non-empty value is required.", parameterName);
+        ObserveString(value, cancellationToken);
+        return value;
+    }
+
     private static bool HasNonWhitespace(string? value, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -404,6 +416,13 @@ public sealed class HomeAssistantMediaBrowserClient
             && value.Length != 0
             && !char.IsWhiteSpace(value[0])
             && !char.IsWhiteSpace(value[value.Length - 1]);
+    }
+
+    private static bool IsActionableContentId(string? value, CancellationToken cancellationToken)
+    {
+        if (!HasNonWhitespace(value, cancellationToken)) return false;
+        ObserveString(value!, cancellationToken);
+        return true;
     }
 
     private static void ObserveString(string value, CancellationToken cancellationToken)

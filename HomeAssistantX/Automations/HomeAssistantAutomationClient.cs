@@ -36,7 +36,7 @@ public sealed class HomeAssistantAutomationClient
             result.Add(ToStatus(state, cancellationToken));
         }
         cancellationToken.ThrowIfCancellationRequested();
-        var comparer = new CancellationAwareStringComparer(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        var comparer = new CancellationAwareStringComparer(StringComparison.OrdinalIgnoreCase, cancellationToken);
         CancellationAwareSort.Sort(result, (left, right) => comparer.Compare(left.EntityId, right.EntityId));
         cancellationToken.ThrowIfCancellationRequested();
         return result;

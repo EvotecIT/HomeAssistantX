@@ -378,6 +378,15 @@ public sealed class CamerasDashboardsAutomationContractTests
         var longValue = new string(' ', 16_000_000) + "house-main";
         using var cancellation = new CancellationTokenSource();
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var canceller = Task.Factory.StartNew(
+            () =>
+            {
+                started.Task.GetAwaiter().GetResult();
+                cancellation.Cancel();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
         var operation = Task.Factory.StartNew(
             () =>
             {
@@ -391,10 +400,8 @@ public sealed class CamerasDashboardsAutomationContractTests
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default);
-        await started.Task;
-        cancellation.Cancel();
-
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        await canceller;
     }
 
     [Fact]
@@ -499,6 +506,15 @@ public sealed class CamerasDashboardsAutomationContractTests
         var value = "automation-" + new string('a', 16_000_000);
         using var cancellation = new CancellationTokenSource();
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var canceller = Task.Factory.StartNew(
+            () =>
+            {
+                started.Task.GetAwaiter().GetResult();
+                cancellation.Cancel();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
         var operation = Task.Factory.StartNew(
             () =>
             {
@@ -508,10 +524,8 @@ public sealed class CamerasDashboardsAutomationContractTests
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default);
-        await started.Task;
-        cancellation.Cancel();
-
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        await canceller;
     }
 
     [Fact]
@@ -540,9 +554,7 @@ public sealed class CamerasDashboardsAutomationContractTests
     [Theory]
     [InlineData("{\"title\":\"Music\",\"media_content_type\":\"library\",\"can_play\":true,\"children\":[]}")]
     [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"can_expand\":true,\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"can_play\":true,\"children\":[]}]}")]
-    [InlineData("{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\" track-1 \",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":[]}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\"track-1\",\"media_content_type\":\" audio/mpeg \",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":[]}")]
-    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\" search-root \",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":true,\"children\":[]}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"search-root\",\"media_content_type\":\" library \",\"can_play\":false,\"can_expand\":false,\"can_search\":true,\"children\":[]}")]
     public async Task MediaBrowseRejectsInvalidActionableContentIdentity(string response)
     {
@@ -1248,6 +1260,40 @@ public sealed class CamerasDashboardsAutomationContractTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnixAtomicExportsReplaceSymbolicLinksWithoutFollowingTheirTargets(bool targetExists)
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists("/usr/bin/ln")) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-symlink-overwrite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var target = Path.Combine(directory, "target.bin");
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            if (targetExists) File.WriteAllBytes(target, new byte[] { 1 });
+            RunUnixCommand("/usr/bin/ln", "-s", target, destination);
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None);
+
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
+            if (targetExists) Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(target));
+            else Assert.False(File.Exists(target));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void UnixTemporaryExportsAreRestrictiveWhileBeingWritten()
     {
@@ -1674,6 +1720,36 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         Assert.Equal("config/integrations", Assert.Single(await client.Dashboards.GetPanelsAsync()).UrlPath);
+    }
+
+    [Fact]
+    public async Task PanelResponsesAllowOmittedOptionalVisibilityBooleans()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"config/integrations\":{\"component_name\":\"config\",\"require_admin\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var panel = Assert.Single(await client.Dashboards.GetPanelsAsync());
+
+        Assert.Equal("config/integrations", panel.UrlPath);
+        Assert.True(panel.RequireAdmin);
+    }
+
+    [Theory]
+    [InlineData("default_visible")]
+    [InlineData("show_in_sidebar")]
+    public async Task PanelResponsesRejectMalformedOptionalVisibilityBooleans(string propertyName)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\"lovelace\",\"require_admin\":false,\""
+                + propertyName + "\":0}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
     }
 
     [Theory]

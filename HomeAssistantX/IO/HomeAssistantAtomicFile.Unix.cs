@@ -8,6 +8,8 @@ namespace HomeAssistantX.IO;
 internal static partial class HomeAssistantAtomicFile
 {
     private const int PermissionBits = 0x0FFF;
+    private const int UnixFileTypeBits = 0xF000;
+    private const int UnixSymbolicLink = 0xA000;
     private const string LinuxAccessAclAttribute = "system.posix_acl_access";
     private const int UnixNoEntry = 2;
     private const int LinuxNoData = 61;
@@ -127,6 +129,8 @@ internal static partial class HomeAssistantAtomicFile
         UnixFileMetadata metadata,
         bool useManagedApis)
     {
+        if (metadata.IsSymbolicLink) return;
+
         // Keep the publicly named staging inode inaccessible while ownership is
         // changing. Transfer ownership before applying the destination ACL so an
         // ACL update can never expose the exchanged inode under the exporter identity.
@@ -219,25 +223,28 @@ internal static partial class HomeAssistantAtomicFile
                 Marshal.WriteInt64(buffer, offset, 0L);
             }
 
-            if (Stat(path, buffer) != 0)
+            if (LStat(path, buffer) != 0)
             {
                 throw new IOException(
                     "The destination Unix file metadata could not be read.",
                     new Win32Exception(Marshal.GetLastWin32Error()));
             }
 
-            var linuxAccessAcl = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            var rawMode = Marshal.ReadInt32(buffer, offsets.Mode);
+            var isSymbolicLink = (rawMode & UnixFileTypeBits) == UnixSymbolicLink;
+            var linuxAccessAcl = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !isSymbolicLink
                 ? ReadLinuxAccessAcl(path)
                 : null;
-            var macAccessAcl = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            var macAccessAcl = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && !isSymbolicLink
                 ? ReadMacAccessAcl(path)
                 : null;
             return new UnixFileMetadata(
                 ReadNativeUnsigned(buffer, offsets.Device, offsets.DeviceIs32Bit),
                 ReadNativeUnsigned(buffer, offsets.Inode, offsets.InodeIs32Bit),
-                unchecked((uint)(Marshal.ReadInt32(buffer, offsets.Mode) & PermissionBits)),
+                unchecked((uint)(rawMode & PermissionBits)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.UserId)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)),
+                isSymbolicLink,
                 linuxAccessAcl,
                 macAccessAcl);
         }
@@ -469,6 +476,7 @@ internal static partial class HomeAssistantAtomicFile
             uint mode,
             uint userId,
             uint groupId,
+            bool isSymbolicLink,
             byte[]? linuxAccessAcl,
             string? macAccessAcl)
         {
@@ -477,6 +485,7 @@ internal static partial class HomeAssistantAtomicFile
             Mode = mode;
             UserId = userId;
             GroupId = groupId;
+            IsSymbolicLink = isSymbolicLink;
             LinuxAccessAcl = linuxAccessAcl;
             MacAccessAcl = macAccessAcl;
         }
@@ -486,6 +495,7 @@ internal static partial class HomeAssistantAtomicFile
         internal uint Mode { get; }
         internal uint UserId { get; }
         internal uint GroupId { get; }
+        internal bool IsSymbolicLink { get; }
         internal byte[]? LinuxAccessAcl { get; }
         internal string? MacAccessAcl { get; }
 
@@ -503,6 +513,7 @@ internal static partial class HomeAssistantAtomicFile
                 && expected.Value.Mode == current.Value.Mode
                 && expected.Value.UserId == current.Value.UserId
                 && expected.Value.GroupId == current.Value.GroupId
+                && expected.Value.IsSymbolicLink == current.Value.IsSymbolicLink
                 && EqualBytes(expected.Value.LinuxAccessAcl, current.Value.LinuxAccessAcl)
                 && string.Equals(expected.Value.MacAccessAcl, current.Value.MacAccessAcl, StringComparison.Ordinal);
         }
@@ -522,8 +533,8 @@ internal static partial class HomeAssistantAtomicFile
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int Open(string path, int flags, uint mode);
 
-    [DllImport("libc", EntryPoint = "stat", SetLastError = true)]
-    private static extern int Stat(string path, IntPtr buffer);
+    [DllImport("libc", EntryPoint = "lstat", SetLastError = true)]
+    private static extern int LStat(string path, IntPtr buffer);
 
     [DllImport("libc", EntryPoint = "chmod", SetLastError = true)]
     private static extern int Chmod(string path, uint mode);
