@@ -2,6 +2,8 @@ namespace HomeAssistantX.Protocol;
 
 internal static class CancellationAwareString
 {
+    private const int ComparisonChunkLength = 256;
+
     internal static bool IsNullOrWhiteSpace(
         string? value,
         CancellationToken cancellationToken)
@@ -87,10 +89,12 @@ internal static class CancellationAwareString
         cancellationToken.ThrowIfCancellationRequested();
         if (ReferenceEquals(left, right)) return true;
         if (left is null || right is null || left.Length != right.Length) return false;
-        for (var index = 0; index < left.Length; index++)
+        for (var index = 0; index < left.Length;)
         {
-            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (char.ToUpperInvariant(left[index]) != char.ToUpperInvariant(right[index])) return false;
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = GetOrdinalIgnoreCaseChunkLength(left, right, index);
+            if (string.Compare(left, index, right, index, count, StringComparison.OrdinalIgnoreCase) != 0) return false;
+            index += count;
         }
         cancellationToken.ThrowIfCancellationRequested();
         return true;
@@ -105,10 +109,14 @@ internal static class CancellationAwareString
         unchecked
         {
             var hash = 17;
-            for (var index = 0; index < value.Length; index++)
+            for (var index = 0; index < value.Length;)
             {
-                if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-                hash = (hash * 31) + char.ToUpperInvariant(value[index]);
+                cancellationToken.ThrowIfCancellationRequested();
+                var count = GetOrdinalIgnoreCaseChunkLength(value, null, index);
+                var chunk = value.Substring(index, count);
+                cancellationToken.ThrowIfCancellationRequested();
+                hash = (hash * 31) + StringComparer.OrdinalIgnoreCase.GetHashCode(chunk);
+                index += count;
             }
             cancellationToken.ThrowIfCancellationRequested();
             return hash;
@@ -125,18 +133,37 @@ internal static class CancellationAwareString
         if (left is null) return -1;
         if (right is null) return 1;
         var length = Math.Min(left.Length, right.Length);
-        for (var index = 0; index < length; index++)
+        for (var index = 0; index < length;)
         {
-            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            var leftValue = char.ToUpperInvariant(left[index]);
-            var rightValue = char.ToUpperInvariant(right[index]);
-            if (leftValue < rightValue) return -1;
-            if (leftValue > rightValue) return 1;
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = GetOrdinalIgnoreCaseChunkLength(left, right, index);
+            var comparison = string.Compare(left, index, right, index, count, StringComparison.OrdinalIgnoreCase);
+            if (comparison != 0) return comparison;
+            index += count;
         }
         cancellationToken.ThrowIfCancellationRequested();
         return left.Length.CompareTo(right.Length);
     }
 
+    private static int GetOrdinalIgnoreCaseChunkLength(string left, string? right, int index)
+    {
+        var remaining = right is null
+            ? left.Length - index
+            : Math.Min(left.Length, right.Length) - index;
+        var count = Math.Min(ComparisonChunkLength, remaining);
+        if (count == remaining) return count;
+
+        var boundary = index + count;
+        if (boundary > index
+            && ((char.IsHighSurrogate(left[boundary - 1]) && char.IsLowSurrogate(left[boundary]))
+                || (right is not null
+                    && char.IsHighSurrogate(right[boundary - 1])
+                    && char.IsLowSurrogate(right[boundary]))))
+        {
+            count--;
+        }
+        return count;
+    }
     private static void Append(
         System.Text.StringBuilder builder,
         string value,

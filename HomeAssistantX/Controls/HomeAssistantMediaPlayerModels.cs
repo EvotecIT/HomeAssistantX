@@ -1,5 +1,6 @@
 using HomeAssistantX.Models;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Protocol;
 using System.Text.Json;
 
 namespace HomeAssistantX.Controls;
@@ -312,7 +313,7 @@ public sealed class HomeAssistantMediaPlayerStatus
             throw new ArgumentException("A canonical media_player entity state is required.", nameof(state));
         }
 
-        if (string.IsNullOrWhiteSpace(state.State))
+        if (CancellationAwareString.IsNullOrWhiteSpace(state.State, cancellationToken))
         {
             throw new HomeAssistantProtocolException("The Home Assistant media-player state omitted its required state value.");
         }

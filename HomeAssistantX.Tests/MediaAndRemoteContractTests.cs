@@ -26,6 +26,38 @@ public sealed class MediaAndRemoteContractTests
             HomeAssistantRemoteClient.ToStatus(state, cancellation.Token));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TypedStateProjectionStopsDuringRequiredStateScanning(bool mediaPlayer)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var state = new HomeAssistantState
+        {
+            EntityId = mediaPlayer ? "media_player.kitchen" : "remote.lounge",
+            State = new string(' ', 16_000_000)
+        };
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                if (mediaPlayer)
+                {
+                    _ = HomeAssistantMediaPlayerStatus.FromState(state, cancellation.Token);
+                }
+                else
+                {
+                    _ = HomeAssistantRemoteStatus.FromState(state, cancellation.Token);
+                }
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
     [Fact]
     public async Task SharedOptionalAttributeTraversalObservesCancellation()
     {

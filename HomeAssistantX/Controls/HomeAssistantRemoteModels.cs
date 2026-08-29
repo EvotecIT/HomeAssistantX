@@ -1,5 +1,6 @@
 using HomeAssistantX.Models;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Controls;
 
@@ -138,7 +139,7 @@ public sealed class HomeAssistantRemoteStatus
             throw new ArgumentException("A canonical remote entity state is required.", nameof(state));
         }
 
-        if (string.IsNullOrWhiteSpace(state.State))
+        if (CancellationAwareString.IsNullOrWhiteSpace(state.State, cancellationToken))
         {
             throw new HomeAssistantProtocolException("The Home Assistant remote state omitted its required state value.");
         }
@@ -146,9 +147,9 @@ public sealed class HomeAssistantRemoteStatus
         var attributes = state.Attributes;
         return new HomeAssistantRemoteStatus(state)
         {
-            IsOn = string.Equals(state.State, "on", StringComparison.OrdinalIgnoreCase)
+            IsOn = CancellationAwareString.EqualsOrdinalIgnoreCase(state.State, "on", cancellationToken)
                 ? true
-                : string.Equals(state.State, "off", StringComparison.OrdinalIgnoreCase)
+                : CancellationAwareString.EqualsOrdinalIgnoreCase(state.State, "off", cancellationToken)
                     ? false
                     : null,
             FriendlyName = HomeAssistantAttributeReader.GetString(attributes, "friendly_name", cancellationToken),

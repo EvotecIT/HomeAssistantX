@@ -528,6 +528,24 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public void InventoryTextComparisonPreservesOrdinalIgnoreCaseSupplementaryUnicodeSemantics()
+    {
+        const string upperDeseretLongI = "\U00010400";
+        const string lowerDeseretLongI = "\U00010428";
+        var comparer = new CancellationAwareStringEqualityComparer(CancellationToken.None);
+
+        Assert.True(StringComparer.OrdinalIgnoreCase.Equals(upperDeseretLongI, lowerDeseretLongI));
+        Assert.True(comparer.Equals(upperDeseretLongI, lowerDeseretLongI));
+        Assert.Equal(comparer.GetHashCode(upperDeseretLongI), comparer.GetHashCode(lowerDeseretLongI));
+        Assert.Equal(
+            0,
+            CancellationAwareString.CompareOrdinalIgnoreCase(
+                upperDeseretLongI,
+                lowerDeseretLongI,
+                CancellationToken.None));
+    }
+
+    [Fact]
     public void InventorySortPreservesCancellationClassification()
     {
         using var cancellation = new CancellationTokenSource();
