@@ -4,6 +4,7 @@ using System.Text.Json;
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Energy;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 using HomeAssistantX.Recorder;
 using HomeAssistantX.Tests.Infrastructure;
 using HomeAssistantX.Weather;
@@ -790,6 +791,42 @@ public sealed class EnergyRecorderWeatherContractTests
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync("weather.home"));
+    }
+
+    [Theory]
+    [InlineData("\"temperature\":\"21.5\"")]
+    [InlineData("\"humidity\":\"55\"")]
+    [InlineData("\"cloud_coverage\":\"40\"")]
+    public async Task WeatherCurrentReadsRejectStringShapedNumericAttributes(string attribute)
+    {
+        var state = "{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{" + attribute + "}}";
+        using var server = new TestHomeAssistantServer { ExactStateResponseJson = state };
+        server.SetStates("[" + state + "]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync("weather.home"));
+    }
+
+    [Fact]
+    public void WeatherCurrentProjectionHonorsCancellationAcrossProviderText()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var state = new HomeAssistantState
+        {
+            EntityId = "weather.home",
+            State = new string('x', 1_000_000),
+            Attributes = new Dictionary<string, JsonElement>
+            {
+                ["friendly_name"] = JsonDocument.Parse("\"" + new string('x', 1_000_000) + "\"").RootElement.Clone()
+            }
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+        {
+            _ = HomeAssistantWeatherClient.ToObservation(state, cancellation.Token);
+        });
     }
 
     [Fact]
