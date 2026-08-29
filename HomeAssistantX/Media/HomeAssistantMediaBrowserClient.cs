@@ -123,30 +123,56 @@ public sealed class HomeAssistantMediaBrowserClient
         return result;
     }
 
-    private static void ValidateItemShape(JsonElement value, CancellationToken cancellationToken)
+    internal static void ValidateItemShape(JsonElement value, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (value.ValueKind != JsonValueKind.Object
-            || !value.TryGetProperty("media_class", out var mediaClass)
+        if (value.ValueKind != JsonValueKind.Object)
+            throw new HomeAssistantProtocolException("The media response omitted its required identity or actionability fields.");
+
+        var mediaClass = default(JsonElement);
+        var mediaContentId = default(JsonElement);
+        var mediaContentType = default(JsonElement);
+        var canPlay = default(JsonElement);
+        var canExpand = default(JsonElement);
+        var canSearch = default(JsonElement);
+        var notShown = default(JsonElement);
+        var childrenMediaClass = default(JsonElement);
+        var children = default(JsonElement);
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (property.NameEquals("media_class")) mediaClass = property.Value;
+            else if (property.NameEquals("media_content_id")) mediaContentId = property.Value;
+            else if (property.NameEquals("media_content_type")) mediaContentType = property.Value;
+            else if (property.NameEquals("can_play")) canPlay = property.Value;
+            else if (property.NameEquals("can_expand")) canExpand = property.Value;
+            else if (property.NameEquals("can_search")) canSearch = property.Value;
+            else if (property.NameEquals("not_shown")) notShown = property.Value;
+            else if (property.NameEquals("children_media_class")) childrenMediaClass = property.Value;
+            else if (property.NameEquals("children")) children = property.Value;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (mediaClass.ValueKind == JsonValueKind.Undefined
             || mediaClass.ValueKind != JsonValueKind.String
             || !IsCanonicalMediaClass(mediaClass.GetString(), cancellationToken)
-            || !value.TryGetProperty("media_content_id", out var mediaContentId)
+            || mediaContentId.ValueKind == JsonValueKind.Undefined
             || mediaContentId.ValueKind != JsonValueKind.String
-            || !value.TryGetProperty("media_content_type", out var mediaContentType)
+            || mediaContentType.ValueKind == JsonValueKind.Undefined
             || mediaContentType.ValueKind != JsonValueKind.String
-            || !value.TryGetProperty("can_play", out var canPlay)
+            || canPlay.ValueKind == JsonValueKind.Undefined
             || canPlay.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
-            || !value.TryGetProperty("can_expand", out var canExpand)
+            || canExpand.ValueKind == JsonValueKind.Undefined
             || canExpand.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
-            || !value.TryGetProperty("can_search", out var canSearch)
+            || canSearch.ValueKind == JsonValueKind.Undefined
             || canSearch.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
-            || value.TryGetProperty("not_shown", out var notShown)
+            || notShown.ValueKind != JsonValueKind.Undefined
                 && (notShown.ValueKind != JsonValueKind.Number || !notShown.TryGetInt32(out var hiddenCount) || hiddenCount < 0))
         {
             throw new HomeAssistantProtocolException("The media response omitted its required identity or actionability fields.");
         }
 
-        if (value.TryGetProperty("children_media_class", out var childrenMediaClass)
+        if (childrenMediaClass.ValueKind != JsonValueKind.Undefined
             && childrenMediaClass.ValueKind != JsonValueKind.Null
             && (childrenMediaClass.ValueKind != JsonValueKind.String
                 || !IsCanonicalMediaClass(childrenMediaClass.GetString(), cancellationToken)))
@@ -157,7 +183,7 @@ public sealed class HomeAssistantMediaBrowserClient
                 || !IsCanonicalActionableSelector(mediaContentType.GetString(), cancellationToken)))
             throw new HomeAssistantProtocolException("An actionable media response contained a noncanonical selector.");
 
-        if (!value.TryGetProperty("children", out var children)) return;
+        if (children.ValueKind == JsonValueKind.Undefined) return;
         if (children.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media response contained an invalid children collection.");
         foreach (var child in children.EnumerateArray())

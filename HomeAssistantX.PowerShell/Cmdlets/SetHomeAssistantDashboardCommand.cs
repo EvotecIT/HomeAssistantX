@@ -9,7 +9,7 @@ namespace HomeAssistantX.PowerShell;
 /// <example><summary>Replace the default dashboard configuration</summary><code>Set-HomeAssistantDashboard -ConfigurationJson '{"views":[]}' -WhatIf</code></example>
 /// <example><summary>Create a dashboard</summary><code>Set-HomeAssistantDashboard -New -UrlPath 'house-main' -Title 'House' -WhatIf</code></example>
 /// <example><summary>Add a dashboard resource</summary><code>Set-HomeAssistantDashboard -NewResource -ResourceUrl '/local/card.js' -ResourceType Module -WhatIf</code></example>
-[Cmdlet(VerbsCommon.Set, "HomeAssistantDashboard", SupportsShouldProcess = true, DefaultParameterSetName = ConfigurationSet)]
+[Cmdlet(VerbsCommon.Set, "HomeAssistantDashboard", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.High, DefaultParameterSetName = ConfigurationSet)]
 [OutputType(typeof(HomeAssistantDashboard))]
 [OutputType(typeof(HomeAssistantDashboardResource))]
 [OutputType(typeof(JsonElement))]

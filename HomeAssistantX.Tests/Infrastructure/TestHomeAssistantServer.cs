@@ -911,8 +911,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(CameraStreamResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "camera/get_prefs":
-            case "camera/update_prefs":
                 await session.SendResultAsync(id, ParseJson(CameraPreferencesResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "camera/update_prefs":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "media_source/browse_media":
             case "media_player/browse_media":

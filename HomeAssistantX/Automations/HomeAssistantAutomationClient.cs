@@ -67,7 +67,7 @@ public sealed class HomeAssistantAutomationClient
     public async Task<HomeAssistantAutomationConfiguration> GetConfigurationAsync(string automationId, CancellationToken cancellationToken = default)
     {
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
-        var value = await _rest.SendAsync<JsonElement>(HttpMethod.Get, ConfigurationPath(id), null, cancellationToken).ConfigureAwait(false);
+        var value = await _rest.SendAsync<JsonElement>(HttpMethod.Get, ConfigurationPath(id, cancellationToken), null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Home Assistant returned a non-object automation definition.");
         if (HomeAssistantAutomationIdentifier.HasDuplicateProperties(value, cancellationToken)) throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with duplicate JSON properties.");
         var responseIds = new List<JsonElement>();
@@ -106,14 +106,14 @@ public sealed class HomeAssistantAutomationClient
             nameof(definition),
             "Automation definition",
             cancellationToken);
-        return await _rest.SendAsync<JsonElement>(HttpMethod.Post, ConfigurationPath(id), frozenDefinition, cancellationToken).ConfigureAwait(false);
+        return await _rest.SendAsync<JsonElement>(HttpMethod.Post, ConfigurationPath(id, cancellationToken), frozenDefinition, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Deletes an editable automation definition. Requires an administrator.</summary>
     public Task<JsonElement> DeleteConfigurationAsync(string automationId, CancellationToken cancellationToken = default)
     {
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
-        return _rest.SendAsync<JsonElement>(HttpMethod.Delete, ConfigurationPath(id), null, cancellationToken);
+        return _rest.SendAsync<JsonElement>(HttpMethod.Delete, ConfigurationPath(id, cancellationToken), null, cancellationToken);
     }
 
     private static HomeAssistantAutomationStatus ToStatus(HomeAssistantState state)
@@ -143,6 +143,6 @@ public sealed class HomeAssistantAutomationClient
         return normalized;
     }
 
-    private static string ConfigurationPath(string automationId)
-        => "api/config/automation/config/" + Uri.EscapeDataString(automationId);
+    private static string ConfigurationPath(string automationId, CancellationToken cancellationToken)
+        => "api/config/automation/config/" + HomeAssistantAutomationIdentifier.EscapeConfigurationId(automationId, cancellationToken);
 }

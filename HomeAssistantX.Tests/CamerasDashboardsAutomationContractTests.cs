@@ -420,6 +420,38 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void AutomationIdentifierEscapingSupportsNetFrameworkSizedValues()
+    {
+        var value = "automation-" + new string('a', 40_000) + " 🏠";
+
+        var escaped = HomeAssistantAutomationIdentifier.EscapeConfigurationId(value, CancellationToken.None);
+
+        Assert.StartsWith("automation-", escaped, StringComparison.Ordinal);
+        Assert.EndsWith("%20%F0%9F%8F%A0", escaped, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AutomationIdentifierEscapingObservesCancellationDuringTraversal()
+    {
+        var value = "automation-" + new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantAutomationIdentifier.EscapeConfigurationId(value, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+    }
+
+    [Fact]
     public async Task AutomationEntityNormalizationObservesCancellationDuringTraversal()
     {
         using var server = new TestHomeAssistantServer();
@@ -534,6 +566,34 @@ public sealed class CamerasDashboardsAutomationContractTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             HomeAssistantMediaBrowserClient.DecodeItemAsync(document.RootElement, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task MediaBrowseRequiredFieldDiscoveryObservesCancellationAcrossWideObjects()
+    {
+        var json = new StringBuilder("{");
+        for (var index = 0; index < 250_000; index++)
+        {
+            if (index != 0) json.Append(',');
+            json.Append("\"provider_").Append(index).Append("\":true");
+        }
+        json.Append('}');
+        using var document = JsonDocument.Parse(json.ToString());
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                HomeAssistantMediaBrowserClient.ValidateItemShape(document.RootElement, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
     }
 
     [Theory]

@@ -200,6 +200,14 @@ foreach ($name in 'Export-HomeAssistantCameraSnapshot', 'Install-HomeAssistantUp
     }
 }
 
+$dashboardCommand = Get-Command Set-HomeAssistantDashboard -ErrorAction Stop
+$dashboardAttribute = $dashboardCommand.ImplementingType.GetCustomAttributes($true) |
+    Where-Object { $_ -is [System.Management.Automation.CmdletAttribute] } |
+    Select-Object -First 1
+if ($null -eq $dashboardAttribute -or $dashboardAttribute.ConfirmImpact -ne [System.Management.Automation.ConfirmImpact]::High) {
+    throw 'Set-HomeAssistantDashboard must retain high-impact confirmation for full configuration replacement.'
+}
+
 $server = New-Object System.Diagnostics.Process
 $server.StartInfo = New-Object System.Diagnostics.ProcessStartInfo
 $server.StartInfo.FileName = $resolvedTestServerPath

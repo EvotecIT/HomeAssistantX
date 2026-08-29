@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Automations;
@@ -41,6 +42,39 @@ public static class HomeAssistantAutomationIdentifier
 
         cancellationToken.ThrowIfCancellationRequested();
         return automationId.Substring(start, end - start + 1);
+    }
+
+    internal static string EscapeConfigurationId(
+        string automationId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        const int maximumChunkLength = 16_000;
+        if (automationId.Length <= maximumChunkLength)
+        {
+            var escaped = Uri.EscapeDataString(automationId);
+            cancellationToken.ThrowIfCancellationRequested();
+            return escaped;
+        }
+
+        var result = new StringBuilder(automationId.Length);
+        for (var offset = 0; offset < automationId.Length;)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var length = Math.Min(maximumChunkLength, automationId.Length - offset);
+            if (offset + length < automationId.Length
+                && char.IsHighSurrogate(automationId[offset + length - 1])
+                && char.IsLowSurrogate(automationId[offset + length]))
+            {
+                length--;
+            }
+
+            result.Append(Uri.EscapeDataString(automationId.Substring(offset, length)));
+            offset += length;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return result.ToString();
     }
 
     internal static void ValidateDefinitionForSave(
