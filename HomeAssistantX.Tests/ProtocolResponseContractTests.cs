@@ -209,6 +209,17 @@ public sealed class ProtocolResponseContractTests
                 cancellationToken: cancellation.Token));
     }
 
+    [Fact]
+    public void DomainTargetValidationHonorsCallerCancellation()
+    {
+        var target = HomeAssistantX.Services.HomeAssistantTarget.ForEntity("light.kitchen");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            target.NormalizeRequiredForDomain("light", nameof(target), cancellation.Token));
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]

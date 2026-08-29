@@ -95,7 +95,11 @@ public sealed class HomeAssistantTarget
             for (var index = 0; index < normalized.EntityIds.Count; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!HomeAssistantEntityId.TryNormalizeForDomain(normalized.EntityIds[index], domain, out entityIds[index]))
+                if (!HomeAssistantEntityId.TryNormalizeForDomain(
+                        normalized.EntityIds[index],
+                        domain,
+                        cancellationToken,
+                        out entityIds[index]))
                 {
                     throw new ArgumentException($"Target entity identifiers must belong to the '{domain}' domain.", nameof(EntityIds));
                 }
