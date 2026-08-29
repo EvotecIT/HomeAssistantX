@@ -423,6 +423,27 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task CalendarOperationsHonorCancellationBeforeEntityNormalization()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var entityId = " calendar." + new string('x', 1_000_000);
+        var start = DateTimeOffset.Parse("2026-08-27T00:00:00Z");
+        var input = HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", "Event");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Calendars.GetEventsAsync(entityId, start, start.AddDays(1), cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Calendars.CreateEventAsync(entityId, input, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Rest.GetCalendarEventsAsync(entityId, start, start.AddDays(1), cancellation.Token));
+
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Fact]
     public async Task RegistrySnapshotIncludesLabelsAndScopedCategoryCrudPreservesTriStateUpdates()
     {
         using var server = new TestHomeAssistantServer();

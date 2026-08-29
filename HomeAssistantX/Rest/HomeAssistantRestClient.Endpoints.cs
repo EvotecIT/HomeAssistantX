@@ -109,7 +109,7 @@ public sealed partial class HomeAssistantRestClient
         foreach (var calendar in calendars)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out var normalized)
+            if (!HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", cancellationToken, out var normalized)
                 || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
                 || !entityIds.Add(normalized))
             {

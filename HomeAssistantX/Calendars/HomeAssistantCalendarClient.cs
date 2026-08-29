@@ -32,7 +32,7 @@ public sealed class HomeAssistantCalendarClient
         foreach (var calendar in calendars)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", out var normalized)
+            if (!HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", cancellationToken, out var normalized)
                 || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
                 || !entityIds.Add(normalized))
             {
@@ -51,7 +51,7 @@ public sealed class HomeAssistantCalendarClient
         DateTimeOffset end,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         ValidateRange(start, end);
         var events = await _rest.GetCalendarEventsAsync(normalizedEntityId, start, end, cancellationToken).ConfigureAwait(false);
         ValidateEvents(events, cancellationToken);
@@ -63,7 +63,7 @@ public sealed class HomeAssistantCalendarClient
         HomeAssistantCalendarEventInput eventInput,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         if (eventInput is null)
         {
             throw new ArgumentNullException(nameof(eventInput));
@@ -82,7 +82,7 @@ public sealed class HomeAssistantCalendarClient
         HomeAssistantCalendarEventInput eventInput,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         if (eventReference is null)
         {
             throw new ArgumentNullException(nameof(eventReference));
@@ -107,7 +107,7 @@ public sealed class HomeAssistantCalendarClient
         HomeAssistantCalendarEventReference eventReference,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         if (eventReference is null)
         {
             throw new ArgumentNullException(nameof(eventReference));
@@ -125,7 +125,7 @@ public sealed class HomeAssistantCalendarClient
         Func<HomeAssistantCalendarEventUpdate, CancellationToken, Task> handler,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         ValidateRange(start, end);
         if (handler is null)
         {
@@ -209,13 +209,17 @@ public sealed class HomeAssistantCalendarClient
         cancellationToken.ThrowIfCancellationRequested();
     }
 
-    private static string NormalizeEntityId(string entityId)
+    private static string NormalizeEntityId(
+        string entityId,
+        CancellationToken cancellationToken)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", out var normalized))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", cancellationToken, out var normalized))
         {
             throw new ArgumentException("A calendar entity identifier is required.", nameof(entityId));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized;
     }
 }
