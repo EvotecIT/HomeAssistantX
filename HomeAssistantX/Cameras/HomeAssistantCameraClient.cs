@@ -99,7 +99,7 @@ public sealed class HomeAssistantCameraClient
             value,
             "The camera stream response could not be decoded.",
             cancellationToken: cancellationToken);
-        if (!HomeAssistantRootRelativePath.IsValid(stream.Path))
+        if (!HomeAssistantRootRelativePath.IsValid(stream.Path, cancellationToken))
         {
             throw new HomeAssistantProtocolException("Home Assistant did not return a valid root-relative camera stream path.");
         }

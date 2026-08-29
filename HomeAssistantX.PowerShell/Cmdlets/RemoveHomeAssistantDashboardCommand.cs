@@ -28,19 +28,13 @@ public sealed class RemoveHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 if (ShouldProcess(urlPath ?? "default", "Delete Home Assistant dashboard configuration")) await Client.Dashboards.DeleteConfigurationAsync(urlPath, CancelToken).ConfigureAwait(false);
                 break;
             case ResourceSet:
-                var resourceId = Require(ResourceId, nameof(ResourceId));
+                var resourceId = HomeAssistantDashboardIdentifier.RequireSelector(ResourceId, nameof(ResourceId), CancelToken);
                 if (ShouldProcess(resourceId, "Delete Home Assistant dashboard resource")) await Client.Dashboards.DeleteResourceAsync(resourceId, CancelToken).ConfigureAwait(false);
                 break;
             default:
-                var dashboardId = Require(DashboardId, nameof(DashboardId));
+                var dashboardId = HomeAssistantDashboardIdentifier.RequireSelector(DashboardId, nameof(DashboardId), CancelToken);
                 if (ShouldProcess(dashboardId, "Delete Home Assistant dashboard")) await Client.Dashboards.DeleteDashboardAsync(dashboardId, CancelToken).ConfigureAwait(false);
                 break;
         }
-    }
-
-    private static string Require(string? value, string parameterName)
-    {
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A non-empty value is required.", parameterName);
-        return value!.Trim();
     }
 }

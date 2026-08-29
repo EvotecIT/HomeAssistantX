@@ -1536,6 +1536,17 @@ public sealed class CamerasDashboardsAutomationContractTests
                 cancellation.Token));
     }
 
+    [Fact]
+    public void CameraRootRelativePathValidationHonorsCancellation()
+    {
+        Assert.True(HomeAssistantRootRelativePath.IsValid("/api/hls/front/master_playlist.m3u8"));
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRootRelativePath.IsValid("/api/hls/front/master_playlist.m3u8", cancellation.Token));
+    }
+
     private static IEnumerable<string> CancelAfterFirstStreamType(CancellationTokenSource cancellation)
     {
         yield return "hls";

@@ -784,6 +784,8 @@ try {
         { Set-HomeAssistantDashboard -ConfigurationJson '{}' -UrlPath ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard -ResourceId ' ' -WhatIf -ErrorAction Stop }
+        { Remove-HomeAssistantDashboard ([string]::new([char]'d', 256)) -WhatIf -ErrorAction Stop }
+        { Remove-HomeAssistantDashboard -ResourceId ([string]::new([char]'r', 256)) -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard -Configuration -UrlPath ' ' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantAutomation morning-routine '[]' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantAutomation morning-routine '{"id":"other-routine","alias":"Morning"}' -WhatIf -ErrorAction Stop }
