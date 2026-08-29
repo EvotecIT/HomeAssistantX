@@ -934,6 +934,25 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task EventSubscriptionAndDispatchUseTheSameNormalizedType()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        using var subscription = await client.Events.SubscribeAsync(
+            " state_changed ",
+            (_, _) => Task.CompletedTask);
+        await client.Events.FireAsync(" state_changed ");
+
+        using var subscribe = JsonDocument.Parse(
+            Assert.IsType<string>(server.GetLastWebSocketCommand("subscribe_events")));
+        using var fire = JsonDocument.Parse(
+            Assert.IsType<string>(server.GetLastWebSocketCommand("fire_event")));
+        Assert.Equal("state_changed", subscribe.RootElement.GetProperty("event_type").GetString());
+        Assert.Equal("state_changed", fire.RootElement.GetProperty("event_type").GetString());
+    }
+
+    [Fact]
     public async Task SignPathRejectsExpiryValuesOutsideTheWireIntegerRange()
     {
         using var server = new TestHomeAssistantServer();

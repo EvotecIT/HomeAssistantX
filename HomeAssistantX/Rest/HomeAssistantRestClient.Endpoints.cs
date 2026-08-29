@@ -105,16 +105,21 @@ public sealed partial class HomeAssistantRestClient
             calendars,
             "The Home Assistant calendar list contained a null item.",
             cancellationToken: cancellationToken);
-        var entityIds = new HashSet<string>(StringComparer.Ordinal);
+        var entityIds = new List<string>();
         foreach (var calendar in calendars)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", cancellationToken, out var normalized)
-                || !string.Equals(calendar.EntityId, normalized, StringComparison.Ordinal)
-                || !entityIds.Add(normalized))
+                || !CancellationAwareString.EqualsOrdinal(calendar.EntityId, normalized, cancellationToken)
+                || entityIds.Any(value => CancellationAwareString.EqualsOrdinal(value, normalized, cancellationToken)))
             {
                 throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
             }
+            if (CancellationAwareString.IsNullOrWhiteSpace(calendar.Name, cancellationToken))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an incomplete display name.");
+            }
+            entityIds.Add(normalized);
         }
 
         cancellationToken.ThrowIfCancellationRequested();

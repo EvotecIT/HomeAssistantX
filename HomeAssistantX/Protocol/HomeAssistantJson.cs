@@ -230,6 +230,7 @@ internal static class HomeAssistantJson
     {
         var options = new JsonSerializerOptions(SerializerOptions);
         options.Converters.Insert(0, new CancellationAwareJsonElementConverter(cancellationToken));
+        options.Converters.Insert(0, new CancellationAwareStringConverter(cancellationToken));
         options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarEventJsonConverter(cancellationToken));
         options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarBoundaryJsonConverter(cancellationToken));
         return options;
@@ -312,90 +313,39 @@ internal static class HomeAssistantJson
         }
 
         public override JsonElement Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            _cancellationToken.ThrowIfCancellationRequested();
-            using var stream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(stream))
-            {
-                CopyJsonValue(ref reader, writer, _cancellationToken);
-                writer.Flush();
-            }
-
-            _cancellationToken.ThrowIfCancellationRequested();
-            stream.Position = 0;
-            var document = JsonDocument.ParseAsync(stream, default, _cancellationToken)
-                .ConfigureAwait(false)
-                .GetAwaiter()
-                .GetResult();
-            _cancellationToken.ThrowIfCancellationRequested();
-            return document.RootElement;
-        }
+            => HomeAssistantX.Rest.HomeAssistantCancellationJsonValueReader.Read(
+                ref reader,
+                _cancellationToken);
 
         public override void Write(Utf8JsonWriter writer, JsonElement value, JsonSerializerOptions options)
             => WriteJsonElement(writer, value, _cancellationToken);
     }
 
-    private static void CopyJsonValue(
-        ref Utf8JsonReader reader,
-        Utf8JsonWriter writer,
-        CancellationToken cancellationToken)
+    private sealed class CancellationAwareStringConverter : JsonConverter<string>
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var depth = 0;
-        while (true)
+        private readonly CancellationToken _cancellationToken;
+
+        internal CancellationAwareStringConverter(CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            switch (reader.TokenType)
-            {
-                case JsonTokenType.StartObject:
-                    writer.WriteStartObject();
-                    depth++;
-                    break;
-                case JsonTokenType.EndObject:
-                    writer.WriteEndObject();
-                    depth--;
-                    break;
-                case JsonTokenType.StartArray:
-                    writer.WriteStartArray();
-                    depth++;
-                    break;
-                case JsonTokenType.EndArray:
-                    writer.WriteEndArray();
-                    depth--;
-                    break;
-                case JsonTokenType.PropertyName:
-                    writer.WritePropertyName(reader.GetString()!);
-                    break;
-                case JsonTokenType.String:
-                    writer.WriteStringValue(reader.GetString());
-                    break;
-                case JsonTokenType.Number:
-                    writer.WriteRawValue(GetRawValue(ref reader), skipInputValidation: true);
-                    break;
-                case JsonTokenType.True:
-                    writer.WriteBooleanValue(true);
-                    break;
-                case JsonTokenType.False:
-                    writer.WriteBooleanValue(false);
-                    break;
-                case JsonTokenType.Null:
-                    writer.WriteNullValue();
-                    break;
-                default:
-                    throw new JsonException("The JSON value contained an unsupported token.");
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            if (depth == 0) return;
-            if (!reader.Read()) throw new JsonException("The JSON value ended unexpectedly.");
+            _cancellationToken = cancellationToken;
         }
-    }
 
-    private static string GetRawValue(ref Utf8JsonReader reader)
-    {
-        return reader.HasValueSequence
-            ? System.Text.Encoding.UTF8.GetString(reader.ValueSequence.ToArray())
-            : System.Text.Encoding.UTF8.GetString(reader.ValueSpan.ToArray());
+        public override string? Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+            => HomeAssistantX.Rest.HomeAssistantCancellationJsonValueReader.ReadString(
+                ref reader,
+                _cancellationToken);
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            string value,
+            JsonSerializerOptions options)
+        {
+            ThrowIfStringTraversalCanceled(value, _cancellationToken);
+            writer.WriteStringValue(value);
+        }
     }
 
     private sealed class CancellationAwareJsonDocumentConverter : JsonConverter<JsonDocument>

@@ -63,6 +63,19 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task ExtendedEntityRegistryRejectsMismatchedResponseIdentity()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExtendedEntityRegistryResponseJson =
+                "{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.ghost\"}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Inventory.GetSnapshotAsync());
+    }
+
+    [Fact]
     public async Task InventoryRejectsNegativeCapabilityMasks()
     {
         using var server = new TestHomeAssistantServer();

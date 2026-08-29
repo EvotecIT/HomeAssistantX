@@ -52,9 +52,28 @@ internal static class CancellationAwareString
         cancellationToken.ThrowIfCancellationRequested();
         if (start == 0 && end == value.Length - 1) return value;
         if (end < start) return string.Empty;
-        var result = value.Substring(start, end - start + 1);
+        return Slice(value, start, end - start + 1, cancellationToken);
+    }
+
+    internal static string Slice(
+        string value,
+        int start,
+        int length,
+        CancellationToken cancellationToken)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        if (start < 0 || length < 0 || start > value.Length - length)
+            throw new ArgumentOutOfRangeException(nameof(start));
         cancellationToken.ThrowIfCancellationRequested();
-        return result;
+        if (start == 0 && length == value.Length) return value;
+        var result = new System.Text.StringBuilder(length);
+        for (var index = 0; index < length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            result.Append(value[start + index]);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return result.ToString();
     }
 
     internal static string Concat(

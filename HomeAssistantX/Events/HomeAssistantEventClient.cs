@@ -27,9 +27,10 @@ public sealed class HomeAssistantEventClient
             throw new ArgumentNullException(nameof(handler));
         }
 
-        IReadOnlyDictionary<string, object?>? payload = string.IsNullOrWhiteSpace(eventType)
+        var normalizedEventType = NormalizeEventType(eventType, required: false, cancellationToken);
+        IReadOnlyDictionary<string, object?>? payload = normalizedEventType is null
             ? null
-            : new Dictionary<string, object?> { ["event_type"] = eventType };
+            : new Dictionary<string, object?> { ["event_type"] = normalizedEventType };
         return _webSocket.SubscribeAsync(
             "subscribe_events",
             payload,
@@ -53,12 +54,8 @@ public sealed class HomeAssistantEventClient
         IReadOnlyDictionary<string, object?>? eventData = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(eventType))
-        {
-            throw new ArgumentException("An event type is required.", nameof(eventType));
-        }
-
-        var payload = new Dictionary<string, object?> { ["event_type"] = eventType.Trim() };
+        var normalizedEventType = NormalizeEventType(eventType, required: true, cancellationToken)!;
+        var payload = new Dictionary<string, object?> { ["event_type"] = normalizedEventType };
         if (eventData is not null)
         {
             payload["event_data"] = HomeAssistantJson.FreezeObject(eventData, nameof(eventData), "EventData", cancellationToken);
@@ -107,5 +104,20 @@ public sealed class HomeAssistantEventClient
 
         cancellationToken.ThrowIfCancellationRequested();
         return value;
+    }
+
+    private static string? NormalizeEventType(
+        string? eventType,
+        bool required,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (CancellationAwareString.IsNullOrWhiteSpace(eventType, cancellationToken))
+        {
+            if (required) throw new ArgumentException("An event type is required.", nameof(eventType));
+            return null;
+        }
+
+        return CancellationAwareString.Trim(eventType!, cancellationToken);
     }
 }

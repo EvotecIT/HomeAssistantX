@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.WebSockets;
 
@@ -242,6 +243,25 @@ public sealed class HomeAssistantRegistryClient
             allowNullCollectionEntries: true,
             cancellationToken: cancellationToken);
 
+        foreach (var pair in extendedEntries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!HomeAssistantEntityId.TryNormalize(pair.Key, cancellationToken, out var normalizedEntityId)
+                || !HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                    pair.Key,
+                    normalizedEntityId,
+                    cancellationToken)
+                || pair.Value is not null
+                    && !HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                        pair.Key,
+                        pair.Value.EntityId,
+                        cancellationToken))
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant extended entity registry response contained a mismatched entity identifier.");
+            }
+        }
+
         var merged = new List<HomeAssistantEntityRegistryEntry>(partialEntries.Count);
         foreach (var partial in partialEntries)
         {
@@ -250,6 +270,15 @@ public sealed class HomeAssistantRegistryClient
             {
                 merged.Add(partial);
                 continue;
+            }
+
+            if (!HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                partial.EntityId,
+                extended.EntityId,
+                cancellationToken))
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant extended entity registry response contained a mismatched entity identifier.");
             }
 
             foreach (var pair in partial.AdditionalData)

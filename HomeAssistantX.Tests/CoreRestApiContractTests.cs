@@ -68,6 +68,8 @@ public sealed class CoreRestApiContractTests
     [InlineData("[{\"entity_id\":\"light.kitchen\",\"name\":\"Wrong domain\"}]")]
     [InlineData("[{\"entity_id\":\" calendar.home \",\"name\":\"Padded\"}]")]
     [InlineData("[{\"entity_id\":\"calendar.Home\",\"name\":\"Noncanonical\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"   \"}]")]
     [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"First\"},{\"entity_id\":\"calendar.home\",\"name\":\"Duplicate\"}]")]
     public async Task DirectCalendarRestDiscoveryRejectsMalformedResponseIdentities(string response)
     {

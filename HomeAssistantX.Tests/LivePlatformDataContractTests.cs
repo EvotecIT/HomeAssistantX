@@ -241,6 +241,27 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task PersistentNotificationMutationValidationHonorsCancellationBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Notifications.CreatePersistentAsync(
+                new string(' ', 1_000_000),
+                notificationId: new string(' ', 1_000_000),
+                cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Notifications.DismissPersistentAsync(
+                new string(' ', 1_000_000),
+                cancellation.Token));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task CalendarReadsWritesAndStreamsTimedAndAllDayEvents()
     {
         using var server = new TestHomeAssistantServer();
@@ -301,6 +322,8 @@ public sealed class LivePlatformDataContractTests
     [InlineData("[{\"entity_id\":\"light.kitchen\",\"name\":\"Wrong\"}]")]
     [InlineData("[{\"entity_id\":\"calendar.Home\",\"name\":\"Noncanonical\"}]")]
     [InlineData("[{\"entity_id\":\" calendar.home \",\"name\":\"Padded\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"   \"}]")]
     [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"First\"},{\"entity_id\":\"calendar.home\",\"name\":\"Duplicate\"}]")]
     public async Task CalendarDiscoveryRejectsInvalidEntityIdentifiers(string response)
     {

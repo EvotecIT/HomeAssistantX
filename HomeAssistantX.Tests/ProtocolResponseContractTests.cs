@@ -267,6 +267,23 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
+    public void GenericScalarExtensionProjectionHonorsPreCancellation()
+    {
+        using var document = JsonDocument.Parse(
+            "{\"notification_id\":\"notice\",\"message\":\"Ready\",\"provider_payload\":\""
+            + new string('x', 1_000_000)
+            + "\"}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification>(
+                document.RootElement,
+                "The notification could not be decoded.",
+                cancellationToken: cancellation.Token));
+    }
+
+    [Fact]
     public void BuiltInResponseValidationStopsCollectionTraversalAfterCancellation()
     {
         using var cancellation = new CancellationTokenSource();

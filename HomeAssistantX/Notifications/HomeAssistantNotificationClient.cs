@@ -37,12 +37,13 @@ public sealed class HomeAssistantNotificationClient
         string? notificationId = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (notificationId is not null)
         {
-            Require(notificationId, nameof(notificationId));
+            Require(notificationId, nameof(notificationId), cancellationToken);
         }
 
-        var data = MessageData(message, title);
+        var data = MessageData(message, title, cancellationToken);
         AddOptional(data, "notification_id", notificationId);
         return _services.CallControlAsync(CreateCall("persistent_notification", "create", data), cancellationToken);
     }
@@ -51,7 +52,7 @@ public sealed class HomeAssistantNotificationClient
         string notificationId,
         CancellationToken cancellationToken = default)
     {
-        Require(notificationId, nameof(notificationId));
+        Require(notificationId, nameof(notificationId), cancellationToken);
         return _services.CallControlAsync(
             new HomeAssistantServiceCall("persistent_notification", "dismiss").WithData("notification_id", notificationId),
             cancellationToken);
@@ -79,7 +80,7 @@ public sealed class HomeAssistantNotificationClient
         }
 
         return _services.CallControlAsync(
-            CreateCall("notify", "send_message", MessageData(message, title)).ForTarget(normalizedTarget),
+            CreateCall("notify", "send_message", MessageData(message, title, cancellationToken)).ForTarget(normalizedTarget),
             cancellationToken);
     }
 
@@ -128,14 +129,14 @@ public sealed class HomeAssistantNotificationClient
             foreach (var property in value.EnumerateObject())
             {
                 token.ThrowIfCancellationRequested();
-                if (string.Equals(property.Name, "type", StringComparison.Ordinal))
+                if (CancellationAwareString.EqualsOrdinal(property.Name, "type", token))
                 {
                     if (hasType)
                         throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate type field.");
                     hasType = true;
                     typeValue = property.Value;
                 }
-                else if (string.Equals(property.Name, "notifications", StringComparison.Ordinal))
+                else if (CancellationAwareString.EqualsOrdinal(property.Name, "notifications", token))
                 {
                     if (hasNotifications)
                         throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notifications field.");
@@ -153,19 +154,23 @@ public sealed class HomeAssistantNotificationClient
             }
 
             var rawType = typeValue.GetString() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(rawType)
-                || !string.Equals(rawType, rawType.Trim(), StringComparison.Ordinal))
+            if (CancellationAwareString.IsNullOrWhiteSpace(rawType, token)
+                || !CancellationAwareString.EqualsOrdinal(
+                    rawType,
+                    CancellationAwareString.Trim(rawType, token),
+                    token))
             {
                 throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained an invalid event type.");
             }
-            var notificationKeys = new HashSet<string>(StringComparer.Ordinal);
+            var notificationKeys = new List<string>();
             foreach (var item in notificationsValue.EnumerateObject())
             {
                 token.ThrowIfCancellationRequested();
-                if (!notificationKeys.Add(item.Name))
+                if (notificationKeys.Any(value => CancellationAwareString.EqualsOrdinal(value, item.Name, token)))
                 {
                     throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notification identifier.");
                 }
+                notificationKeys.Add(item.Name);
             }
             var notifications = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantPersistentNotification>>(
                 notificationsValue,
@@ -175,7 +180,7 @@ public sealed class HomeAssistantNotificationClient
             foreach (var item in notifications)
             {
                 token.ThrowIfCancellationRequested();
-                if (!string.Equals(item.Key, item.Value.NotificationId, StringComparison.Ordinal))
+                if (!CancellationAwareString.EqualsOrdinal(item.Key, item.Value.NotificationId, token))
                 {
                     throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a mismatched notification identifier.");
                 }
@@ -187,7 +192,7 @@ public sealed class HomeAssistantNotificationClient
             return new HomeAssistantPersistentNotificationUpdate
             {
                 RawType = rawType,
-                Type = ParseType(rawType),
+                Type = ParseType(rawType, token),
                 Notifications = notifications,
                 Raw = raw
             };
@@ -198,23 +203,28 @@ public sealed class HomeAssistantNotificationClient
         string responseName,
         CancellationToken cancellationToken)
     {
-        var identifiers = new HashSet<string>(StringComparer.Ordinal);
+        var identifiers = new List<string>();
         foreach (var item in notifications)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (item is null)
                 throw new HomeAssistantProtocolException(responseName + " contained a null item.");
-            if (string.IsNullOrWhiteSpace(item.NotificationId) || string.IsNullOrWhiteSpace(item.Message))
+            if (CancellationAwareString.IsNullOrWhiteSpace(item.NotificationId, cancellationToken)
+                || CancellationAwareString.IsNullOrWhiteSpace(item.Message, cancellationToken))
                 throw new HomeAssistantProtocolException(responseName + " contained an incomplete item.");
-            if (!identifiers.Add(item.NotificationId))
+            if (identifiers.Any(value => CancellationAwareString.EqualsOrdinal(value, item.NotificationId, cancellationToken)))
                 throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification identifier.");
+            identifiers.Add(item.NotificationId);
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
 
-    private static Dictionary<string, object?> MessageData(string message, string? title)
+    private static Dictionary<string, object?> MessageData(
+        string message,
+        string? title,
+        CancellationToken cancellationToken)
     {
-        Require(message, nameof(message));
+        Require(message, nameof(message), cancellationToken);
         var data = new Dictionary<string, object?> { ["message"] = message };
         AddOptional(data, "title", title);
         return data;
@@ -242,23 +252,28 @@ public sealed class HomeAssistantNotificationClient
         }
     }
 
-    private static void Require(string value, string parameterName)
+    private static void Require(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty value is required.", parameterName);
         }
     }
 
-    private static HomeAssistantPersistentNotificationUpdateType ParseType(string value)
+    private static HomeAssistantPersistentNotificationUpdateType ParseType(
+        string value,
+        CancellationToken cancellationToken)
     {
-        if (string.Equals(value, "current", StringComparison.OrdinalIgnoreCase))
+        if (CancellationAwareString.EqualsOrdinalIgnoreCase(value, "current", cancellationToken))
             return HomeAssistantPersistentNotificationUpdateType.Current;
-        if (string.Equals(value, "added", StringComparison.OrdinalIgnoreCase))
+        if (CancellationAwareString.EqualsOrdinalIgnoreCase(value, "added", cancellationToken))
             return HomeAssistantPersistentNotificationUpdateType.Added;
-        if (string.Equals(value, "updated", StringComparison.OrdinalIgnoreCase))
+        if (CancellationAwareString.EqualsOrdinalIgnoreCase(value, "updated", cancellationToken))
             return HomeAssistantPersistentNotificationUpdateType.Updated;
-        if (string.Equals(value, "removed", StringComparison.OrdinalIgnoreCase))
+        if (CancellationAwareString.EqualsOrdinalIgnoreCase(value, "removed", cancellationToken))
             return HomeAssistantPersistentNotificationUpdateType.Removed;
         return HomeAssistantPersistentNotificationUpdateType.Unknown;
     }
