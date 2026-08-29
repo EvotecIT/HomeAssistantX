@@ -185,6 +185,25 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
+    public async Task CalendarEventExtensionProjectionStopsAfterCancellation()
+    {
+        var json = "[{\"summary\":\"Planning\",\"start\":{\"dateTime\":\"2026-08-27T18:00:00Z\"},"
+            + "\"end\":{\"dateTime\":\"2026-08-27T19:00:00Z\"},\"provider_payload\":["
+            + string.Join(",", Enumerable.Repeat("0", 1_000_000))
+            + "]}]";
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json), writable: false);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            JsonSerializer.DeserializeAsync<HomeAssistantCalendarEvent[]>(
+                    stream,
+                    HomeAssistantJson.CreateCancellationAwareResponseOptions(cancellation.Token),
+                    cancellation.Token)
+                .AsTask());
+    }
+
+    [Fact]
     public void BuiltInResponseValidationStopsCollectionTraversalAfterCancellation()
     {
         using var cancellation = new CancellationTokenSource();

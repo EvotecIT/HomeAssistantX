@@ -228,6 +228,7 @@ internal static class HomeAssistantJson
     internal static JsonSerializerOptions CreateCancellationAwareResponseOptions(CancellationToken cancellationToken)
     {
         var options = new JsonSerializerOptions(SerializerOptions);
+        options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarEventJsonConverter(cancellationToken));
         options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarBoundaryJsonConverter(cancellationToken));
         return options;
     }

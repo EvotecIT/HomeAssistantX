@@ -83,6 +83,7 @@ public sealed class HomeAssistantCalendarBoundary
 }
 
 /// <summary>An event returned by a Home Assistant calendar entity.</summary>
+[JsonConverter(typeof(HomeAssistantCalendarEventJsonConverter))]
 public sealed class HomeAssistantCalendarEvent
 {
     [JsonPropertyName("summary")]
@@ -111,6 +112,257 @@ public sealed class HomeAssistantCalendarEvent
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
+}
+
+internal sealed class HomeAssistantCalendarEventJsonConverter : JsonConverter<HomeAssistantCalendarEvent>
+{
+    private readonly CancellationToken _cancellationToken;
+
+    public HomeAssistantCalendarEventJsonConverter()
+        : this(default)
+    {
+    }
+
+    internal HomeAssistantCalendarEventJsonConverter(CancellationToken cancellationToken)
+    {
+        _cancellationToken = cancellationToken;
+    }
+
+    public override HomeAssistantCalendarEvent? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        _cancellationToken.ThrowIfCancellationRequested();
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            throw new JsonException("A Home Assistant calendar event must be an object.");
+        }
+
+        var result = new HomeAssistantCalendarEvent();
+        var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            _cancellationToken.ThrowIfCancellationRequested();
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                throw new JsonException("A Home Assistant calendar event contained an invalid object member.");
+            }
+
+            var propertyName = reader.GetString()!;
+            if (!propertyNames.Add(propertyName))
+            {
+                throw new JsonException("A Home Assistant calendar event contained a duplicate field.");
+            }
+
+            if (!reader.Read())
+            {
+                throw new JsonException("A Home Assistant calendar event ended before its property value.");
+            }
+
+            _cancellationToken.ThrowIfCancellationRequested();
+            switch (propertyName)
+            {
+                case "summary":
+                    result.Summary = ReadRequiredString(ref reader, "summary");
+                    break;
+                case "start":
+                    result.Start = ReadBoundary(ref reader, options);
+                    break;
+                case "end":
+                    result.End = ReadBoundary(ref reader, options);
+                    break;
+                case "description":
+                    result.Description = ReadOptionalString(ref reader, "description");
+                    break;
+                case "location":
+                    result.Location = ReadOptionalString(ref reader, "location");
+                    break;
+                case "uid":
+                    result.Uid = ReadOptionalString(ref reader, "uid");
+                    break;
+                case "recurrence_id":
+                    result.RecurrenceId = ReadOptionalString(ref reader, "recurrence_id");
+                    break;
+                case "rrule":
+                    result.RecurrenceRule = ReadOptionalString(ref reader, "rrule");
+                    break;
+                default:
+                    result.AdditionalData.Add(
+                        propertyName,
+                        HomeAssistantCancellationJsonValueReader.Read(ref reader, _cancellationToken));
+                    break;
+            }
+        }
+
+        if (reader.TokenType != JsonTokenType.EndObject)
+        {
+            throw new JsonException("A Home Assistant calendar event object was incomplete.");
+        }
+
+        _cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
+
+    private static string ReadRequiredString(ref Utf8JsonReader reader, string propertyName)
+    {
+        if (reader.TokenType != JsonTokenType.String)
+        {
+            throw new JsonException("A Home Assistant calendar " + propertyName + " must be a string.");
+        }
+
+        return reader.GetString()!;
+    }
+
+    private static string? ReadOptionalString(ref Utf8JsonReader reader, string propertyName)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return null;
+        }
+
+        return ReadRequiredString(ref reader, propertyName);
+    }
+
+    private static HomeAssistantCalendarBoundary? ReadBoundary(ref Utf8JsonReader reader, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Deserialize<HomeAssistantCalendarBoundary>(ref reader, options);
+    }
+
+    public override void Write(Utf8JsonWriter writer, HomeAssistantCalendarEvent value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("summary", value.Summary);
+        if (value.Start is not null)
+        {
+            writer.WritePropertyName("start");
+            JsonSerializer.Serialize(writer, value.Start, options);
+        }
+        if (value.End is not null)
+        {
+            writer.WritePropertyName("end");
+            JsonSerializer.Serialize(writer, value.End, options);
+        }
+        WriteOptionalString(writer, "description", value.Description);
+        WriteOptionalString(writer, "location", value.Location);
+        WriteOptionalString(writer, "uid", value.Uid);
+        WriteOptionalString(writer, "recurrence_id", value.RecurrenceId);
+        WriteOptionalString(writer, "rrule", value.RecurrenceRule);
+        foreach (var pair in value.AdditionalData)
+        {
+            writer.WritePropertyName(pair.Key);
+            pair.Value.WriteTo(writer);
+        }
+        writer.WriteEndObject();
+    }
+
+    private static void WriteOptionalString(Utf8JsonWriter writer, string propertyName, string? value)
+    {
+        if (value is not null)
+        {
+            writer.WriteString(propertyName, value);
+        }
+    }
+}
+
+internal static class HomeAssistantCancellationJsonValueReader
+{
+    internal static JsonElement Read(ref Utf8JsonReader reader, CancellationToken cancellationToken)
+    {
+        byte[] payload;
+        using (var buffer = new MemoryStream())
+        {
+            using (var writer = new Utf8JsonWriter(buffer))
+            {
+                Copy(ref reader, writer, cancellationToken);
+                writer.Flush();
+            }
+
+            payload = buffer.ToArray();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!cancellationToken.CanBeCanceled)
+        {
+            using var document = JsonDocument.Parse(payload);
+            return document.RootElement.Clone();
+        }
+
+        var parseTask = Task.Run(() =>
+        {
+            using var document = JsonDocument.Parse(payload);
+            return document.RootElement.Clone();
+        });
+        var completed = Task.WhenAny(parseTask, Task.Delay(Timeout.Infinite, cancellationToken))
+            .GetAwaiter()
+            .GetResult();
+        if (!ReferenceEquals(completed, parseTask))
+        {
+            _ = parseTask.ContinueWith(
+                task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        return parseTask.GetAwaiter().GetResult();
+    }
+
+    private static void Copy(ref Utf8JsonReader reader, Utf8JsonWriter writer, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.StartObject:
+                writer.WriteStartObject();
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                        throw new JsonException("An extension object contained an invalid member.");
+                    writer.WritePropertyName(reader.GetString()!);
+                    if (!reader.Read()) throw new JsonException("An extension object was incomplete.");
+                    Copy(ref reader, writer, cancellationToken);
+                }
+                if (reader.TokenType != JsonTokenType.EndObject)
+                    throw new JsonException("An extension object was incomplete.");
+                writer.WriteEndObject();
+                return;
+            case JsonTokenType.StartArray:
+                writer.WriteStartArray();
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                {
+                    Copy(ref reader, writer, cancellationToken);
+                }
+                if (reader.TokenType != JsonTokenType.EndArray)
+                    throw new JsonException("An extension array was incomplete.");
+                writer.WriteEndArray();
+                return;
+            case JsonTokenType.String:
+                writer.WriteStringValue(reader.GetString());
+                return;
+            case JsonTokenType.Number:
+                if (reader.HasValueSequence)
+                    writer.WriteRawValue(reader.ValueSequence.ToArray(), skipInputValidation: true);
+                else
+                    writer.WriteRawValue(reader.ValueSpan, skipInputValidation: true);
+                return;
+            case JsonTokenType.True:
+                writer.WriteBooleanValue(true);
+                return;
+            case JsonTokenType.False:
+                writer.WriteBooleanValue(false);
+                return;
+            case JsonTokenType.Null:
+                writer.WriteNullValue();
+                return;
+            default:
+                throw new JsonException("An extension value contained an invalid JSON token.");
+        }
+    }
 }
 
 internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter<HomeAssistantCalendarBoundary>
@@ -220,7 +472,9 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             }
             else
             {
-                additionalData.Add(propertyName, ReadExtensionValue(ref reader));
+                additionalData.Add(
+                    propertyName,
+                    HomeAssistantCancellationJsonValueReader.Read(ref reader, _cancellationToken));
             }
         }
 
@@ -242,103 +496,6 @@ internal sealed class HomeAssistantCalendarBoundaryJsonConverter : JsonConverter
             DateTime = parsedDateTime,
             AdditionalData = additionalData
         };
-    }
-
-    private JsonElement ReadExtensionValue(ref Utf8JsonReader reader)
-    {
-        byte[] payload;
-        using (var buffer = new MemoryStream())
-        {
-            using (var writer = new Utf8JsonWriter(buffer))
-            {
-                CopyValue(ref reader, writer);
-                writer.Flush();
-            }
-
-            payload = buffer.ToArray();
-        }
-
-        _cancellationToken.ThrowIfCancellationRequested();
-        if (!_cancellationToken.CanBeCanceled)
-        {
-            using var document = JsonDocument.Parse(payload);
-            return document.RootElement.Clone();
-        }
-
-        var parseTask = Task.Run(() =>
-        {
-            using var document = JsonDocument.Parse(payload);
-            return document.RootElement.Clone();
-        });
-        var completed = Task.WhenAny(
-                parseTask,
-                Task.Delay(Timeout.Infinite, _cancellationToken))
-            .GetAwaiter()
-            .GetResult();
-        if (!ReferenceEquals(completed, parseTask))
-        {
-            _ = parseTask.ContinueWith(
-                task => _ = task.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted,
-                TaskScheduler.Default);
-            _cancellationToken.ThrowIfCancellationRequested();
-        }
-
-        return parseTask.GetAwaiter().GetResult();
-    }
-
-    private void CopyValue(ref Utf8JsonReader reader, Utf8JsonWriter writer)
-    {
-        _cancellationToken.ThrowIfCancellationRequested();
-        switch (reader.TokenType)
-        {
-            case JsonTokenType.StartObject:
-                writer.WriteStartObject();
-                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-                {
-                    _cancellationToken.ThrowIfCancellationRequested();
-                    if (reader.TokenType != JsonTokenType.PropertyName)
-                        throw new JsonException("A calendar extension object contained an invalid member.");
-                    writer.WritePropertyName(reader.GetString()!);
-                    if (!reader.Read()) throw new JsonException("A calendar extension object was incomplete.");
-                    CopyValue(ref reader, writer);
-                }
-                if (reader.TokenType != JsonTokenType.EndObject)
-                    throw new JsonException("A calendar extension object was incomplete.");
-                writer.WriteEndObject();
-                return;
-            case JsonTokenType.StartArray:
-                writer.WriteStartArray();
-                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-                {
-                    CopyValue(ref reader, writer);
-                }
-                if (reader.TokenType != JsonTokenType.EndArray)
-                    throw new JsonException("A calendar extension array was incomplete.");
-                writer.WriteEndArray();
-                return;
-            case JsonTokenType.String:
-                writer.WriteStringValue(reader.GetString());
-                return;
-            case JsonTokenType.Number:
-                if (reader.HasValueSequence)
-                    writer.WriteRawValue(reader.ValueSequence.ToArray(), skipInputValidation: true);
-                else
-                    writer.WriteRawValue(reader.ValueSpan, skipInputValidation: true);
-                return;
-            case JsonTokenType.True:
-                writer.WriteBooleanValue(true);
-                return;
-            case JsonTokenType.False:
-                writer.WriteBooleanValue(false);
-                return;
-            case JsonTokenType.Null:
-                writer.WriteNullValue();
-                return;
-            default:
-                throw new JsonException("A calendar extension value contained an invalid JSON token.");
-        }
     }
 
     private static bool TryReadWireDateTime(JsonElement value, out DateTimeOffset result)
