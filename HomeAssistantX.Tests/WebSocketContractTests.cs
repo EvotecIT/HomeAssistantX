@@ -340,7 +340,6 @@ public sealed class WebSocketContractTests
 
     [Theory]
     [InlineData("test/coalesced_missing_event")]
-    [InlineData("test/coalesced_null_event")]
     [InlineData("test/missing_event")]
     public async Task EventMessagesRequirePayloadBeforeRouting(string command)
     {
@@ -352,6 +351,17 @@ public sealed class WebSocketContractTests
 
         var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
         Assert.Contains("event payload", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task EventMessagesPermitAnExplicitNullPayload()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var result = await client.WebSocket.RequestAsync("test/coalesced_null_event");
+
+        Assert.Equal(JsonValueKind.Null, result.ValueKind);
     }
 
     [Fact]
