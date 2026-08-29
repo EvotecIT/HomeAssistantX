@@ -163,7 +163,9 @@ public sealed class LivePlatformDataContractTests
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
-    public async Task PersistentNotificationSubscriptionRejectsBlankUpdateTypes(string type)
+    [InlineData(" current")]
+    [InlineData("current ")]
+    public async Task PersistentNotificationSubscriptionRejectsInvalidUpdateTypes(string type)
     {
         using var server = new TestHomeAssistantServer
         {
