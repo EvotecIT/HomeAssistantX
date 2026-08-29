@@ -96,6 +96,10 @@ public sealed class PublicApiCompatibilityTests
             FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.Transient))!),
             StringComparison.Ordinal);
         Assert.Contains(
+            "thread-static ",
+            FormatField(typeof(FieldFixture).GetField(nameof(FieldFixture.ThreadLocal))!),
+            StringComparison.Ordinal);
+        Assert.Contains(
             FormatAssemblyContracts(typeof(HomeAssistantClient).Assembly),
             value => value.StartsWith("A assembly-identity(\"HomeAssistantX, Version=", StringComparison.Ordinal));
     }
@@ -434,7 +438,7 @@ public sealed class PublicApiCompatibilityTests
             "error obsolete ",
             ObsoleteContract(typeof(CompileBlockingObsoleteEnumFixture).GetField("Legacy")!));
         var property = typeof(CompileBlockingObsoleteAccessorFixture).GetProperty(nameof(CompileBlockingObsoleteAccessorFixture.Value))!;
-        Assert.Equal("error obsolete ", ObsoleteContract(property, property.GetMethod, property.SetMethod));
+        Assert.Contains("{error obsolete get;set;}", FormatProperty(property), StringComparison.Ordinal);
         var implementationOnlySetter = typeof(CompileBlockingObsoleteAccessorFixture).GetProperty("ImplementationOnlySetter")!;
         Assert.Equal(
             string.Empty,
@@ -1304,10 +1308,7 @@ public sealed class PublicApiCompatibilityTests
         var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
         var getter = IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
         var setter = IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
-        return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(property) + ObsoleteContract(
-            property,
-            getter,
-            setter)
+        return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(property) + ObsoleteContract(property)
             + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
             + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
@@ -1757,6 +1758,8 @@ public sealed class PublicApiCompatibilityTests
         public string[,,]? Mutable = new string[1, 1, 1];
         [NonSerialized]
         public string? Transient = string.Empty;
+        [ThreadStatic]
+        public static int ThreadLocal = 1;
         public volatile int Volatile = 1;
     }
 
@@ -2123,7 +2126,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
     }
 
     private static string FormatEnumField(Type type, string name)
@@ -2139,6 +2142,11 @@ public sealed class PublicApiCompatibilityTests
         => (field.Attributes & (FieldAttributes)0x0080) != 0
             || HasAttribute(field, "System.NonSerializedAttribute")
             ? "nonserialized "
+            : string.Empty;
+
+    private static string ThreadStaticContract(FieldInfo field)
+        => HasAttribute(field, "System.ThreadStaticAttribute")
+            ? "thread-static "
             : string.Empty;
 
     private static string FormatFieldType(FieldInfo field)
@@ -2482,6 +2490,7 @@ public sealed class PublicApiCompatibilityTests
             : accessorScope + " ";
         return (string.Equals(accessorAccess, propertyAccess, StringComparison.Ordinal) ? string.Empty : accessorAccess)
             + independentScope
+            + ObsoleteContract(accessor!)
             + DispIdContract(accessor!)
             + DllImportContract(accessor!)
             + PreserveSigContract(accessor!)
