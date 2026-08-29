@@ -1808,6 +1808,23 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task MobileAppWebhookCommandTypesAreBoundedBeforeCopying()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "bounded-command",
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/bounded-command")
+            });
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            webhook.SendAsync(" " + new string('a', 256), null));
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
     public async Task MobileAppWebhookResponseParsingObservesCancellation()
     {
         using var cancellation = new CancellationTokenSource();

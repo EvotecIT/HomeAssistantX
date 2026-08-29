@@ -65,7 +65,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
 
     public async Task<HomeAssistantMobileAppCameraStream> GetCameraStreamAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", out var normalizedEntityId))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", cancellationToken, out var normalizedEntityId))
             throw new ArgumentException("A camera entity ID is required.", nameof(entityId));
         var result = await SendAsync("stream_camera", new Dictionary<string, object?> { ["camera_entity_id"] = normalizedEntityId }, cancellationToken).ConfigureAwait(false);
         var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantMobileAppCameraStream>(
@@ -308,10 +308,12 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (end < start) throw new ArgumentException("A webhook command type is required.", nameof(commandType));
-        return start == 0 && end == commandType.Length - 1
+        var length = end - start + 1;
+        if (length <= 0) throw new ArgumentException("A webhook command type is required.", nameof(commandType));
+        if (length > 255) throw new ArgumentException("A webhook command type cannot exceed 255 characters.", nameof(commandType));
+        return start == 0 && length == commandType.Length
             ? commandType
-            : commandType.Substring(start, end - start + 1);
+            : commandType.Substring(start, length);
     }
 
     public void Dispose()
