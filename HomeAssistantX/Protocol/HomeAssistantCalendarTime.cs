@@ -31,7 +31,8 @@ internal static class HomeAssistantCalendarTime
         DateTimeOffset value,
         TimeZoneInfo homeTimeZone,
         HomeAssistantCalendarPeriod period)
-        => IsBoundary(value.ToUnixTimeMilliseconds(), homeTimeZone, period);
+        => value.Ticks % TimeSpan.TicksPerMillisecond == 0
+            && IsBoundary(value.ToUnixTimeMilliseconds(), homeTimeZone, period);
 
     internal static bool IsBoundary(
         long unixMilliseconds,

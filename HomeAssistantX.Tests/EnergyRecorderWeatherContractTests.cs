@@ -1781,6 +1781,7 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Theory]
+    [InlineData(HomeAssistantEnergyPeriod.FiveMinute, "2026-10-01T00:00:00.0000001+02:00")]
     [InlineData(HomeAssistantEnergyPeriod.FiveMinute, "2026-10-02T00:00:00+02:00")]
     [InlineData(HomeAssistantEnergyPeriod.Day, "2026-10-25T10:17:00+01:00")]
     [InlineData(HomeAssistantEnergyPeriod.Month, "2026-10-02T00:00:00+02:00")]
