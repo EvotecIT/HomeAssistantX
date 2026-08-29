@@ -1132,6 +1132,82 @@ public sealed class CamerasDashboardsAutomationContractTests
         }
     }
 
+    [Fact]
+    public void AtomicExportsPreserveLinuxOwnershipAndAccessAclWhenAvailable()
+    {
+        if (!OperatingSystem.IsLinux()
+            || !File.Exists("/usr/bin/setfacl")
+            || !File.Exists("/usr/bin/getfacl"))
+        {
+            return;
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-acl-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            RunUnixCommand("/usr/bin/setfacl", "-m", "u:nobody:r--", destination);
+            var expectedOwner = RunUnixCommand("/usr/bin/stat", "-c", "%u:%g", destination);
+            var expectedAcl = RunUnixCommand("/usr/bin/getfacl", "-cp", destination);
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None);
+
+            Assert.Equal(expectedOwner, RunUnixCommand("/usr/bin/stat", "-c", "%u:%g", destination));
+            Assert.Equal(expectedAcl, RunUnixCommand("/usr/bin/getfacl", "-cp", destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ForcedAtomicExportsCommitForPresentAndAbsentDestinations()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-atomic-overwrite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        try
+        {
+            foreach (var destinationExists in new[] { false, true })
+            {
+                if (destinationExists)
+                {
+                    File.WriteAllBytes(destination, new byte[] { 1 });
+                }
+                else if (File.Exists(destination))
+                {
+                    File.Delete(destination);
+                }
+
+                var temporary = Path.Combine(directory, "temporary-" + Guid.NewGuid().ToString("N") + ".bin");
+                File.WriteAllBytes(temporary, new byte[] { 2 });
+
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None);
+
+                Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+                Assert.False(File.Exists(temporary));
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("Linux", "X64", 24)]
     [InlineData("Linux", "Ppc64le", 24)]
@@ -1145,12 +1221,56 @@ public sealed class CamerasDashboardsAutomationContractTests
         int expectedOffset)
     {
         Assert.Equal(expectedOffset, HomeAssistantAtomicFile.UnixModeOffset(operatingSystem, architecture));
+        Assert.Equal(
+            expectedOffset,
+            HomeAssistantAtomicFile.UnixMetadataOffsets(operatingSystem, architecture).Mode);
+    }
+
+    [Theory]
+    [InlineData("Linux", "X64", 28, 32)]
+    [InlineData("Linux", "Ppc64le", 28, 32)]
+    [InlineData("Linux", "S390x", 28, 32)]
+    [InlineData("Linux", "X86", 24, 28)]
+    [InlineData("Linux", "Arm", 24, 28)]
+    [InlineData("Linux", "Arm64", 24, 28)]
+    [InlineData("Linux", "RiscV64", 24, 28)]
+    [InlineData("OSX", "Arm64", 16, 20)]
+    public void AtomicExportsSelectNativeOwnershipOffsetsByAbi(
+        string operatingSystem,
+        string architecture,
+        int expectedUserIdOffset,
+        int expectedGroupIdOffset)
+    {
+        var offsets = HomeAssistantAtomicFile.UnixMetadataOffsets(operatingSystem, architecture);
+
+        Assert.Equal(expectedUserIdOffset, offsets.UserId);
+        Assert.Equal(expectedGroupIdOffset, offsets.GroupId);
     }
 
     [Fact]
     public void AtomicExportsRejectUnknownNativeStatLayouts()
     {
         Assert.Throws<PlatformNotSupportedException>(() => HomeAssistantAtomicFile.UnixModeOffset("Linux", "FutureCpu"));
+    }
+
+    private static string RunUnixCommand(string fileName, params string[] arguments)
+    {
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = fileName,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+        using var process = System.Diagnostics.Process.Start(startInfo)
+            ?? throw new InvalidOperationException("The Unix metadata probe could not be started.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException("The Unix metadata probe failed: " + error.Trim());
+        return output.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
     }
 
     [Fact]

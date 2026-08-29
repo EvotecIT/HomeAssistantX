@@ -1,9 +1,8 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace HomeAssistantX.IO;
 
-internal static class HomeAssistantAtomicFile
+internal static partial class HomeAssistantAtomicFile
 {
     internal static void CommitTemporaryFile(
         string temporaryPath,
@@ -12,18 +11,30 @@ internal static class HomeAssistantAtomicFile
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (File.Exists(destinationPath))
+        if (!overwrite)
         {
-            if (!overwrite)
-                throw new IOException("The destination file already exists. Use -Force to overwrite it.");
-            PreserveDestinationPermissions(destinationPath, temporaryPath);
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Replace(temporaryPath, destinationPath, null);
+            try
+            {
+                File.Move(temporaryPath, destinationPath);
+            }
+            catch (IOException exception) when (File.Exists(destinationPath))
+            {
+                throw new IOException(
+                    "The destination file already exists. Use -Force to overwrite it.",
+                    exception);
+            }
             return;
         }
 
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            CommitWindowsOverwrite(temporaryPath, destinationPath, cancellationToken);
+            return;
+        }
+
+        PreserveDestinationPermissions(destinationPath, temporaryPath);
         cancellationToken.ThrowIfCancellationRequested();
-        File.Move(temporaryPath, destinationPath);
+        CommitUnixOverwrite(temporaryPath, destinationPath);
     }
 
     internal static void PreserveDestinationPermissions(string destinationPath, string temporaryPath)
@@ -34,66 +45,8 @@ internal static class HomeAssistantAtomicFile
         string temporaryPath,
         bool useManagedApis)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || !File.Exists(destinationPath)) return;
-
-        if (useManagedApis && TryPreserveWithManagedApis(destinationPath, temporaryPath)) return;
-        PreserveWithNativeApis(destinationPath, temporaryPath);
-    }
-
-    private static bool TryPreserveWithManagedApis(string destinationPath, string temporaryPath)
-    {
-        var getMode = typeof(File).GetMethod(
-            "GetUnixFileMode",
-            BindingFlags.Public | BindingFlags.Static,
-            binder: null,
-            types: new[] { typeof(string) },
-            modifiers: null);
-        if (getMode is null) return false;
-
-        var mode = getMode.Invoke(null, new object[] { destinationPath });
-        if (mode is null) return false;
-        var setMode = typeof(File).GetMethod(
-            "SetUnixFileMode",
-            BindingFlags.Public | BindingFlags.Static,
-            binder: null,
-            types: new[] { typeof(string), mode.GetType() },
-            modifiers: null);
-        if (setMode is null) return false;
-        setMode.Invoke(null, new[] { (object)temporaryPath, mode });
-        return true;
-    }
-
-    private static void PreserveWithNativeApis(string destinationPath, string temporaryPath)
-    {
-        var modeOffset = UnixModeOffset();
-        var buffer = Marshal.AllocHGlobal(512);
-        try
-        {
-            for (var offset = 0; offset < 512; offset += sizeof(long))
-            {
-                Marshal.WriteInt64(buffer, offset, 0L);
-            }
-
-            if (Stat(destinationPath, buffer) != 0)
-            {
-                throw new IOException(
-                    "The destination Unix file mode could not be read.",
-                    new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()));
-            }
-
-            const int permissionBits = 0x0FFF;
-            var mode = unchecked((uint)(Marshal.ReadInt32(buffer, modeOffset) & permissionBits));
-            if (Chmod(temporaryPath, mode) != 0)
-            {
-                throw new IOException(
-                    "The temporary Unix file mode could not be updated.",
-                    new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()));
-            }
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+        PreserveUnixDestinationMetadata(destinationPath, temporaryPath, useManagedApis);
     }
 
     private static int UnixModeOffset()
@@ -119,9 +72,4 @@ internal static class HomeAssistantAtomicFile
         };
     }
 
-    [DllImport("libc", EntryPoint = "stat", SetLastError = true)]
-    private static extern int Stat(string path, IntPtr buffer);
-
-    [DllImport("libc", EntryPoint = "chmod", SetLastError = true)]
-    private static extern int Chmod(string path, uint mode);
 }
