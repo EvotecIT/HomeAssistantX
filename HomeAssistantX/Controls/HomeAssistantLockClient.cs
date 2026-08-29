@@ -10,7 +10,7 @@ public sealed class HomeAssistantLockClient : HomeAssistantControlClientBase
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantLockAction action, string? code = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var normalizedCode = code is null ? null : ControlValidation.RequiredUnchanged(code, nameof(code));
+        var normalizedCode = code is null ? null : ControlValidation.RequiredUnchanged(code, nameof(code), cancellationToken);
         return CallAsync(action switch
         {
             HomeAssistantLockAction.Lock => "lock",

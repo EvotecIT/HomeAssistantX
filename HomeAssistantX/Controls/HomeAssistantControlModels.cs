@@ -255,6 +255,41 @@ internal static class ControlValidation
         return value!;
     }
 
+    public static string RequiredUnchanged(
+        string? value,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null)
+        {
+            throw new ArgumentException("A non-empty value is required.", name);
+        }
+
+        var hasContent = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (!char.IsWhiteSpace(value[index]))
+            {
+                hasContent = true;
+                break;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!hasContent)
+        {
+            throw new ArgumentException("A non-empty value is required.", name);
+        }
+
+        return value;
+    }
+
     public static IReadOnlyList<string> RequiredValues(
         IReadOnlyList<string>? values,
         string name,

@@ -143,6 +143,35 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task SafetyCodeValidationStopsWhenCancellationArrivesDuringWhitespaceTraversal()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        using var started = new ManualResetEventSlim();
+        var longCode = new string(' ', 20_000_000);
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.Set();
+                await client.Controls.Alarms.ActAsync(
+                    HomeAssistantTarget.ForEntity("alarm_control_panel.home"),
+                    HomeAssistantAlarmAction.Disarm,
+                    longCode,
+                    cancellation.Token).ConfigureAwait(false);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task RoutineAndHelperControlsKeepDomainsAndValueShapesTyped()
     {
         using var server = new TestHomeAssistantServer();
