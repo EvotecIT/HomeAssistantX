@@ -20,7 +20,7 @@ public sealed class ExportHomeAssistantCameraSnapshotCommand : HomeAssistantCmdl
 
     protected override Task BeginProcessingAsync()
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(EntityId, "camera", out _entityId))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(EntityId, "camera", CancelToken, out _entityId))
         {
             throw new ArgumentException("A lowercase camera entity identifier is required.", nameof(EntityId));
         }

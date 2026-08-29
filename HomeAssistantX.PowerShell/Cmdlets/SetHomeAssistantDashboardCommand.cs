@@ -62,7 +62,7 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(UrlPath, AllowSingleWord, out var createUrlPath, CancelToken))
                     throw new ArgumentException("Dashboard URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens; a hyphen is required unless AllowSingleWord is enabled.", nameof(UrlPath));
                 var createTitle = Require(Title, nameof(Title));
-                var createIcon = Icon is null ? null : RequireIcon(Icon, nameof(Icon));
+                var createIcon = Icon is null ? null : RequireIcon(Icon, nameof(Icon), CancelToken);
                 target = createUrlPath; action = "Create Home Assistant dashboard";
                 if (!ShouldProcess(target, action)) return;
                 result = await Client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = createUrlPath, Title = createTitle, Icon = createIcon, ShowInSidebar = !HideFromSidebar, RequireAdmin = RequireAdmin, AllowSingleWord = AllowSingleWord }, CancelToken).ConfigureAwait(false);
@@ -71,7 +71,7 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
                 if (RemoveIcon && Icon is not null) throw new ArgumentException("Icon and RemoveIcon cannot be combined.");
                 var dashboardId = Require(DashboardId, nameof(DashboardId));
                 var updateTitle = Title is null ? null : Require(Title, nameof(Title));
-                var updateIcon = Icon is null ? null : RequireIcon(Icon, nameof(Icon));
+                var updateIcon = Icon is null ? null : RequireIcon(Icon, nameof(Icon), CancelToken);
                 var update = new HomeAssistantDashboardUpdate { Title = updateTitle, Icon = updateIcon, RemoveIcon = RemoveIcon, ShowInSidebar = ShowInSidebar, RequireAdmin = DashboardRequireAdmin };
                 if (Title is null && Icon is null && !RemoveIcon && !ShowInSidebar.HasValue && !DashboardRequireAdmin.HasValue) throw new ArgumentException("Specify at least one dashboard update.");
                 target = dashboardId; action = "Update Home Assistant dashboard";
@@ -128,9 +128,9 @@ public sealed class SetHomeAssistantDashboardCommand : HomeAssistantCmdlet
         return value!.Trim();
     }
 
-    private static string RequireIcon(string value, string parameterName)
+    private static string RequireIcon(string value, string parameterName, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(value, out var normalized))
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(value, out var normalized, cancellationToken))
             throw new ArgumentException("A dashboard icon must contain a ':' separator.", parameterName);
         return normalized;
     }

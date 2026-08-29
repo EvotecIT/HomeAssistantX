@@ -192,6 +192,7 @@ public sealed class HomeAssistantCameraClient
         cancellationToken.ThrowIfCancellationRequested();
         if (value is null
             || value.Length == 0
+            || value.Length > 255
             || char.IsWhiteSpace(value[0])
             || char.IsWhiteSpace(value[value.Length - 1]))
         {

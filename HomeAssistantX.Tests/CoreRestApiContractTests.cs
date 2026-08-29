@@ -280,7 +280,7 @@ public sealed class CoreRestApiContractTests
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
         using var cancellation = new CancellationTokenSource();
-        var entityId = "camera." + new string('a', 16_000_000);
+        var entityId = new string(' ', 16_000_000) + "camera.front";
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var operation = Task.Factory.StartNew(
             async () =>

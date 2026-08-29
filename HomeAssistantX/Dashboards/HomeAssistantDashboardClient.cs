@@ -26,7 +26,7 @@ public sealed class HomeAssistantDashboardClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.");
+            var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.", cancellationToken);
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
             RequirePanelBooleans(property.Value);
@@ -44,7 +44,8 @@ public sealed class HomeAssistantDashboardClient
                     throw new HomeAssistantProtocolException("A frontend panel contained an invalid route.");
                 panel.UrlPath = RequireResponseSelector(
                     embeddedRoute.GetString(),
-                    "A frontend panel contained an invalid route.");
+                    "A frontend panel contained an invalid route.",
+                    cancellationToken);
                 if (!string.Equals(panel.UrlPath, route, StringComparison.Ordinal))
                     throw new HomeAssistantProtocolException("A frontend panel route did not match its registered key.");
             }
@@ -52,9 +53,10 @@ public sealed class HomeAssistantDashboardClient
                 throw new HomeAssistantProtocolException("A frontend panel did not contain its required fields.");
             panel.ComponentName = RequireResponseSelector(
                 panel.ComponentName,
-                "A frontend panel contained a noncanonical component name.");
+                "A frontend panel contained a noncanonical component name.",
+                cancellationToken);
             if (panel.Icon is not null
-                && (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(panel.Icon, out var normalizedIcon)
+                && (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(panel.Icon, out var normalizedIcon, cancellationToken)
                     || !string.Equals(panel.Icon, normalizedIcon, StringComparison.Ordinal)))
                 throw new HomeAssistantProtocolException("A frontend panel contained a noncanonical icon.");
             result.Add(panel);
@@ -135,7 +137,7 @@ public sealed class HomeAssistantDashboardClient
             ["show_in_sidebar"] = create.ShowInSidebar,
             ["require_admin"] = create.RequireAdmin
         };
-        var icon = create.Icon is null ? null : RequireIcon(create.Icon, nameof(create.Icon));
+        var icon = create.Icon is null ? null : RequireIcon(create.Icon, nameof(create.Icon), cancellationToken);
         if (icon is not null) payload["icon"] = icon;
         if (create.AllowSingleWord) payload["allow_single_word"] = true;
         return await RequestDashboardAsync(
@@ -157,7 +159,7 @@ public sealed class HomeAssistantDashboardClient
         var normalizedDashboardId = Require(dashboardId, nameof(dashboardId), cancellationToken);
         var payload = new Dictionary<string, object?> { ["dashboard_id"] = normalizedDashboardId };
         var title = update.Title is null ? null : Require(update.Title, nameof(update.Title), cancellationToken);
-        var icon = update.Icon is null ? null : RequireIcon(update.Icon, nameof(update.Icon));
+        var icon = update.Icon is null ? null : RequireIcon(update.Icon, nameof(update.Icon), cancellationToken);
         if (title is not null) payload["title"] = title;
         if (icon is not null) payload["icon"] = icon;
         if (update.RemoveIcon) payload["icon"] = null;
@@ -265,7 +267,7 @@ public sealed class HomeAssistantDashboardClient
         foreach (var resource in resources)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ValidateListedResource(resource, resourceMode);
+            ValidateListedResource(resource, resourceMode, cancellationToken);
             if (resourceMode == "storage" && !storageIds.Add(resource.Id))
                 throw new HomeAssistantProtocolException("The Lovelace resource list contained a duplicate storage identifier.");
         }
@@ -368,7 +370,7 @@ public sealed class HomeAssistantDashboardClient
             value,
             "The Lovelace resource response could not be decoded.",
             cancellationToken: cancellationToken);
-        ValidateStorageResource(resource);
+        ValidateStorageResource(resource, cancellationToken);
         if (expectedResourceId is not null && !string.Equals(resource.Id, expectedResourceId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A Lovelace resource mutation response did not match the requested identifier.");
         if (expectedUrl is not null && !string.Equals(resource.Url, expectedUrl, StringComparison.Ordinal))
@@ -403,18 +405,16 @@ public sealed class HomeAssistantDashboardClient
     private static void ValidateListedDashboard(HomeAssistantDashboard dashboard, CancellationToken cancellationToken)
     {
         dashboard.UrlPath = RequireResponseUrlPath(dashboard.UrlPath, "A dashboard did not contain a canonical URL path.", cancellationToken);
-        if (string.IsNullOrWhiteSpace(dashboard.Title)
-            || string.IsNullOrWhiteSpace(dashboard.Mode))
+        if (!IsCanonicalTrimmed(dashboard.Title, cancellationToken)
+            || !IsCanonicalTrimmed(dashboard.Mode, cancellationToken))
             throw new HomeAssistantProtocolException("A dashboard did not contain its required fields.");
         if (dashboard.Mode == "storage")
         {
-            dashboard.Id = RequireResponseSelector(dashboard.Id, "A storage dashboard did not contain a canonical identifier.");
+            dashboard.Id = RequireResponseSelector(dashboard.Id, "A storage dashboard did not contain a canonical identifier.", cancellationToken);
         }
         else if (dashboard.Mode == "yaml")
         {
-            if (dashboard.FileName is not string fileName
-                || string.IsNullOrWhiteSpace(fileName)
-                || !string.Equals(fileName, fileName.Trim(), StringComparison.Ordinal))
+            if (!IsCanonicalTrimmed(dashboard.FileName, cancellationToken))
                 throw new HomeAssistantProtocolException("A YAML dashboard did not contain a canonical filename.");
         }
         else
@@ -422,7 +422,7 @@ public sealed class HomeAssistantDashboardClient
             throw new HomeAssistantProtocolException("A dashboard contained an unsupported mode.");
         }
         if (dashboard.Icon is not null
-            && (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(dashboard.Icon, out var normalizedIcon)
+            && (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(dashboard.Icon, out var normalizedIcon, cancellationToken)
                 || !string.Equals(dashboard.Icon, normalizedIcon, StringComparison.Ordinal)))
         {
             throw new HomeAssistantProtocolException("A dashboard contained a noncanonical icon.");
@@ -463,21 +463,22 @@ public sealed class HomeAssistantDashboardClient
             throw new HomeAssistantProtocolException("A dashboard mutation response was not a storage dashboard.");
     }
 
-    private static void ValidateListedResource(HomeAssistantDashboardResource resource, string? resourceMode = null)
+    private static void ValidateListedResource(
+        HomeAssistantDashboardResource resource,
+        string? resourceMode,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(resource.Url)
-            || !string.Equals(resource.Url, resource.Url.Trim(), StringComparison.Ordinal)
-            || string.IsNullOrWhiteSpace(resource.Type)
-            || !string.Equals(resource.Type, resource.Type.Trim(), StringComparison.Ordinal))
+        if (!IsCanonicalTrimmed(resource.Url, cancellationToken)
+            || !IsCanonicalTrimmed(resource.Type, cancellationToken))
             throw new HomeAssistantProtocolException("A Lovelace resource did not contain its required fields.");
         if (resourceMode == "storage")
-            resource.Id = RequireResponseSelector(resource.Id, "A storage Lovelace resource did not contain a canonical identifier.");
+            resource.Id = RequireResponseSelector(resource.Id, "A storage Lovelace resource did not contain a canonical identifier.", cancellationToken);
     }
 
-    private static void ValidateStorageResource(HomeAssistantDashboardResource resource)
+    private static void ValidateStorageResource(HomeAssistantDashboardResource resource, CancellationToken cancellationToken)
     {
-        ValidateListedResource(resource);
-        resource.Id = RequireResponseSelector(resource.Id, "A Lovelace resource mutation response did not contain a canonical identifier.");
+        ValidateListedResource(resource, null, cancellationToken);
+        resource.Id = RequireResponseSelector(resource.Id, "A Lovelace resource mutation response did not contain a canonical identifier.", cancellationToken);
     }
 
     private static string ResourceTypeName(HomeAssistantDashboardResourceType value) => value switch
@@ -532,19 +533,37 @@ public sealed class HomeAssistantDashboardClient
         return normalized;
     }
 
-    private static string RequireResponseSelector(string? value, string failureMessage)
+    private static string RequireResponseSelector(
+        string? value,
+        string failureMessage,
+        CancellationToken cancellationToken)
     {
-        if (value is not string selector
-            || string.IsNullOrWhiteSpace(selector)
-            || !string.Equals(selector, selector.Trim(), StringComparison.Ordinal))
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeSelector(value, out var selector, cancellationToken)
+            || !string.Equals(value, selector, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException(failureMessage);
         return selector;
     }
 
-    private static string RequireIcon(string value, string parameterName)
+    private static string RequireIcon(string value, string parameterName, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(value, out var normalized))
+        if (!HomeAssistantDashboardIdentifier.TryNormalizeIcon(value, out var normalized, cancellationToken))
             throw new ArgumentException("A dashboard icon must contain a ':' separator.", parameterName);
         return normalized;
+    }
+
+    private static bool IsCanonicalTrimmed(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null
+            || value.Length == 0
+            || char.IsWhiteSpace(value[0])
+            || char.IsWhiteSpace(value[value.Length - 1]))
+            return false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return true;
     }
 }

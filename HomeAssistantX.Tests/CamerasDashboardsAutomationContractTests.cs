@@ -43,6 +43,13 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Equal(icon, normalized);
     }
 
+    [Fact]
+    public void DashboardSelectorsAreBoundedBeforeHashingOrCopying()
+    {
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeIcon("mdi:" + new string('a', 251), out _));
+        Assert.False(HomeAssistantDashboardIdentifier.TryNormalizeIcon("mdi:" + new string('a', 252), out _));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
@@ -298,24 +305,14 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
-    public async Task CameraStreamTypeValidationObservesCancellationWithinAValue()
+    public void CameraStreamTypeValidationBoundsDuplicateHashing()
     {
-        var streamType = new string('a', 16_000_000);
-        using var cancellation = new CancellationTokenSource();
-        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var operation = Task.Factory.StartNew(
-            () =>
-            {
-                started.TrySetResult(true);
-                HomeAssistantCameraClient.ValidateStreamTypes(new[] { streamType }, cancellation.Token);
-            },
-            CancellationToken.None,
-            TaskCreationOptions.LongRunning,
-            TaskScheduler.Default);
-
-        await started.Task;
-        cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        var maximumLengthType = new string('a', 255);
+        HomeAssistantCameraClient.ValidateStreamTypes(new[] { maximumLengthType }, CancellationToken.None);
+        Assert.Throws<HomeAssistantProtocolException>(() =>
+            HomeAssistantCameraClient.ValidateStreamTypes(new[] { maximumLengthType, maximumLengthType }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() =>
+            HomeAssistantCameraClient.ValidateStreamTypes(new[] { new string('a', 256) }, CancellationToken.None));
     }
 
     [Theory]
@@ -587,7 +584,7 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
         using var cancellation = new CancellationTokenSource();
-        var entityId = "camera." + new string('a', 16_000_000);
+        var entityId = new string(' ', 16_000_000) + "camera.front";
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var operation = Task.Factory.StartNew(
             async () =>
