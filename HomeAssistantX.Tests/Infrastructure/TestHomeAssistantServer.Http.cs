@@ -136,6 +136,18 @@ internal sealed partial class TestHomeAssistantServer
             return;
         }
 
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/invalid-mjpeg-camera-path")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"mjpeg_path\":\"https://other.invalid/camera/front\"}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/invalid-hls-camera-path")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"hls_path\":\"//other.invalid/camera/front\"}").ConfigureAwait(false);
+            return;
+        }
+
         if (method == "POST" && pathWithoutQuery == "/api/webhook/redirect")
         {
             if (WebhookRedirectUri is null)

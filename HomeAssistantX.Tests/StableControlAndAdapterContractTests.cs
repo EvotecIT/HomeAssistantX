@@ -1756,6 +1756,24 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Null(stream.Success);
     }
 
+    [Theory]
+    [InlineData("invalid-mjpeg-camera-path")]
+    [InlineData("invalid-hls-camera-path")]
+    public async Task MobileAppWebhookRejectsNonRootRelativeCameraPaths(string webhookId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = webhookId,
+                CloudhookUri = new Uri(server.BaseUri, "api/webhook/" + webhookId)
+            });
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => webhook.GetCameraStreamAsync("camera.front"));
+    }
+
     [Fact]
     public async Task MobileAppWebhookHonorsCancellationBeforeSerializingTheOutboundEnvelope()
     {
@@ -1851,16 +1869,17 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
-    public async Task MobileAppWebhookPreservesPayloadProtectorFailureProvenance()
+    public async Task MobileAppWebhookClassifiesRequestProtectionFailures()
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
         foreach (var failure in new Exception[]
                  {
+                     new FormatException("Protector secret was malformed."),
+                     new System.Security.Cryptography.CryptographicException("Protector encryption failed."),
                      new IOException("Protector storage failed."),
                      new HttpRequestException("Protector network failed."),
-                     new JsonException("Protector JSON failed."),
-                     new OperationCanceledException("Protector canceled independently.")
+                     new JsonException("Protector JSON failed.")
                  })
         {
             using var webhook = client.MobileApp.CreateWebhookClient(
@@ -1872,9 +1891,19 @@ public sealed class StableControlAndAdapterContractTests
                 new ThrowingPayloadProtector(failure));
 
             var actual = await Record.ExceptionAsync(() => webhook.GetConfigurationAsync());
-            Assert.NotNull(actual);
-            Assert.Equal(failure.GetType(), actual.GetType());
+            var protocol = Assert.IsType<HomeAssistantProtocolException>(actual);
+            Assert.Same(failure, protocol.InnerException);
         }
+
+        var cancellation = new OperationCanceledException("Protector canceled independently.");
+        using var canceledWebhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "test-webhook",
+                Secret = "test-secret"
+            },
+            new ThrowingPayloadProtector(cancellation));
+        Assert.Same(cancellation, await Record.ExceptionAsync(() => canceledWebhook.GetConfigurationAsync()));
     }
 
     private static HomeAssistantMobileAppRegistrationRequest RegistrationRequest(bool encryption) => new()

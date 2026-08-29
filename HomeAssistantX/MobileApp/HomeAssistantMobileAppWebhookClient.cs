@@ -72,8 +72,10 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             result,
             "Home Assistant returned an invalid camera-stream response.",
             cancellationToken: cancellationToken);
-        var hasMjpeg = !string.IsNullOrWhiteSpace(stream.MjpegPath);
-        var hasHls = !string.IsNullOrWhiteSpace(stream.HlsPath);
+        var hasMjpeg = stream.MjpegPath is not null
+            && HomeAssistantRootRelativePath.IsValid(stream.MjpegPath, cancellationToken);
+        var hasHls = stream.HlsPath is not null
+            && HomeAssistantRootRelativePath.IsValid(stream.HlsPath, cancellationToken);
         if (stream.Success == false
             || (stream.MjpegPath is not null && !hasMjpeg)
             || (stream.HlsPath is not null && !hasHls)
@@ -121,7 +123,21 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             else
             {
                 var requestPlaintext = HomeAssistantJson.SerializeToUtf8Bytes(frozenData, operationToken);
-                var encrypted = await _protector!.ProtectAsync(requestPlaintext, _secret!, operationToken).ConfigureAwait(false);
+                string encrypted;
+                try
+                {
+                    encrypted = await _protector!.ProtectAsync(requestPlaintext, _secret!, operationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new HomeAssistantProtocolException(
+                        "The mobile-app request payload could not be encrypted.",
+                        ex);
+                }
                 if (string.IsNullOrWhiteSpace(encrypted)) throw new HomeAssistantProtocolException("The mobile-app payload protector returned an empty request payload.");
                 envelope = new Dictionary<string, object?> { ["type"] = command, ["encrypted"] = true, ["encrypted_data"] = encrypted };
             }
