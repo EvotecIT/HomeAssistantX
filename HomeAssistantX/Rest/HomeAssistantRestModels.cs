@@ -271,7 +271,7 @@ internal static class HomeAssistantCancellationJsonValueReader
 {
     internal static JsonElement Read(ref Utf8JsonReader reader, CancellationToken cancellationToken)
     {
-        byte[] payload;
+        ArraySegment<byte> payload;
         using (var buffer = new MemoryStream())
         {
             using (var writer = new Utf8JsonWriter(buffer))
@@ -280,24 +280,25 @@ internal static class HomeAssistantCancellationJsonValueReader
                 writer.Flush();
             }
 
-            payload = buffer.ToArray();
+            if (!buffer.TryGetBuffer(out payload))
+                throw new InvalidOperationException("The extension JSON buffer could not be accessed.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         if (!cancellationToken.CanBeCanceled)
         {
-            using var document = JsonDocument.Parse(payload);
+            using var document = JsonDocument.Parse(payload.AsMemory());
             return document.RootElement.Clone();
         }
 
         var parseTask = Task.Run(() =>
         {
-            using var document = JsonDocument.Parse(payload);
+            using var document = JsonDocument.Parse(payload.AsMemory());
             return document.RootElement.Clone();
         });
-        var completed = Task.WhenAny(parseTask, Task.Delay(Timeout.Infinite, cancellationToken))
-            .GetAwaiter()
-            .GetResult();
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        var completed = Task.WhenAny(parseTask, canceled.Task).GetAwaiter().GetResult();
         if (!ReferenceEquals(completed, parseTask))
         {
             _ = parseTask.ContinueWith(
