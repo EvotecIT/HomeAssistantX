@@ -116,10 +116,37 @@ public sealed class HomeAssistantNotificationClient
         JsonElement value,
         CancellationToken token)
     {
-            if (value.ValueKind != JsonValueKind.Object
-                || !value.TryGetProperty("type", out var typeValue)
+            if (value.ValueKind != JsonValueKind.Object)
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update had an unexpected shape.");
+            }
+
+            var hasType = false;
+            var hasNotifications = false;
+            var typeValue = default(JsonElement);
+            var notificationsValue = default(JsonElement);
+            foreach (var property in value.EnumerateObject())
+            {
+                token.ThrowIfCancellationRequested();
+                if (string.Equals(property.Name, "type", StringComparison.Ordinal))
+                {
+                    if (hasType)
+                        throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate type field.");
+                    hasType = true;
+                    typeValue = property.Value;
+                }
+                else if (string.Equals(property.Name, "notifications", StringComparison.Ordinal))
+                {
+                    if (hasNotifications)
+                        throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notifications field.");
+                    hasNotifications = true;
+                    notificationsValue = property.Value;
+                }
+            }
+
+            if (!hasType
                 || typeValue.ValueKind != JsonValueKind.String
-                || !value.TryGetProperty("notifications", out var notificationsValue)
+                || !hasNotifications
                 || notificationsValue.ValueKind != JsonValueKind.Object)
             {
                 throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update had an unexpected shape.");

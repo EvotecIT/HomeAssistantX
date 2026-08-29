@@ -216,6 +216,18 @@ public sealed class LivePlatformDataContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
     }
 
+    [Theory]
+    [InlineData("{\"type\":\"Current\",\"type\":\"Removed\",\"notifications\":{}}")]
+    [InlineData("{\"type\":\"Current\",\"notifications\":{},\"notifications\":{}}")]
+    public async Task PersistentNotificationSubscriptionRejectsDuplicateEnvelopeFields(string payload)
+    {
+        using var server = new TestHomeAssistantServer { PersistentNotificationSubscriptionEventJson = payload };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
     [Fact]
     public async Task PersistentNotificationCreateRejectsBlankIdentifierBeforeDispatch()
     {
@@ -315,6 +327,29 @@ public sealed class LivePlatformDataContractTests
             (_, _) => Task.CompletedTask);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
+    [Fact]
+    public async Task CalendarSubscriptionRoutesNullAsUnavailableUpdate()
+    {
+        using var server = new TestHomeAssistantServer { CalendarSubscriptionEventJson = "null" };
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 26, 0, 0, 0, TimeSpan.Zero);
+        var received = new TaskCompletionSource<HomeAssistantCalendarEventUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.Calendars.SubscribeAsync(
+            "calendar.home",
+            start,
+            start.AddDays(1),
+            (update, _) =>
+            {
+                received.TrySetResult(update);
+                return Task.CompletedTask;
+            });
+
+        var update = await received.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.False(update.IsAvailable);
+        Assert.Empty(update.Events);
+        Assert.Equal(JsonValueKind.Null, update.Raw.ValueKind);
     }
 
     [Theory]

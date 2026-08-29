@@ -255,8 +255,7 @@ public sealed partial class HomeAssistantWebSocketClient
         }
 
         if (string.Equals(type, "event", StringComparison.Ordinal)
-            && (!message.TryGetProperty("event", out var eventProperty)
-                || eventProperty.ValueKind == JsonValueKind.Null))
+            && !message.TryGetProperty("event", out _))
         {
             throw new HomeAssistantProtocolException(
                 "A Home Assistant WebSocket event omitted its required event payload.");
