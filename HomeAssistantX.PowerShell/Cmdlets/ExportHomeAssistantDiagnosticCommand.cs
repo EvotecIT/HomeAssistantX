@@ -63,6 +63,7 @@ public sealed class ExportHomeAssistantDiagnosticCommand : HomeAssistantCmdlet
         var temporaryPath = System.IO.Path.Combine(
             directory,
             "." + System.IO.Path.GetFileName(_resolvedPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        var preserveTemporaryFile = false;
         try
         {
             using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporaryPath))
@@ -73,9 +74,14 @@ public sealed class ExportHomeAssistantDiagnosticCommand : HomeAssistantCmdlet
 
             HomeAssistantAtomicFile.CommitTemporaryFile(temporaryPath, _resolvedPath, Force, CancelToken);
         }
+        catch (HomeAssistantAtomicCommitException exception) when (exception.PreserveTemporaryFile)
+        {
+            preserveTemporaryFile = true;
+            throw;
+        }
         finally
         {
-            if (File.Exists(temporaryPath))
+            if (!preserveTemporaryFile && File.Exists(temporaryPath))
             {
                 File.Delete(temporaryPath);
             }

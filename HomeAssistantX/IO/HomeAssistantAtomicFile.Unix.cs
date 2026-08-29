@@ -49,19 +49,21 @@ internal static partial class HomeAssistantAtomicFile
             // The displaced destination now has temporaryPath. Reading it after the
             // atomic exchange removes the compare-to-rename race; the replacement
             // remains restrictive until those exact permissions are applied.
-            cancellationToken.ThrowIfCancellationRequested();
-            var displaced = ReadUnixFileMetadata(temporaryPath);
             try
             {
+                // Once the paths have been exchanged this is a non-cancellable
+                // commit section: either finish or restore the displaced file.
+                var displaced = ReadUnixFileMetadata(temporaryPath);
                 ApplyUnixDestinationMetadata(
                     temporaryPath,
                     destinationPath,
                     displaced,
                     useManagedApis: true);
+                File.Delete(temporaryPath);
             }
-            catch
+            catch (Exception commitException)
             {
-                _ = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                var rollbackResult = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
                     ? RenameMac(destinationPath, temporaryPath, MacRenameSwap)
                     : RenameLinux(
                         UnixCurrentWorkingDirectory,
@@ -69,9 +71,20 @@ internal static partial class HomeAssistantAtomicFile
                         UnixCurrentWorkingDirectory,
                         temporaryPath,
                         LinuxRenameExchange);
-                throw;
+                if (rollbackResult == 0)
+                {
+                    throw new IOException(
+                        "The Unix replacement could not be completed; the original destination was restored.",
+                        commitException);
+                }
+
+                var rollbackError = new Win32Exception(Marshal.GetLastWin32Error());
+                throw new HomeAssistantAtomicCommitException(
+                    "The Unix replacement could not be completed or rolled back. "
+                    + "The displaced original remains at the temporary path and was preserved for recovery.",
+                    new AggregateException(commitException, rollbackError),
+                    preserveTemporaryFile: true);
             }
-            File.Delete(temporaryPath);
             return;
         }
 
