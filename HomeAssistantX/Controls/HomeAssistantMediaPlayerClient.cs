@@ -98,19 +98,23 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var soundMode = NormalizeOptional(options.SoundMode, nameof(options.SoundMode));
         var shuffle = options.Shuffle;
         var repeat = options.Repeat;
-        var mediaContentId = NormalizeOptional(options.MediaContentId, nameof(options.MediaContentId));
+        var mediaContentId = PreserveOptional(options.MediaContentId, nameof(options.MediaContentId));
         var mediaContentType = NormalizeOptional(options.MediaContentType, nameof(options.MediaContentType));
         var enqueue = options.Enqueue;
         var announce = options.Announce;
         var mediaExtra = options.MediaExtra;
+        var hasSource = source is not null;
+        var hasSoundMode = soundMode is not null;
+        var hasMediaContentId = mediaContentId is not null;
+        var hasMediaContentType = mediaContentType is not null;
 
-        if (string.IsNullOrWhiteSpace(mediaContentId) != string.IsNullOrWhiteSpace(mediaContentType))
+        if (hasMediaContentId != hasMediaContentType)
         {
             throw new ArgumentException("MediaContentId and MediaContentType must be supplied together.", nameof(options));
         }
 
         if ((enqueue.HasValue || announce.HasValue || mediaExtra is not null)
-            && string.IsNullOrWhiteSpace(mediaContentId))
+            && !hasMediaContentId)
         {
             throw new ArgumentException("Play-media options require media content.", nameof(options));
         }
@@ -123,17 +127,17 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var hasNonPowerOperation = playback.HasValue
             || volumePercent.HasValue
             || muted.HasValue
-            || !string.IsNullOrWhiteSpace(source)
-            || !string.IsNullOrWhiteSpace(soundMode)
+            || hasSource
+            || hasSoundMode
             || shuffle.HasValue
             || repeat.HasValue
-            || !string.IsNullOrWhiteSpace(mediaContentId);
+            || hasMediaContentId;
         if ((power is HomeAssistantPowerAction.Off or HomeAssistantPowerAction.Toggle) && hasNonPowerOperation)
         {
             throw new ArgumentException("Power Off and Toggle cannot be combined with other media-player operations.", nameof(options));
         }
 
-        if (!string.IsNullOrWhiteSpace(mediaContentId) && playback.HasValue)
+        if (hasMediaContentId && playback.HasValue)
         {
             throw new ArgumentException("Media content cannot be combined with a separate playback action.", nameof(options));
         }
@@ -164,12 +168,12 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             results.Add(await CallAsync("volume_mute", frozenTarget, call => call.WithData("is_volume_muted", muted.Value), context, cancellationToken).ConfigureAwait(false));
         }
 
-        if (!string.IsNullOrWhiteSpace(source))
+        if (hasSource)
         {
             results.Add(await CallAsync("select_source", frozenTarget, call => call.WithData("source", source), context, cancellationToken).ConfigureAwait(false));
         }
 
-        if (!string.IsNullOrWhiteSpace(soundMode))
+        if (hasSoundMode)
         {
             results.Add(await CallAsync(
                 "select_sound_mode",
@@ -199,7 +203,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 cancellationToken).ConfigureAwait(false));
         }
 
-        if (!string.IsNullOrWhiteSpace(mediaContentId))
+        if (hasMediaContentId)
         {
             results.Add(await CallAsync(
                 "play_media",
@@ -350,7 +354,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        mediaContentId = ControlValidation.Required(mediaContentId, nameof(mediaContentId));
+        mediaContentId = ControlValidation.RequiredUnchanged(mediaContentId, nameof(mediaContentId));
         mediaContentType = ControlValidation.Required(mediaContentType, nameof(mediaContentType));
         var enqueueOption = options?.Enqueue;
         var announce = options?.Announce;
@@ -445,7 +449,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
         if (mediaContentId is not null || mediaContentType is not null)
         {
-            mediaContentId = ControlValidation.Required(mediaContentId!, nameof(mediaContentId));
+            mediaContentId = ControlValidation.RequiredUnchanged(mediaContentId!, nameof(mediaContentId));
             mediaContentType = ControlValidation.Required(mediaContentType!, nameof(mediaContentType));
             var enqueueOption = playMediaOptions?.Enqueue;
             var announce = playMediaOptions?.Announce;
@@ -521,6 +525,9 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
     private static string? NormalizeOptional(string? value, string name)
         => value is null ? null : ControlValidation.Required(value, name);
+
+    private static string? PreserveOptional(string? value, string name)
+        => value is null ? null : ControlValidation.RequiredUnchanged(value, name);
 
     private static string PowerAction(HomeAssistantPowerAction value) => value switch
     {

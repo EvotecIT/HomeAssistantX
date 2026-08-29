@@ -629,7 +629,7 @@ public sealed class MediaAndRemoteContractTests
         await client.Controls.MediaPlayers.UnjoinAsync(target);
         await client.Controls.MediaPlayers.PlayMediaAsync(
             target,
-            "media-source://radio/station",
+            " media-source://radio/station ",
             "music",
             new HomeAssistantPlayMediaOptions
             {
@@ -649,6 +649,7 @@ public sealed class MediaAndRemoteContractTests
                 .EnumerateArray().Select(value => value.GetString()).ToArray());
         using var play = FindCall(server, "play_media");
         var playData = play.RootElement.GetProperty("service_data");
+        Assert.Equal(" media-source://radio/station ", playData.GetProperty("media_content_id").GetString());
         Assert.Equal("next", playData.GetProperty("enqueue").GetString());
         Assert.Equal("station", playData.GetProperty("extra").GetProperty("metadata").GetString());
     }
