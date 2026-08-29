@@ -731,7 +731,7 @@ public sealed class EnergyRecorderWeatherContractTests
         };
         server.SetStates("[" +
             "{\"entity_id\":\"weather.home\",\"state\":\"partlycloudy\",\"attributes\":{\"friendly_name\":\"Home\",\"temperature\":21.5,\"temperature_unit\":\"°C\",\"humidity\":55,\"wind_bearing\":180,\"supported_features\":3}}," +
-            "{\"entity_id\":\"weather.bad\",\"state\":\"unknown\",\"attributes\":{\"supported_features\":4294967297}}]");
+            "{\"entity_id\":\"weather.bad\",\"state\":\"unknown\",\"attributes\":{\"supported_features\":0}}]");
         using var client = TestClientFactory.Create(server);
 
         var observations = await client.Weather.GetAsync();
@@ -800,6 +800,24 @@ public sealed class EnergyRecorderWeatherContractTests
     public async Task WeatherCurrentReadsRejectStringShapedNumericAttributes(string attribute)
     {
         var state = "{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{" + attribute + "}}";
+        using var server = new TestHomeAssistantServer { ExactStateResponseJson = state };
+        server.SetStates("[" + state + "]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetAsync("weather.home"));
+    }
+
+    [Theory]
+    [InlineData("\"3\"")]
+    [InlineData("true")]
+    [InlineData("1.5")]
+    [InlineData("-1")]
+    [InlineData("2147483648")]
+    public async Task WeatherCurrentReadsRejectMalformedSupportedFeatures(string value)
+    {
+        var state = "{\"entity_id\":\"weather.home\",\"state\":\"sunny\",\"attributes\":{" +
+            "\"supported_features\":" + value + "}}";
         using var server = new TestHomeAssistantServer { ExactStateResponseJson = state };
         server.SetStates("[" + state + "]");
         using var client = TestClientFactory.Create(server);

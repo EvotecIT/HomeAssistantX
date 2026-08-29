@@ -41,10 +41,10 @@ public sealed class HomeAssistantWeatherClient
 
     public async Task<HomeAssistantWeatherObservation> GetAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var state = await _states.GetAsync(normalizedEntityId, cancellationToken).ConfigureAwait(false);
         return ToObservation(
-            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId),
+            HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId, cancellationToken),
             cancellationToken);
     }
 
@@ -53,7 +53,7 @@ public sealed class HomeAssistantWeatherClient
         HomeAssistantWeatherForecastType type,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var result = await _services.CallAsync(
             new HomeAssistantServiceCall("weather", "get_forecasts")
                 .ForEntity(normalizedEntityId)
@@ -68,6 +68,7 @@ public sealed class HomeAssistantWeatherClient
         }
 
         var entity = RequireSingleForecastEntity(result.Response.Value, cancellationToken);
+        HomeAssistantJson.ThrowIfStringTraversalCanceled(entity.Name, cancellationToken);
         if (!string.Equals(entity.Name, normalizedEntityId, StringComparison.Ordinal)
             || entity.Value.ValueKind != JsonValueKind.Object)
         {
@@ -91,6 +92,7 @@ public sealed class HomeAssistantWeatherClient
         foreach (var property in response.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
             if (entity.HasValue)
                 throw new HomeAssistantProtocolException("The weather forecast response did not contain exactly the requested entity.");
             entity = property;
@@ -115,6 +117,7 @@ public sealed class HomeAssistantWeatherClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
             if (!string.Equals(property.Name, "units", StringComparison.Ordinal))
                 additionalData.Add(property.Name, property.Value);
         }
@@ -135,7 +138,8 @@ public sealed class HomeAssistantWeatherClient
         foreach (var property in units.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantEntityId.TryNormalizeDomain(property.Name, out var normalizedCategory)
+            HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
+            if (!HomeAssistantEntityId.TryNormalizeDomain(property.Name, cancellationToken, out var normalizedCategory)
                 || !string.Equals(property.Name, normalizedCategory, StringComparison.Ordinal)
                 || result.ContainsKey(property.Name))
                 throw new HomeAssistantProtocolException("The weather convertible-unit response contained a noncanonical or duplicate unit category.");
@@ -146,8 +150,9 @@ public sealed class HomeAssistantWeatherClient
             foreach (var item in property.Value.EnumerateArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (item.ValueKind != JsonValueKind.String
-                    || item.GetString() is not string name
+                var name = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
+                HomeAssistantJson.ThrowIfStringTraversalCanceled(name, cancellationToken);
+                if (name is null
                     || string.IsNullOrWhiteSpace(name)
                     || !string.Equals(name, name.Trim(), StringComparison.Ordinal))
                     throw new HomeAssistantProtocolException("A weather convertible-unit list contained a noncanonical value.");
@@ -167,7 +172,7 @@ public sealed class HomeAssistantWeatherClient
         Func<HomeAssistantWeatherForecastUpdate, CancellationToken, Task> handler,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         if (handler is null) throw new ArgumentNullException(nameof(handler));
         var payload = new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId, ["forecast_type"] = TypeName(type) };
         return _webSocket.SubscribeAsync("weather/subscribe_forecast", payload, async (value, token) =>
@@ -178,7 +183,7 @@ public sealed class HomeAssistantWeatherClient
                     || HomeAssistantJson.HasDuplicateProperties(value, token)
                     || !value.TryGetProperty("type", out var responseType)
                     || responseType.ValueKind != JsonValueKind.String
-                    || !string.Equals(responseType.GetString(), TypeName(type), StringComparison.Ordinal)
+                    || !IsExpectedForecastType(responseType.GetString(), TypeName(type), token)
                     || !value.TryGetProperty("forecast", out var forecast))
                     throw new HomeAssistantProtocolException("The weather forecast subscription had an unexpected shape.");
                 return ParseUpdate(normalizedEntityId, type, forecast, value, token);
@@ -229,7 +234,7 @@ public sealed class HomeAssistantWeatherClient
             VisibilityUnit = ReadCurrentUnit(state.Attributes, "visibility_unit", cancellationToken),
             WindSpeedUnit = ReadCurrentUnit(state.Attributes, "wind_speed_unit", cancellationToken),
             PrecipitationUnit = ReadCurrentUnit(state.Attributes, "precipitation_unit", cancellationToken),
-            SupportedFeatures = (HomeAssistantWeatherFeature)(HomeAssistantAttributeReader.GetNonNegativeInt32(state.Attributes, "supported_features", cancellationToken) ?? 0),
+            SupportedFeatures = ReadSupportedFeatures(state.Attributes, cancellationToken),
             RawState = state
         };
         cancellationToken.ThrowIfCancellationRequested();
@@ -359,6 +364,42 @@ public sealed class HomeAssistantWeatherClient
         return found;
     }
 
+    private static HomeAssistantWeatherFeature ReadSupportedFeatures(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        CancellationToken cancellationToken)
+    {
+        if (!HomeAssistantAttributeReader.TryGetValue(
+                attributes,
+                "supported_features",
+                out var raw,
+                cancellationToken)
+            || raw.ValueKind == JsonValueKind.Null)
+        {
+            return HomeAssistantWeatherFeature.None;
+        }
+
+        if (raw.ValueKind != JsonValueKind.Number
+            || !raw.TryGetInt64(out var value)
+            || value < 0
+            || value > int.MaxValue)
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant weather state contained invalid supported_features.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return (HomeAssistantWeatherFeature)(int)value;
+    }
+
+    private static bool IsExpectedForecastType(
+        string? actual,
+        string expected,
+        CancellationToken cancellationToken)
+    {
+        HomeAssistantJson.ThrowIfStringTraversalCanceled(actual, cancellationToken);
+        return string.Equals(actual, expected, StringComparison.Ordinal);
+    }
+
     internal static HomeAssistantWeatherForecastUpdate ParseUpdate(
         string entityId,
         HomeAssistantWeatherForecastType type,
@@ -380,9 +421,9 @@ public sealed class HomeAssistantWeatherClient
                 || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken)
                 || !value.TryGetProperty("datetime", out var timestamp)
                 || timestamp.ValueKind != JsonValueKind.String
-                || !HomeAssistantTimestamp.TryParse(timestamp.GetString(), out _)
-                || !HasFiniteForecastNumbers(value)
-                || !HasValidForecastPercentages(value))
+                || !HasValidTimestamp(timestamp.GetString(), cancellationToken)
+                || !HasFiniteForecastNumbers(value, cancellationToken)
+                || !HasValidForecastPercentages(value, cancellationToken))
             {
                 throw new HomeAssistantProtocolException("The weather forecast contained an invalid period value.");
             }
@@ -412,7 +453,9 @@ public sealed class HomeAssistantWeatherClient
         };
     }
 
-    private static bool HasFiniteForecastNumbers(JsonElement value)
+    private static bool HasFiniteForecastNumbers(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
         foreach (var propertyName in new[]
         {
@@ -430,14 +473,15 @@ public sealed class HomeAssistantWeatherClient
             "wind_gust_speed"
         })
         {
-            if (!HasFiniteOptionalNumber(value, propertyName))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!HasFiniteOptionalNumber(value, propertyName, cancellationToken))
             {
                 return false;
             }
         }
 
         if (value.TryGetProperty("wind_bearing", out var windBearing)
-            && !IsValidWindBearing(windBearing))
+            && !IsValidWindBearing(windBearing, cancellationToken))
         {
             return false;
         }
@@ -445,10 +489,13 @@ public sealed class HomeAssistantWeatherClient
         return true;
     }
 
-    private static bool HasValidForecastPercentages(JsonElement value)
+    private static bool HasValidForecastPercentages(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
         foreach (var propertyName in new[] { "humidity", "cloud_coverage", "precipitation_probability" })
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!value.TryGetProperty(propertyName, out var number) || number.ValueKind == JsonValueKind.Null)
             {
                 continue;
@@ -466,19 +513,26 @@ public sealed class HomeAssistantWeatherClient
         return true;
     }
 
-    private static bool IsValidWindBearing(JsonElement value)
+    private static bool IsValidWindBearing(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind == JsonValueKind.Null) return true;
         if (value.ValueKind == JsonValueKind.String)
-            return !string.IsNullOrWhiteSpace(value.GetString());
+            return HasNonWhitespace(value.GetString(), cancellationToken);
         return value.ValueKind == JsonValueKind.Number
             && value.TryGetDouble(out var bearing)
             && !double.IsNaN(bearing)
             && !double.IsInfinity(bearing);
     }
 
-    private static bool HasFiniteOptionalNumber(JsonElement value, string propertyName)
+    private static bool HasFiniteOptionalNumber(
+        JsonElement value,
+        string propertyName,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!value.TryGetProperty(propertyName, out var number) || number.ValueKind == JsonValueKind.Null)
         {
             return true;
@@ -490,10 +544,22 @@ public sealed class HomeAssistantWeatherClient
             && !double.IsInfinity(parsed);
     }
 
-    private static string NormalizeEntityId(string entityId)
+    private static bool HasValidTimestamp(
+        string? value,
+        CancellationToken cancellationToken)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "weather", out var normalized))
+        HomeAssistantJson.ThrowIfStringTraversalCanceled(value, cancellationToken);
+        return HomeAssistantTimestamp.TryParse(value, out _);
+    }
+
+    private static string NormalizeEntityId(
+        string entityId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "weather", cancellationToken, out var normalized))
             throw new ArgumentException("A weather entity identifier is required.", nameof(entityId));
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized;
     }
 
