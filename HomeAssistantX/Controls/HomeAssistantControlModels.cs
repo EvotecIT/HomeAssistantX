@@ -305,11 +305,7 @@ internal static class ControlValidation
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
-            if (!char.IsWhiteSpace(value[index]))
-            {
-                hasContent = true;
-                break;
-            }
+            if (!char.IsWhiteSpace(value[index])) hasContent = true;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
