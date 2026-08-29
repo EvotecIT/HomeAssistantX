@@ -20,7 +20,9 @@ public sealed class HomeAssistantDiagnosticEvent
         Level = level;
         Name = name ?? throw new ArgumentNullException(nameof(name));
         Message = message ?? throw new ArgumentNullException(nameof(message));
-        Exception = exception;
+        Exception = exception is null
+            ? null
+            : HomeAssistantDiagnosticFailure.Sanitize(exception, message);
         Timestamp = DateTimeOffset.UtcNow;
     }
 

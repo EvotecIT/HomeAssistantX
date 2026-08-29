@@ -86,7 +86,7 @@ public static class HomeAssistantEntityId
                 cancellationToken)
             && IsValidSegment(
                 objectId,
-                disallowBoundaryUnderscore: false,
+                disallowBoundaryUnderscore: true,
                 disallowDoubleUnderscore: false,
                 cancellationToken);
     }

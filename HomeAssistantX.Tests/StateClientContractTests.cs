@@ -273,6 +273,21 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public void DiagnosticEventsSanitizeEveryAttachedServerFailure()
+    {
+        const string privateMarker = "private-installation-detail";
+        var diagnostic = new HomeAssistantDiagnosticEvent(
+            HomeAssistantDiagnosticLevel.Warning,
+            "test.failure",
+            "A Home Assistant operation failed.",
+            new HomeAssistantCommandException("invalid_format", privateMarker));
+
+        var failure = Assert.IsType<HomeAssistantCommandException>(diagnostic.Exception);
+        Assert.Equal("invalid_format", failure.Code);
+        Assert.DoesNotContain(privateMarker, failure.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TerminalReconnectFailureCancelsRunningStateHandlerAndPreservesUpstreamFailure()
     {
         using var server = new TestHomeAssistantServer();
