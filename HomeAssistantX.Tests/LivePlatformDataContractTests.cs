@@ -487,6 +487,23 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public void CalendarReferenceDispatchUsesOneValidatedSnapshot()
+    {
+        var reference = new HomeAssistantCalendarEventReference("event-1");
+        var payload = new MutatingCalendarPayload(() =>
+        {
+            reference.RecurrenceId = "changed-occurrence";
+            reference.RecurrenceRange = "THISANDFUTURE";
+        });
+
+        reference.AddTo(payload, CancellationToken.None);
+
+        Assert.Equal("event-1", payload["uid"]);
+        Assert.False(payload.ContainsKey("recurrence_id"));
+        Assert.False(payload.ContainsKey("recurrence_range"));
+    }
+
+    [Fact]
     public async Task CalendarOperationsRejectMalformedOrWrongDomainEntityIdsBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();
@@ -898,6 +915,45 @@ public sealed class LivePlatformDataContractTests
             }
         }
 
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class MutatingCalendarPayload : IDictionary<string, object?>
+    {
+        private readonly Dictionary<string, object?> _inner = new(StringComparer.Ordinal);
+        private readonly Action _mutate;
+        private bool _mutated;
+
+        internal MutatingCalendarPayload(Action mutate) => _mutate = mutate;
+
+        public object? this[string key]
+        {
+            get => _inner[key];
+            set
+            {
+                if (!_mutated && string.Equals(key, "uid", StringComparison.Ordinal))
+                {
+                    _mutated = true;
+                    _mutate();
+                }
+                _inner[key] = value;
+            }
+        }
+
+        public ICollection<string> Keys => _inner.Keys;
+        public ICollection<object?> Values => _inner.Values;
+        public int Count => _inner.Count;
+        public bool IsReadOnly => false;
+        public void Add(string key, object? value) => _inner.Add(key, value);
+        public void Add(KeyValuePair<string, object?> item) => ((ICollection<KeyValuePair<string, object?>>)_inner).Add(item);
+        public void Clear() => _inner.Clear();
+        public bool Contains(KeyValuePair<string, object?> item) => ((ICollection<KeyValuePair<string, object?>>)_inner).Contains(item);
+        public bool ContainsKey(string key) => _inner.ContainsKey(key);
+        public void CopyTo(KeyValuePair<string, object?>[] array, int arrayIndex) => ((ICollection<KeyValuePair<string, object?>>)_inner).CopyTo(array, arrayIndex);
+        public IEnumerator<KeyValuePair<string, object?>> GetEnumerator() => _inner.GetEnumerator();
+        public bool Remove(string key) => _inner.Remove(key);
+        public bool Remove(KeyValuePair<string, object?> item) => ((ICollection<KeyValuePair<string, object?>>)_inner).Remove(item);
+        public bool TryGetValue(string key, out object? value) => _inner.TryGetValue(key, out value);
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

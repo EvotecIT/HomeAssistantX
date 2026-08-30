@@ -135,32 +135,50 @@ public sealed class HomeAssistantCalendarEventReference
     public string? RecurrenceRange { get; set; }
 
     /// <summary>Validates recurrence targeting before an update or delete is dispatched.</summary>
-    public void Validate() => Validate(default);
+    public void Validate()
+    {
+        var recurrenceId = RecurrenceId;
+        var recurrenceRange = RecurrenceRange;
+        Validate(recurrenceId, recurrenceRange, default);
+    }
 
     internal void Validate(CancellationToken cancellationToken)
     {
+        var recurrenceId = RecurrenceId;
+        var recurrenceRange = RecurrenceRange;
+        Validate(recurrenceId, recurrenceRange, cancellationToken);
+    }
+
+    private static void Validate(
+        string? recurrenceId,
+        string? recurrenceRange,
+        CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
-        if (RecurrenceId is not null && CancellationAwareString.IsNullOrWhiteSpace(RecurrenceId, cancellationToken))
+        if (recurrenceId is not null && CancellationAwareString.IsNullOrWhiteSpace(recurrenceId, cancellationToken))
             throw new ArgumentException("A supplied recurrence identifier cannot be empty.", nameof(RecurrenceId));
-        if (RecurrenceRange is null) return;
-        if (CancellationAwareString.IsNullOrWhiteSpace(RecurrenceId, cancellationToken))
+        if (recurrenceRange is null) return;
+        if (CancellationAwareString.IsNullOrWhiteSpace(recurrenceId, cancellationToken))
             throw new ArgumentException("RecurrenceRange requires RecurrenceId.", nameof(RecurrenceRange));
-        if (!CancellationAwareString.EqualsOrdinalIgnoreCase(RecurrenceRange, "THISANDFUTURE", cancellationToken))
+        if (!CancellationAwareString.EqualsOrdinalIgnoreCase(recurrenceRange, "THISANDFUTURE", cancellationToken))
             throw new ArgumentException("The supported recurrence range is THISANDFUTURE.", nameof(RecurrenceRange));
         cancellationToken.ThrowIfCancellationRequested();
     }
 
     internal void AddTo(IDictionary<string, object?> payload, CancellationToken cancellationToken)
     {
-        Validate(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var recurrenceId = RecurrenceId;
+        var recurrenceRange = RecurrenceRange;
+        Validate(recurrenceId, recurrenceRange, cancellationToken);
         payload["uid"] = Uid;
         cancellationToken.ThrowIfCancellationRequested();
-        if (RecurrenceId is not null)
+        if (recurrenceId is not null)
         {
-            payload["recurrence_id"] = RecurrenceId;
+            payload["recurrence_id"] = recurrenceId;
         }
 
-        if (RecurrenceRange is not null)
+        if (recurrenceRange is not null)
         {
             payload["recurrence_range"] = "THISANDFUTURE";
         }

@@ -104,6 +104,12 @@ internal static class HomeAssistantJson
         return result;
     }
 
+    /// <summary>Synchronously bridges cancellation-aware JSON string decoding for synchronous validation paths.</summary>
+    internal static string? GetString(
+        JsonElement value,
+        CancellationToken cancellationToken)
+        => GetStringAsync(value, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+
     /// <summary>Snapshots a response DOM with cancellation checks throughout traversal.</summary>
     internal static async Task<JsonElement> SnapshotResponseAsync(
         JsonElement value,
