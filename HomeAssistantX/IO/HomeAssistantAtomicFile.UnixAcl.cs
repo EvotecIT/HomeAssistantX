@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -43,40 +44,25 @@ internal static partial class HomeAssistantAtomicFile
 
     private static byte[]? ReadLinuxAccessAcl(SafeFileHandle sourceHandle)
     {
-        var size = FGetExtendedAttribute(
-            sourceHandle,
-            LinuxAccessAclAttribute,
-            IntPtr.Zero,
-            UIntPtr.Zero).ToInt64();
-        if (size < 0)
-        {
-            var error = Marshal.GetLastWin32Error();
-            if (error == LinuxNoData || error == LinuxOperationNotSupported) return null;
-            throw new IOException("The pinned Unix access ACL could not be read.", new Win32Exception(error));
-        }
-        if (size == 0) return Array.Empty<byte>();
-
-        var buffer = Marshal.AllocHGlobal(checked((int)size));
+        // Linux O_PATH descriptors intentionally work for fstat even when the
+        // caller cannot read the file, but fgetxattr rejects them with EBADF.
+        // /proc/self/fd resolves the already-pinned descriptor and therefore
+        // cannot be redirected by replacing the original directory entry.
+        var addedReference = false;
         try
         {
-            var read = FGetExtendedAttribute(
-                sourceHandle,
-                LinuxAccessAclAttribute,
-                buffer,
-                new UIntPtr(unchecked((ulong)size))).ToInt64();
-            if (read != size)
-            {
-                throw new IOException(
-                    "The pinned Unix access ACL changed while it was being read.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
-            var result = new byte[checked((int)size)];
-            Marshal.Copy(buffer, result, 0, result.Length);
-            return result;
+            sourceHandle.DangerousAddRef(ref addedReference);
+            var descriptorPath = "/proc/self/fd/"
+                + sourceHandle.DangerousGetHandle().ToInt64().ToString(CultureInfo.InvariantCulture);
+            return ReadLinuxAccessAcl(descriptorPath);
+        }
+        catch (IOException exception)
+        {
+            throw new IOException("The pinned Unix access ACL could not be read.", exception);
         }
         finally
         {
-            Marshal.FreeHGlobal(buffer);
+            if (addedReference) sourceHandle.DangerousRelease();
         }
     }
 
@@ -212,13 +198,6 @@ internal static partial class HomeAssistantAtomicFile
     [DllImport("libc", EntryPoint = "getxattr", SetLastError = true)]
     private static extern IntPtr GetExtendedAttribute(
         string path,
-        string name,
-        IntPtr value,
-        UIntPtr size);
-
-    [DllImport("libc", EntryPoint = "fgetxattr", SetLastError = true)]
-    private static extern IntPtr FGetExtendedAttribute(
-        SafeFileHandle handle,
         string name,
         IntPtr value,
         UIntPtr size);

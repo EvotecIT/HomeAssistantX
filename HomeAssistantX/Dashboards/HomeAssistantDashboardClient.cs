@@ -110,8 +110,9 @@ public sealed class HomeAssistantDashboardClient
             value,
             "The dashboard list could not be decoded.",
             cancellationToken: cancellationToken);
-        var urlPaths = new HashSet<string>(StringComparer.Ordinal);
-        var storageIds = new HashSet<string>(StringComparer.Ordinal);
+        var comparer = new CancellationAwareOrdinalStringEqualityComparer(cancellationToken);
+        var urlPaths = new HashSet<string>(comparer);
+        var storageIds = new HashSet<string>(comparer);
         foreach (var dashboard in dashboards)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -264,7 +265,8 @@ public sealed class HomeAssistantDashboardClient
             value,
             "The Lovelace resource list could not be decoded.",
             cancellationToken: cancellationToken);
-        var storageIds = new HashSet<string>(StringComparer.Ordinal);
+        var storageIds = new HashSet<string>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var resource in resources)
         {
             cancellationToken.ThrowIfCancellationRequested();

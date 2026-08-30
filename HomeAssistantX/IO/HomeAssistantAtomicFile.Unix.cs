@@ -92,12 +92,7 @@ internal static partial class HomeAssistantAtomicFile
                             "The displaced Unix destination changed before its metadata could be pinned.");
                     }
 
-                    var displaced = ReadUnixFileMetadata(temporaryPath, includeAccessAcl: true);
-                    if (!UnixFileMetadata.SameIdentity(pinnedDisplaced, displaced))
-                    {
-                        throw new IOException(
-                            "The displaced Unix destination changed while its metadata was being read.");
-                    }
+                    var displaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: true);
                     RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
                     ApplyUnixDestinationMetadata(replacementHandle, displaced);
                     RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
@@ -174,12 +169,7 @@ internal static partial class HomeAssistantAtomicFile
             throw new IOException(
                 "The Unix destination changed before its metadata could be pinned.");
         }
-        var metadata = ReadUnixFileMetadata(destinationPath, includeAccessAcl: true);
-        if (!UnixFileMetadata.SameIdentity(pinnedSource, metadata))
-        {
-            throw new IOException(
-                "The Unix destination changed while its metadata was being read.");
-        }
+        var metadata = ReadUnixFileMetadata(sourceHandle, includeAccessAcl: true);
         RequireUnixPathIdentity(destinationPath, pinnedSource);
 
         using var temporaryHandle = OpenPinnedUnixFile(temporaryPath);
