@@ -27,7 +27,7 @@ public sealed class RestClientContractTests
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
-        var end = new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+        var end = new DateTimeOffset(2026, 8, 24, 12, 0, 1, TimeSpan.Zero);
 
         await client.Rest.GetLogbookAsync(new HomeAssistantX.Rest.HomeAssistantLogbookQuery { EndTime = end });
         Assert.StartsWith("/api/logbook?", server.LastRequestPath, StringComparison.Ordinal);
