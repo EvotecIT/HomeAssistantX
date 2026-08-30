@@ -245,7 +245,9 @@ public sealed class HomeAssistantEnergyClient
                 start,
                 homeTimeZone ?? throw new ArgumentNullException(nameof(homeTimeZone)),
                 HomeAssistantCalendarPeriod.Month),
-            HomeAssistantEnergyPeriod.Hour => start.AddHours(-1),
+            HomeAssistantEnergyPeriod.Hour => new DateTimeOffset(
+                start.UtcDateTime.Ticks - start.UtcDateTime.Ticks % TimeSpan.TicksPerHour,
+                TimeSpan.Zero),
             HomeAssistantEnergyPeriod.Day => HomeAssistantCalendarTime.GetContainingBoundary(
                 start,
                 homeTimeZone ?? throw new ArgumentNullException(nameof(homeTimeZone)),

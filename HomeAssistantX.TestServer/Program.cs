@@ -1,6 +1,11 @@
 ﻿using HomeAssistantX.Tests.Infrastructure;
 
-using var server = new TestHomeAssistantServer { SendStateChangeBeforeSnapshot = true };
+using var server = new TestHomeAssistantServer
+{
+    SendStateChangeBeforeSnapshot = true,
+    RecorderMetadataResponseJson =
+        "[{\"statistic_id\":\"sensor.grid_energy\",\"source\":\"recorder\",\"name\":\"Grid energy\",\"unit_of_measurement\":\"Wh\",\"statistics_unit_of_measurement\":\"kWh\",\"unit_class\":\"energy\",\"has_mean\":false,\"has_sum\":true}]"
+};
 Console.WriteLine("READY " + server.BaseUri.AbsoluteUri);
 while (await Console.In.ReadLineAsync() is { } command)
 {

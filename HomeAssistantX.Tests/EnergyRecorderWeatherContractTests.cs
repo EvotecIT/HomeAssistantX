@@ -1507,6 +1507,21 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderUnitConversionUsesTheNativeOldUnitField()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Recorder.ChangeStatisticsUnitAsync("sensor.grid_energy", "Wh", "kWh");
+
+        using var command = JsonDocument.Parse(Assert.IsType<string>(
+            server.GetLastWebSocketCommand("recorder/change_statistics_unit")));
+        Assert.Equal("Wh", command.RootElement.GetProperty("old_unit_of_measurement").GetString());
+        Assert.Equal("kWh", command.RootElement.GetProperty("new_unit_of_measurement").GetString());
+        Assert.False(command.RootElement.TryGetProperty("statistic_unit_of_measurement", out _));
+    }
+
+    [Fact]
     public async Task RecorderStatisticsNormalizeUnitValuesAndRequireStrictRowOrdering()
     {
         using var server = new TestHomeAssistantServer
@@ -2019,6 +2034,24 @@ public sealed class EnergyRecorderWeatherContractTests
             new[] { "sensor.energy" },
             "sensor.co2",
             HomeAssistantEnergyPeriod.Hour));
+    }
+
+    [Fact]
+    public async Task FossilEnergyRejectsThePrecedingBucketAtAnExactHourlyBoundary()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FossilEnergyResponseJson = "{\"2026-08-26T08:00:00Z\":0.42}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Energy.GetFossilEnergyConsumptionAsync(
+                new DateTimeOffset(2026, 8, 26, 9, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero),
+                new[] { "sensor.energy" },
+                "sensor.co2",
+                HomeAssistantEnergyPeriod.Hour));
     }
 
     [Theory]

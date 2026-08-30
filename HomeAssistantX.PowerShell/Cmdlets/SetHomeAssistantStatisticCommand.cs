@@ -90,9 +90,9 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                     throw new InvalidOperationException("Home Assistant did not return metadata for the requested Recorder statistic.");
                 }
                 var unitClass = hasUnitClass ? requestedUnitClass : matchingMetadata.UnitClass;
-                var unitOfMeasurement = hasUnitOfMeasurement ? requestedUnitOfMeasurement : matchingMetadata.UnitOfMeasurement;
+                var unitOfMeasurement = hasUnitOfMeasurement ? requestedUnitOfMeasurement : matchingMetadata.StatisticsUnitOfMeasurement;
                 if (string.Equals(unitClass, matchingMetadata.UnitClass, StringComparison.Ordinal)
-                    && string.Equals(unitOfMeasurement, matchingMetadata.UnitOfMeasurement, StringComparison.Ordinal))
+                    && string.Equals(unitOfMeasurement, matchingMetadata.StatisticsUnitOfMeasurement, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException("The requested Recorder statistic metadata already matches the current values.");
                 }
