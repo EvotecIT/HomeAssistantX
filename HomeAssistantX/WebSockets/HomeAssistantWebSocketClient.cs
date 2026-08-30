@@ -727,6 +727,18 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         return property.GetString() ?? string.Empty;
     }
 
+    private static string GetRequiredMessageType(JsonElement element)
+    {
+        var type = GetRequiredString(element, "type");
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            throw new HomeAssistantProtocolException(
+                "Home Assistant WebSocket message contained an empty required property 'type'.");
+        }
+
+        return type;
+    }
+
     private void FailPendingRequests(Exception exception)
     {
         foreach (var completion in _pendingRequests.Values)

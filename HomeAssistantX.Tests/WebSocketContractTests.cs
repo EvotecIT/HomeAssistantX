@@ -190,6 +190,21 @@ public sealed class WebSocketContractTests
         Assert.Contains("no messages", protocolFailure.Message);
     }
 
+    [Theory]
+    [InlineData("test/coalesced_blank_type")]
+    [InlineData("test/standalone_blank_type")]
+    public async Task WebSocketMessagesRejectBlankRequiredTypes(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("empty required property 'type'", protocolFailure.Message);
+    }
+
     [Fact]
     public async Task CoalescedBatchRejectsRoutedMessagesWithoutAnIntegerIdentifierBeforeRoutingAnyItem()
     {

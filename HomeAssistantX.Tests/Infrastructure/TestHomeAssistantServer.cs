@@ -734,6 +734,15 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             case "test/empty_coalesced":
                 await session.SendCoalescedAsync(Array.Empty<object>(), _source.Token).ConfigureAwait(false);
                 return;
+            case "test/coalesced_blank_type":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["type"] = "   " },
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
             case "test/coalesced_invalid_id":
                 await session.SendCoalescedAsync(
                     new object[]
@@ -802,6 +811,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                         ["success"] = true,
                         ["result"] = null
                     },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/standalone_blank_type":
+                await session.SendAsync(
+                    new Dictionary<string, object?> { ["type"] = string.Empty },
                     _source.Token).ConfigureAwait(false);
                 return;
             case "test/coalesced_missing_event":

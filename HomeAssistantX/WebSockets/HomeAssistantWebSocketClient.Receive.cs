@@ -117,7 +117,7 @@ public sealed partial class HomeAssistantWebSocketClient
                     "A Home Assistant coalesced WebSocket batch contained a non-message value.");
             }
 
-            var type = GetRequiredString(item, "type");
+            var type = GetRequiredMessageType(item);
             var commandId = 0;
             if (RequiresCommandIdentifier(type)
                 && (!item.TryGetProperty("id", out var idProperty)
@@ -154,7 +154,7 @@ public sealed partial class HomeAssistantWebSocketClient
 
     private void RouteMessage(JsonElement root)
     {
-        var type = GetRequiredString(root, "type");
+        var type = GetRequiredMessageType(root);
         RequireRoutedPayload(root, type);
         var id = 0;
         var hasCommandId = root.TryGetProperty("id", out var idProperty)
