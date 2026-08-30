@@ -99,8 +99,18 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets all calendar entities.</summary>
     public async Task<IReadOnlyList<HomeAssistantCalendar>> GetCalendarsAsync(CancellationToken cancellationToken = default)
     {
-        var calendars = await SendHomeAssistantAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
+        var rawCalendars = await SendHomeAssistantAsync<JsonElement>(HttpMethod.Get, "api/calendars", null, cancellationToken)
             .ConfigureAwait(false);
+        if (rawCalendars.ValueKind != JsonValueKind.Array
+            || HomeAssistantJson.HasDuplicateProperties(rawCalendars, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant calendar list contained duplicate properties or was not an array.");
+        }
+        var calendars = HomeAssistantJson.DeserializeResponse<HomeAssistantCalendar[]>(
+            rawCalendars,
+            "The Home Assistant calendar list could not be decoded.",
+            cancellationToken: cancellationToken);
         HomeAssistantJson.RequireNoNullCollectionEntries(
             calendars,
             "The Home Assistant calendar list contained a null item.",

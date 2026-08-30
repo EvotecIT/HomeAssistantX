@@ -71,6 +71,8 @@ public sealed class CoreRestApiContractTests
     [InlineData("[{\"entity_id\":\"calendar.home\"}]")]
     [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"   \"}]")]
     [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"First\"},{\"entity_id\":\"calendar.home\",\"name\":\"Duplicate\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"entity_id\":\"calendar.other\",\"name\":\"Duplicate property\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"First\",\"name\":\"Second\"}]")]
     public async Task DirectCalendarRestDiscoveryRejectsMalformedResponseIdentities(string response)
     {
         using var server = new TestHomeAssistantServer { CalendarListResponseJson = response };

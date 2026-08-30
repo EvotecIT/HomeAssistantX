@@ -156,12 +156,13 @@ internal static class HomeAssistantRecurrenceRuleValidator
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (isAllDay && name is "BYSECOND" or "BYMINUTE" or "BYHOUR")
+        var normalizedName = name.ToUpperInvariant();
+        if (isAllDay && normalizedName is "BYSECOND" or "BYMINUTE" or "BYHOUR")
         {
-            throw Invalid(parameterName, name + " cannot be used with an all-day recurrence.");
+            throw Invalid(parameterName, normalizedName + " cannot be used with an all-day recurrence.");
         }
 
-        switch (name.ToUpperInvariant())
+        switch (normalizedName)
         {
             case "FREQ":
                 return;

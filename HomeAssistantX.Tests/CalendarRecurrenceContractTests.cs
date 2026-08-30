@@ -40,6 +40,8 @@ public sealed class CalendarRecurrenceContractTests
     [InlineData("FREQ=MONTHLY;BYWEEKNO=1")]
     [InlineData("FREQ=DAILY;BYDAY=1MO")]
     [InlineData("FREQ=YEARLY;BYWEEKNO=1;BYDAY=1MO")]
+    [InlineData("freq=daily;byhour=8")]
+    [InlineData("FREQ=DAILY;ByMinute=30")]
     public void CalendarInputRejectsMalformedRecurrenceClauses(string rule)
     {
         var input = HomeAssistantCalendarEventInput.AllDay(
