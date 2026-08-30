@@ -415,6 +415,23 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void FormatterPreservesJsonConstructionTaskLikeBuildersAndManagedVarArgs()
+    {
+        var jsonConstructor = typeof(JsonConstructorFixture).GetConstructors().Single();
+        var varArgsMethod = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(ManagedVarArgsFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var varArgsConstructor = typeof(ManagedVarArgsConstructorFixture).GetConstructors().Single();
+
+        Assert.Contains("json-constructor ", FormatConstructor(jsonConstructor), StringComparison.Ordinal);
+        Assert.Equal(
+            "async-method-builder(HomeAssistantX.Tests.PublicApiCompatibilityTests+AsyncBuilderFixture) ",
+            AsyncMethodBuilderContract(typeof(AsyncTaskLikeFixture)));
+        Assert.StartsWith("managed-varargs ManagedVarArgsFixture", FormatMethod(varArgsMethod), StringComparison.Ordinal);
+        Assert.Contains("managed-varargs ", FormatConstructor(varArgsConstructor), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MethodAndAccessorFormattersPreserveSynchronizedImplementationContracts()
     {
         var method = typeof(PublicApiCompatibilityTests).GetMethod(
@@ -924,7 +941,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + AsyncMethodBuilderContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -1144,8 +1161,26 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => DynamicallyAccessedMembersContract(argument) + argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + DispIdContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + SynchronizedContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + DispIdContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + SynchronizedContract(method) + ManagedCallingConventionContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
+
+    private static string AsyncMethodBuilderContract(Type type)
+    {
+        var attribute = type.GetCustomAttribute<AsyncMethodBuilderAttribute>(inherit: false);
+        return attribute is null
+            ? string.Empty
+            : "async-method-builder(" + FormatType(attribute.BuilderType) + ") ";
+    }
+
+    private static string JsonConstructorContract(ConstructorInfo constructor)
+        => constructor.IsDefined(typeof(JsonConstructorAttribute), inherit: false)
+            ? "json-constructor "
+            : string.Empty;
+
+    private static string ManagedCallingConventionContract(MethodBase method)
+        => (method.CallingConvention & CallingConventions.VarArgs) != 0
+            ? "managed-varargs "
+            : string.Empty;
 
     private static string SpecialNameContract(MemberInfo member)
         => member switch
@@ -1346,7 +1381,8 @@ public sealed class PublicApiCompatibilityTests
         => "C " + ConstructorAccess(constructor) + SpecialNameContract(constructor) + ObsoleteContract(constructor)
             + ExperimentalContract(constructor) + PreviewFeatureContract(constructor) + PlatformContract(constructor) + RequiresCodeContract(constructor)
             + ClsComplianceContract(constructor) + ComVisibilityContract(constructor)
-            + OverloadResolutionPriorityContract(constructor) + SynchronizedContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
+            + OverloadResolutionPriorityContract(constructor) + SynchronizedContract(constructor) + ManagedCallingConventionContract(constructor)
+            + JsonConstructorContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
             + FormatType(constructor.DeclaringType!) + "(" + FormatParameters(constructor.GetParameters()) + ")";
 
     private static string FormatProperty(PropertyInfo property)
@@ -1484,6 +1520,37 @@ public sealed class PublicApiCompatibilityTests
 
     [PreserveSig]
     private static int PreserveSigManagedFixture() => 0;
+
+    private static void ManagedVarArgsFixture(int value, __arglist)
+    {
+    }
+
+    private sealed class ManagedVarArgsConstructorFixture
+    {
+        public ManagedVarArgsConstructorFixture(int value, __arglist)
+        {
+        }
+    }
+
+    private sealed class JsonConstructorFixture
+    {
+        [JsonConstructor]
+        public JsonConstructorFixture(int value)
+        {
+            Value = value;
+        }
+
+        public int Value { get; }
+    }
+
+    [AsyncMethodBuilder(typeof(AsyncBuilderFixture))]
+    private readonly struct AsyncTaskLikeFixture
+    {
+    }
+
+    private sealed class AsyncBuilderFixture
+    {
+    }
 
     [MethodImpl(MethodImplOptions.Synchronized)]
     private static int SynchronizedMethodFixture() => 0;
