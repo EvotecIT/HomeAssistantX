@@ -83,12 +83,12 @@ public sealed class HomeAssistantAutomationClient
             }
         }
         var responseId = responseIds.Count == 1 && responseIds[0].ValueKind == JsonValueKind.String
-            ? responseIds[0].GetString()
+            ? await HomeAssistantJson.GetStringAsync(responseIds[0], cancellationToken).ConfigureAwait(false)
             : null;
         HomeAssistantJson.ThrowIfStringTraversalCanceled(responseId, cancellationToken);
         if (responseIds.Count != 1
             || responseId is null
-            || !string.Equals(responseId, id, StringComparison.Ordinal))
+            || !CancellationAwareString.EqualsOrdinal(responseId, id, cancellationToken))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with a mismatched identifier.");
         }
@@ -128,15 +128,15 @@ public sealed class HomeAssistantAutomationClient
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!string.Equals(state.Domain, "automation", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The entity is not an automation.", nameof(state));
+        if (!CancellationAwareString.EqualsOrdinalIgnoreCase(state.Domain, "automation", cancellationToken)) throw new ArgumentException("The entity is not an automation.", nameof(state));
         if (!HasNonWhitespace(state.State, cancellationToken)) throw new HomeAssistantProtocolException("The Home Assistant automation state omitted its required state value.");
         return new HomeAssistantAutomationStatus
         {
             EntityId = state.EntityId,
             Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name", cancellationToken),
-            IsEnabled = string.Equals(state.State, "on", StringComparison.OrdinalIgnoreCase)
+            IsEnabled = CancellationAwareString.EqualsOrdinalIgnoreCase(state.State, "on", cancellationToken)
                 ? true
-                : string.Equals(state.State, "off", StringComparison.OrdinalIgnoreCase)
+                : CancellationAwareString.EqualsOrdinalIgnoreCase(state.State, "off", cancellationToken)
                     ? false
                     : null,
             LastTriggered = HomeAssistantAttributeReader.GetDateTimeOffset(state.Attributes, "last_triggered", cancellationToken),

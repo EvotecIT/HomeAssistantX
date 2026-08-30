@@ -67,11 +67,16 @@ public static class HomeAssistantAutomationIdentifier
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (definitionId.HasValue
-            && (definitionId.Value.ValueKind != JsonValueKind.String
-                || !string.Equals(definitionId.Value.GetString(), automationId, StringComparison.Ordinal)))
+        if (definitionId.HasValue)
         {
-            throw new ArgumentException("An automation definition identifier must match the requested automation identifier.", parameterName);
+            var definitionIdValue = definitionId.Value.ValueKind == JsonValueKind.String
+                ? HomeAssistantJson.GetString(definitionId.Value, cancellationToken)
+                : null;
+            if (definitionIdValue is null
+                || !CancellationAwareString.EqualsOrdinal(definitionIdValue, automationId, cancellationToken))
+            {
+                throw new ArgumentException("An automation definition identifier must match the requested automation identifier.", parameterName);
+            }
         }
     }
 

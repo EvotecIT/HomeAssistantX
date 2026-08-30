@@ -156,10 +156,22 @@ public sealed class HomeAssistantMediaBrowserClient
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        var mediaClassText = mediaClass.ValueKind == JsonValueKind.String
+            ? HomeAssistantJson.GetString(mediaClass, cancellationToken)
+            : null;
+        var mediaContentIdText = mediaContentId.ValueKind == JsonValueKind.String
+            ? HomeAssistantJson.GetString(mediaContentId, cancellationToken)
+            : null;
+        var mediaContentTypeText = mediaContentType.ValueKind == JsonValueKind.String
+            ? HomeAssistantJson.GetString(mediaContentType, cancellationToken)
+            : null;
+        var childrenMediaClassText = childrenMediaClass.ValueKind == JsonValueKind.String
+            ? HomeAssistantJson.GetString(childrenMediaClass, cancellationToken)
+            : null;
         if (mediaClass.ValueKind == JsonValueKind.Undefined
             || mediaClass.ValueKind != JsonValueKind.Null
                 && (mediaClass.ValueKind != JsonValueKind.String
-                    || !IsCanonicalMediaClass(mediaClass.GetString(), cancellationToken))
+                    || !IsCanonicalMediaClass(mediaClassText, cancellationToken))
             || mediaContentId.ValueKind == JsonValueKind.Undefined
             || mediaContentId.ValueKind != JsonValueKind.String
             || mediaContentType.ValueKind == JsonValueKind.Undefined
@@ -179,12 +191,12 @@ public sealed class HomeAssistantMediaBrowserClient
         if (childrenMediaClass.ValueKind != JsonValueKind.Undefined
             && childrenMediaClass.ValueKind != JsonValueKind.Null
             && (childrenMediaClass.ValueKind != JsonValueKind.String
-                || !IsCanonicalMediaClass(childrenMediaClass.GetString(), cancellationToken)))
+                || !IsCanonicalMediaClass(childrenMediaClassText, cancellationToken)))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");
 
         if ((canPlay.GetBoolean() || canExpand.GetBoolean() || canSearch.GetBoolean())
-            && (!IsActionableContentId(mediaContentId.GetString(), cancellationToken)
-                || !IsCanonicalActionableSelector(mediaContentType.GetString(), cancellationToken)))
+            && (!IsActionableContentId(mediaContentIdText, cancellationToken)
+                || !IsCanonicalActionableSelector(mediaContentTypeText, cancellationToken)))
             throw new HomeAssistantProtocolException("An actionable media response contained a noncanonical selector.");
 
         if (children.ValueKind == JsonValueKind.Undefined) return;
@@ -267,7 +279,12 @@ public sealed class HomeAssistantMediaBrowserClient
             cancellationToken.ThrowIfCancellationRequested();
             var resolved = new Uri(new Uri("https://homeassistant.invalid", UriKind.Absolute), value);
             cancellationToken.ThrowIfCancellationRequested();
-            var canonical = string.Equals(resolved.PathAndQuery + resolved.Fragment, value, StringComparison.Ordinal);
+            var canonicalPath = CancellationAwareString.Concat(
+                resolved.PathAndQuery,
+                string.Empty,
+                resolved.Fragment,
+                cancellationToken);
+            var canonical = CancellationAwareString.EqualsOrdinal(canonicalPath, value, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             return canonical;
         }
