@@ -114,6 +114,17 @@ public sealed class LivePlatformDataContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Notifications.GetPersistentAsync());
     }
 
+    [Theory]
+    [InlineData("[{\"notification_id\":\"notice-1\",\"notification_id\":\"notice-1\",\"message\":\"Door open\"}]")]
+    [InlineData("[{\"notification_id\":\"notice-1\",\"Notification_Id\":\"notice-1\",\"message\":\"Door open\"}]")]
+    public async Task PersistentNotificationReadsRejectDuplicateRecognizedFields(string response)
+    {
+        using var server = new TestHomeAssistantServer { PersistentNotificationResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Notifications.GetPersistentAsync());
+    }
+
     [Fact]
     public void PersistentNotificationValidationStopsWhenCancellationArrivesDuringTraversal()
     {
@@ -220,6 +231,18 @@ public sealed class LivePlatformDataContractTests
     [InlineData("{\"type\":\"Current\",\"type\":\"Removed\",\"notifications\":{}}")]
     [InlineData("{\"type\":\"Current\",\"notifications\":{},\"notifications\":{}}")]
     public async Task PersistentNotificationSubscriptionRejectsDuplicateEnvelopeFields(string payload)
+    {
+        using var server = new TestHomeAssistantServer { PersistentNotificationSubscriptionEventJson = payload };
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((_, _) => Task.CompletedTask);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(async () => await subscription.Completion);
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"Current\",\"notifications\":{\"notice\":{\"notification_id\":\"notice\",\"notification_id\":\"notice\",\"message\":\"First\"}}}")]
+    [InlineData("{\"type\":\"Current\",\"notifications\":{\"notice\":{\"notification_id\":\"notice\",\"Notification_Id\":\"notice\",\"message\":\"First\"}}}")]
+    public async Task PersistentNotificationSubscriptionRejectsDuplicateRecognizedItemFields(string payload)
     {
         using var server = new TestHomeAssistantServer { PersistentNotificationSubscriptionEventJson = payload };
         using var client = TestClientFactory.Create(server);
