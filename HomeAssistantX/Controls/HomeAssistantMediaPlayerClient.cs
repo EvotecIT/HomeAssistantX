@@ -103,7 +103,10 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             options.MediaContentId,
             nameof(options.MediaContentId),
             cancellationToken);
-        var mediaContentType = NormalizeOptional(options.MediaContentType, nameof(options.MediaContentType));
+        var mediaContentType = NormalizeOptional(
+            options.MediaContentType,
+            nameof(options.MediaContentType),
+            cancellationToken);
         var enqueue = options.Enqueue;
         var announce = options.Announce;
         var mediaExtra = options.MediaExtra;
@@ -369,7 +372,10 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             mediaContentId,
             nameof(mediaContentId),
             cancellationToken);
-        mediaContentType = ControlValidation.Required(mediaContentType, nameof(mediaContentType));
+        mediaContentType = ControlValidation.Required(
+            mediaContentType,
+            nameof(mediaContentType),
+            cancellationToken);
         var enqueueOption = options?.Enqueue;
         var announce = options?.Announce;
         var extra = options?.Extra;
@@ -467,7 +473,10 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 mediaContentId!,
                 nameof(mediaContentId),
                 cancellationToken);
-            mediaContentType = ControlValidation.Required(mediaContentType!, nameof(mediaContentType));
+            mediaContentType = ControlValidation.Required(
+                mediaContentType!,
+                nameof(mediaContentType),
+                cancellationToken);
             var enqueueOption = playMediaOptions?.Enqueue;
             var announce = playMediaOptions?.Announce;
             if (enqueueOption.HasValue && announce == true)
@@ -540,8 +549,11 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         return HomeAssistantJson.FreezeObject(extra, parameterName, "MediaExtra", cancellationToken);
     }
 
-    private static string? NormalizeOptional(string? value, string name)
-        => value is null ? null : ControlValidation.Required(value, name);
+    private static string? NormalizeOptional(
+        string? value,
+        string name,
+        CancellationToken cancellationToken)
+        => value is null ? null : ControlValidation.Required(value, name, cancellationToken);
 
     private static string? PreserveOptional(
         string? value,

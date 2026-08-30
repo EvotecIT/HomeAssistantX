@@ -1144,6 +1144,12 @@ public sealed class MediaAndRemoteContractTests
                 cancellation.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.Controls.Remotes.DeleteCommandsAsync(remoteTarget, values, cancellationToken: cancellation.Token));
+        var longWhitespace = new string(' ', 128 * 1024);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Remotes.SendCommandsAsync(
+                remoteTarget,
+                new[] { longWhitespace },
+                cancellationToken: cancellation.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.Controls.MediaPlayers.JoinAsync(
                 HomeAssistantTarget.ForEntity("media_player.kitchen"),
@@ -1188,6 +1194,12 @@ public sealed class MediaAndRemoteContractTests
                 "music",
                 new HomeAssistantPlayMediaOptions { Extra = cyclicExtra },
                 cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.PlayMediaAsync(
+                mediaTarget,
+                "media-source://local/song.mp3",
+                longWhitespace,
+                cancellationToken: cancellation.Token));
         Assert.Empty(server.ServiceCallBodies);
     }
 

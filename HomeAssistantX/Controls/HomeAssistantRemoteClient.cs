@@ -275,7 +275,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         foreach (var command in commands)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(command))
+            if (CancellationAwareString.IsNullOrWhiteSpace(command, cancellationToken))
             {
                 throw new ArgumentException(
                     "At least one non-empty remote command is required.",

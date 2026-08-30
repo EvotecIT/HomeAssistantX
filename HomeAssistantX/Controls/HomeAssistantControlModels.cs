@@ -157,14 +157,17 @@ public sealed class HomeAssistantClimateOptions
 
 internal static class ControlValidation
 {
-    public static string Required(string? value, string name)
+    public static string Required(
+        string? value,
+        string name,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty value is required.", name);
         }
 
-        return value!.Trim();
+        return CancellationAwareString.Trim(value!, cancellationToken);
     }
 
     public static string RequiredUnchanged(
