@@ -33,16 +33,17 @@ public sealed class GetHomeAssistantActionCommand : HomeAssistantCmdlet
     {
         var snapshot = await Client.Inventory.GetSnapshotAsync(CancelToken).ConfigureAwait(false);
         var domain = Domain;
-        if (!string.IsNullOrWhiteSpace(Entity))
+        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Entity, CancelToken))
         {
             var entity = Client.Inventory.ResolveEntity(snapshot, Entity!, CancelToken);
-            if (!string.IsNullOrWhiteSpace(domain) && !string.Equals(domain, entity.Domain, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The supplied domain does not match the selected entity.", nameof(Domain));
+            if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(domain, CancelToken)
+                && !HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(domain, entity.Domain, CancelToken)) throw new ArgumentException("The supplied domain does not match the selected entity.", nameof(Domain));
             domain = entity.Domain;
         }
 
         IEnumerable<HomeAssistantActionDefinition> actions = snapshot.Actions;
-        if (!string.IsNullOrWhiteSpace(domain)) actions = actions.Where(x => { CancelToken.ThrowIfCancellationRequested(); return string.Equals(x.Domain, domain, StringComparison.OrdinalIgnoreCase); });
-        if (!string.IsNullOrWhiteSpace(Action)) actions = actions.Where(x => { CancelToken.ThrowIfCancellationRequested(); return string.Equals(x.Action, Action, StringComparison.OrdinalIgnoreCase); });
+        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(domain, CancelToken)) actions = actions.Where(x => { CancelToken.ThrowIfCancellationRequested(); return HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(x.Domain, domain, CancelToken); });
+        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Action, CancelToken)) actions = actions.Where(x => { CancelToken.ThrowIfCancellationRequested(); return HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(x.Action, Action, CancelToken); });
         var result = actions.ToArray();
         CancelToken.ThrowIfCancellationRequested();
         WriteObject(result, true);

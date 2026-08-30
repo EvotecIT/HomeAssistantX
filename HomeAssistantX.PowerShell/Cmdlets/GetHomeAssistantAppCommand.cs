@@ -21,10 +21,22 @@ public sealed class GetHomeAssistantAppCommand : HomeAssistantCmdlet
     protected override async Task ProcessRecordAsync()
     {
         var apps = await Client.Supervisor.GetAppsAsync(CancelToken).ConfigureAwait(false);
-        WriteObject(
-            string.IsNullOrWhiteSpace(App)
-                ? apps
-                : apps.Where(value => string.Equals(value.Slug, App, StringComparison.OrdinalIgnoreCase)).ToArray(),
-            enumerateCollection: true);
+        if (HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(App, CancelToken))
+        {
+            WriteObject(apps, enumerateCollection: true);
+            return;
+        }
+
+        var matches = new List<HomeAssistantApp>();
+        foreach (var app in apps)
+        {
+            CancelToken.ThrowIfCancellationRequested();
+            if (HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(app.Slug, App, CancelToken))
+            {
+                matches.Add(app);
+            }
+        }
+        CancelToken.ThrowIfCancellationRequested();
+        WriteObject(matches.ToArray(), enumerateCollection: true);
     }
 }

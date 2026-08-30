@@ -20,7 +20,7 @@ public sealed class GetHomeAssistantFloorCommand : HomeAssistantCmdlet
     protected override async Task ProcessRecordAsync()
     {
         var snapshot = await Client.Inventory.GetSnapshotAsync(CancelToken).ConfigureAwait(false);
-        var result = string.IsNullOrWhiteSpace(Floor)
+        var result = HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Floor, CancelToken)
             ? snapshot.Floors
             : new[] { Client.Inventory.ResolveFloor(snapshot, Floor!, CancelToken) };
         CancelToken.ThrowIfCancellationRequested();
