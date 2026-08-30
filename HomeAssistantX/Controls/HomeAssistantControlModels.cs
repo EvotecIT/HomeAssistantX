@@ -108,24 +108,78 @@ public sealed class HomeAssistantLightOptions
 /// <summary>Typed climate values that may be applied in one logical operation.</summary>
 public sealed class HomeAssistantClimateOptions
 {
+    private readonly object _sync = new();
+    private double? _temperature;
+    private double? _targetTemperatureLow;
+    private double? _targetTemperatureHigh;
+    private string? _hvacMode;
+    private string? _fanMode;
+    private string? _presetMode;
     private double? _humidity;
 
-    public double? Temperature { get; set; }
+    public double? Temperature
+    {
+        get { lock (_sync) return _temperature; }
+        set { lock (_sync) _temperature = value; }
+    }
 
-    public double? TargetTemperatureLow { get; set; }
+    public double? TargetTemperatureLow
+    {
+        get { lock (_sync) return _targetTemperatureLow; }
+        set { lock (_sync) _targetTemperatureLow = value; }
+    }
 
-    public double? TargetTemperatureHigh { get; set; }
+    public double? TargetTemperatureHigh
+    {
+        get { lock (_sync) return _targetTemperatureHigh; }
+        set { lock (_sync) _targetTemperatureHigh = value; }
+    }
 
-    public string? HvacMode { get; set; }
+    public string? HvacMode
+    {
+        get { lock (_sync) return _hvacMode; }
+        set { lock (_sync) _hvacMode = value; }
+    }
 
-    public string? FanMode { get; set; }
+    public string? FanMode
+    {
+        get { lock (_sync) return _fanMode; }
+        set { lock (_sync) _fanMode = value; }
+    }
 
-    public string? PresetMode { get; set; }
+    public string? PresetMode
+    {
+        get { lock (_sync) return _presetMode; }
+        set { lock (_sync) _presetMode = value; }
+    }
 
     public double? Humidity
     {
-        get => _humidity;
-        set => _humidity = ControlValidation.Percent(value, nameof(Humidity));
+        get { lock (_sync) return _humidity; }
+        set
+        {
+            var validated = ControlValidation.Percent(value, nameof(Humidity));
+            lock (_sync) _humidity = validated;
+        }
+    }
+
+    internal HomeAssistantClimateOptions Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantClimateOptions
+            {
+                Temperature = _temperature,
+                TargetTemperatureLow = _targetTemperatureLow,
+                TargetTemperatureHigh = _targetTemperatureHigh,
+                HvacMode = _hvacMode,
+                FanMode = _fanMode,
+                PresetMode = _presetMode,
+                Humidity = _humidity
+            };
+        }
     }
 
     internal bool HasTemperature => Temperature.HasValue || TargetTemperatureLow.HasValue || TargetTemperatureHigh.HasValue;

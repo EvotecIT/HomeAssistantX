@@ -18,14 +18,15 @@ public sealed class HomeAssistantClimateClient : HomeAssistantControlClientBase
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        options.Validate();
-        var temperature = options.Temperature;
-        var targetTemperatureLow = options.TargetTemperatureLow;
-        var targetTemperatureHigh = options.TargetTemperatureHigh;
-        var hvacMode = options.HvacMode;
-        var fanMode = options.FanMode;
-        var presetMode = options.PresetMode;
-        var humidity = options.Humidity;
+        var frozenOptions = options.Snapshot(cancellationToken);
+        frozenOptions.Validate();
+        var temperature = frozenOptions.Temperature;
+        var targetTemperatureLow = frozenOptions.TargetTemperatureLow;
+        var targetTemperatureHigh = frozenOptions.TargetTemperatureHigh;
+        var hvacMode = frozenOptions.HvacMode;
+        var fanMode = frozenOptions.FanMode;
+        var presetMode = frozenOptions.PresetMode;
+        var humidity = frozenOptions.Humidity;
         var hasTemperature = temperature.HasValue || targetTemperatureLow.HasValue || targetTemperatureHigh.HasValue;
         if (!hasTemperature
             && string.IsNullOrWhiteSpace(hvacMode)

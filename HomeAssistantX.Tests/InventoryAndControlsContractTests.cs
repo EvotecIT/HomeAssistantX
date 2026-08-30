@@ -365,6 +365,32 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public void ClimateOptionSnapshotIsIndependentFromLaterCallerMutation()
+    {
+        var options = new HomeAssistantClimateOptions
+        {
+            Temperature = 21,
+            HvacMode = "heat",
+            FanMode = "auto",
+            PresetMode = "comfort",
+            Humidity = 45
+        };
+
+        var snapshot = options.Snapshot(CancellationToken.None);
+        options.Temperature = 18;
+        options.HvacMode = "off";
+        options.FanMode = "quiet";
+        options.PresetMode = "eco";
+        options.Humidity = 30;
+
+        Assert.Equal(21, snapshot.Temperature);
+        Assert.Equal("heat", snapshot.HvacMode);
+        Assert.Equal("auto", snapshot.FanMode);
+        Assert.Equal("comfort", snapshot.PresetMode);
+        Assert.Equal(45, snapshot.Humidity);
+    }
+
+    [Fact]
     public async Task ContradictoryMediaOperationsFailBeforeAnyServiceCall()
     {
         using var server = new TestHomeAssistantServer();

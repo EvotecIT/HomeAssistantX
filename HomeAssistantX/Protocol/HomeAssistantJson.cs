@@ -4,6 +4,7 @@ using System.Collections;
 using System.Reflection;
 using System.Globalization;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 
 namespace HomeAssistantX.Protocol;
 
@@ -189,6 +190,7 @@ internal static class HomeAssistantJson
         cancellationToken.ThrowIfCancellationRequested();
         using var stream = new MemoryStream();
         var options = CreateCancellationAwareOptions(cancellationToken);
+        using var cancellationScope = HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellationToken);
         JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
             .ConfigureAwait(false)
             .GetAwaiter()
@@ -201,6 +203,7 @@ internal static class HomeAssistantJson
     {
         using var stream = new MemoryStream();
         var options = CreateCancellationAwareOptions(cancellationToken);
+        using var cancellationScope = HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellationToken);
         JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
             .ConfigureAwait(false)
             .GetAwaiter()
@@ -221,7 +224,7 @@ internal static class HomeAssistantJson
         return options;
     }
 
-    private static void WriteJsonElement(
+    internal static void WriteJsonElement(
         Utf8JsonWriter writer,
         JsonElement value,
         CancellationToken cancellationToken)
@@ -369,11 +372,15 @@ internal static class HomeAssistantJson
 
             cancellationToken.ThrowIfCancellationRequested();
             stream.Position = 0;
-            var result = await JsonSerializer.DeserializeAsync<T>(
-                stream,
-                SerializerOptions,
-                cancellationToken).ConfigureAwait(false)
-                ?? throw new HomeAssistantProtocolException(failureMessage);
+            T result;
+            using (HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellationToken))
+            {
+                result = await JsonSerializer.DeserializeAsync<T>(
+                    stream,
+                    SerializerOptions,
+                    cancellationToken).ConfigureAwait(false)
+                    ?? throw new HomeAssistantProtocolException(failureMessage);
+            }
             return RequireNoNullCollectionEntries(
                 result,
                 failureMessage,
