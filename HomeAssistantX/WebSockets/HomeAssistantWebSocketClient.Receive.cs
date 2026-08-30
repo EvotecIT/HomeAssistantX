@@ -96,6 +96,12 @@ public sealed partial class HomeAssistantWebSocketClient
         }
 
         var messageCount = root.GetArrayLength();
+        if (messageCount == 0)
+        {
+            throw new HomeAssistantProtocolException(
+                "A Home Assistant coalesced WebSocket batch contained no messages.");
+        }
+
         if (messageCount > _options.MaximumCoalescedWebSocketMessages)
         {
             throw new HomeAssistantProtocolException(

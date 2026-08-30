@@ -178,6 +178,19 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task CoalescedBatchRejectsAnEmptyFrameImmediately()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/empty_coalesced"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("no messages", protocolFailure.Message);
+    }
+
+    [Fact]
     public async Task CoalescedBatchRejectsRoutedMessagesWithoutAnIntegerIdentifierBeforeRoutingAnyItem()
     {
         using var server = new TestHomeAssistantServer();
