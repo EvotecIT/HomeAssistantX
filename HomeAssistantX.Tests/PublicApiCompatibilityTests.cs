@@ -421,12 +421,19 @@ public sealed class PublicApiCompatibilityTests
         var varArgsMethod = typeof(PublicApiCompatibilityTests).GetMethod(
             nameof(ManagedVarArgsFixture),
             BindingFlags.NonPublic | BindingFlags.Static)!;
+        var builderMethod = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(AsyncMethodBuilderFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
         var varArgsConstructor = typeof(ManagedVarArgsConstructorFixture).GetConstructors().Single();
 
         Assert.Contains("json-constructor ", FormatConstructor(jsonConstructor), StringComparison.Ordinal);
         Assert.Equal(
             "async-method-builder(HomeAssistantX.Tests.PublicApiCompatibilityTests+AsyncBuilderFixture) ",
             AsyncMethodBuilderContract(typeof(AsyncTaskLikeFixture)));
+        Assert.StartsWith(
+            "async-method-builder(HomeAssistantX.Tests.PublicApiCompatibilityTests+AsyncBuilderFixture) AsyncMethodBuilderFixture",
+            FormatMethod(builderMethod),
+            StringComparison.Ordinal);
         Assert.StartsWith("managed-varargs ManagedVarArgsFixture", FormatMethod(varArgsMethod), StringComparison.Ordinal);
         Assert.Contains("managed-varargs ", FormatConstructor(varArgsConstructor), StringComparison.Ordinal);
     }
@@ -1161,15 +1168,20 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => DynamicallyAccessedMembersContract(argument) + argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + DispIdContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + SynchronizedContract(method) + ManagedCallingConventionContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + DispIdContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + SynchronizedContract(method) + ManagedCallingConventionContract(method) + AsyncMethodBuilderContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
-    private static string AsyncMethodBuilderContract(Type type)
+    private static string AsyncMethodBuilderContract(ICustomAttributeProvider provider)
     {
-        var attribute = type.GetCustomAttribute<AsyncMethodBuilderAttribute>(inherit: false);
+        var attribute = GetCustomAttributes(provider).FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            typeof(AsyncMethodBuilderAttribute).FullName,
+            StringComparison.Ordinal));
         return attribute is null
+            || attribute.ConstructorArguments.Count != 1
+            || attribute.ConstructorArguments[0].Value is not Type builderType
             ? string.Empty
-            : "async-method-builder(" + FormatType(attribute.BuilderType) + ") ";
+            : "async-method-builder(" + FormatType(builderType) + ") ";
     }
 
     private static string JsonConstructorContract(ConstructorInfo constructor)
@@ -1545,6 +1557,11 @@ public sealed class PublicApiCompatibilityTests
 
     [AsyncMethodBuilder(typeof(AsyncBuilderFixture))]
     private readonly struct AsyncTaskLikeFixture
+    {
+    }
+
+    [AsyncMethodBuilder(typeof(AsyncBuilderFixture))]
+    private static void AsyncMethodBuilderFixture()
     {
     }
 
