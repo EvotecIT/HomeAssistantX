@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using HomeAssistantX.Calendars;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
@@ -39,7 +40,7 @@ public sealed partial class HomeAssistantRestClient
         var path = "api/history/period";
         if (query.StartTime.HasValue)
         {
-            path += "/" + EscapeTimestamp(query.StartTime.Value);
+            path += "/" + EscapeTimestamp(query.StartTime.Value, cancellationToken);
         }
 
         var parameters = new List<KeyValuePair<string, string?>>
@@ -53,7 +54,7 @@ public sealed partial class HomeAssistantRestClient
 
         var response = await SendHomeAssistantAsync<HomeAssistantState[][]>(
             HttpMethod.Get,
-            AppendQuery(path, parameters),
+            AppendQuery(path, parameters, cancellationToken),
             null,
             cancellationToken).ConfigureAwait(false);
         return response;
@@ -73,7 +74,7 @@ public sealed partial class HomeAssistantRestClient
         var path = "api/logbook";
         if (startTime.HasValue)
         {
-            path += "/" + EscapeTimestamp(startTime.Value);
+            path += "/" + EscapeTimestamp(startTime.Value, cancellationToken);
         }
 
         var parameters = new List<KeyValuePair<string, string?>>();
@@ -88,7 +89,7 @@ public sealed partial class HomeAssistantRestClient
 
         var rawEntries = await SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Get,
-            AppendQuery(path, parameters),
+            AppendQuery(path, parameters, cancellationToken),
             null,
             cancellationToken).ConfigureAwait(false);
         if (rawEntries.ValueKind != JsonValueKind.Array
@@ -160,7 +161,9 @@ public sealed partial class HomeAssistantRestClient
     {
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", cancellationToken, out var normalizedEntityId))
             throw new ArgumentException("A camera entity identifier is required.", nameof(entityId));
-        return GetBytesAsync("api/camera_proxy/" + EscapePath(normalizedEntityId, cancellationToken), cancellationToken);
+        return GetBytesAsync(
+            "api/camera_proxy/" + EscapePath(normalizedEntityId, cancellationToken),
+            cancellationToken);
     }
 
     /// <summary>Gets all calendar entities.</summary>
@@ -250,7 +253,8 @@ public sealed partial class HomeAssistantRestClient
             {
                 new KeyValuePair<string, string?>("start", FormatTimestamp(start)),
                 new KeyValuePair<string, string?>("end", FormatTimestamp(end))
-            });
+            },
+            cancellationToken);
         var events = await SendHomeAssistantAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
             .ConfigureAwait(false);
         HomeAssistantCalendarClient.ValidateEvents(events, cancellationToken);
@@ -388,26 +392,31 @@ public sealed partial class HomeAssistantRestClient
         }
     }
 
-    private static string AppendQuery(string path, IEnumerable<KeyValuePair<string, string?>> parameters)
+    private static string AppendQuery(
+        string path,
+        IEnumerable<KeyValuePair<string, string?>> parameters,
+        CancellationToken cancellationToken)
     {
         var query = new StringBuilder();
         foreach (var parameter in parameters)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             query.Append(query.Length == 0 ? '?' : '&');
-            query.Append(Uri.EscapeDataString(parameter.Key));
+            query.Append(HomeAssistantUri.EscapeDataString(parameter.Key, cancellationToken));
             if (parameter.Value is not null)
             {
                 query.Append('=');
-                query.Append(Uri.EscapeDataString(parameter.Value));
+                query.Append(HomeAssistantUri.EscapeDataString(parameter.Value, cancellationToken));
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return path + query;
     }
 
-    private static string EscapeTimestamp(DateTimeOffset value)
+    private static string EscapeTimestamp(DateTimeOffset value, CancellationToken cancellationToken)
     {
-        return Uri.EscapeDataString(FormatTimestamp(value));
+        return HomeAssistantUri.EscapeDataString(FormatTimestamp(value), cancellationToken);
     }
 
     private static string FormatTimestamp(DateTimeOffset value)
