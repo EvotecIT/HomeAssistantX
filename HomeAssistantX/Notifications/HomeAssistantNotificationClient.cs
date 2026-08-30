@@ -154,7 +154,8 @@ public sealed class HomeAssistantNotificationClient
                 throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update had an unexpected shape.");
             }
 
-            var rawType = typeValue.GetString() ?? string.Empty;
+            var rawType = await HomeAssistantJson.GetStringAsync(typeValue, token).ConfigureAwait(false)
+                ?? string.Empty;
             if (CancellationAwareString.IsNullOrWhiteSpace(rawType, token)
                 || !CancellationAwareString.EqualsOrdinal(
                     rawType,
@@ -284,10 +285,10 @@ public sealed class HomeAssistantNotificationClient
 
     private static int NotificationField(string name, CancellationToken cancellationToken)
     {
-        if (CancellationAwareString.EqualsOrdinalIgnoreCase(name, "notification_id", cancellationToken)) return 1;
-        if (CancellationAwareString.EqualsOrdinalIgnoreCase(name, "message", cancellationToken)) return 2;
-        if (CancellationAwareString.EqualsOrdinalIgnoreCase(name, "title", cancellationToken)) return 4;
-        if (CancellationAwareString.EqualsOrdinalIgnoreCase(name, "created_at", cancellationToken)) return 8;
+        if (CancellationAwareString.EqualsOrdinal(name, "notification_id", cancellationToken)) return 1;
+        if (CancellationAwareString.EqualsOrdinal(name, "message", cancellationToken)) return 2;
+        if (CancellationAwareString.EqualsOrdinal(name, "title", cancellationToken)) return 4;
+        if (CancellationAwareString.EqualsOrdinal(name, "created_at", cancellationToken)) return 8;
         return 0;
     }
 

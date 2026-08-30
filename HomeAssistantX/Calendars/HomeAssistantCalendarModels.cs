@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
 
 namespace HomeAssistantX.Calendars;
@@ -134,21 +135,26 @@ public sealed class HomeAssistantCalendarEventReference
     public string? RecurrenceRange { get; set; }
 
     /// <summary>Validates recurrence targeting before an update or delete is dispatched.</summary>
-    public void Validate()
+    public void Validate() => Validate(default);
+
+    internal void Validate(CancellationToken cancellationToken)
     {
-        if (RecurrenceId is not null && string.IsNullOrWhiteSpace(RecurrenceId))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (RecurrenceId is not null && CancellationAwareString.IsNullOrWhiteSpace(RecurrenceId, cancellationToken))
             throw new ArgumentException("A supplied recurrence identifier cannot be empty.", nameof(RecurrenceId));
         if (RecurrenceRange is null) return;
-        if (string.IsNullOrWhiteSpace(RecurrenceId))
+        if (CancellationAwareString.IsNullOrWhiteSpace(RecurrenceId, cancellationToken))
             throw new ArgumentException("RecurrenceRange requires RecurrenceId.", nameof(RecurrenceRange));
-        if (!string.Equals(RecurrenceRange, "THISANDFUTURE", StringComparison.OrdinalIgnoreCase))
+        if (!CancellationAwareString.EqualsOrdinalIgnoreCase(RecurrenceRange, "THISANDFUTURE", cancellationToken))
             throw new ArgumentException("The supported recurrence range is THISANDFUTURE.", nameof(RecurrenceRange));
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
-    internal void AddTo(IDictionary<string, object?> payload)
+    internal void AddTo(IDictionary<string, object?> payload, CancellationToken cancellationToken)
     {
-        Validate();
+        Validate(cancellationToken);
         payload["uid"] = Uid;
+        cancellationToken.ThrowIfCancellationRequested();
         if (RecurrenceId is not null)
         {
             payload["recurrence_id"] = RecurrenceId;
@@ -158,6 +164,7 @@ public sealed class HomeAssistantCalendarEventReference
         {
             payload["recurrence_range"] = "THISANDFUTURE";
         }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 }
 

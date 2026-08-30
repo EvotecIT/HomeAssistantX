@@ -182,7 +182,39 @@ public sealed class ProtocolResponseContractTests
             HomeAssistantJson.SnapshotResponseAsync(
                 document.RootElement,
                 "The response could not be snapshotted.",
-                cancellation.Token));
+            cancellation.Token));
+    }
+
+    [Fact]
+    public async Task JsonStringDecodingCanBeCanceledWhileTheDecoderIsRunning()
+    {
+        using var document = JsonDocument.Parse("\"Current\"");
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var finished = new ManualResetEventSlim();
+        using var cancellation = new CancellationTokenSource();
+        var decoding = HomeAssistantJson.GetStringAsync(
+            document.RootElement,
+            cancellation.Token,
+            element =>
+            {
+                try
+                {
+                    started.Set();
+                    release.Wait();
+                    return element.GetString();
+                }
+                finally
+                {
+                    finished.Set();
+                }
+            });
+
+        Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => decoding);
+        release.Set();
+        Assert.True(finished.Wait(TimeSpan.FromSeconds(2)));
     }
 
     [Fact]

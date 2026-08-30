@@ -68,6 +68,38 @@ internal static class HomeAssistantJson
         return document;
     }
 
+    /// <summary>Decodes a JSON string without making cancellation wait for synchronous unescaping.</summary>
+    internal static async Task<string?> GetStringAsync(
+        JsonElement value,
+        CancellationToken cancellationToken,
+        Func<JsonElement, string?>? decoder = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.String)
+            throw new InvalidOperationException("A JSON string value is required.");
+
+        decoder ??= static element => element.GetString();
+        if (!cancellationToken.CanBeCanceled)
+            return decoder(value);
+
+        var decodeTask = Task.Run(() => decoder(value), CancellationToken.None);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        if (await Task.WhenAny(decodeTask, canceled.Task).ConfigureAwait(false) != decodeTask)
+        {
+            _ = decodeTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var result = await decodeTask.ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
+
     /// <summary>Snapshots a response DOM with cancellation checks throughout traversal.</summary>
     internal static async Task<JsonElement> SnapshotResponseAsync(
         JsonElement value,

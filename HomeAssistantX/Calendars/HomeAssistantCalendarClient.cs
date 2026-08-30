@@ -98,7 +98,7 @@ public sealed class HomeAssistantCalendarClient
             ["entity_id"] = normalizedEntityId,
             ["event"] = eventInput.ToPayload()
         };
-        eventReference.AddTo(payload);
+        eventReference.AddTo(payload, cancellationToken);
         await _webSocket.RequestAsync("calendar/event/update", payload, cancellationToken).ConfigureAwait(false);
     }
 
@@ -114,7 +114,7 @@ public sealed class HomeAssistantCalendarClient
         }
 
         var payload = new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId };
-        eventReference.AddTo(payload);
+        eventReference.AddTo(payload, cancellationToken);
         await _webSocket.RequestAsync("calendar/event/delete", payload, cancellationToken).ConfigureAwait(false);
     }
 

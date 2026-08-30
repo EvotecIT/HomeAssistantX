@@ -119,13 +119,33 @@ public sealed class LivePlatformDataContractTests
 
     [Theory]
     [InlineData("[{\"notification_id\":\"notice-1\",\"notification_id\":\"notice-1\",\"message\":\"Door open\"}]")]
-    [InlineData("[{\"notification_id\":\"notice-1\",\"Notification_Id\":\"notice-1\",\"message\":\"Door open\"}]")]
     public async Task PersistentNotificationReadsRejectDuplicateRecognizedFields(string response)
     {
         using var server = new TestHomeAssistantServer { PersistentNotificationResponseJson = response };
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Notifications.GetPersistentAsync());
+    }
+
+    [Fact]
+    public async Task PersistentNotificationSubscriptionPreservesCaseDistinctExtensionFields()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            PersistentNotificationSubscriptionEventJson =
+                "{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"Message\":\"provider value\"}}}"
+        };
+        using var client = TestClientFactory.Create(server);
+        var received = new TaskCompletionSource<HomeAssistantPersistentNotificationUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.Notifications.SubscribePersistentAsync((update, _) =>
+        {
+            received.TrySetResult(update);
+            return Task.CompletedTask;
+        });
+
+        var update = await received.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal("Door open", update.Notifications["notice-1"].Message);
+        Assert.Equal("provider value", update.Notifications["notice-1"].AdditionalData["Message"].GetString());
     }
 
     [Fact]
@@ -451,6 +471,20 @@ public sealed class LivePlatformDataContractTests
         Assert.Throws<ArgumentException>(() => new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "THIS" }.Validate());
         var recurrence = new HomeAssistantCalendarEventReference("event-1") { RecurrenceId = "20260827", RecurrenceRange = "thisandfuture" };
         recurrence.Validate();
+    }
+
+    [Fact]
+    public void CalendarReferenceValidationHonorsPreCanceledTokens()
+    {
+        var reference = new HomeAssistantCalendarEventReference("event-1")
+        {
+            RecurrenceId = new string('x', 1_000_000),
+            RecurrenceRange = "THISANDFUTURE"
+        };
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() => reference.Validate(cancellation.Token));
     }
 
     [Fact]
