@@ -29,8 +29,12 @@ public sealed class RemoveHomeAssistantCalendarEventCommand : HomeAssistantCmdle
 
     protected override async Task ProcessRecordAsync()
     {
-        if (!HomeAssistantEntityId.TryNormalize(EntityId, out var entityId)
-            || !entityId.StartsWith("calendar.", StringComparison.Ordinal))
+        CancelToken.ThrowIfCancellationRequested();
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(
+                EntityId,
+                "calendar",
+                CancelToken,
+                out var entityId))
         {
             throw new ArgumentException("A calendar entity identifier is required.", nameof(EntityId));
         }
@@ -40,7 +44,7 @@ public sealed class RemoveHomeAssistantCalendarEventCommand : HomeAssistantCmdle
             RecurrenceId = RecurrenceId,
             RecurrenceRange = RecurrenceRange
         };
-        reference.Validate();
+        reference.Validate(CancelToken);
         if (ShouldProcess(entityId + "/" + Uid, "Delete Home Assistant calendar event"))
         {
             await Client.Calendars.DeleteEventAsync(entityId, reference, CancelToken).ConfigureAwait(false);

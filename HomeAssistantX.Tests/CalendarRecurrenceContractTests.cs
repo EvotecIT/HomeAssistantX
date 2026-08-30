@@ -67,6 +67,19 @@ public sealed class CalendarRecurrenceContractTests
     }
 
     [Fact]
+    public void TimedCalendarInputAcceptsLeapSecondRecurrenceValues()
+    {
+        var input = HomeAssistantCalendarEventInput.Timed(
+            new DateTimeOffset(2026, 8, 27, 10, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 8, 27, 11, 0, 0, TimeSpan.Zero),
+            "Leap second");
+
+        input.RecurrenceRule = "FREQ=DAILY;BYSECOND=60";
+
+        Assert.Equal("FREQ=DAILY;BYSECOND=60", input.RecurrenceRule);
+    }
+
+    [Fact]
     public void CalendarUntilMustMatchTheEventStartValueType()
     {
         var timed = HomeAssistantCalendarEventInput.Timed(

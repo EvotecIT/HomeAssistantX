@@ -77,8 +77,12 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        if (!HomeAssistantEntityId.TryNormalize(EntityId, out var entityId)
-            || !entityId.StartsWith("calendar.", StringComparison.Ordinal))
+        CancelToken.ThrowIfCancellationRequested();
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(
+                EntityId,
+                "calendar",
+                CancelToken,
+                out var entityId))
         {
             throw new ArgumentException("A calendar entity identifier is required.", nameof(EntityId));
         }
@@ -100,7 +104,7 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
                 RecurrenceId = RecurrenceId,
                 RecurrenceRange = RecurrenceRange
             };
-            reference.Validate();
+            reference.Validate(CancelToken);
         }
 
         var action = update ? "Update Home Assistant calendar event" : "Create Home Assistant calendar event";

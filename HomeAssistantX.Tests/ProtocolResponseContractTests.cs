@@ -282,18 +282,20 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
-    public async Task CalendarKnownStringProjectionStopsAfterCancellation()
+    public async Task CalendarKnownStringProjectionPrioritizesAPreCanceledToken()
     {
         var json = JsonSerializer.Serialize(new string('x', 16_000_000));
         var payload = System.Text.Encoding.UTF8.GetBytes(json);
         using var cancellation = new CancellationTokenSource();
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim(false);
         var operation = Task.Factory.StartNew(
             () =>
             {
                 var reader = new Utf8JsonReader(payload);
                 Assert.True(reader.Read());
                 started.TrySetResult(true);
+                release.Wait();
                 return HomeAssistantCancellationJsonValueReader.ReadString(ref reader, cancellation.Token);
             },
             CancellationToken.None,
@@ -302,6 +304,7 @@ public sealed class ProtocolResponseContractTests
 
         await started.Task;
         cancellation.Cancel();
+        release.Set();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
     }
