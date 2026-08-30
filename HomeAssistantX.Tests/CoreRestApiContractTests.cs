@@ -352,6 +352,21 @@ public sealed class CoreRestApiContractTests
         Assert.InRange(entries.ReadCount, 1, 2);
     }
 
+    [Fact]
+    public async Task LogbookRejectsEntriesAtTheExclusiveEndBoundary()
+    {
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+        var end = start.AddHours(1);
+        using var server = new TestHomeAssistantServer
+        {
+            LogbookResponseJson = "[{\"when\":\"2026-08-24T01:00:00+00:00\",\"entity_id\":\"sensor.energy\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery { StartTime = start, EndTime = end }));
+    }
+
     private sealed class CancellingLogbookEntries : IEnumerable<HomeAssistantLogbookEntry?>
     {
         private readonly CancellationTokenSource _cancellation;

@@ -122,7 +122,7 @@ public sealed partial class HomeAssistantRestClient
             }
 
             if (startTime.HasValue && entry.When.Value < startTime.Value
-                || endTime.HasValue && entry.When.Value > endTime.Value)
+                || endTime.HasValue && entry.When.Value >= endTime.Value)
             {
                 throw new HomeAssistantProtocolException(
                     "The Home Assistant logbook response contained an entry outside the requested time range.");
