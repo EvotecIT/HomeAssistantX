@@ -94,7 +94,7 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
             : HomeAssistantCalendarEventInput.Timed(StartTime, EndTime, Summary);
         input.Description = Description;
         input.Location = Location;
-        input.RecurrenceRule = RecurrenceRule;
+        input.SetRecurrenceRule(RecurrenceRule, CancelToken);
 
         HomeAssistantCalendarEventReference? reference = null;
         if (update)

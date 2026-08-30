@@ -102,4 +102,20 @@ public sealed class CalendarRecurrenceContractTests
         Assert.Throws<ArgumentException>(() =>
             allDay.RecurrenceRule = "FREQ=WEEKLY;UNTIL=20261231T235959Z");
     }
+
+    [Fact]
+    public void CalendarRecurrenceValidationPrioritizesAPreCanceledToken()
+    {
+        var input = HomeAssistantCalendarEventInput.AllDay(
+            "2026-08-27",
+            "2026-08-28",
+            "Canceled event");
+        var recurrence = "FREQ=WEEKLY;BYDAY=" + string.Join(",", Enumerable.Repeat("MO", 100_000));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            input.SetRecurrenceRule(recurrence, cancellation.Token));
+        Assert.Null(input.RecurrenceRule);
+    }
 }

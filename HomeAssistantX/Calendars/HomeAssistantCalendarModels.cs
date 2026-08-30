@@ -29,18 +29,22 @@ public sealed class HomeAssistantCalendarEventInput
     public string? RecurrenceRule
     {
         get => _recurrenceRule;
-        set
-        {
-            if (value is not null)
-            {
-                ValidateRecurrenceRule(value, IsAllDay);
-            }
-
-            _recurrenceRule = value;
-        }
+        set => SetRecurrenceRule(value, default);
     }
 
     private string? _recurrenceRule;
+
+    internal void SetRecurrenceRule(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is not null)
+        {
+            ValidateRecurrenceRule(value, IsAllDay, cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        _recurrenceRule = value;
+    }
 
     public bool IsAllDay { get; private set; }
 
@@ -114,9 +118,12 @@ public sealed class HomeAssistantCalendarEventInput
         }
     }
 
-    private static void ValidateRecurrenceRule(string value, bool isAllDay)
+    private static void ValidateRecurrenceRule(
+        string value,
+        bool isAllDay,
+        CancellationToken cancellationToken)
     {
-        HomeAssistantRecurrenceRuleValidator.Validate(value, isAllDay, nameof(value));
+        HomeAssistantRecurrenceRuleValidator.Validate(value, isAllDay, nameof(value), cancellationToken);
     }
 }
 
