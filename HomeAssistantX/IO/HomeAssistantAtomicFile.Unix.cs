@@ -7,7 +7,9 @@ namespace HomeAssistantX.IO;
 
 internal static partial class HomeAssistantAtomicFile
 {
-    private const int PermissionBits = 0x0FFF;
+    // Preserve ordinary permissions and the sticky bit, but never restore
+    // setuid/setgid onto an inode containing newly exported bytes.
+    private const int SafeReplacementModeBits = 0x03FF;
     private const int UnixFileTypeBits = 0xF000;
     private const int UnixSymbolicLink = 0xA000;
     private const string LinuxAccessAclAttribute = "system.posix_acl_access";
@@ -241,7 +243,7 @@ internal static partial class HomeAssistantAtomicFile
             return new UnixFileMetadata(
                 ReadNativeUnsigned(buffer, offsets.Device, offsets.DeviceIs32Bit),
                 ReadNativeUnsigned(buffer, offsets.Inode, offsets.InodeIs32Bit),
-                unchecked((uint)(rawMode & PermissionBits)),
+                unchecked((uint)(rawMode & SafeReplacementModeBits)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.UserId)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)),
                 isSymbolicLink,

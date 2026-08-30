@@ -805,6 +805,28 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task CameraCapabilityAndPreferencePropertyLookupHonorCancellation()
+    {
+        var filler = string.Join(",", Enumerable.Range(0, 20_000).Select(index => "\"provider_" + index + "\":0"));
+        using var server = new TestHomeAssistantServer
+        {
+            CameraCapabilitiesResponseJson = "{" + filler + ",\"frontend_stream_types\":[\"hls\"]}",
+            CameraPreferencesResponseJson = "{" + filler + ",\"preload_stream\":true,\"orientation\":1}"
+        };
+        using var client = TestClientFactory.Create(server);
+        using var capabilityCancellation = new CancellationTokenSource();
+        using var preferenceCancellation = new CancellationTokenSource();
+
+        var capabilities = client.Cameras.GetCapabilitiesAsync("camera.front", capabilityCancellation.Token);
+        capabilityCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await capabilities);
+
+        var preferences = client.Cameras.GetPreferencesAsync("camera.front", preferenceCancellation.Token);
+        preferenceCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await preferences);
+    }
+
+    [Fact]
     public async Task MediaClassFiltersPreserveOrderWhileDeduplicatingCaseInsensitively()
     {
         using var server = new TestHomeAssistantServer();
@@ -1177,6 +1199,35 @@ public sealed class CamerasDashboardsAutomationContractTests
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
             HomeAssistantAtomicFile.PreserveDestinationPermissions(destination, temporary, useManagedApis: false);
             Assert.Equal(File.GetUnixFileMode(destination), File.GetUnixFileMode(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AtomicExportsClearUnixSetIdBitsFromReplacementFiles()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-setid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            var requested = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                | UnixFileMode.GroupRead | UnixFileMode.SetUser | UnixFileMode.SetGroup;
+            File.SetUnixFileMode(destination, requested);
+
+            HomeAssistantAtomicFile.PreserveDestinationPermissions(destination, temporary, useManagedApis: false);
+
+            var actual = File.GetUnixFileMode(temporary);
+            Assert.Equal(
+                requested & ~(UnixFileMode.SetUser | UnixFileMode.SetGroup),
+                actual);
         }
         finally
         {

@@ -71,9 +71,11 @@ public sealed class HomeAssistantCameraClient
     {
         var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var value = await _webSocket.RequestAsync("camera/capabilities", new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId }, cancellationToken).ConfigureAwait(false);
-        RequireNoDuplicateProperties(value, "The camera capabilities contained duplicate JSON properties.", cancellationToken);
-        if (value.ValueKind != JsonValueKind.Object
-            || !value.TryGetProperty("frontend_stream_types", out var frontendStreamTypes)
+        var properties = ReadUniqueObjectProperties(
+            value,
+            "The camera capabilities contained duplicate JSON properties.",
+            cancellationToken);
+        if (!TryGetProperty(properties, "frontend_stream_types", cancellationToken, out var frontendStreamTypes)
             || frontendStreamTypes.ValueKind != JsonValueKind.Array)
         {
             throw new HomeAssistantProtocolException("The camera capabilities omitted their frontend stream-type collection.");
@@ -140,11 +142,10 @@ public sealed class HomeAssistantCameraClient
         string failureMessage,
         CancellationToken cancellationToken)
     {
-        RequireNoDuplicateProperties(value, failureMessage, cancellationToken);
-        if (value.ValueKind != JsonValueKind.Object
-            || !value.TryGetProperty("preload_stream", out var preloadStream)
+        var properties = ReadUniqueObjectProperties(value, failureMessage, cancellationToken);
+        if (!TryGetProperty(properties, "preload_stream", cancellationToken, out var preloadStream)
             || preloadStream.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
-            || !value.TryGetProperty("orientation", out var orientation)
+            || !TryGetProperty(properties, "orientation", cancellationToken, out var orientation)
             || orientation.ValueKind != JsonValueKind.Number
             || !orientation.TryGetInt32(out _))
         {
@@ -167,6 +168,46 @@ public sealed class HomeAssistantCameraClient
     {
         if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
             throw new HomeAssistantProtocolException(failureMessage);
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> ReadUniqueObjectProperties(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.Object)
+            throw new HomeAssistantProtocolException(failureMessage);
+
+        var result = new Dictionary<string, JsonElement>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (result.ContainsKey(property.Name))
+                throw new HomeAssistantProtocolException(failureMessage);
+            result.Add(property.Name, property.Value);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
+
+    private static bool TryGetProperty(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        string name,
+        CancellationToken cancellationToken,
+        out JsonElement value)
+    {
+        foreach (var property in properties)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!CancellationAwareString.EqualsOrdinal(property.Key, name, cancellationToken)) continue;
+            value = property.Value;
+            return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        value = default;
+        return false;
     }
 
     internal static void ValidateStreamTypes(
