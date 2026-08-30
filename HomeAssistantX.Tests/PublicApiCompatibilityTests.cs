@@ -593,6 +593,31 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void EventFormatterPreservesExternallyAccessibleRaiseAccessors()
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("HomeAssistantX.EventRaiseFixture"),
+            AssemblyBuilderAccess.Run);
+        var module = assembly.DefineDynamicModule("main");
+        var builder = module.DefineType("RaiseOnlyEvent", TypeAttributes.Public | TypeAttributes.Class);
+        var eventBuilder = builder.DefineEvent("Raised", EventAttributes.None, typeof(EventHandler));
+        var raiseBuilder = builder.DefineMethod(
+            "raise_Raised",
+            MethodAttributes.Public | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
+            typeof(void),
+            new[] { typeof(object), typeof(EventArgs) });
+        raiseBuilder.GetILGenerator().Emit(OpCodes.Ret);
+        eventBuilder.SetRaiseMethod(raiseBuilder);
+        var eventInfo = builder.CreateType()!.GetEvent(
+            "Raised",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+
+        Assert.True(IsExternallyAccessibleEvent(eventInfo));
+        Assert.Equal("raise;", FormatEventAccessors(eventInfo));
+        Assert.False(ShouldIncludeMethod(eventInfo.RaiseMethod!));
+    }
+
+    [Fact]
     public void MemberFormatterPreservesProtectedInheritanceContracts()
     {
         var type = typeof(ProtectedSurfaceFixture);
@@ -972,8 +997,8 @@ public sealed class PublicApiCompatibilityTests
                          .Where(IsExternallyAccessibleEvent)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
-                var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(eventInfo) + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod) + DispIdContract(eventInfo) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name + " {" + FormatEventAccessors(eventInfo) + "}");
+                var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)!;
+                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(eventInfo) + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + DispIdContract(eventInfo) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name + " {" + FormatEventAccessors(eventInfo) + "}");
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -2722,11 +2747,12 @@ public sealed class PublicApiCompatibilityTests
 
     private static string FormatEventAccessors(EventInfo eventInfo)
     {
-        var representativeAccessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod)!;
+        var representativeAccessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)!;
         var eventAccess = MemberAccess(representativeAccessor);
         var eventScope = MemberScope(representativeAccessor);
         return FormatAccessor(eventInfo.AddMethod, eventAccess, eventScope, "add;")
-            + FormatAccessor(eventInfo.RemoveMethod, eventAccess, eventScope, "remove;");
+            + FormatAccessor(eventInfo.RemoveMethod, eventAccess, eventScope, "remove;")
+            + FormatAccessor(eventInfo.RaiseMethod, eventAccess, eventScope, "raise;");
     }
 
     private static string RequiredMember(MemberInfo member)
@@ -2782,13 +2808,15 @@ public sealed class PublicApiCompatibilityTests
         => IsExternallyAccessibleMethod(property.GetMethod) || IsExternallyAccessibleMethod(property.SetMethod);
 
     private static bool IsExternallyAccessibleEvent(EventInfo eventInfo)
-        => IsExternallyAccessibleMethod(eventInfo.AddMethod) || IsExternallyAccessibleMethod(eventInfo.RemoveMethod);
+        => IsExternallyAccessibleMethod(eventInfo.AddMethod)
+            || IsExternallyAccessibleMethod(eventInfo.RemoveMethod)
+            || IsExternallyAccessibleMethod(eventInfo.RaiseMethod);
 
-    private static MethodInfo? MostAccessible(MethodInfo? first, MethodInfo? second)
+    private static MethodInfo? MostAccessible(params MethodInfo?[] methods)
     {
-        if (first is null) return second;
-        if (second is null) return first;
-        return AccessRank(first) >= AccessRank(second) ? first : second;
+        return methods.Where(method => method is not null)
+            .OrderByDescending(method => AccessRank(method!))
+            .FirstOrDefault();
     }
 
     private static int AccessRank(MethodBase method)

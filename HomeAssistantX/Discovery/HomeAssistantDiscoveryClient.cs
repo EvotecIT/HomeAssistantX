@@ -60,7 +60,7 @@ public sealed class HomeAssistantDiscoveryClient
             // responses, so never merge identities across isolated interfaces here.
             return results.SelectMany(result => result.Instances)
                 .OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(value => value.ServiceInstanceName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(value => value.ServiceInstanceName, DnsNameComparer.Instance)
                 .ThenBy(value => value.ServiceInstanceName, StringComparer.Ordinal)
                 .ThenBy(value => value.Addresses.FirstOrDefault()?.ToString(), StringComparer.Ordinal)
                 .ToArray();
@@ -86,11 +86,11 @@ public sealed class HomeAssistantDiscoveryClient
         return instances
             .GroupBy(
                 value => value.ServiceInstanceName + "\0" + (value.HostName ?? string.Empty) + "\0" + (value.Port?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty),
-                StringComparer.OrdinalIgnoreCase)
+                DnsNameComparer.Instance)
             .Select(group =>
             {
                 var ordered = group
-                    .OrderBy(value => value.ServiceInstanceName, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value.ServiceInstanceName, DnsNameComparer.Instance)
                     .ThenBy(value => value.ServiceInstanceName, StringComparer.Ordinal)
                     .ToArray();
                 var first = ordered[0];
@@ -193,6 +193,77 @@ public sealed class HomeAssistantDiscoveryClient
     }
 }
 
+internal sealed class DnsNameComparer : IEqualityComparer<string>, IComparer<string>
+{
+    internal static readonly DnsNameComparer Instance = new();
+
+    private DnsNameComparer()
+    {
+    }
+
+    public bool Equals(string? x, string? y) => Compare(x, y) == 0;
+
+    public int GetHashCode(string value)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        unchecked
+        {
+            var hash = 17;
+            for (var index = 0; index < value.Length; index++)
+            {
+                hash = hash * 31 + FoldAscii(value[index]);
+            }
+            return hash;
+        }
+    }
+
+    public int Compare(string? x, string? y)
+    {
+        if (ReferenceEquals(x, y)) return 0;
+        if (x is null) return -1;
+        if (y is null) return 1;
+        var length = Math.Min(x.Length, y.Length);
+        for (var index = 0; index < length; index++)
+        {
+            var left = FoldAscii(x[index]);
+            var right = FoldAscii(y[index]);
+            if (left != right) return left < right ? -1 : 1;
+        }
+        return x.Length.CompareTo(y.Length);
+    }
+
+    internal static bool EndsWith(string value, string suffix)
+    {
+        if (value.Length < suffix.Length) return false;
+        var offset = value.Length - suffix.Length;
+        for (var index = 0; index < suffix.Length; index++)
+        {
+            if (FoldAscii(value[offset + index]) != FoldAscii(suffix[index])) return false;
+        }
+        return true;
+    }
+
+    internal static string NormalizeKey(string value)
+    {
+        var firstLower = -1;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (value[index] is >= 'a' and <= 'z')
+            {
+                firstLower = index;
+                break;
+            }
+        }
+        if (firstLower < 0) return value;
+        var chars = value.ToCharArray();
+        for (var index = firstLower; index < chars.Length; index++) chars[index] = FoldAscii(chars[index]);
+        return new string(chars);
+    }
+
+    private static char FoldAscii(char value)
+        => value is >= 'a' and <= 'z' ? (char)(value - ('a' - 'A')) : value;
+}
+
 internal sealed class DnsDiscoveryLimits
 {
     internal static readonly DnsDiscoveryLimits Default = new(64, 128, 128, 128, 256);
@@ -241,11 +312,11 @@ internal sealed class DnsDiscoveryAggregate
     private readonly Func<int, int> _weightedSelector;
     private static readonly Random WeightedRandom = new();
     private readonly object _gate = new();
-    private readonly Dictionary<string, CachedPtr> _instances = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, List<CachedService>> _services = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, List<CachedText>> _text = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Dictionary<IPAddress, CachedAddress>> _addresses = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, TimeSpan> _unavailableInstances = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CachedPtr> _instances = new(DnsNameComparer.Instance);
+    private readonly Dictionary<string, List<CachedService>> _services = new(DnsNameComparer.Instance);
+    private readonly Dictionary<string, List<CachedText>> _text = new(DnsNameComparer.Instance);
+    private readonly Dictionary<string, Dictionary<IPAddress, CachedAddress>> _addresses = new(DnsNameComparer.Instance);
+    private readonly Dictionary<string, TimeSpan> _unavailableInstances = new(DnsNameComparer.Instance);
     private int _datagrams;
 
     internal DnsDiscoveryAggregate(
@@ -335,7 +406,7 @@ internal sealed class DnsDiscoveryAggregate
             var now = _clock();
             Prune(now);
             if (!_services.Values.SelectMany(value => value).Any(value =>
-                    string.Equals(value.Host, host, StringComparison.OrdinalIgnoreCase)))
+                    DnsNameComparer.Instance.Equals(value.Host, host)))
             {
                 return;
             }
@@ -370,12 +441,12 @@ internal sealed class DnsDiscoveryAggregate
             var unavailableServiceUpdates = new List<DnsDiscoveryUpdate>();
             var textUpdates = new List<DnsDiscoveryUpdate>();
             var addressUpdates = new List<DnsDiscoveryUpdate>();
-            var goodbyeInstances = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var announcedServices = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-            var announcedText = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-            var announcedIpv4 = new Dictionary<string, HashSet<IPAddress>>(StringComparer.OrdinalIgnoreCase);
-            var announcedIpv6 = new Dictionary<string, HashSet<IPAddress>>(StringComparer.OrdinalIgnoreCase);
-            var unrelatedServiceHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var goodbyeInstances = new HashSet<string>(DnsNameComparer.Instance);
+            var announcedServices = new Dictionary<string, HashSet<string>>(DnsNameComparer.Instance);
+            var announcedText = new Dictionary<string, HashSet<string>>(DnsNameComparer.Instance);
+            var announcedIpv4 = new Dictionary<string, HashSet<IPAddress>>(DnsNameComparer.Instance);
+            var announcedIpv6 = new Dictionary<string, HashSet<IPAddress>>(DnsNameComparer.Instance);
+            var unrelatedServiceHosts = new HashSet<string>(DnsNameComparer.Instance);
             foreach (var update in updates)
             {
                 switch (update.Kind)
@@ -414,7 +485,7 @@ internal sealed class DnsDiscoveryAggregate
             foreach (var update in unavailableServiceUpdates)
                 ApplyUnavailableService(update, now);
 
-            var acceptedInstances = new HashSet<string>(_instances.Keys, StringComparer.OrdinalIgnoreCase);
+            var acceptedInstances = new HashSet<string>(_instances.Keys, DnsNameComparer.Instance);
             foreach (var update in ptrUpdates.Where(value => !_unavailableInstances.ContainsKey(value.Target!)))
             {
                 acceptedInstances.Add(update.Target!);
@@ -427,10 +498,10 @@ internal sealed class DnsDiscoveryAggregate
                 .ToArray();
             var rejectedServiceHosts = new HashSet<string>(
                 serviceUpdates.Except(acceptedServiceUpdates).Select(value => value.Host!),
-                StringComparer.OrdinalIgnoreCase);
+                DnsNameComparer.Instance);
             var homeAssistantServiceHosts = new HashSet<string>(
                 serviceUpdates.Select(value => value.Host!),
-                StringComparer.OrdinalIgnoreCase);
+                DnsNameComparer.Instance);
             foreach (var update in acceptedServiceUpdates)
                 ApplyService(update, now, Announcement(announcedServices, update), acceptedInstances.Contains(update.Name));
             foreach (var update in textUpdates.Where(value => !goodbyeInstances.Contains(value.Name) || acceptedInstances.Contains(value.Name)))
@@ -438,10 +509,10 @@ internal sealed class DnsDiscoveryAggregate
 
             var acceptedHosts = new HashSet<string>(
                 _services.SelectMany(value => value.Value).Select(value => value.Host),
-                StringComparer.OrdinalIgnoreCase);
+                DnsNameComparer.Instance);
             var verifiedHosts = new HashSet<string>(
                 _services.Values.SelectMany(value => value).Where(value => value.IsVerified).Select(value => value.Host),
-                StringComparer.OrdinalIgnoreCase);
+                DnsNameComparer.Instance);
             foreach (var update in addressUpdates.Where(value =>
                          acceptedHosts.Contains(value.Name)
                          || !homeAssistantServiceHosts.Contains(value.Name)
@@ -485,7 +556,7 @@ internal sealed class DnsDiscoveryAggregate
                     Properties = new Dictionary<string, string?>(properties, StringComparer.OrdinalIgnoreCase)
                 };
             }).OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(value => value.ServiceInstanceName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(value => value.ServiceInstanceName, DnsNameComparer.Instance)
                 .ThenBy(value => value.ServiceInstanceName, StringComparer.Ordinal)
                 .ToArray();
         }
@@ -659,7 +730,7 @@ internal sealed class DnsDiscoveryAggregate
         var pendingOwner = _services
             .Where(pair => pair.Value.Count > 0 && pair.Value.All(record => !record.IsVerified))
             .OrderBy(pair => pair.Value.Min(record => record.ReceivedAt))
-            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(pair => pair.Key, DnsNameComparer.Instance)
             .ThenBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => pair.Key)
             .FirstOrDefault();
@@ -676,7 +747,7 @@ internal sealed class DnsDiscoveryAggregate
         var pendingOwner = _text
             .Where(pair => pair.Value.Count > 0 && pair.Value.All(record => !record.IsVerified))
             .OrderBy(pair => pair.Value.Min(record => record.ReceivedAt))
-            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(pair => pair.Key, DnsNameComparer.Instance)
             .ThenBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => pair.Key)
             .FirstOrDefault();
@@ -691,11 +762,11 @@ internal sealed class DnsDiscoveryAggregate
         if (!isVerifiedHost) return false;
         var verifiedHosts = new HashSet<string>(
             _services.Values.SelectMany(value => value).Where(value => value.IsVerified).Select(value => value.Host),
-            StringComparer.OrdinalIgnoreCase);
+            DnsNameComparer.Instance);
         var pendingHost = _addresses
             .Where(pair => pair.Value.Count > 0 && !verifiedHosts.Contains(pair.Key))
             .OrderBy(pair => pair.Value.Min(record => record.Value.ReceivedAt))
-            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(pair => pair.Key, DnsNameComparer.Instance)
             .ThenBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => pair.Key)
             .FirstOrDefault();
@@ -708,7 +779,7 @@ internal sealed class DnsDiscoveryAggregate
     {
         var retainedHosts = new HashSet<string>(
             _services.Values.SelectMany(value => value).Select(value => value.Host),
-            StringComparer.OrdinalIgnoreCase);
+            DnsNameComparer.Instance);
         foreach (var owner in _addresses.Keys.Where(owner => !retainedHosts.Contains(owner)).ToArray())
         {
             var values = _addresses[owner];
@@ -768,7 +839,7 @@ internal sealed class DnsDiscoveryAggregate
 
     private bool IsVerifiedHost(string host)
         => _services.Values.SelectMany(value => value).Any(value =>
-            value.IsVerified && string.Equals(value.Host, host, StringComparison.OrdinalIgnoreCase));
+            value.IsVerified && DnsNameComparer.Instance.Equals(value.Host, host));
 
     private void PromoteAddresses(string host)
     {
@@ -787,7 +858,7 @@ internal sealed class DnsDiscoveryAggregate
         foreach (var key in _instances.Where(value => value.Value.ExpiresAt <= now).Select(value => value.Key).ToArray()) _instances.Remove(key);
         foreach (var owner in _services.Keys.ToArray()) { _services[owner].RemoveAll(value => value.ExpiresAt <= now || value.IsVerified && !_instances.ContainsKey(owner)); if (_services[owner].Count == 0) _services.Remove(owner); }
         foreach (var owner in _text.Keys.ToArray()) { _text[owner].RemoveAll(value => value.ExpiresAt <= now || value.IsVerified && !_instances.ContainsKey(owner)); if (_text[owner].Count == 0) _text.Remove(owner); }
-        var retainedHosts = new HashSet<string>(_services.Values.SelectMany(value => value).Select(value => value.Host), StringComparer.OrdinalIgnoreCase);
+        var retainedHosts = new HashSet<string>(_services.Values.SelectMany(value => value).Select(value => value.Host), DnsNameComparer.Instance);
         foreach (var owner in _addresses.Keys.ToArray())
         {
             var values = _addresses[owner];
@@ -800,13 +871,13 @@ internal sealed class DnsDiscoveryAggregate
     }
 
     private static bool IsHomeAssistantPtr(DnsDiscoveryUpdate update)
-        => string.Equals(update.Name, ServiceName, StringComparison.OrdinalIgnoreCase)
+        => DnsNameComparer.Instance.Equals(update.Name, ServiceName)
             && update.Target is not null
             && IsHomeAssistantInstanceName(update.Target);
     private static bool IsHomeAssistantInstanceName(string value)
         => value.Length > ServiceName.Length + 1
-            && value.EndsWith("." + ServiceName, StringComparison.OrdinalIgnoreCase);
-    private static string ServiceKey(string host, int port) => host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            && DnsNameComparer.EndsWith(value, "." + ServiceName);
+    private static string ServiceKey(string host, int port) => DnsNameComparer.NormalizeKey(host) + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture);
     private static TimeSpan Expiry(TimeSpan now, uint ttl) => now + TimeSpan.FromSeconds(ttl == 0 ? 1 : ttl);
     private static TimeSpan Earlier(TimeSpan left, TimeSpan right) => left <= right ? left : right;
     private static TimeSpan MonotonicNow() => TimeSpan.FromSeconds((double)System.Diagnostics.Stopwatch.GetTimestamp() / System.Diagnostics.Stopwatch.Frequency);
@@ -890,7 +961,7 @@ internal sealed class DnsDiscoveryAggregate
     private static string FriendlyInstanceName(string instance)
     {
         var suffix = "." + ServiceName;
-        var value = instance.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ? instance.Substring(0, instance.Length - suffix.Length) : instance;
+        var value = DnsNameComparer.EndsWith(instance, suffix) ? instance.Substring(0, instance.Length - suffix.Length) : instance;
         return string.IsNullOrWhiteSpace(value) ? instance : value;
     }
 
@@ -985,7 +1056,7 @@ internal static class DnsDiscoveryPacket
                     {
                         var instance = ReadName(packet, ref dataOffset);
                         if (dataOffset != end) throw new InvalidDataException("Invalid PTR record length.");
-                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Ptr, Name = name, Target = instance, DataKey = instance.ToUpperInvariant(), Ttl = ttl, CacheFlush = cacheFlush });
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Ptr, Name = name, Target = instance, DataKey = DnsNameComparer.NormalizeKey(instance), Ttl = ttl, CacheFlush = cacheFlush });
                         break;
                     }
                     case 33:
@@ -996,7 +1067,7 @@ internal static class DnsDiscoveryPacket
                         var port = ReadUInt16(packet, ref dataOffset);
                         var host = ReadName(packet, ref dataOffset);
                         if (dataOffset != end) throw new InvalidDataException("Invalid SRV record length.");
-                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Srv, Name = name, Host = host, Port = port, Priority = priority, Weight = weight, NoService = host.Length == 0, DataKey = priority.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + weight.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + host.ToUpperInvariant() + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture), Ttl = ttl, CacheFlush = cacheFlush });
+                        updates.Add(new DnsDiscoveryUpdate { Kind = DnsDiscoveryRecordKind.Srv, Name = name, Host = host, Port = port, Priority = priority, Weight = weight, NoService = host.Length == 0, DataKey = priority.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + weight.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0" + DnsNameComparer.NormalizeKey(host) + "\0" + port.ToString(System.Globalization.CultureInfo.InvariantCulture), Ttl = ttl, CacheFlush = cacheFlush });
                         break;
                     }
                     case 16:

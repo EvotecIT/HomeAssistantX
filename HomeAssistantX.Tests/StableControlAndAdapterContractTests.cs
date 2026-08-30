@@ -1162,6 +1162,70 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdCorrelatesNamesWithAsciiOnlyCaseFolding()
+    {
+        var upperInstance = "Å._home-assistant._tcp.local";
+        var lowerInstance = "å._home-assistant._tcp.local";
+        var upperHost = "Å-host.local";
+        var lowerHost = "å-host.local";
+        var aggregate = new DnsDiscoveryAggregate(clock: () => TimeSpan.Zero);
+
+        aggregate.ApplyPacket(new[]
+        {
+            Ptr(upperInstance), Ptr(lowerInstance),
+            Service(upperInstance, upperHost, "upper-service"),
+            Service(lowerInstance, lowerHost, "lower-service"),
+            Text(upperInstance, "Upper", "upper-text"),
+            Text(lowerInstance, "Lower", "lower-text"),
+            Address(upperHost, "192.0.2.10", "upper-address"),
+            Address(lowerHost, "192.0.2.11", "lower-address")
+        });
+
+        var instances = aggregate.Build();
+        Assert.Equal(2, instances.Count);
+        var upper = Assert.Single(instances, value => value.ServiceInstanceName == upperInstance);
+        var lower = Assert.Single(instances, value => value.ServiceInstanceName == lowerInstance);
+        Assert.Equal(upperHost, upper.HostName);
+        Assert.Equal(lowerHost, lower.HostName);
+        Assert.Equal(IPAddress.Parse("192.0.2.10"), Assert.Single(upper.Addresses));
+        Assert.Equal(IPAddress.Parse("192.0.2.11"), Assert.Single(lower.Addresses));
+
+        static DnsDiscoveryUpdate Ptr(string target) => new()
+        {
+            Kind = DnsDiscoveryRecordKind.Ptr,
+            Name = "_HOME-ASSISTANT._TCP.LOCAL",
+            Target = target,
+            DataKey = DnsNameComparer.NormalizeKey(target),
+            Ttl = 120
+        };
+        static DnsDiscoveryUpdate Service(string name, string host, string key) => new()
+        {
+            Kind = DnsDiscoveryRecordKind.Srv,
+            Name = name,
+            Host = host,
+            Port = 8123,
+            DataKey = key,
+            Ttl = 120
+        };
+        static DnsDiscoveryUpdate Text(string name, string displayName, string key) => new()
+        {
+            Kind = DnsDiscoveryRecordKind.Txt,
+            Name = name,
+            Properties = new Dictionary<string, string?> { ["location_name"] = displayName },
+            DataKey = key,
+            Ttl = 120
+        };
+        static DnsDiscoveryUpdate Address(string name, string address, string key) => new()
+        {
+            Kind = DnsDiscoveryRecordKind.A,
+            Name = name,
+            Address = IPAddress.Parse(address),
+            DataKey = key,
+            Ttl = 120
+        };
+    }
+
+    [Fact]
     public void DnsSdVerifiedRecordsEvictPendingOwnersAtSharedQuotas()
     {
         var aggregate = new DnsDiscoveryAggregate(clock: () => TimeSpan.Zero);
