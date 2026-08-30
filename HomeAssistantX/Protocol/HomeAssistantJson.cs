@@ -104,11 +104,52 @@ internal static class HomeAssistantJson
         return result;
     }
 
-    /// <summary>Synchronously bridges cancellation-aware JSON string decoding for synchronous validation paths.</summary>
+    /// <summary>Decodes a JSON string inside an already cancellation-isolated validation operation.</summary>
     internal static string? GetString(
         JsonElement value,
         CancellationToken cancellationToken)
-        => GetStringAsync(value, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.String)
+            throw new InvalidOperationException("A JSON string value is required.");
+
+        var result = value.GetString();
+        ThrowIfStringTraversalCanceled(result, cancellationToken);
+        return result;
+    }
+
+    /// <summary>Runs one synchronous response-validation operation on a dedicated worker while keeping caller cancellation prompt.</summary>
+    internal static T RunCancellationIsolated<T>(
+        Func<T> operation,
+        CancellationToken cancellationToken)
+    {
+        if (operation is null) throw new ArgumentNullException(nameof(operation));
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!cancellationToken.CanBeCanceled)
+            return operation();
+
+        var operationTask = Task.Factory.StartNew(
+            operation,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        var completed = Task.WhenAny(operationTask, canceled.Task).ConfigureAwait(false).GetAwaiter().GetResult();
+        if (!ReferenceEquals(completed, operationTask))
+        {
+            _ = operationTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var result = operationTask.ConfigureAwait(false).GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
 
     /// <summary>Snapshots a response DOM with cancellation checks throughout traversal.</summary>
     internal static async Task<JsonElement> SnapshotResponseAsync(

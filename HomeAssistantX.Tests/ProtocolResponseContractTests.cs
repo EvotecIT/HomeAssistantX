@@ -224,6 +224,42 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
+    public void SynchronousResponseValidationUsesOneCancelableWorkerForTheWholeOperation()
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var finished = new ManualResetEventSlim();
+        using var cancellation = new CancellationTokenSource();
+        var validation = Task.Run(() => HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                try
+                {
+                    started.Set();
+                    release.Wait();
+                    return 42;
+                }
+                finally
+                {
+                    finished.Set();
+                }
+            },
+            cancellation.Token));
+
+        try
+        {
+            Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+            cancellation.Cancel();
+            Assert.ThrowsAny<OperationCanceledException>(() => validation.GetAwaiter().GetResult());
+        }
+        finally
+        {
+            release.Set();
+            Assert.True(finished.Wait(TimeSpan.FromSeconds(2)));
+        }
+    }
+
+    [Fact]
     public async Task CalendarEventExtensionProjectionStopsAfterCancellation()
     {
         var json = "[{\"summary\":\"Planning\",\"start\":{\"dateTime\":\"2026-08-27T18:00:00Z\"},"
