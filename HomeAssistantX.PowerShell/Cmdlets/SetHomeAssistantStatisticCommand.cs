@@ -98,11 +98,12 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 }
                 var unitClass = hasUnitClass ? requestedUnitClass : matchingMetadata.UnitClass;
                 var unitOfMeasurement = hasUnitOfMeasurement ? requestedUnitOfMeasurement : matchingMetadata.StatisticsUnitOfMeasurement;
-                if (string.Equals(unitClass, matchingMetadata.UnitClass, StringComparison.Ordinal)
-                    && string.Equals(unitOfMeasurement, matchingMetadata.StatisticsUnitOfMeasurement, StringComparison.Ordinal))
+                if (HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(unitClass, matchingMetadata.UnitClass, CancelToken)
+                    && HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(unitOfMeasurement, matchingMetadata.StatisticsUnitOfMeasurement, CancelToken))
                 {
                     throw new InvalidOperationException("The requested Recorder statistic metadata already matches the current values.");
                 }
+                CancelToken.ThrowIfCancellationRequested();
                 if (!ShouldProcess(ConnectionDisplayName, "Update Recorder statistics metadata for 1 identifier")) return;
                 await Client.Recorder.UpdateStatisticsMetadataAsync(statisticId, unitClass, unitOfMeasurement, CancelToken).ConfigureAwait(false);
                 return;
@@ -111,8 +112,9 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 RequireExclusive(NewUnit, ClearNewUnit, nameof(NewUnit), nameof(ClearNewUnit), CancelToken, required: true, allowEmptySentinel: true);
                 var oldUnit = ClearOldUnit ? null : HomeAssistantX.Protocol.CancellationAwareString.Trim(OldUnit!, CancelToken);
                 var newUnit = ClearNewUnit ? null : HomeAssistantX.Protocol.CancellationAwareString.Trim(NewUnit!, CancelToken);
-                if (string.Equals(oldUnit, newUnit, StringComparison.Ordinal))
+                if (HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(oldUnit, newUnit, CancelToken))
                     throw new ArgumentException("OldUnit and NewUnit must resolve to different values.");
+                CancelToken.ThrowIfCancellationRequested();
                 if (!ShouldProcess(ConnectionDisplayName, "Convert stored Recorder statistics for 1 identifier to a new unit")) return;
                 await Client.Recorder.ChangeStatisticsUnitAsync(statisticId, oldUnit, newUnit, CancelToken).ConfigureAwait(false);
                 return;

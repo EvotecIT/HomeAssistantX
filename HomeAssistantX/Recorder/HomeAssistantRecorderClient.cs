@@ -333,15 +333,15 @@ public sealed class HomeAssistantRecorderClient
                 || HomeAssistantJson.HasDuplicateProperties(item, cancellationToken)
                 || !item.TryGetProperty("statistic_id", out var statisticId)
                 || statisticId.ValueKind != JsonValueKind.String
-                || statisticId.GetString() is not string statisticIdValue
+                || HomeAssistantJson.GetString(statisticId, cancellationToken) is not string statisticIdValue
                 || CancellationAwareString.IsNullOrWhiteSpace(statisticIdValue, cancellationToken)
                 || !HomeAssistantStatisticIdentifier.TryNormalize(statisticIdValue, cancellationToken, out var normalizedStatisticId)
                 || !CancellationAwareString.EqualsOrdinal(statisticIdValue, normalizedStatisticId, cancellationToken)
                 || !item.TryGetProperty("source", out var source)
                 || source.ValueKind != JsonValueKind.String
-                || source.GetString() is not string sourceValue
+                || HomeAssistantJson.GetString(source, cancellationToken) is not string sourceValue
                 || !HomeAssistantStatisticIdentifier.IsSlug(sourceValue, cancellationToken)
-                || (statisticIdValue.Contains(':')
+                || (ContainsCharacter(statisticIdValue, ':', cancellationToken)
                     ? !HomeAssistantStatisticIdentifier.TryNormalizeExternal(statisticIdValue, cancellationToken, out _, out var statisticSource)
                         || !CancellationAwareString.EqualsOrdinal(sourceValue, statisticSource, cancellationToken)
                     : !CancellationAwareString.EqualsOrdinal(sourceValue, "recorder", cancellationToken))
@@ -384,7 +384,8 @@ public sealed class HomeAssistantRecorderClient
             return true;
         }
 
-        if (unit.ValueKind != JsonValueKind.String || unit.GetString() is not string text)
+        if (unit.ValueKind != JsonValueKind.String
+            || HomeAssistantJson.GetString(unit, cancellationToken) is not string text)
         {
             return false;
         }
@@ -395,6 +396,22 @@ public sealed class HomeAssistantRecorderClient
                     text,
                     CancellationAwareString.Trim(text, cancellationToken),
                     cancellationToken));
+    }
+
+    private static bool ContainsCharacter(
+        string value,
+        char character,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] == character) return true;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
     }
 
     private static void ValidateStatisticRows(
