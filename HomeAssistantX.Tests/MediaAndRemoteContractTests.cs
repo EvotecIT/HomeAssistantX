@@ -1132,6 +1132,8 @@ public sealed class MediaAndRemoteContractTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.Controls.MediaPlayers.SubscribeAsync(null!, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Remotes.SubscribeAsync(null!, cancellation.Token));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.Controls.Remotes.SendCommandsAsync(remoteTarget, values, cancellationToken: cancellation.Token));

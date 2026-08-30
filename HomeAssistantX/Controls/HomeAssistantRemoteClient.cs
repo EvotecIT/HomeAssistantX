@@ -57,6 +57,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         Func<HomeAssistantRemoteStateChange, CancellationToken, Task> handler,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (handler is null)
         {
             throw new ArgumentNullException(nameof(handler));
