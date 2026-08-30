@@ -34,7 +34,7 @@ public sealed class HomeAssistantRecorderClient
         var payload = requestedIdSnapshot is null ? null : new Dictionary<string, object?> { ["statistic_ids"] = requestedIdSnapshot };
         var value = await _webSocket.RequestAsync("recorder/get_statistics_metadata", payload, cancellationToken).ConfigureAwait(false);
         var metadata = DecodeMetadata(value, "Recorder statistics metadata could not be decoded.", cancellationToken);
-        var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var responseIds = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
         foreach (var item in metadata)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -43,7 +43,7 @@ public sealed class HomeAssistantRecorderClient
         }
         if (requestedIdSnapshot is not null)
         {
-            var requestedIds = new HashSet<string>(requestedIdSnapshot, StringComparer.OrdinalIgnoreCase);
+            var requestedIds = new HashSet<string>(requestedIdSnapshot, new CancellationAwareStringEqualityComparer(cancellationToken));
             foreach (var item in metadata)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -65,7 +65,7 @@ public sealed class HomeAssistantRecorderClient
         };
         var value = await _webSocket.RequestAsync("recorder/list_statistic_ids", payload, cancellationToken).ConfigureAwait(false);
         var metadata = DecodeMetadata(value, "Recorder statistic identifiers could not be decoded.", cancellationToken);
-        var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var responseIds = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
         foreach (var item in metadata)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -153,8 +153,8 @@ public sealed class HomeAssistantRecorderClient
         var value = await _webSocket.RequestAsync("recorder/statistics_during_period", payload, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Recorder statistics were not an object.");
         var series = new List<HomeAssistantStatisticSeries>();
-        var requestedIds = new HashSet<string>(requestedIdSnapshot, StringComparer.OrdinalIgnoreCase);
-        var responseIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var requestedIds = new HashSet<string>(requestedIdSnapshot, new CancellationAwareStringEqualityComparer(cancellationToken));
+        var responseIds = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -320,6 +320,14 @@ public sealed class HomeAssistantRecorderClient
         => _services.CallControlAsync(new HomeAssistantServiceCall("recorder", enabled ? "enable" : "disable"), cancellationToken);
 
     private static IReadOnlyList<HomeAssistantStatisticMetadata> DecodeMetadata(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => DecodeMetadataCore(value, failureMessage, cancellationToken),
+            cancellationToken);
+
+    private static IReadOnlyList<HomeAssistantStatisticMetadata> DecodeMetadataCore(
         JsonElement value,
         string failureMessage,
         CancellationToken cancellationToken)
