@@ -354,8 +354,6 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        if (Uri.TryCreate(endpoint, UriKind.Absolute, out _))
-            throw new ArgumentException("A root-relative Supervisor endpoint is required.", nameof(endpoint));
 
         string decodedPath;
         try
