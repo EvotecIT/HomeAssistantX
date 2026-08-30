@@ -20,9 +20,9 @@ public sealed class GetHomeAssistantLabelCommand : HomeAssistantCmdlet
         string? filter = null;
         if (MyInvocation.BoundParameters.ContainsKey(nameof(Label)))
         {
-            if (string.IsNullOrWhiteSpace(Label))
+            if (HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Label, CancelToken))
                 throw new ArgumentException("A non-empty label name or native ID is required.", nameof(Label));
-            filter = Label!.Trim();
+            filter = HomeAssistantX.Protocol.CancellationAwareString.Trim(Label!, CancelToken);
         }
 
         var labels = await Client.Registries.GetLabelsAsync(CancelToken).ConfigureAwait(false);

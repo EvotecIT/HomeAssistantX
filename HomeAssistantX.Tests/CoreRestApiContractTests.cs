@@ -82,6 +82,23 @@ public sealed class CoreRestApiContractTests
     }
 
     [Fact]
+    public async Task CalendarDiscoveryPreservesOpaqueProviderObjectsWithDuplicateNestedKeys()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            CalendarListResponseJson = "[{\"entity_id\":\"calendar.home\",\"name\":\"Home\","
+                + "\"provider_payload\":{\"key\":1,\"key\":2}}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var calendar = Assert.Single(await client.Rest.GetCalendarsAsync());
+        var providerPayload = calendar.AdditionalData["provider_payload"];
+
+        Assert.Equal(2, providerPayload.EnumerateObject().Count());
+        Assert.Equal(new[] { 1, 2 }, providerPayload.EnumerateObject().Select(value => value.Value.GetInt32()));
+    }
+
+    [Fact]
     public async Task DocumentedRestCommandsSerializeAndDecodeTheirContracts()
     {
         using var server = new TestHomeAssistantServer();

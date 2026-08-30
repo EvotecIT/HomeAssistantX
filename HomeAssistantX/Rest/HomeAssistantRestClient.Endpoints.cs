@@ -101,11 +101,19 @@ public sealed partial class HomeAssistantRestClient
     {
         var rawCalendars = await SendHomeAssistantAsync<JsonElement>(HttpMethod.Get, "api/calendars", null, cancellationToken)
             .ConfigureAwait(false);
-        if (rawCalendars.ValueKind != JsonValueKind.Array
-            || HomeAssistantJson.HasDuplicateProperties(rawCalendars, cancellationToken))
+        if (rawCalendars.ValueKind != JsonValueKind.Array)
         {
             throw new HomeAssistantProtocolException(
                 "The Home Assistant calendar list contained duplicate properties or was not an array.");
+        }
+        foreach (var rawCalendar in rawCalendars.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (HomeAssistantJson.HasDuplicateObjectProperties(rawCalendar, cancellationToken))
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant calendar list contained duplicate properties or was not an array.");
+            }
         }
         var calendars = HomeAssistantJson.DeserializeResponse<HomeAssistantCalendar[]>(
             rawCalendars,

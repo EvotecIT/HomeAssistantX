@@ -24,9 +24,9 @@ public sealed class GetHomeAssistantCategoryCommand : HomeAssistantCmdlet
         string? filter = null;
         if (MyInvocation.BoundParameters.ContainsKey(nameof(Category)))
         {
-            if (string.IsNullOrWhiteSpace(Category))
+            if (HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Category, CancelToken))
                 throw new ArgumentException("A non-empty category name or native ID is required.", nameof(Category));
-            filter = Category!.Trim();
+            filter = HomeAssistantX.Protocol.CancellationAwareString.Trim(Category!, CancelToken);
         }
 
         var categories = await Client.Registries.GetCategoriesAsync(Scope, CancelToken).ConfigureAwait(false);
