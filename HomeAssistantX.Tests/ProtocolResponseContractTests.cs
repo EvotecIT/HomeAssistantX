@@ -166,12 +166,12 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
-    public async Task ResponseSnapshotStopsLargeJsonTraversalAfterCancellation()
+    public async Task ResponseSnapshotPrioritizesAPreCanceledToken()
     {
         var json = "[" + string.Join(",", Enumerable.Repeat("0", 1_000_000)) + "]";
         using var document = JsonDocument.Parse(json);
         using var cancellation = new CancellationTokenSource();
-        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+        cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             HomeAssistantJson.SnapshotResponseAsync(

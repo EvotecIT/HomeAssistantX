@@ -50,10 +50,10 @@ public sealed partial class HomeAssistantRestClient : IDisposable
 
     public async Task<HomeAssistantState> GetStateAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var state = await SendHomeAssistantAsync<HomeAssistantState>(
             HttpMethod.Get,
-            "api/states/" + EscapePath(normalizedEntityId),
+            "api/states/" + EscapePath(normalizedEntityId, cancellationToken),
             null,
             cancellationToken).ConfigureAwait(false);
         return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
@@ -73,7 +73,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             throw new ArgumentNullException(nameof(call));
         }
 
-        var path = "api/services/" + EscapePath(call.Domain) + "/" + EscapePath(call.Service)
+        var path = "api/services/" + EscapePath(call.Domain, cancellationToken) + "/" + EscapePath(call.Service, cancellationToken)
             + (call.ReturnResponse ? "?return_response" : string.Empty);
         var result = await SendHomeAssistantAsync<JsonElement>(HttpMethod.Post, path, call.ToRestPayload(), cancellationToken).ConfigureAwait(false);
 
@@ -467,19 +467,37 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         }
     }
 
-    private static string EscapePath(string value)
+    private static string EscapePath(string value, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        cancellationToken.ThrowIfCancellationRequested();
+        var start = 0;
+        while (start < value.Length && char.IsWhiteSpace(value[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+        var end = value.Length - 1;
+        while (end >= start && char.IsWhiteSpace(value[end]))
+        {
+            if (((value.Length - 1 - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+        if (end < start)
         {
             throw new ArgumentException("A non-empty path identifier is required.", nameof(value));
         }
 
-        return HomeAssistantUri.EscapeDataString(value.Trim(), CancellationToken.None);
+        var normalized = start == 0 && end == value.Length - 1
+            ? value
+            : value.Substring(start, end - start + 1);
+        return HomeAssistantUri.EscapeDataString(
+            normalized,
+            cancellationToken);
     }
 
-    private static string NormalizeEntityId(string entityId)
+    private static string NormalizeEntityId(string entityId, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantEntityId.TryNormalize(entityId, out var normalized))
+        if (!HomeAssistantEntityId.TryNormalize(entityId, cancellationToken, out var normalized))
         {
             throw new ArgumentException("A Home Assistant entity identifier is required.", nameof(entityId));
         }

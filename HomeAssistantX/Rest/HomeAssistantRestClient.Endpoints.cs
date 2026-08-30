@@ -70,7 +70,7 @@ public sealed partial class HomeAssistantRestClient
         AddTimestamp(parameters, "end_time", query.EndTime);
         if (!string.IsNullOrWhiteSpace(query.EntityId))
         {
-            parameters.Add(new KeyValuePair<string, string?>("entity", NormalizeEntityId(query.EntityId!)));
+            parameters.Add(new KeyValuePair<string, string?>("entity", NormalizeEntityId(query.EntityId!, cancellationToken)));
         }
 
         return await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
@@ -89,9 +89,9 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets an image from a camera entity.</summary>
     public Task<byte[]> GetCameraImageAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", out var normalizedEntityId))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", cancellationToken, out var normalizedEntityId))
             throw new ArgumentException("A camera entity identifier is required.", nameof(entityId));
-        return GetBytesAsync("api/camera_proxy/" + EscapePath(normalizedEntityId), cancellationToken);
+        return GetBytesAsync("api/camera_proxy/" + EscapePath(normalizedEntityId, cancellationToken), cancellationToken);
     }
 
     /// <summary>Gets all calendar entities.</summary>
@@ -108,7 +108,7 @@ public sealed partial class HomeAssistantRestClient
         DateTimeOffset end,
         CancellationToken cancellationToken = default)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", out var normalizedEntityId))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", cancellationToken, out var normalizedEntityId))
             throw new ArgumentException("A calendar entity identifier is required.", nameof(entityId));
         if (end <= start)
         {
@@ -116,7 +116,7 @@ public sealed partial class HomeAssistantRestClient
         }
 
         var path = AppendQuery(
-            "api/calendars/" + EscapePath(normalizedEntityId),
+            "api/calendars/" + EscapePath(normalizedEntityId, cancellationToken),
             new[]
             {
                 new KeyValuePair<string, string?>("start", FormatTimestamp(start)),
@@ -137,10 +137,10 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentNullException(nameof(update));
         }
 
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var state = await SendHomeAssistantAsync<HomeAssistantState>(
             HttpMethod.Post,
-            "api/states/" + EscapePath(normalizedEntityId),
+            "api/states/" + EscapePath(normalizedEntityId, cancellationToken),
             update,
             cancellationToken).ConfigureAwait(false);
         return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
@@ -151,7 +151,7 @@ public sealed partial class HomeAssistantRestClient
     {
         return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Delete,
-            "api/states/" + EscapePath(NormalizeEntityId(entityId)),
+            "api/states/" + EscapePath(NormalizeEntityId(entityId, cancellationToken), cancellationToken),
             null,
             cancellationToken);
     }
@@ -164,7 +164,7 @@ public sealed partial class HomeAssistantRestClient
     {
         return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
-            "api/events/" + EscapePath(eventType),
+            "api/events/" + EscapePath(eventType, cancellationToken),
             eventData ?? new Dictionary<string, object?>(),
             cancellationToken);
     }

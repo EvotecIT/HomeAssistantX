@@ -83,6 +83,19 @@ public sealed class CoreRestApiContractTests
     }
 
     [Fact]
+    public async Task RestRouteEscapingPrioritizesAPreCanceledToken()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Rest.FireEventAsync(new string('a', 1_000_000), cancellationToken: cancellation.Token));
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Fact]
     public async Task HistoryQueryEscapesTimestampsAndUsesPresenceFlags()
     {
         using var server = new TestHomeAssistantServer();
