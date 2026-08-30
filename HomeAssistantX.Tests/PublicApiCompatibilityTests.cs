@@ -924,7 +924,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -1359,6 +1359,8 @@ public sealed class PublicApiCompatibilityTests
             + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
             + JsonPropertyNameContract(property)
             + JsonExtensionDataContract(property)
+            + JsonIgnoreContract(property)
+            + JsonConverterContract(property)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
@@ -1382,6 +1384,35 @@ public sealed class PublicApiCompatibilityTests
             .GetProperty(nameof(HomeAssistantX.Models.HomeAssistantState.AdditionalData))!;
 
         Assert.Contains("json-extension-data ", FormatProperty(property), StringComparison.Ordinal);
+        Assert.Contains(
+            "json-extension-data ",
+            FormatField(typeof(JsonFieldFixture).GetField(nameof(JsonFieldFixture.AdditionalData))!),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatterPreservesJsonIgnoreAndConverterContracts()
+    {
+        var stateType = typeof(HomeAssistantX.Models.HomeAssistantState);
+        Assert.Contains(
+            "json-converter(HomeAssistantX.Models.HomeAssistantAttributeDictionaryConverter)",
+            FormatProperty(stateType.GetProperty(nameof(HomeAssistantX.Models.HomeAssistantState.Attributes))!),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "json-ignore ",
+            FormatProperty(stateType.GetProperty(nameof(HomeAssistantX.Models.HomeAssistantState.Domain))!),
+            StringComparison.Ordinal);
+
+        var deviceId = typeof(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationRequest)
+            .GetProperty(nameof(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationRequest.DeviceId))!;
+        Assert.Contains(
+            "json-ignore(condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)",
+            FormatProperty(deviceId),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "json-converter(HomeAssistantX.Rest.HomeAssistantCalendarBoundaryJsonConverter)",
+            JsonConverterContract(typeof(HomeAssistantX.Rest.HomeAssistantCalendarBoundary)),
+            StringComparison.Ordinal);
     }
 
     private static string JsonPropertyNameContract(PropertyInfo property)
@@ -1396,13 +1427,48 @@ public sealed class PublicApiCompatibilityTests
                 : string.Empty;
     }
 
-    private static string JsonExtensionDataContract(PropertyInfo property)
-        => property.GetCustomAttributesData().Any(value => string.Equals(
+    private static string JsonExtensionDataContract(MemberInfo member)
+        => member.GetCustomAttributesData().Any(value => string.Equals(
             value.AttributeType.FullName,
             typeof(JsonExtensionDataAttribute).FullName,
             StringComparison.Ordinal))
                 ? "json-extension-data "
                 : string.Empty;
+
+    private static string JsonIgnoreContract(MemberInfo member)
+    {
+        var attribute = member.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            typeof(JsonIgnoreAttribute).FullName,
+            StringComparison.Ordinal));
+        if (attribute is null) return string.Empty;
+        var conditions = attribute.NamedArguments.Where(value => string.Equals(
+            value.MemberName,
+            nameof(JsonIgnoreAttribute.Condition),
+            StringComparison.Ordinal)).ToArray();
+        return conditions.Length == 0
+            ? "json-ignore "
+            : "json-ignore(condition=" + FormatAttributeArgument(conditions[0].TypedValue) + ") ";
+    }
+
+    private static string JsonConverterContract(MemberInfo member)
+    {
+        var attribute = member.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            typeof(JsonConverterAttribute).FullName,
+            StringComparison.Ordinal));
+        if (attribute is null) return string.Empty;
+        return attribute.ConstructorArguments.Count == 1
+            && attribute.ConstructorArguments[0].Value is Type converterType
+                ? "json-converter(" + FormatType(converterType) + ") "
+                : "json-converter ";
+    }
+
+    private sealed class JsonFieldFixture
+    {
+        [JsonExtensionData]
+        public Dictionary<string, object?> AdditionalData = new();
+    }
 
     private static void ParameterDirectionFixture(ref int byReference, out int output, in int input)
     {
@@ -2232,7 +2298,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonExtensionDataContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
     }
 
     private static string FormatEnumField(Type type, string name)

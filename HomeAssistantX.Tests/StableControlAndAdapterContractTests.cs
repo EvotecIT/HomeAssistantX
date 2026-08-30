@@ -294,6 +294,26 @@ public sealed class StableControlAndAdapterContractTests
             HomeAssistantTarget.ForEntity("number.volume"),
             12.5,
             canceled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Helpers.SetNumberAsync(
+            HomeAssistantHelperDomain.Select,
+            HomeAssistantTarget.ForEntity("number.volume"),
+            double.NaN,
+            canceled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Helpers.SelectOptionAsync(
+            HomeAssistantHelperDomain.Number,
+            HomeAssistantTarget.ForEntity("select.mode"),
+            " ",
+            canceled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Helpers.CycleSelectAsync(
+            HomeAssistantHelperDomain.Number,
+            HomeAssistantTarget.ForEntity("select.mode"),
+            forward: true,
+            cancellationToken: canceled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Helpers.SetTimeAsync(
+            HomeAssistantHelperDomain.Select,
+            HomeAssistantTarget.ForEntity("time.wakeup"),
+            TimeSpan.FromMilliseconds(500),
+            canceled.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Routines.RunScriptAsync(
             HomeAssistantTarget.ForEntity("script.evening"),
             cyclicVariables,

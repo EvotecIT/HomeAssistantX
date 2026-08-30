@@ -33,6 +33,7 @@ public sealed class HomeAssistantHelperClient
 
     public Task<HomeAssistantServiceCallResult> SetNumberAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, double value, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         RequireDomain(domain, HomeAssistantHelperDomain.Number, HomeAssistantHelperDomain.InputNumber);
         return CallAsync(domain, "set_value", target, call => call.WithData("value", ControlValidation.Finite(value, nameof(value))!.Value), cancellationToken);
     }
@@ -42,6 +43,7 @@ public sealed class HomeAssistantHelperClient
 
     public Task<HomeAssistantServiceCallResult> SelectOptionAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, string option, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         RequireDomain(domain, HomeAssistantHelperDomain.Select, HomeAssistantHelperDomain.InputSelect);
         return CallAsync(domain, "select_option", target, call => call.WithData("option", ControlValidation.RequiredUnchanged(option, nameof(option), cancellationToken)), cancellationToken);
     }
@@ -53,6 +55,7 @@ public sealed class HomeAssistantHelperClient
 
     public Task<HomeAssistantServiceCallResult> CycleSelectAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, bool forward, bool cycle = true, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         RequireDomain(domain, HomeAssistantHelperDomain.Select, HomeAssistantHelperDomain.InputSelect);
         return CallAsync(domain, forward ? "select_next" : "select_previous", target, call => call.WithData("cycle", cycle), cancellationToken);
     }
@@ -68,12 +71,14 @@ public sealed class HomeAssistantHelperClient
 
     public Task<HomeAssistantServiceCallResult> SetDateAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, DateTime value, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         RequireDomain(domain, HomeAssistantHelperDomain.Date, HomeAssistantHelperDomain.InputDateTime);
         return CallAsync(domain, domain == HomeAssistantHelperDomain.Date ? "set_value" : "set_datetime", target, call => call.WithData("date", value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)), cancellationToken);
     }
 
     public Task<HomeAssistantServiceCallResult> SetTimeAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, TimeSpan value, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         RequireDomain(domain, HomeAssistantHelperDomain.Time, HomeAssistantHelperDomain.InputDateTime);
         if (value < TimeSpan.Zero || value >= TimeSpan.FromDays(1)) throw new ArgumentOutOfRangeException(nameof(value), "The time must be within one day.");
         if (value.Ticks % TimeSpan.TicksPerSecond != 0) throw new ArgumentException("The time must use whole-second precision.", nameof(value));
@@ -82,6 +87,7 @@ public sealed class HomeAssistantHelperClient
 
     public Task<HomeAssistantServiceCallResult> SetDateTimeAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, DateTimeOffset value, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         RequireDomain(domain, HomeAssistantHelperDomain.DateTime, HomeAssistantHelperDomain.InputDateTime);
         return CallAsync(domain, domain == HomeAssistantHelperDomain.DateTime ? "set_value" : "set_datetime", target, call => call.WithData("datetime", value.ToString("o", System.Globalization.CultureInfo.InvariantCulture)), cancellationToken);
     }

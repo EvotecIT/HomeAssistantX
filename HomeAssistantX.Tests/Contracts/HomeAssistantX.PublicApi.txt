@@ -132,8 +132,8 @@ T before-field-init sealed class HomeAssistantX.Cameras.HomeAssistantCameraStatu
 T before-field-init sealed class HomeAssistantX.Cameras.HomeAssistantCameraStream
   C special-name HomeAssistantX.Cameras.HomeAssistantCameraStream()
   P instance json-extension-data System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
-  P instance System.String EntityId {get;set;}
-  P instance System.String Format {get;set;}
+  P instance json-ignore System.String EntityId {get;set;}
+  P instance json-ignore System.String Format {get;set;}
   P instance json-name("url") System.String Path {get;set;}
 T before-field-init sealed class HomeAssistantX.Configuration.HomeAssistantClientOptions
   C special-name HomeAssistantX.Configuration.HomeAssistantClientOptions(System.Uri baseUri, HomeAssistantX.Authentication.IHomeAssistantAccessTokenProvider accessTokenProvider)
@@ -835,21 +835,21 @@ T before-field-init sealed class HomeAssistantX.MobileApp.HomeAssistantMobileApp
   P instance json-name("app_id") System.String AppId {get;set;}
   P instance json-name("app_name") System.String AppName {get;set;}
   P instance json-name("app_version") System.String AppVersion {get;set;}
-  P instance json-name("device_id") System.String? DeviceId {get;set;}
+  P instance json-name("device_id") json-ignore(condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull) System.String? DeviceId {get;set;}
   P instance json-name("device_name") System.String DeviceName {get;set;}
   P instance json-name("manufacturer") System.String Manufacturer {get;set;}
   P instance json-name("model") System.String Model {get;set;}
   P instance json-name("os_name") System.String OperatingSystemName {get;set;}
-  P instance json-name("os_version") System.String? OperatingSystemVersion {get;set;}
+  P instance json-name("os_version") json-ignore(condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull) System.String? OperatingSystemVersion {get;set;}
   P instance json-name("supports_encryption") System.Boolean SupportsEncryption {get;set;}
 T before-field-init sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate
   C special-name HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate(System.String appVersion, System.String deviceName, System.String manufacturer, System.String model)
-  P instance json-name("app_data") System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? AppData {get;set;}
+  P instance json-name("app_data") json-ignore(condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull) System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object?>? AppData {get;set;}
   P instance json-name("app_version") System.String AppVersion {get;}
   P instance json-name("device_name") System.String DeviceName {get;}
   P instance json-name("manufacturer") System.String Manufacturer {get;}
   P instance json-name("model") System.String Model {get;}
-  P instance json-name("os_version") System.String? OperatingSystemVersion {get;set;}
+  P instance json-name("os_version") json-ignore(condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull) System.String? OperatingSystemVersion {get;set;}
 T before-field-init sealed class HomeAssistantX.MobileApp.HomeAssistantMobileAppWebhookClient : System.IDisposable
   M instance System.Void Dispose()
   M instance System.Threading.Tasks.Task<HomeAssistantX.MobileApp.HomeAssistantMobileAppCameraStream> GetCameraStreamAsync(System.String entityId, System.Threading.CancellationToken cancellationToken = null)
@@ -893,9 +893,9 @@ T before-field-init sealed class HomeAssistantX.Models.HomeAssistantEvent
 T before-field-init sealed class HomeAssistantX.Models.HomeAssistantState
   C special-name HomeAssistantX.Models.HomeAssistantState()
   P instance json-extension-data System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
-  P instance json-name("attributes") System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> Attributes {get;set;}
+  P instance json-name("attributes") json-converter(HomeAssistantX.Models.HomeAssistantAttributeDictionaryConverter) System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> Attributes {get;set;}
   P instance json-name("context") HomeAssistantX.Models.HomeAssistantContext? Context {get;set;}
-  P instance System.String Domain {get;}
+  P instance json-ignore System.String Domain {get;}
   P instance json-name("entity_id") System.String EntityId {get;set;}
   P instance json-name("last_changed") System.Nullable<System.DateTimeOffset> LastChanged {get;set;}
   P instance json-name("last_reported") System.Nullable<System.DateTimeOffset> LastReported {get;set;}
@@ -1119,14 +1119,14 @@ T before-field-init sealed class HomeAssistantX.Recorder.HomeAssistantStatisticR
   C special-name HomeAssistantX.Recorder.HomeAssistantStatisticRow()
   P instance json-extension-data System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
   P instance json-name("change") System.Nullable<System.Double> Change {get;set;}
-  P instance System.DateTimeOffset End {get;}
+  P instance json-ignore System.DateTimeOffset End {get;}
   P instance json-name("end") System.Int64 EndMilliseconds {get;set;}
-  P instance System.Nullable<System.DateTimeOffset> LastReset {get;}
+  P instance json-ignore System.Nullable<System.DateTimeOffset> LastReset {get;}
   P instance json-name("last_reset") System.Nullable<System.Int64> LastResetMilliseconds {get;set;}
   P instance json-name("max") System.Nullable<System.Double> Maximum {get;set;}
   P instance json-name("mean") System.Nullable<System.Double> Mean {get;set;}
   P instance json-name("min") System.Nullable<System.Double> Minimum {get;set;}
-  P instance System.DateTimeOffset Start {get;}
+  P instance json-ignore System.DateTimeOffset Start {get;}
   P instance json-name("start") System.Int64 StartMilliseconds {get;set;}
   P instance json-name("state") System.Nullable<System.Double> State {get;set;}
   P instance json-name("sum") System.Nullable<System.Double> Sum {get;set;}
@@ -1278,12 +1278,12 @@ T before-field-init sealed class HomeAssistantX.Rest.HomeAssistantCalendar
   P instance json-extension-data System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
   P instance json-name("entity_id") System.String EntityId {get;set;}
   P instance json-name("name") System.String Name {get;set;}
-T before-field-init sealed class HomeAssistantX.Rest.HomeAssistantCalendarBoundary
+T json-converter(HomeAssistantX.Rest.HomeAssistantCalendarBoundaryJsonConverter) before-field-init sealed class HomeAssistantX.Rest.HomeAssistantCalendarBoundary
   C special-name HomeAssistantX.Rest.HomeAssistantCalendarBoundary()
   P instance json-extension-data System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
   P instance json-name("date") System.String? Date {get;set;}
   P instance json-name("dateTime") System.Nullable<System.DateTimeOffset> DateTime {get;set;}
-T before-field-init sealed class HomeAssistantX.Rest.HomeAssistantCalendarEvent
+T json-converter(HomeAssistantX.Rest.HomeAssistantCalendarEventJsonConverter) before-field-init sealed class HomeAssistantX.Rest.HomeAssistantCalendarEvent
   C special-name HomeAssistantX.Rest.HomeAssistantCalendarEvent()
   P instance json-extension-data System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
   P instance json-name("description") System.String? Description {get;set;}
@@ -1298,7 +1298,7 @@ T before-field-init sealed class HomeAssistantX.Rest.HomeAssistantConfigurationC
   C special-name HomeAssistantX.Rest.HomeAssistantConfigurationCheck()
   P instance json-extension-data System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
   P instance json-name("errors") System.String? Errors {get;set;}
-  P instance System.Boolean IsValid {get;}
+  P instance json-ignore System.Boolean IsValid {get;}
   P instance json-name("result") System.String Result {get;set;}
 T before-field-init sealed class HomeAssistantX.Rest.HomeAssistantEventType
   C special-name HomeAssistantX.Rest.HomeAssistantEventType()
