@@ -232,7 +232,8 @@ public sealed class HomeAssistantRegistryClient
         IReadOnlyList<HomeAssistantEntityRegistryEntry> partialEntries,
         CancellationToken cancellationToken)
     {
-        if (value.ValueKind != JsonValueKind.Object)
+        if (value.ValueKind != JsonValueKind.Object
+            || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
         {
             throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response had an unexpected shape.");
         }
@@ -301,6 +302,12 @@ public sealed class HomeAssistantRegistryClient
         string name,
         CancellationToken cancellationToken)
     {
+        if (value.ValueKind != JsonValueKind.Array
+            || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant " + name + " response contained duplicate properties or was not an array.");
+        }
         return HomeAssistantJson.DeserializeResponse<T[]>(
             value,
             "The Home Assistant " + name + " response could not be decoded.",
@@ -409,6 +416,12 @@ public sealed class HomeAssistantRegistryClient
         string name,
         CancellationToken cancellationToken)
     {
+        if (value.ValueKind != JsonValueKind.Object
+            || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant " + name + " response contained duplicate properties or was not an object.");
+        }
         return HomeAssistantJson.DeserializeResponse<T>(
             value,
             "The Home Assistant " + name + " response could not be decoded.",
@@ -548,6 +561,7 @@ public sealed class HomeAssistantRegistryClient
         }
 
         if (value.ValueKind == JsonValueKind.Object
+            && !HomeAssistantJson.HasDuplicateProperties(value, cancellationToken)
             && value.TryGetProperty("entries", out var entries))
         {
             return DeserializeArray<HomeAssistantConfigEntry>(entries, "configuration-entry registry", cancellationToken);

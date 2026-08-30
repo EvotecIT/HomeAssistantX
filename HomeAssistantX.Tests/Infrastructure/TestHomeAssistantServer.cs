@@ -153,6 +153,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? ConfigEntriesErrorCode { get; set; }
 
+    public string? ConfigEntriesResponseJson { get; set; }
+
     public string? LabelRegistryErrorCode { get; set; }
 
     public string LabelRegistryResponseJson { get; set; } =
@@ -1026,7 +1028,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     return;
                 }
 
-                await session.SendResultAsync(id, ParseJson("{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(ConfigEntriesResponseJson
+                    ?? "{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get_single":
                 await session.SendResultAsync(id, ParseJson("{\"config_entry\":{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true}}"), false, _source.Token).ConfigureAwait(false);

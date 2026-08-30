@@ -190,11 +190,15 @@ public sealed partial class HomeAssistantRestClient
         IReadOnlyDictionary<string, object?>? eventData = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (CancellationAwareString.IsNullOrWhiteSpace(eventType, cancellationToken))
+            throw new ArgumentException("An event type is required.", nameof(eventType));
+        var normalizedEventType = CancellationAwareString.Trim(eventType, cancellationToken);
         var frozenEventData = HomeAssistantJson.FreezeObject(
             eventData ?? new Dictionary<string, object?>(), nameof(eventData), "EventData", cancellationToken);
         return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
-            "api/events/" + EscapePath(eventType, cancellationToken),
+            "api/events/" + EscapePath(normalizedEventType, cancellationToken),
             frozenEventData,
             cancellationToken);
     }

@@ -663,6 +663,63 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task RegistryListsAndMutationsRejectDuplicateRecognizedFields()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            LabelRegistryResponseJson = "[{\"label_id\":\"security\",\"label_id\":\"other\",\"name\":\"Security\"}]",
+            CategoryRegistryResponseJson = "[{\"category_id\":\"comfort\",\"category_id\":\"other\",\"name\":\"Comfort\"}]",
+            LabelMutationResponseJson = "{\"label_id\":\"security\",\"name\":\"Security\",\"name\":\"Other\"}",
+            CategoryMutationResponseJson = "{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"name\":\"Other\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetLabelsAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetCategoriesAsync("automation"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.CreateLabelAsync(new HomeAssistantLabelCreate("Security")));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.CreateCategoryAsync("automation", new HomeAssistantCategoryCreate("Comfort")));
+    }
+
+    [Fact]
+    public async Task RegistrySnapshotRejectsDuplicateExtendedEntitiesAndConfigEntryWrappers()
+    {
+        using (var extendedServer = new TestHomeAssistantServer
+        {
+            ExtendedEntityRegistryResponseJson =
+                "{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"entity_id\":\"sensor.other\"}}"
+        })
+        using (var client = TestClientFactory.Create(extendedServer))
+        {
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetSnapshotAsync());
+        }
+
+        using (var configServer = new TestHomeAssistantServer
+        {
+            ConfigEntriesResponseJson = "{\"entries\":[],\"entries\":[]}"
+        })
+        using (var client = TestClientFactory.Create(configServer))
+        {
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Registries.GetSnapshotAsync());
+        }
+    }
+
+    [Fact]
+    public async Task RestEventTypeValidationHonorsPreCanceledCallers()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Rest.FireEventAsync(new string(' ', 1_000_000), cancellationToken: cancellation.Token));
+
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Fact]
     public async Task RegistryMutationsRejectIncompleteLabelsAndCategories()
     {
         using var server = new TestHomeAssistantServer
