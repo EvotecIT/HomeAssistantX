@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
@@ -257,7 +258,9 @@ public sealed class HomeAssistantCameraClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateDimensions(width, height);
-        var path = "/api/camera_proxy/" + Uri.EscapeDataString(NormalizeEntityId(entityId, cancellationToken));
+        var path = "/api/camera_proxy/" + HomeAssistantUri.EscapeDataString(
+            NormalizeEntityId(entityId, cancellationToken),
+            cancellationToken);
         var signedPath = await _system.SignPathAsync(path, expiration, cancellationToken).ConfigureAwait(false);
         if (!width.HasValue) return signedPath;
 
@@ -272,7 +275,7 @@ public sealed class HomeAssistantCameraClient
         var validated = NormalizeEntityId(entityId, cancellationToken);
         if (intervalSeconds.HasValue && (double.IsNaN(intervalSeconds.Value) || double.IsInfinity(intervalSeconds.Value) || intervalSeconds.Value < 0.5))
             throw new ArgumentOutOfRangeException(nameof(intervalSeconds), "Camera stream interval must be at least 0.5 seconds.");
-        var path = "/api/camera_proxy_stream/" + Uri.EscapeDataString(validated);
+        var path = "/api/camera_proxy_stream/" + HomeAssistantUri.EscapeDataString(validated, cancellationToken);
         var signedPath = await _system.SignPathAsync(path, expiration, cancellationToken).ConfigureAwait(false);
         if (!intervalSeconds.HasValue) return signedPath;
 
