@@ -210,11 +210,17 @@ public sealed class ProtocolResponseContractTests
                 }
             });
 
-        Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
-        cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => decoding);
-        release.Set();
-        Assert.True(finished.Wait(TimeSpan.FromSeconds(2)));
+        try
+        {
+            Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => decoding);
+        }
+        finally
+        {
+            release.Set();
+            Assert.True(finished.Wait(TimeSpan.FromSeconds(2)));
+        }
     }
 
     [Fact]

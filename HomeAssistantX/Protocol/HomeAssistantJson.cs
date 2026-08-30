@@ -82,7 +82,11 @@ internal static class HomeAssistantJson
         if (!cancellationToken.CanBeCanceled)
             return decoder(value);
 
-        var decodeTask = Task.Run(() => decoder(value), CancellationToken.None);
+        var decodeTask = Task.Factory.StartNew(
+            () => decoder(value),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
         var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
         if (await Task.WhenAny(decodeTask, canceled.Task).ConfigureAwait(false) != decodeTask)
