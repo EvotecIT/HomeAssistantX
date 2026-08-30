@@ -224,13 +224,15 @@ public sealed class HomeAssistantNotificationClient
         if (value.ValueKind != JsonValueKind.Object)
             throw new HomeAssistantProtocolException(failureMessage);
 
-        var result = new Dictionary<string, HomeAssistantPersistentNotification>(
-            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
+        var result = new Dictionary<string, HomeAssistantPersistentNotification>(StringComparer.Ordinal);
+        var identifiers = new List<string>();
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (result.ContainsKey(property.Name))
+            if (identifiers.Any(identifier =>
+                    CancellationAwareString.EqualsOrdinal(identifier, property.Name, cancellationToken)))
                 throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notification identifier.");
+            identifiers.Add(property.Name);
             result.Add(
                 property.Name,
                 HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification>(
