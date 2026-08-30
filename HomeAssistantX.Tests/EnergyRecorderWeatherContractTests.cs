@@ -5,6 +5,7 @@ using HomeAssistantX.Authentication;
 using HomeAssistantX.Energy;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Recorder;
 using HomeAssistantX.Tests.Infrastructure;
 using HomeAssistantX.Weather;
@@ -1402,6 +1403,36 @@ public sealed class EnergyRecorderWeatherContractTests
             DateTimeOffset.UtcNow.AddHours(-1), HomeAssistantStatisticPeriod.Hour, statisticId));
         Assert.Null(server.GetLastWebSocketCommand("recorder/get_statistics_metadata"));
         Assert.Null(server.GetLastWebSocketCommand("recorder/statistics_during_period"));
+    }
+
+    [Fact]
+    public void RecorderStatisticsQueryDeduplicatesManyIdentifiersWithoutChangingOrder()
+    {
+        var identifiers = Enumerable.Range(0, 10_000)
+            .SelectMany(index => new[] { $"sensor.value_{index}", $"sensor.value_{index}" })
+            .ToArray();
+
+        var query = new HomeAssistantStatisticsQuery(
+            DateTimeOffset.UtcNow.AddHours(-1),
+            HomeAssistantStatisticPeriod.Hour,
+            identifiers);
+
+        Assert.Equal(10_000, query.StatisticIds.Count);
+        Assert.Equal("sensor.value_0", query.StatisticIds[0]);
+        Assert.Equal("sensor.value_9999", query.StatisticIds[9_999]);
+    }
+
+    [Fact]
+    public void HomeTimeZoneResolutionPrioritizesAPreCanceledToken()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            HomeAssistantCalendarTime.RequireTimeZone(
+                new string('A', 1_000_000),
+                "calendar statistics",
+                cancellation.Token));
     }
 
     [Fact]

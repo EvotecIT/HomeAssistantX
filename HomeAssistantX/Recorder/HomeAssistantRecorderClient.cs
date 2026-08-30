@@ -147,7 +147,8 @@ public sealed class HomeAssistantRecorderClient
             var configuration = await _rest.GetConfigurationAsync(cancellationToken).ConfigureAwait(false);
             homeTimeZone = HomeAssistantCalendarTime.RequireTimeZone(
                 configuration.TimeZone,
-                "calendar statistics");
+                "calendar statistics",
+                cancellationToken);
         }
 
         var value = await _webSocket.RequestAsync("recorder/statistics_during_period", payload, cancellationToken).ConfigureAwait(false);

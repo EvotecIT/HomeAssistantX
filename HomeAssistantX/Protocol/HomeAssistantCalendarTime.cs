@@ -12,14 +12,23 @@ internal enum HomeAssistantCalendarPeriod
 
 internal static class HomeAssistantCalendarTime
 {
-    internal static TimeZoneInfo RequireTimeZone(string? timeZoneId, string purpose)
+    internal static TimeZoneInfo RequireTimeZone(
+        string? timeZoneId,
+        string purpose,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(timeZoneId))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (CancellationAwareString.IsNullOrWhiteSpace(timeZoneId, cancellationToken))
             throw new HomeAssistantProtocolException($"Home Assistant did not provide the time zone required to validate {purpose}.");
+        if (timeZoneId!.Length > 255)
+            throw new HomeAssistantProtocolException($"Home Assistant provided an unsupported time zone for {purpose}.");
 
         try
         {
-            return TZConvert.GetTimeZoneInfo(timeZoneId!);
+            cancellationToken.ThrowIfCancellationRequested();
+            var timeZone = TZConvert.GetTimeZoneInfo(timeZoneId);
+            cancellationToken.ThrowIfCancellationRequested();
+            return timeZone;
         }
         catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
         {

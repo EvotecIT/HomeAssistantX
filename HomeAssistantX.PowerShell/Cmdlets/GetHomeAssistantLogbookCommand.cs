@@ -16,9 +16,10 @@ public sealed class GetHomeAssistantLogbookCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        CancelToken.ThrowIfCancellationRequested();
         if (StartTime.HasValue && EndTime.HasValue && EndTime <= StartTime) throw new ArgumentOutOfRangeException(nameof(EndTime));
         string? entityId = null;
-        if (EntityId is not null && !HomeAssistantEntityId.TryNormalize(EntityId, out entityId))
+        if (EntityId is not null && !HomeAssistantEntityId.TryNormalize(EntityId, CancelToken, out entityId))
             throw new ArgumentException("EntityId must be a lowercase native Home Assistant entity identifier.", nameof(EntityId));
         WriteObject(await Client.Rest.GetLogbookAsync(new HomeAssistantLogbookQuery { StartTime = StartTime, EndTime = EndTime, EntityId = entityId }, CancelToken).ConfigureAwait(false), true);
     }

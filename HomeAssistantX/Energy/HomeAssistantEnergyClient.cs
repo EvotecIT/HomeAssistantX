@@ -147,7 +147,8 @@ public sealed class HomeAssistantEnergyClient
             var configuration = await _rest.GetConfigurationAsync(cancellationToken).ConfigureAwait(false);
             homeTimeZone = HomeAssistantCalendarTime.RequireTimeZone(
                 configuration.TimeZone,
-                "fossil-energy calendar periods");
+                "fossil-energy calendar periods",
+                cancellationToken);
         }
         var value = await _webSocket.RequestAsync("energy/fossil_energy_consumption", new Dictionary<string, object?>
         {
