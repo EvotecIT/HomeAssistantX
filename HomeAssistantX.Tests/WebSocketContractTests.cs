@@ -7,6 +7,7 @@ using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
+using HomeAssistantX.WebSockets;
 
 namespace HomeAssistantX.Tests;
 
@@ -73,6 +74,38 @@ public sealed class WebSocketContractTests
                 .GetProperty("features")
                 .GetProperty("coalesce_messages")
                 .GetInt32());
+    }
+
+    [Fact]
+    public async Task ConnectAcceptsACoalescedFeatureNegotiationAcknowledgement()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            CoalesceSupportedFeaturesAcknowledgement = true
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await client.WebSocket.ConnectAsync();
+
+        Assert.Equal(HomeAssistantConnectionState.Connected, client.WebSocket.State);
+    }
+
+    [Theory]
+    [InlineData("omit")]
+    [InlineData("null")]
+    [InlineData("\"true\"")]
+    public async Task FeatureNegotiationRequiresAnExplicitBooleanSuccess(string successJson)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SupportedFeaturesSuccessJson = successJson
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.WebSocket.ConnectAsync());
+
+        Assert.Contains("Boolean success", exception.Message);
     }
 
     [Fact]

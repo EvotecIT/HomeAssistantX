@@ -288,6 +288,20 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public void DiagnosticEventsPreserveConnectionFailureClassification()
+    {
+        const string privateMarker = "private-connection-detail";
+        var diagnostic = new HomeAssistantDiagnosticEvent(
+            HomeAssistantDiagnosticLevel.Warning,
+            "test.connection_failure",
+            "A Home Assistant connection failed.",
+            new HomeAssistantConnectionException(privateMarker, new IOException(privateMarker)));
+
+        Assert.IsType<HomeAssistantConnectionException>(diagnostic.Exception);
+        Assert.DoesNotContain(privateMarker, diagnostic.Exception!.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TerminalReconnectFailureCancelsRunningStateHandlerAndPreservesUpstreamFailure()
     {
         using var server = new TestHomeAssistantServer();

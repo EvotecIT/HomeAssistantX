@@ -27,7 +27,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _failNextSubscription;
     private TaskCompletionSource<bool>? _pausedSubscriptionReceived;
     private TaskCompletionSource<bool>? _pausedSubscriptionRelease;
-    private TaskCompletionSource<bool>? _pausedSubscriptionActivated;
     private TaskCompletionSource<bool>? _pausedServiceCallReceived;
     private TaskCompletionSource<bool>? _pausedServiceCallRelease;
     private TaskCompletionSource<bool>? _pausedGetStatesReceived;
@@ -168,6 +167,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public bool ReturnMalformedSupportedFeatures { get; set; }
 
+    public bool CoalesceSupportedFeaturesAcknowledgement { get; set; }
+
+    public string? SupportedFeaturesSuccessJson { get; set; }
+
     public bool ReturnInvalidUpdateReleaseNotes { get; set; }
 
     public string HistoryResponseJson { get; set; } = "[[" + KitchenTemperatureStateJson + "]]";
@@ -212,7 +215,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         _pausedSubscriptionReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pausedSubscriptionRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pausedSubscriptionActivated = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     public Task WaitForPausedSubscriptionAsync()
@@ -225,12 +227,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         (_pausedSubscriptionRelease
             ?? throw new InvalidOperationException("No subscription pause is configured.")).TrySetResult(true);
-    }
-
-    public Task WaitForPausedSubscriptionActivationAsync()
-    {
-        return (_pausedSubscriptionActivated
-            ?? throw new InvalidOperationException("No subscription activation is configured.")).Task;
     }
 
     public Task WaitForUnsubscribeAsync()
@@ -497,7 +493,28 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     && features.TryGetProperty("coalesce_messages", out var coalesce)
                     && coalesce.TryGetInt32(out var coalesceVersion)
                     && coalesceVersion == 1;
-                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                var acknowledgement = new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["type"] = "result",
+                    ["result"] = null
+                };
+                if (!string.Equals(SupportedFeaturesSuccessJson, "omit", StringComparison.Ordinal))
+                {
+                    acknowledgement["success"] = SupportedFeaturesSuccessJson is null
+                        ? true
+                        : ParseJson(SupportedFeaturesSuccessJson);
+                }
+
+                if (CoalesceSupportedFeaturesAcknowledgement)
+                {
+                    await session.SendCoalescedAsync(new object[] { acknowledgement }, _source.Token)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await session.SendAsync(acknowledgement, _source.Token).ConfigureAwait(false);
+                }
                 return;
             case "ping":
                 await session.SendAsync(new Dictionary<string, object?> { ["id"] = id, ["type"] = "pong" }, _source.Token)
@@ -599,7 +616,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ? id
                     : session.StateSubscriptionId;
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
-                _pausedSubscriptionActivated?.TrySetResult(true);
                 return;
             case "unsubscribe_events":
                 var unsubscribeSubscriptionId = command.GetProperty("subscription").GetInt32();

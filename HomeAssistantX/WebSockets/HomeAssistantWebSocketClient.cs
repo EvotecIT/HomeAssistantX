@@ -424,9 +424,8 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         using var responseDocument = HomeAssistantJson.ParseResponse(
             response,
             "The Home Assistant supported-features response could not be decoded.");
-        var root = responseDocument.RootElement;
-        if (root.ValueKind != JsonValueKind.Object
-            || !root.TryGetProperty("id", out var idProperty)
+        var root = GetSupportedFeaturesAcknowledgement(responseDocument.RootElement);
+        if (!root.TryGetProperty("id", out var idProperty)
             || !idProperty.TryGetInt32(out var responseId)
             || responseId != commandId
             || !string.Equals(GetRequiredString(root, "type"), "result", StringComparison.Ordinal))
@@ -435,8 +434,14 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                 "Home Assistant returned an invalid supported-features response.");
         }
 
-        var success = root.TryGetProperty("success", out var successProperty)
-            && successProperty.ValueKind == JsonValueKind.True;
+        if (!root.TryGetProperty("success", out var successProperty)
+            || successProperty.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant supported-features response omitted its required Boolean success flag.");
+        }
+
+        var success = successProperty.ValueKind == JsonValueKind.True;
         if (!success)
         {
             var exception = ReadCommandException(root);
@@ -454,6 +459,31 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         }
 
         return true;
+    }
+
+    private JsonElement GetSupportedFeaturesAcknowledgement(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            return root;
+        }
+
+        if (root.ValueKind != JsonValueKind.Array
+            || root.GetArrayLength() != 1
+            || root.GetArrayLength() > _options.MaximumCoalescedWebSocketMessages)
+        {
+            throw new HomeAssistantProtocolException(
+                "Home Assistant returned an invalid supported-features response.");
+        }
+
+        var acknowledgement = root[0];
+        if (acknowledgement.ValueKind != JsonValueKind.Object)
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant supported-features batch contained a non-message value.");
+        }
+
+        return acknowledgement;
     }
 
     private async Task ActivateSubscriptionAsync(SubscriptionRegistration registration, CancellationToken cancellationToken)

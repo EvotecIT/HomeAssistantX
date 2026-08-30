@@ -67,6 +67,13 @@ internal static class HomeAssistantDiagnosticFailure
             return new Exceptions.HomeAssistantAuthenticationException(message);
         }
 
+        if (failure is Exceptions.HomeAssistantConnectionException)
+        {
+            return new Exceptions.HomeAssistantConnectionException(
+                message,
+                new InvalidOperationException(message));
+        }
+
         if (failure is Exceptions.HomeAssistantProtocolException)
         {
             return new Exceptions.HomeAssistantProtocolException(message);

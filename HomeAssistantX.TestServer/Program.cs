@@ -24,7 +24,6 @@ while (await Console.In.ReadLineAsync() is { } command)
             break;
         case "RELEASE_PAUSED_SUBSCRIPTION":
             server.ReleasePausedSubscription();
-            await server.WaitForPausedSubscriptionActivationAsync();
             Console.WriteLine("SUBSCRIPTION_RELEASED");
             break;
         case "WAIT_FOR_UNSUBSCRIBE":

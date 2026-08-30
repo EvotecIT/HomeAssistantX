@@ -41,6 +41,7 @@ public static class HomeAssistantEntityId
         normalized = value?.Trim() ?? string.Empty;
         return IsValidSegment(
             normalized,
+            mustStartWithLetter: true,
             disallowBoundaryUnderscore: true,
             disallowDoubleUnderscore: true,
             cancellationToken);
@@ -81,11 +82,13 @@ public static class HomeAssistantEntityId
         var objectId = normalized.Substring(separator + 1);
         return IsValidSegment(
                 domain,
+                mustStartWithLetter: true,
                 disallowBoundaryUnderscore: true,
                 disallowDoubleUnderscore: true,
                 cancellationToken)
             && IsValidSegment(
                 objectId,
+                mustStartWithLetter: false,
                 disallowBoundaryUnderscore: true,
                 disallowDoubleUnderscore: false,
                 cancellationToken);
@@ -93,11 +96,13 @@ public static class HomeAssistantEntityId
 
     private static bool IsValidSegment(
         string value,
+        bool mustStartWithLetter,
         bool disallowBoundaryUnderscore,
         bool disallowDoubleUnderscore,
         CancellationToken cancellationToken)
     {
         if (value.Length == 0
+            || (mustStartWithLetter && (value[0] < 'a' || value[0] > 'z'))
             || (disallowBoundaryUnderscore
                 && (value[0] == '_' || value[value.Length - 1] == '_'))
             || (disallowDoubleUnderscore && value.Contains("__")))

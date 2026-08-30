@@ -265,17 +265,32 @@ public sealed partial class HomeAssistantWebSocketClient
             }
             catch (HomeAssistantAuthenticationException ex)
             {
+                if (Volatile.Read(ref _manualDisconnect))
+                {
+                    SetState(HomeAssistantConnectionState.Disconnected);
+                    return;
+                }
+
                 SetState(HomeAssistantConnectionState.Faulted, ex);
                 WriteDiagnostic(
                     HomeAssistantDiagnosticLevel.Error,
                     "websocket.reconnect_authentication_failed",
                     "Home Assistant rejected the recovered WebSocket credentials; automatic reconnect stopped.",
                     ex);
-                await FailSubscriptionsAsync(ex).ConfigureAwait(false);
+                if (!Volatile.Read(ref _manualDisconnect))
+                {
+                    await FailSubscriptionsAsync(ex).ConfigureAwait(false);
+                }
                 return;
             }
             catch (PermanentReconnectNegotiationException ex)
             {
+                if (Volatile.Read(ref _manualDisconnect))
+                {
+                    SetState(HomeAssistantConnectionState.Disconnected);
+                    return;
+                }
+
                 SetState(HomeAssistantConnectionState.Faulted, ex.Failure);
                 WriteDiagnostic(
                     HomeAssistantDiagnosticLevel.Error,
@@ -284,7 +299,10 @@ public sealed partial class HomeAssistantWebSocketClient
                     HomeAssistantDiagnosticFailure.Sanitize(
                         ex.Failure,
                         "Home Assistant rejected WebSocket feature negotiation."));
-                await FailSubscriptionsAsync(ex.Failure).ConfigureAwait(false);
+                if (!Volatile.Read(ref _manualDisconnect))
+                {
+                    await FailSubscriptionsAsync(ex.Failure).ConfigureAwait(false);
+                }
                 return;
             }
             catch (Exception ex)
