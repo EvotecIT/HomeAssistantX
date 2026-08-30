@@ -22,19 +22,20 @@ public sealed class HomeAssistantDashboardClient
             "The frontend panel response contained duplicate JSON properties.",
             cancellationToken);
         var result = new List<HomeAssistantPanel>();
-        var routes = new HashSet<string>(StringComparer.Ordinal);
+        var routes = new HashSet<string>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
             var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.", cancellationToken);
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
-            RequirePanelBooleans(property.Value, cancellationToken);
+            var embeddedRoute = RequirePanelBooleans(property.Value, cancellationToken);
             var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(
                 property.Value,
                 "A frontend panel could not be decoded.",
                 cancellationToken: cancellationToken);
-            if (!property.Value.TryGetProperty("url_path", out var embeddedRoute))
+            if (embeddedRoute.ValueKind == JsonValueKind.Undefined)
             {
                 panel.UrlPath = route;
             }
@@ -475,7 +476,7 @@ public sealed class HomeAssistantDashboardClient
         }
     }
 
-    private static void RequirePanelBooleans(JsonElement value, CancellationToken cancellationToken)
+    private static JsonElement RequirePanelBooleans(JsonElement value, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object)
@@ -484,11 +485,13 @@ public sealed class HomeAssistantDashboardClient
         }
 
         var hasRequireAdmin = false;
+        var embeddedRoute = default(JsonElement);
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
             var isBoolean = property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False;
             if (property.NameEquals("require_admin")) hasRequireAdmin = isBoolean;
+            else if (property.NameEquals("url_path")) embeddedRoute = property.Value;
             else if ((property.NameEquals("default_visible") || property.NameEquals("show_in_sidebar"))
                 && !isBoolean)
             {
@@ -500,6 +503,7 @@ public sealed class HomeAssistantDashboardClient
         {
             throw new HomeAssistantProtocolException("A frontend panel did not contain its required require_admin field.");
         }
+        return embeddedRoute;
     }
 
     private static void ValidateStorageDashboard(HomeAssistantDashboard dashboard, CancellationToken cancellationToken)

@@ -27,6 +27,18 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.True(Path.GetFileName(temporary).Length < 64);
     }
 
+    [Theory]
+    [InlineData(System.Runtime.InteropServices.Architecture.X64, 316)]
+    [InlineData(System.Runtime.InteropServices.Architecture.X86, 353)]
+    [InlineData(System.Runtime.InteropServices.Architecture.Arm, 382)]
+    [InlineData(System.Runtime.InteropServices.Architecture.Arm64, 276)]
+    public void LinuxAtomicExchangeUsesKernelRenameAt2Numbers(
+        System.Runtime.InteropServices.Architecture architecture,
+        int expected)
+    {
+        Assert.Equal(expected, HomeAssistantAtomicFile.GetLinuxRenameAt2SystemCallNumber(architecture));
+    }
+
     [Fact]
     public void CameraSubscriptionStateProjectionPreservesIdentityCancellation()
     {
@@ -849,6 +861,19 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Equal(
             new[] { "music", "video" },
             command.RootElement.GetProperty("media_filter_classes").EnumerateArray().Select(value => value.GetString()).ToArray());
+    }
+
+    [Fact]
+    public async Task MediaSearchPreservesProviderDefinedQueryText()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Media.SearchSourcesAsync(" dinner music ");
+
+        using var command = JsonDocument.Parse(
+            Assert.IsType<string>(server.GetLastWebSocketCommand("media_source/search_media")));
+        Assert.Equal(" dinner music ", command.RootElement.GetProperty("search_query").GetString());
     }
 
     [Theory]

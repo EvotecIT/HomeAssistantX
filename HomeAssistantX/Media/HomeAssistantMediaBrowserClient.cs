@@ -25,7 +25,7 @@ public sealed class HomeAssistantMediaBrowserClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         var payload = OptionalContentId(mediaContentId, cancellationToken);
-        payload["search_query"] = Require(searchQuery, nameof(searchQuery), cancellationToken);
+        payload["search_query"] = RequirePreserved(searchQuery, nameof(searchQuery), cancellationToken);
         AddMediaClasses(payload, mediaClasses, cancellationToken);
         return RequestSearchAsync("media_source/search_media", payload, cancellationToken);
     }
@@ -66,7 +66,7 @@ public sealed class HomeAssistantMediaBrowserClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         var payload = PlayerPayload(entityId, mediaContentType, mediaContentId, cancellationToken);
-        payload["search_query"] = Require(searchQuery, nameof(searchQuery), cancellationToken);
+        payload["search_query"] = RequirePreserved(searchQuery, nameof(searchQuery), cancellationToken);
         AddMediaClasses(payload, mediaClasses, cancellationToken);
         return RequestSearchAsync("media_player/search_media", payload, cancellationToken);
     }
@@ -82,7 +82,8 @@ public sealed class HomeAssistantMediaBrowserClient
         var value = await _webSocket.RequestAsync(command, payload, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         RequireNoDuplicateProperties(value, "The media search response contained duplicate JSON properties.", cancellationToken);
-        if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array)
+        var result = FindSearchResult(value, cancellationToken);
+        if (result.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media search response had an unexpected shape.");
         foreach (var item in result.EnumerateArray())
         {
@@ -335,7 +336,7 @@ public sealed class HomeAssistantMediaBrowserClient
     {
         if (mediaClasses is null) return;
         var values = new List<string>(mediaClasses.Count);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
         foreach (var mediaClass in mediaClasses)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -356,6 +357,20 @@ public sealed class HomeAssistantMediaBrowserClient
     {
         if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
             throw new HomeAssistantProtocolException(failureMessage);
+    }
+
+    private static JsonElement FindSearchResult(JsonElement value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.Object) return default;
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
+            if (property.NameEquals("result")) return property.Value;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return default;
     }
 
     private static string Require(

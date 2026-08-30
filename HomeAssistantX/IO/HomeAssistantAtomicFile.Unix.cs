@@ -573,8 +573,34 @@ internal static partial class HomeAssistantAtomicFile
     [DllImport("libc", EntryPoint = "fchown", SetLastError = true)]
     private static extern int FChown(SafeFileHandle handle, uint owner, uint group);
 
-    [DllImport("libc", EntryPoint = "renameat2", SetLastError = true)]
-    private static extern int RenameLinux(
+    private static int RenameLinux(
+        int oldDirectory,
+        string oldPath,
+        int newDirectory,
+        string newPath,
+        uint flags)
+        => RenameLinuxSystemCall(
+            new IntPtr(GetLinuxRenameAt2SystemCallNumber(RuntimeInformation.ProcessArchitecture)),
+            oldDirectory,
+            oldPath,
+            newDirectory,
+            newPath,
+            flags).ToInt32();
+
+    internal static int GetLinuxRenameAt2SystemCallNumber(Architecture architecture)
+        => architecture switch
+        {
+            Architecture.X64 => 316,
+            Architecture.X86 => 353,
+            Architecture.Arm => 382,
+            Architecture.Arm64 => 276,
+            _ => throw new PlatformNotSupportedException(
+                "Atomic Linux file replacement is not supported on this processor architecture.")
+        };
+
+    [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
+    private static extern IntPtr RenameLinuxSystemCall(
+        IntPtr number,
         int oldDirectory,
         string oldPath,
         int newDirectory,
