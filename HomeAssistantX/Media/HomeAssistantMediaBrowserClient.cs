@@ -157,8 +157,9 @@ public sealed class HomeAssistantMediaBrowserClient
 
         cancellationToken.ThrowIfCancellationRequested();
         if (mediaClass.ValueKind == JsonValueKind.Undefined
-            || mediaClass.ValueKind != JsonValueKind.String
-            || !IsCanonicalMediaClass(mediaClass.GetString(), cancellationToken)
+            || mediaClass.ValueKind != JsonValueKind.Null
+                && (mediaClass.ValueKind != JsonValueKind.String
+                    || !IsCanonicalMediaClass(mediaClass.GetString(), cancellationToken))
             || mediaContentId.ValueKind == JsonValueKind.Undefined
             || mediaContentId.ValueKind != JsonValueKind.String
             || mediaContentType.ValueKind == JsonValueKind.Undefined
@@ -203,7 +204,7 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
         if (!HasNonWhitespace(item.Title, cancellationToken))
             throw new HomeAssistantProtocolException("The media response omitted an item title.");
-        if (!IsCanonicalMediaClass(item.MediaClass, cancellationToken))
+        if (item.MediaClass is not null && !IsCanonicalMediaClass(item.MediaClass, cancellationToken))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical media class.");
         if (item.ChildrenMediaClass is not null && !IsCanonicalMediaClass(item.ChildrenMediaClass, cancellationToken))
             throw new HomeAssistantProtocolException("The media response contained a noncanonical children media class.");

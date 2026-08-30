@@ -7,7 +7,7 @@ namespace HomeAssistantX.Automations;
 /// <summary>Normalizes administrator-managed Home Assistant automation configuration identifiers.</summary>
 public static class HomeAssistantAutomationIdentifier
 {
-    /// <summary>Returns a trimmed non-empty automation configuration identifier.</summary>
+    /// <summary>Returns a non-empty automation configuration identifier without changing provider-defined characters.</summary>
     /// <exception cref="ArgumentException">Thrown when <paramref name="automationId"/> is empty or whitespace.</exception>
     public static string NormalizeConfigurationId(string automationId)
         => NormalizeConfigurationId(automationId, default);
@@ -19,29 +19,17 @@ public static class HomeAssistantAutomationIdentifier
         if (automationId is null)
             throw new ArgumentNullException(nameof(automationId));
         cancellationToken.ThrowIfCancellationRequested();
-        var start = 0;
-        while (start < automationId.Length && char.IsWhiteSpace(automationId[start]))
+        var hasContent = false;
+        for (var index = 0; index < automationId.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            start++;
+            if (!char.IsWhiteSpace(automationId[index])) hasContent = true;
         }
 
-        var end = automationId.Length - 1;
-        while (end >= start && char.IsWhiteSpace(automationId[end]))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            end--;
-        }
-
-        if (end < start)
+        if (!hasContent)
             throw new ArgumentException("An automation configuration identifier is required.", nameof(automationId));
-        for (var index = start; index <= end; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-
         cancellationToken.ThrowIfCancellationRequested();
-        return automationId.Substring(start, end - start + 1);
+        return automationId;
     }
 
     internal static string EscapeConfigurationId(

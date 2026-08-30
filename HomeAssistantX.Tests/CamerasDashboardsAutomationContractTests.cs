@@ -637,6 +637,22 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Empty(item.MediaContentType);
     }
 
+    [Fact]
+    public async Task MediaBrowseAllowsNullProviderMediaClasses()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson =
+                "{\"title\":\"Provider root\",\"media_class\":null,\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[{\"title\":\"Provider message\",\"media_class\":null,\"media_content_id\":\"\",\"media_content_type\":\"\",\"can_play\":false,\"can_expand\":false,\"can_search\":false,\"children\":[]}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var root = await client.Media.BrowseSourcesAsync();
+
+        Assert.Null(root.MediaClass);
+        Assert.Null(Assert.Single(root.Children).MediaClass);
+    }
+
     [Theory]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"not_shown\":-1,\"children\":[]}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[{\"title\":\"Hidden\",\"media_class\":\"music\",\"media_content_id\":\"child\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"not_shown\":-1}]}")]
@@ -2291,6 +2307,14 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAsync<ArgumentException>(() =>
             client.Automations.DeleteConfigurationAsync(automationId));
         Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public void AutomationConfigurationIdentifiersPreserveProviderWhitespace()
+    {
+        const string identifier = " morning-routine ";
+
+        Assert.Equal(identifier, HomeAssistantAutomationIdentifier.NormalizeConfigurationId(identifier));
     }
 
     [Theory]
