@@ -1265,6 +1265,37 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void ForcedAtomicExportsReplaceWriteOnlyUnixDestinations()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-write-only-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            File.SetUnixFileMode(destination, UnixFileMode.UserWrite);
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None);
+
+            Assert.Equal(UnixFileMode.UserWrite, File.GetUnixFileMode(destination));
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void AtomicExportsClearUnixSetIdBitsFromReplacementFiles()
     {
         if (OperatingSystem.IsWindows()) return;

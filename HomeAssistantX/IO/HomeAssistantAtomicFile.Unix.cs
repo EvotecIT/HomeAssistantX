@@ -25,6 +25,7 @@ internal static partial class HomeAssistantAtomicFile
     private const int LinuxNoFollow = 0x20000;
     private const int LinuxCloseOnExec = 0x80000;
     private const int LinuxNonBlocking = 0x0800;
+    private const int LinuxPathOnly = 0x200000;
     private const int MacWriteOnly = 0x0001;
     private const int MacReadOnly = 0x0000;
     private const int MacCreate = 0x0200;
@@ -32,6 +33,7 @@ internal static partial class HomeAssistantAtomicFile
     private const int MacNoFollow = 0x0100;
     private const int MacCloseOnExec = 0x1000000;
     private const int MacNonBlocking = 0x0004;
+    private const int MacEventOnly = 0x8000;
     private const int UnixCurrentWorkingDirectory = -100;
     private const uint LinuxRenameExchange = 0x2;
     private const uint MacRenameSwap = 0x2;
@@ -79,20 +81,26 @@ internal static partial class HomeAssistantAtomicFile
                     RequireRegularUnixFile(
                         displacedIdentity,
                         "The Unix destination must be a regular file or symbolic link.");
-                    using var displacedHandle = OpenPinnedUnixFile(temporaryPath);
-                    var displaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: true);
+                    using var displacedHandle = OpenPinnedUnixMetadataFile(temporaryPath);
+                    var pinnedDisplaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: false);
                     RequireRegularUnixFile(
-                        displaced,
+                        pinnedDisplaced,
                         "The pinned Unix destination must be a regular file.");
-                    if (!UnixFileMetadata.SameIdentity(displacedIdentity, displaced))
+                    if (!UnixFileMetadata.SameIdentity(displacedIdentity, pinnedDisplaced))
                     {
                         throw new IOException(
                             "The displaced Unix destination changed before its metadata could be pinned.");
                     }
 
-                    RequireUnixPathIdentity(temporaryPath, displaced);
+                    var displaced = ReadUnixFileMetadata(temporaryPath, includeAccessAcl: true);
+                    if (!UnixFileMetadata.SameIdentity(pinnedDisplaced, displaced))
+                    {
+                        throw new IOException(
+                            "The displaced Unix destination changed while its metadata was being read.");
+                    }
+                    RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
                     ApplyUnixDestinationMetadata(replacementHandle, displaced);
-                    RequireUnixPathIdentity(temporaryPath, displaced);
+                    RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
                 }
 
                 RequireUnixPathIdentity(destinationPath, replacementIdentity);
@@ -158,15 +166,21 @@ internal static partial class HomeAssistantAtomicFile
             sourceIdentity.Value,
             "The Unix destination must be a regular file or symbolic link.");
 
-        using var sourceHandle = OpenPinnedUnixFile(destinationPath);
-        var metadata = ReadUnixFileMetadata(sourceHandle, includeAccessAcl: true);
-        RequireRegularUnixFile(metadata, "The pinned Unix destination must be a regular file.");
-        if (!UnixFileMetadata.SameIdentity(sourceIdentity.Value, metadata))
+        using var sourceHandle = OpenPinnedUnixMetadataFile(destinationPath);
+        var pinnedSource = ReadUnixFileMetadata(sourceHandle, includeAccessAcl: false);
+        RequireRegularUnixFile(pinnedSource, "The pinned Unix destination must be a regular file.");
+        if (!UnixFileMetadata.SameIdentity(sourceIdentity.Value, pinnedSource))
         {
             throw new IOException(
                 "The Unix destination changed before its metadata could be pinned.");
         }
-        RequireUnixPathIdentity(destinationPath, metadata);
+        var metadata = ReadUnixFileMetadata(destinationPath, includeAccessAcl: true);
+        if (!UnixFileMetadata.SameIdentity(pinnedSource, metadata))
+        {
+            throw new IOException(
+                "The Unix destination changed while its metadata was being read.");
+        }
+        RequireUnixPathIdentity(destinationPath, pinnedSource);
 
         using var temporaryHandle = OpenPinnedUnixFile(temporaryPath);
         var temporaryIdentity = ReadUnixFileMetadata(temporaryHandle, includeAccessAcl: false);
@@ -230,6 +244,22 @@ internal static partial class HomeAssistantAtomicFile
         {
             throw new IOException(
                 "The Unix file could not be pinned without following symbolic links.",
+                new Win32Exception(Marshal.GetLastWin32Error()));
+        }
+
+        return new SafeFileHandle(new IntPtr(descriptor), ownsHandle: true);
+    }
+
+    private static SafeFileHandle OpenPinnedUnixMetadataFile(string path)
+    {
+        var flags = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            ? MacEventOnly | MacNoFollow | MacCloseOnExec | MacNonBlocking
+            : LinuxPathOnly | LinuxNoFollow | LinuxCloseOnExec;
+        var descriptor = EnsureUsableUnixDescriptor(Open(path, flags, 0));
+        if (descriptor < 0)
+        {
+            throw new IOException(
+                "The Unix file metadata could not be pinned without requiring content access.",
                 new Win32Exception(Marshal.GetLastWin32Error()));
         }
 
