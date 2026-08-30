@@ -24,6 +24,7 @@ public sealed class HomeAssistantFanClient : HomeAssistantControlClientBase
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantFanAction action, int? percentageStep = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var service = action switch
         {
             HomeAssistantFanAction.TurnOn => "turn_on",

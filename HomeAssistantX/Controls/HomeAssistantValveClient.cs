@@ -16,7 +16,9 @@ public sealed class HomeAssistantValveClient : HomeAssistantControlClientBase
     internal HomeAssistantValveClient(HomeAssistantServiceClient services) : base(services, "valve") { }
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantValveAction action, CancellationToken cancellationToken = default)
-        => CallAsync(action switch
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return CallAsync(action switch
         {
             HomeAssistantValveAction.Open => "open_valve",
             HomeAssistantValveAction.Close => "close_valve",
@@ -24,6 +26,7 @@ public sealed class HomeAssistantValveClient : HomeAssistantControlClientBase
             HomeAssistantValveAction.Toggle => "toggle",
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported valve action.")
         }, target, null, cancellationToken);
+    }
 
     public Task<HomeAssistantServiceCallResult> SetPositionAsync(HomeAssistantTarget target, double positionPercent, CancellationToken cancellationToken = default)
         => CallAsync("set_valve_position", target, call => call.WithData("position", ControlValidation.Percent(positionPercent, nameof(positionPercent))!.Value), cancellationToken);

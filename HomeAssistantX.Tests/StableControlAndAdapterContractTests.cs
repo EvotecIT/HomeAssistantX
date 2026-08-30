@@ -351,6 +351,51 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task TypedActionClientsPrioritizeAPreCanceledTokenOverInvalidEnums()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Vacuums.ActAsync(
+            HomeAssistantTarget.ForEntity("vacuum.downstairs"),
+            (HomeAssistantVacuumAction)int.MaxValue,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.LawnMowers.ActAsync(
+            HomeAssistantTarget.ForEntity("lawn_mower.garden"),
+            (HomeAssistantLawnMowerAction)int.MaxValue,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Humidifiers.ActAsync(
+            HomeAssistantTarget.ForEntity("humidifier.bedroom"),
+            (HomeAssistantHumidifierAction)int.MaxValue,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.WaterHeaters.ActAsync(
+            HomeAssistantTarget.ForEntity("water_heater.tank"),
+            (HomeAssistantWaterHeaterAction)int.MaxValue,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Valves.ActAsync(
+            HomeAssistantTarget.ForEntity("valve.water"),
+            (HomeAssistantValveAction)int.MaxValue,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Fans.ActAsync(
+            HomeAssistantTarget.ForEntity("fan.office"),
+            (HomeAssistantFanAction)int.MaxValue,
+            percentageStep: -1,
+            cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Covers.ActAsync(
+            HomeAssistantTarget.ForEntity("cover.garage"),
+            (HomeAssistantCoverAction)int.MaxValue,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.Controls.Routines.PressButtonAsync(
+            HomeAssistantTarget.ForEntity("button.restart"),
+            (HomeAssistantButtonDomain)int.MaxValue,
+            cancellation.Token));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task RoutineHelperAndMobileCameraRejectWrongDomainTargetsBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

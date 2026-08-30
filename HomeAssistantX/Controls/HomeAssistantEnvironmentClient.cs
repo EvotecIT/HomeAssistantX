@@ -21,13 +21,16 @@ public sealed class HomeAssistantHumidifierClient : HomeAssistantControlClientBa
     internal HomeAssistantHumidifierClient(HomeAssistantServiceClient services) : base(services, "humidifier") { }
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantHumidifierAction action, CancellationToken cancellationToken = default)
-        => CallAsync(action switch
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return CallAsync(action switch
         {
             HomeAssistantHumidifierAction.TurnOn => "turn_on",
             HomeAssistantHumidifierAction.TurnOff => "turn_off",
             HomeAssistantHumidifierAction.Toggle => "toggle",
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported humidifier action.")
         }, target, null, cancellationToken);
+    }
 
     public Task<HomeAssistantServiceCallResult> SetHumidityAsync(HomeAssistantTarget target, double humidityPercent, CancellationToken cancellationToken = default)
         => CallAsync("set_humidity", target, call => call.WithData("humidity", ControlValidation.Percent(humidityPercent, nameof(humidityPercent))!.Value), cancellationToken);
@@ -42,12 +45,15 @@ public sealed class HomeAssistantWaterHeaterClient : HomeAssistantControlClientB
     internal HomeAssistantWaterHeaterClient(HomeAssistantServiceClient services) : base(services, "water_heater") { }
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantWaterHeaterAction action, CancellationToken cancellationToken = default)
-        => CallAsync(action switch
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return CallAsync(action switch
         {
             HomeAssistantWaterHeaterAction.TurnOn => "turn_on",
             HomeAssistantWaterHeaterAction.TurnOff => "turn_off",
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported water heater action.")
         }, target, null, cancellationToken);
+    }
 
     public Task<HomeAssistantServiceCallResult> SetTemperatureAsync(HomeAssistantTarget target, double temperature, string? operationMode = null, CancellationToken cancellationToken = default)
         => CallAsync("set_temperature", target, call =>

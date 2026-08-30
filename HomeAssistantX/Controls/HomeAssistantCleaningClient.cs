@@ -26,7 +26,9 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
     internal HomeAssistantVacuumClient(HomeAssistantServiceClient services) : base(services, "vacuum") { }
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantVacuumAction action, CancellationToken cancellationToken = default)
-        => CallAsync(action switch
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return CallAsync(action switch
         {
             HomeAssistantVacuumAction.Start => "start",
             HomeAssistantVacuumAction.Pause => "pause",
@@ -36,6 +38,7 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
             HomeAssistantVacuumAction.CleanSpot => "clean_spot",
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported vacuum action.")
         }, target, null, cancellationToken);
+    }
 
     public Task<HomeAssistantServiceCallResult> SetFanSpeedAsync(HomeAssistantTarget target, string fanSpeed, CancellationToken cancellationToken = default)
         => CallAsync("set_fan_speed", target, call => call.WithData("fan_speed", ControlValidation.RequiredUnchanged(fanSpeed, nameof(fanSpeed), cancellationToken)), cancellationToken);
@@ -70,11 +73,14 @@ public sealed class HomeAssistantLawnMowerClient : HomeAssistantControlClientBas
     internal HomeAssistantLawnMowerClient(HomeAssistantServiceClient services) : base(services, "lawn_mower") { }
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantLawnMowerAction action, CancellationToken cancellationToken = default)
-        => CallAsync(action switch
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return CallAsync(action switch
         {
             HomeAssistantLawnMowerAction.StartMowing => "start_mowing",
             HomeAssistantLawnMowerAction.Pause => "pause",
             HomeAssistantLawnMowerAction.Dock => "dock",
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported lawn mower action.")
         }, target, null, cancellationToken);
+    }
 }

@@ -41,12 +41,15 @@ public sealed class HomeAssistantRoutineClient
         => CallAsync("script", "toggle", target, null, cancellationToken);
 
     public Task<HomeAssistantServiceCallResult> PressButtonAsync(HomeAssistantTarget target, HomeAssistantButtonDomain domain, CancellationToken cancellationToken = default)
-        => CallAsync(domain switch
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return CallAsync(domain switch
         {
             HomeAssistantButtonDomain.Button => "button",
             HomeAssistantButtonDomain.InputButton => "input_button",
             _ => throw new ArgumentOutOfRangeException(nameof(domain), domain, "Unsupported button domain.")
         }, "press", target, null, cancellationToken);
+    }
 
     private async Task<HomeAssistantServiceCallResult> CallAsync(string domain, string action, HomeAssistantTarget target, Action<HomeAssistantServiceCall>? configure, CancellationToken cancellationToken)
     {
