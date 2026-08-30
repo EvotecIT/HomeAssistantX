@@ -651,7 +651,7 @@ public sealed class HomeAssistantRecorderClient
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantEntityId.TryNormalize(value, out var entityId))
+            if (!HomeAssistantEntityId.TryNormalize(value, cancellationToken, out var entityId))
             {
                 throw new ArgumentException("Entity identifiers must use the native Home Assistant format.", name);
             }

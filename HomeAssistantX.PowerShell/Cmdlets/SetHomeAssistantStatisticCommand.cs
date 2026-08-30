@@ -55,14 +55,14 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             return;
         }
 
-        if (!HomeAssistantStatisticIdentifier.TryNormalize(StatisticId, out var statisticId))
+        if (!HomeAssistantStatisticIdentifier.TryNormalize(StatisticId, CancelToken, out var statisticId))
             throw new ArgumentException("Statistic identifiers must use '<domain>.<object>' or '<source>:<name>' with canonical lowercase slug segments.", nameof(StatisticId));
 
         switch (ParameterSetName)
         {
             case MetadataSet:
-                RequireExclusive(UnitClass, ClearUnitClass, nameof(UnitClass), nameof(ClearUnitClass));
-                RequireExclusive(UnitOfMeasurement, ClearUnitOfMeasurement, nameof(UnitOfMeasurement), nameof(ClearUnitOfMeasurement), allowEmptySentinel: true);
+                RequireExclusive(UnitClass, ClearUnitClass, nameof(UnitClass), nameof(ClearUnitClass), CancelToken);
+                RequireExclusive(UnitOfMeasurement, ClearUnitOfMeasurement, nameof(UnitOfMeasurement), nameof(ClearUnitOfMeasurement), CancelToken, allowEmptySentinel: true);
                 var hasUnitClassValue = MyInvocation.BoundParameters.ContainsKey(nameof(UnitClass));
                 var hasUnitValue = MyInvocation.BoundParameters.ContainsKey(nameof(UnitOfMeasurement));
                 if (hasUnitClassValue && UnitClass is null) throw new ArgumentNullException(nameof(UnitClass), "Use ClearUnitClass to remove the unit class.");
@@ -76,15 +76,22 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 var requestedUnitClass = ClearUnitClass
                     ? null
                     : hasUnitClassValue
-                        ? HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(UnitClass, nameof(UnitClass))
+                        ? HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(UnitClass, nameof(UnitClass), CancelToken)
                         : null;
                 var requestedUnitOfMeasurement = ClearUnitOfMeasurement
                     ? null
                     : hasUnitValue
-                        ? HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement))
+                        ? HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(UnitOfMeasurement, nameof(UnitOfMeasurement), CancelToken)
                         : null;
                 var availableMetadata = await Client.Recorder.GetStatisticsMetadataAsync(new[] { statisticId }, CancelToken).ConfigureAwait(false);
-                var matchingMetadata = availableMetadata.FirstOrDefault(item => string.Equals(item.StatisticId, statisticId, StringComparison.OrdinalIgnoreCase));
+                HomeAssistantStatisticMetadata? matchingMetadata = null;
+                foreach (var item in availableMetadata)
+                {
+                    CancelToken.ThrowIfCancellationRequested();
+                    if (!HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(item.StatisticId, statisticId, CancelToken)) continue;
+                    matchingMetadata = item;
+                    break;
+                }
                 if (matchingMetadata is null)
                 {
                     throw new InvalidOperationException("Home Assistant did not return metadata for the requested Recorder statistic.");
@@ -100,10 +107,10 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
                 await Client.Recorder.UpdateStatisticsMetadataAsync(statisticId, unitClass, unitOfMeasurement, CancelToken).ConfigureAwait(false);
                 return;
             case UnitSet:
-                RequireExclusive(OldUnit, ClearOldUnit, nameof(OldUnit), nameof(ClearOldUnit), required: true, allowEmptySentinel: true);
-                RequireExclusive(NewUnit, ClearNewUnit, nameof(NewUnit), nameof(ClearNewUnit), required: true, allowEmptySentinel: true);
-                var oldUnit = ClearOldUnit ? null : OldUnit!.Trim();
-                var newUnit = ClearNewUnit ? null : NewUnit!.Trim();
+                RequireExclusive(OldUnit, ClearOldUnit, nameof(OldUnit), nameof(ClearOldUnit), CancelToken, required: true, allowEmptySentinel: true);
+                RequireExclusive(NewUnit, ClearNewUnit, nameof(NewUnit), nameof(ClearNewUnit), CancelToken, required: true, allowEmptySentinel: true);
+                var oldUnit = ClearOldUnit ? null : HomeAssistantX.Protocol.CancellationAwareString.Trim(OldUnit!, CancelToken);
+                var newUnit = ClearNewUnit ? null : HomeAssistantX.Protocol.CancellationAwareString.Trim(NewUnit!, CancelToken);
                 if (string.Equals(oldUnit, newUnit, StringComparison.Ordinal))
                     throw new ArgumentException("OldUnit and NewUnit must resolve to different values.");
                 if (!ShouldProcess(ConnectionDisplayName, "Convert stored Recorder statistics for 1 identifier to a new unit")) return;
@@ -112,7 +119,7 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             case AdjustSet:
                 if (double.IsNaN(AdjustSum) || double.IsInfinity(AdjustSum)) throw new ArgumentOutOfRangeException(nameof(AdjustSum));
                 if (AdjustSum == 0d) throw new ArgumentOutOfRangeException(nameof(AdjustSum), "AdjustSum must be non-zero.");
-                var adjustmentUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(Unit, nameof(Unit));
+                var adjustmentUnit = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(Unit, nameof(Unit), CancelToken);
                 if (!ShouldProcess(ConnectionDisplayName, $"Adjust Recorder sum by {AdjustSum} for 1 identifier")) return;
                 await Client.Recorder.AdjustSumStatisticsAsync(statisticId, StartTime, AdjustSum, adjustmentUnit, CancelToken).ConfigureAwait(false);
                 return;
@@ -139,8 +146,12 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
         CancellationToken cancellationToken)
     {
         if (metadata is null) throw new ArgumentException("Import metadata is required.", nameof(ImportMetadata));
-        if (!HomeAssistantStatisticIdentifier.TryNormalizeExternal(metadata.StatisticId, out var statisticId, out var source)
-            || !string.Equals(source, metadata.Source?.Trim(), StringComparison.Ordinal))
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalizedSource = metadata.Source is null
+            ? null
+            : HomeAssistantX.Protocol.CancellationAwareString.Trim(metadata.Source, cancellationToken);
+        if (!HomeAssistantStatisticIdentifier.TryNormalizeExternal(metadata.StatisticId, cancellationToken, out var statisticId, out var source)
+            || !HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(source, normalizedSource, cancellationToken))
             throw new ArgumentException("Import metadata requires a canonical external StatisticId whose source prefix exactly matches Source.", nameof(ImportMetadata));
         var normalized = new HomeAssistantStatisticImportMetadata
         {
@@ -150,8 +161,8 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
             HasMean = metadata.HasMean,
             HasSum = metadata.HasSum,
             MeanType = metadata.MeanType,
-            UnitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass)),
-            UnitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement))
+            UnitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass), cancellationToken),
+            UnitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement), cancellationToken)
         };
         normalized.ValidateRows(rows, cancellationToken);
         return normalized;
@@ -174,15 +185,18 @@ public sealed class SetHomeAssistantStatisticCommand : HomeAssistantCmdlet
         bool clear,
         string valueName,
         string clearName,
+        CancellationToken cancellationToken,
         bool required = false,
         bool allowEmptySentinel = false)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value is not null && clear) throw new ArgumentException($"{valueName} and {clearName} cannot be combined.");
         if (required && value is null && !clear) throw new ArgumentException($"Specify {valueName} or {clearName}.");
         if (value is not null
-            && string.IsNullOrWhiteSpace(value)
+            && HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)
             && !(allowEmptySentinel && value.Length == 0))
             throw new ArgumentException($"{valueName} must not be blank.", valueName);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
 }
