@@ -459,6 +459,28 @@ public sealed class ProtocolResponseContractTests
                 options));
     }
 
+    [Fact]
+    public async Task OrdinalResponseKeyHashingObservesCancellationDuringTraversal()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var comparer = new CancellationAwareOrdinalStringEqualityComparer(cancellation.Token);
+        var value = new string('x', 16_000_000);
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return comparer.GetHashCode(value);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]

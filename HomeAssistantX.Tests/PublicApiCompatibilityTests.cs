@@ -414,6 +414,41 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void MethodAndAccessorFormattersPreserveSynchronizedImplementationContracts()
+    {
+        var method = typeof(PublicApiCompatibilityTests).GetMethod(
+            nameof(SynchronizedMethodFixture),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var getter = typeof(SynchronizedAccessorFixture).GetProperty(
+            nameof(SynchronizedAccessorFixture.Value))!.GetMethod!;
+
+        Assert.StartsWith("synchronized SynchronizedMethodFixture", FormatMethod(method), StringComparison.Ordinal);
+        Assert.StartsWith("synchronized get;", FormatAccessor(getter, string.Empty, "instance", "get;"), StringComparison.Ordinal);
+        Assert.Contains(
+            "synchronized ",
+            FormatConstructor(typeof(SynchronizedConstructorFixture).GetConstructors().Single()),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TypeFormatterPreservesBeforeFieldInitContract()
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("HomeAssistantX.TypeInitializationFixture"),
+            AssemblyBuilderAccess.Run);
+        var module = assembly.DefineDynamicModule("main");
+        var relaxed = module.DefineType(
+            "RelaxedInitialization",
+            TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.BeforeFieldInit).CreateType()!;
+        var precise = module.DefineType(
+            "PreciseInitialization",
+            TypeAttributes.Public | TypeAttributes.Class).CreateType()!;
+
+        Assert.Equal("before-field-init ", TypeInitializationContract(relaxed));
+        Assert.Equal(string.Empty, TypeInitializationContract(precise));
+    }
+
+    [Fact]
     public void TypeFormatterPreservesDynamicMetadataAcrossNestedContracts()
     {
         var method = typeof(PublicApiCompatibilityTests).GetMethod(
@@ -732,10 +767,10 @@ public sealed class PublicApiCompatibilityTests
     public void PublicApiMatchesTheReviewedCompatibilityBaseline()
     {
         var current = BuildSurface(typeof(HomeAssistantClient).Assembly);
-        Assert.Contains("T sealed class HomeAssistantX.HomeAssistantClient : System.IDisposable", current, StringComparison.Ordinal);
+        Assert.Contains("T before-field-init sealed class HomeAssistantX.HomeAssistantClient : System.IDisposable", current, StringComparison.Ordinal);
         Assert.Contains("M static HomeAssistantX.HomeAssistantClient Create", current, StringComparison.Ordinal);
-        Assert.Contains("T sealed class HomeAssistantX.Exceptions.HomeAssistantConnectionException : HomeAssistantX.Exceptions.HomeAssistantException", current, StringComparison.Ordinal);
-        Assert.Contains("T interface HomeAssistantX.Subscriptions.IHomeAssistantSubscription : System.IDisposable", current, StringComparison.Ordinal);
+        Assert.Contains("T before-field-init sealed class HomeAssistantX.Exceptions.HomeAssistantConnectionException : HomeAssistantX.Exceptions.HomeAssistantException", current, StringComparison.Ordinal);
+        Assert.Contains("T before-field-init interface HomeAssistantX.Subscriptions.IHomeAssistantSubscription : System.IDisposable", current, StringComparison.Ordinal);
         Assert.Contains("TryGetAttribute<T>(System.String name, out T? value)", current, StringComparison.Ordinal);
         var baselinePath = Path.Combine(AppContext.BaseDirectory, "Contracts", "HomeAssistantX.PublicApi.txt");
         if (string.Equals(Environment.GetEnvironmentVariable("HOMEASSISTANTX_UPDATE_API_BASELINE"), "1", StringComparison.Ordinal))
@@ -888,7 +923,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -1108,7 +1143,7 @@ public sealed class PublicApiCompatibilityTests
             ? string.Empty
             : "<" + string.Join(",", genericArguments.Select(argument => DynamicallyAccessedMembersContract(argument) + argument.Name)) + ">";
         var extension = method.IsDefined(typeof(ExtensionAttribute), inherit: false) ? "extension " : string.Empty;
-        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + DispIdContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
+        return SpecialNameContract(method) + ObsoleteContract(method) + ExperimentalContract(method) + PreviewFeatureContract(method) + PlatformContract(method) + RequiresCodeContract(method) + ClsComplianceContract(method) + ComVisibilityContract(method) + DispIdContract(method) + OverloadResolutionPriorityContract(method) + ConditionalContract(method) + DllImportContract(method) + PreserveSigContract(method) + SynchronizedContract(method) + UnmanagedCallersOnlyContract(method) + UnmanagedCallConvContract(method) + MethodFlowContract(method) + extension + method.Name + genericList + "(" + FormatParameters(method.GetParameters()) + ")" + FormatGenericConstraints(genericArguments);
     }
 
     private static string SpecialNameContract(MemberInfo member)
@@ -1132,6 +1167,11 @@ public sealed class PublicApiCompatibilityTests
     private static string SerializableContract(Type type)
         => (type.Attributes & SerializableTypeMetadataFlag) != 0
             ? "serializable "
+            : string.Empty;
+
+    private static string TypeInitializationContract(Type type)
+        => (type.Attributes & TypeAttributes.BeforeFieldInit) != 0
+            ? "before-field-init "
             : string.Empty;
 
     private static string DefaultMemberContract(Type type)
@@ -1182,6 +1222,11 @@ public sealed class PublicApiCompatibilityTests
             && (method.MethodImplementationFlags & MethodImplAttributes.PreserveSig) != 0
                 ? "preserve-sig "
                 : string.Empty;
+
+    private static string SynchronizedContract(MethodBase method)
+        => (method.MethodImplementationFlags & MethodImplAttributes.Synchronized) != 0
+            ? "synchronized "
+            : string.Empty;
 
     private static string UnmanagedCallersOnlyContract(MethodBase method)
     {
@@ -1300,7 +1345,7 @@ public sealed class PublicApiCompatibilityTests
         => "C " + ConstructorAccess(constructor) + SpecialNameContract(constructor) + ObsoleteContract(constructor)
             + ExperimentalContract(constructor) + PreviewFeatureContract(constructor) + PlatformContract(constructor) + RequiresCodeContract(constructor)
             + ClsComplianceContract(constructor) + ComVisibilityContract(constructor)
-            + OverloadResolutionPriorityContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
+            + OverloadResolutionPriorityContract(constructor) + SynchronizedContract(constructor) + MethodFlowContract(constructor) + RequiredMemberSatisfaction(constructor)
             + FormatType(constructor.DeclaringType!) + "(" + FormatParameters(constructor.GetParameters()) + ")";
 
     private static string FormatProperty(PropertyInfo property)
@@ -1332,6 +1377,26 @@ public sealed class PublicApiCompatibilityTests
 
     [PreserveSig]
     private static int PreserveSigManagedFixture() => 0;
+
+    [MethodImpl(MethodImplOptions.Synchronized)]
+    private static int SynchronizedMethodFixture() => 0;
+
+    private sealed class SynchronizedAccessorFixture
+    {
+        public int Value
+        {
+            [MethodImpl(MethodImplOptions.Synchronized)]
+            get => 0;
+        }
+    }
+
+    private sealed class SynchronizedConstructorFixture
+    {
+        [MethodImpl(MethodImplOptions.Synchronized)]
+        public SynchronizedConstructorFixture()
+        {
+        }
+    }
 
     private static TResult GenericConstraintFixture<TInput, TResult>(params TInput[] values)
         where TInput : class, IDisposable, new()
@@ -2494,6 +2559,7 @@ public sealed class PublicApiCompatibilityTests
             + DispIdContract(accessor!)
             + DllImportContract(accessor!)
             + PreserveSigContract(accessor!)
+            + SynchronizedContract(accessor!)
             + UnmanagedCallersOnlyContract(accessor!)
             + UnmanagedCallConvContract(accessor!)
             + text;

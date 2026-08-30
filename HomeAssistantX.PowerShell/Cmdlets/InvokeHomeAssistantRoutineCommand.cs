@@ -49,11 +49,13 @@ public sealed class InvokeHomeAssistantRoutineCommand : HomeAssistantTargetCmdle
     {
         if (values is null) return null;
         cancellationToken.ThrowIfCancellationRequested();
-        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var result = new Dictionary<string, object?>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (DictionaryEntry entry in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (entry.Key is not string key || string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Variable names must be non-empty strings.", nameof(Variables));
+            if (entry.Key is not string key) throw new ArgumentException("Variable names must be non-empty strings.", nameof(Variables));
+            key = ControlValidation.RequiredUnchanged(key, nameof(Variables), cancellationToken);
             result[key] = entry.Value;
         }
         cancellationToken.ThrowIfCancellationRequested();

@@ -244,7 +244,8 @@ internal static class HomeAssistantJson
                 throw new JsonException("The serialized value was not a JSON object.");
             }
 
-            var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+            var result = new Dictionary<string, object?>(
+                new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
             foreach (var property in document.RootElement.EnumerateObject())
             {
                 cancellationToken.ThrowIfCancellationRequested();
