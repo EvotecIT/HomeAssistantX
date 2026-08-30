@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.Collections.Concurrent;
+using System.Net.Http;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Operations;
@@ -312,6 +313,35 @@ public sealed class OperationsContractTests
         Assert.Contains("direct supervisor log line", log);
         Assert.Equal("/addons/TEST_APP/restart", server.LastRequestPath);
         Assert.Equal("Bearer " + TestHomeAssistantServer.AccessToken, server.LastAuthorization);
+    }
+
+    [Fact]
+    public async Task SupervisorRoutesPrioritizeAPreCanceledTokenBeforeSelectorsAndEscaping()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var supervisor = HomeAssistantSupervisorClient.Create(server.BaseUri, TestHomeAssistantServer.AccessToken);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var longValue = new string('a', 1_000_000);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.GetJobAsync(longValue, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.GetLogAsync((HomeAssistantSupervisorLogTarget)int.MaxValue, cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.RestartAsync((HomeAssistantSupervisorRestartTarget)int.MaxValue, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.InstallUpdateAsync(
+                (HomeAssistantSupervisorUpdateTarget)int.MaxValue,
+                app: longValue,
+                version: longValue,
+                cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.InvokeAppAsync(longValue, (HomeAssistantAppOperation)int.MaxValue, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.SendAsync(HttpMethod.Get, "/" + longValue, cancellationToken: cancellation.Token));
+
+        Assert.Null(server.LastRequestPath);
     }
 
     [Fact]
