@@ -1131,6 +1131,9 @@ public sealed class MediaAndRemoteContractTests
         var remoteTarget = HomeAssistantTarget.ForEntity("remote.living_room");
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.SubscribeAsync(null!, cancellation.Token));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.Controls.Remotes.SendCommandsAsync(remoteTarget, values, cancellationToken: cancellation.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.Controls.Remotes.LearnCommandsAsync(
@@ -1149,9 +1152,23 @@ public sealed class MediaAndRemoteContractTests
                 new HomeAssistantTarget { EntityIds = values },
                 35,
                 cancellation.Token));
+        var mediaTarget = HomeAssistantTarget.ForEntity("media_player.kitchen");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.SetVolumeAsync(mediaTarget, -1, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.StepVolumeAsync(
+                mediaTarget,
+                (HomeAssistantMediaVolumeStepAction)99,
+                cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.SeekAsync(mediaTarget, TimeSpan.FromSeconds(-1), cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.MediaPlayers.SetRepeatAsync(
+                mediaTarget,
+                (HomeAssistantMediaRepeatMode)99,
+                cancellation.Token));
         var cyclicExtra = new Dictionary<string, object?>();
         cyclicExtra["self"] = cyclicExtra;
-        var mediaTarget = HomeAssistantTarget.ForEntity("media_player.kitchen");
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.Controls.MediaPlayers.SetAsync(
                 mediaTarget,

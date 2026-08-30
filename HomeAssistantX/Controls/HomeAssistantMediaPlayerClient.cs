@@ -51,6 +51,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         Func<HomeAssistantMediaPlayerStateChange, CancellationToken, Task> handler,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (handler is null)
         {
             throw new ArgumentNullException(nameof(handler));
@@ -247,6 +248,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         double volumePercent,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var validated = ControlValidation.Percent(volumePercent, nameof(volumePercent))!.Value;
         return CallAsync(
             "volume_set",
@@ -260,6 +262,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         HomeAssistantMediaVolumeStepAction action,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var service = action switch
         {
             HomeAssistantMediaVolumeStepAction.Up => "volume_up",
@@ -274,6 +277,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         TimeSpan position,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var validated = ControlValidation.Duration(position, nameof(position))!.Value;
         return CallAsync(
             "media_seek",
@@ -299,6 +303,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         HomeAssistantMediaRepeatMode repeat,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var value = RepeatMode(repeat);
         return CallAsync(
             "repeat_set",
