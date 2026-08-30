@@ -354,9 +354,9 @@ public sealed class HomeAssistantMediaPlayerStatus
             Shuffle = HomeAssistantAttributeReader.GetBoolean(attributes, "shuffle", cancellationToken),
             Repeat = HomeAssistantAttributeReader.GetString(attributes, "repeat", cancellationToken),
             GroupMembers = GetGroupMembers(attributes, cancellationToken),
-            MediaImageUrl = HomeAssistantAttributeReader.GetString(attributes, "media_image_url", cancellationToken),
-            EntityPicture = HomeAssistantAttributeReader.GetString(attributes, "entity_picture", cancellationToken),
-            EntityPictureLocal = HomeAssistantAttributeReader.GetString(attributes, "entity_picture_local", cancellationToken),
+            MediaImageUrl = HomeAssistantAttributeReader.GetStrictString(attributes, "media_image_url", cancellationToken),
+            EntityPicture = HomeAssistantAttributeReader.GetStrictString(attributes, "entity_picture", cancellationToken),
+            EntityPictureLocal = HomeAssistantAttributeReader.GetStrictString(attributes, "entity_picture_local", cancellationToken),
             Manufacturer = HomeAssistantAttributeReader.GetString(attributes, "manufacturer", cancellationToken),
             ModelName = HomeAssistantAttributeReader.GetString(attributes, "model_name", cancellationToken)
         };

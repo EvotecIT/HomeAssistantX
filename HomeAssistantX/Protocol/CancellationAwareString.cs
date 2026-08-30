@@ -123,6 +123,25 @@ internal static class CancellationAwareString
         }
     }
 
+    internal static int GetOrdinalHashCode(
+        string value,
+        CancellationToken cancellationToken)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        cancellationToken.ThrowIfCancellationRequested();
+        unchecked
+        {
+            var hash = 17;
+            for (var index = 0; index < value.Length; index++)
+            {
+                if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                hash = (hash * 31) + value[index];
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            return hash;
+        }
+    }
+
     internal static int CompareOrdinalIgnoreCase(
         string? left,
         string? right,

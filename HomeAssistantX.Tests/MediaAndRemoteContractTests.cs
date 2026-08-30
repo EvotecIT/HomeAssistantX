@@ -11,6 +11,34 @@ namespace HomeAssistantX.Tests;
 public sealed class MediaAndRemoteContractTests
 {
     [Fact]
+    public void FloatingPointTextParsingIsBoundedAndCancellationAware()
+    {
+        using var document = JsonDocument.Parse("{\"value\":\"" + new string('1', 129) + "\"}");
+        var attributes = new Dictionary<string, JsonElement>
+        {
+            ["value"] = document.RootElement.GetProperty("value").Clone()
+        };
+
+        Assert.Null(HomeAssistantAttributeReader.GetDouble(attributes, "value"));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAttributeReader.GetDouble(attributes, "value", cancellation.Token));
+    }
+
+    [Fact]
+    public void RawFloatingPointParsingIsBounded()
+    {
+        using var document = JsonDocument.Parse("{\"value\":" + new string('1', 129) + "}");
+        var attributes = new Dictionary<string, JsonElement>
+        {
+            ["value"] = document.RootElement.GetProperty("value").Clone()
+        };
+
+        Assert.Null(HomeAssistantAttributeReader.GetDouble(attributes, "value"));
+    }
+
+    [Fact]
     public void TypedSubscriptionStateProjectionPreservesCancellationDuringIdentityValidation()
     {
         using var cancellation = new CancellationTokenSource();
@@ -265,6 +293,22 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal(
             new Uri("https://ha.example.test/api/media/local-artwork"),
             status.ResolveArtworkUri(new Uri("https://ha.example.test/home-assistant/")));
+    }
+
+    [Theory]
+    [InlineData("42")]
+    [InlineData("true")]
+    public void MediaStatusRequiresStringArtworkAttributes(string primary)
+    {
+        var raw = DeserializeState(
+            "{\"entity_id\":\"media_player.fallback\",\"state\":\"idle\",\"attributes\":{" +
+            "\"media_image_url\":" + primary + ",\"entity_picture_local\":\"/api/media/local-artwork\"}}");
+
+        var status = HomeAssistantMediaPlayerStatus.FromState(raw);
+
+        Assert.Equal(
+            new Uri("https://ha.example.test/api/media/local-artwork"),
+            status.ResolveArtworkUri(new Uri("https://ha.example.test/")));
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 ﻿using System.Text.Json.Serialization;
 
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Services;
 
@@ -165,12 +166,12 @@ public sealed class HomeAssistantTarget
         {
             cancellationToken.ThrowIfCancellationRequested();
             var id = ids[index];
-            if (string.IsNullOrWhiteSpace(id))
+            if (CancellationAwareString.IsNullOrWhiteSpace(id, cancellationToken))
             {
                 throw new ArgumentException("Target identifiers cannot be empty.", parameterName);
             }
 
-            normalized[index] = id.Trim();
+            normalized[index] = CancellationAwareString.Trim(id, cancellationToken);
         }
 
         return normalized;
@@ -191,7 +192,7 @@ public sealed class HomeAssistantTarget
         foreach (var value in ids)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!HomeAssistantEntityId.TryNormalize(value, out var entityId))
+            if (!HomeAssistantEntityId.TryNormalize(value, cancellationToken, out var entityId))
             {
                 throw new ArgumentException(
                     "Entity identifiers must use the lowercase native Home Assistant format.",

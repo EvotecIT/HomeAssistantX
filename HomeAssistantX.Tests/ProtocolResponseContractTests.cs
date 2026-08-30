@@ -220,6 +220,30 @@ public sealed class ProtocolResponseContractTests
             target.NormalizeRequiredForDomain("light", nameof(target), cancellation.Token));
     }
 
+    [Fact]
+    public async Task NonEntityTargetNormalizationObservesCancellationDuringTraversal()
+    {
+        var target = new HomeAssistantX.Services.HomeAssistantTarget
+        {
+            AreaIds = new[] { new string(' ', 16_000_000) + "kitchen" }
+        };
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return target.NormalizeRequiredForDomain("light", nameof(target), cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]

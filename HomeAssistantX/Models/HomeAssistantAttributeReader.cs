@@ -7,6 +7,8 @@ namespace HomeAssistantX.Models;
 
 internal static class HomeAssistantAttributeReader
 {
+    private const int MaximumFloatingPointTextLength = 128;
+
     public static string? GetString(IReadOnlyDictionary<string, JsonElement> attributes, string name)
         => GetString(attributes, name, default);
 
@@ -32,6 +34,22 @@ internal static class HomeAssistantAttributeReader
         return result;
     }
 
+    internal static string? GetStrictString(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetValue(attributes, name, out var value, cancellationToken)
+            || value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var result = value.GetString();
+        ObserveString(result, cancellationToken);
+        return result;
+    }
+
     public static double? GetDouble(IReadOnlyDictionary<string, JsonElement> attributes, string name)
         => GetDouble(attributes, name, default);
 
@@ -45,15 +63,23 @@ internal static class HomeAssistantAttributeReader
             return null;
         }
 
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number))
+        if (value.ValueKind == JsonValueKind.Number)
         {
-            return IsFinite(number) ? number : null;
+            var rawNumber = value.GetRawText();
+            ObserveString(rawNumber, cancellationToken);
+            if (rawNumber.Length <= MaximumFloatingPointTextLength
+                && value.TryGetDouble(out var numericValue))
+            {
+                return IsFinite(numericValue) ? numericValue : null;
+            }
+            return null;
         }
 
         var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
         ObserveString(text, cancellationToken);
         if (text is not null
-            && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out number)
+            && text.Length <= MaximumFloatingPointTextLength
+            && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
             && IsFinite(number))
         {
             return number;
@@ -134,7 +160,7 @@ internal static class HomeAssistantAttributeReader
         {
             JsonValueKind.True => true,
             JsonValueKind.False => false,
-            JsonValueKind.String when bool.TryParse(text, out var parsedBoolean) => parsedBoolean,
+            JsonValueKind.String when text is { Length: <= 5 } && bool.TryParse(text, out var parsedBoolean) => parsedBoolean,
             JsonValueKind.String when string.Equals(text, "yes", StringComparison.OrdinalIgnoreCase) => true,
             JsonValueKind.String when string.Equals(text, "no", StringComparison.OrdinalIgnoreCase) => false,
             _ => null
