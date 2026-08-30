@@ -1397,6 +1397,17 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task DnsSdDiscoveryPrioritizesAPreCanceledCallerOverInvalidTimeout()
+    {
+        using var source = new CancellationTokenSource();
+        source.Cancel();
+        var client = new HomeAssistantDiscoveryClient();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.DiscoverAsync(TimeSpan.Zero, source.Token));
+    }
+
+    [Fact]
     public void DnsSdInterfaceEnumerationRetainsHealthyAdaptersWhenOneDisappears()
     {
         var healthy = IPAddress.Parse("192.0.2.10");

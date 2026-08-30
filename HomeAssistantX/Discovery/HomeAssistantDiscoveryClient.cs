@@ -24,9 +24,9 @@ public sealed class HomeAssistantDiscoveryClient
     /// <summary>Performs a bounded IPv4 mDNS query. Results are untrusted discovery hints and are never connected automatically.</summary>
     public async Task<IReadOnlyList<HomeAssistantDiscoveredInstance>> DiscoverAsync(TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var duration = timeout ?? TimeSpan.FromSeconds(3);
         if (duration <= TimeSpan.Zero || duration > TimeSpan.FromMinutes(1)) throw new ArgumentOutOfRangeException(nameof(timeout), "Discovery timeout must be between zero and one minute.");
-        cancellationToken.ThrowIfCancellationRequested();
 
         try
         {
