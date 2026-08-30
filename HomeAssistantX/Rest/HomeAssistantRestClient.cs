@@ -234,10 +234,14 @@ public sealed partial class HomeAssistantRestClient : IDisposable
                     operationToken).ConfigureAwait(false);
                 operationToken.ThrowIfCancellationRequested();
                 using var stream = new MemoryStream(bytes, writable: false);
-                var value = await JsonSerializer.DeserializeAsync<T>(
-                    stream,
-                    serializerOptions,
-                    operationToken).ConfigureAwait(false);
+                T? value;
+                using (HomeAssistantAttributeDictionaryConverter.UseCancellationToken(operationToken))
+                {
+                    value = await JsonSerializer.DeserializeAsync<T>(
+                        stream,
+                        serializerOptions,
+                        operationToken).ConfigureAwait(false);
+                }
                 operationToken.ThrowIfCancellationRequested();
                 var result = value ?? throw new HomeAssistantProtocolException("Home Assistant returned an empty JSON response.");
                 return validateHomeAssistantResponse
