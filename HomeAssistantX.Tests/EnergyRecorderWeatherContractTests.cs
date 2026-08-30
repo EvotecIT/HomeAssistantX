@@ -984,6 +984,23 @@ public sealed class EnergyRecorderWeatherContractTests
             client.Weather.GetForecastAsync("weather.home", HomeAssistantWeatherForecastType.Daily));
     }
 
+    [Fact]
+    public async Task WeatherForecastAcceptsUnavailableConditions()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            WeatherForecastResponseJson =
+                "{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-28T10:00:00+00:00\",\"condition\":null}]}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var update = await client.Weather.GetForecastAsync(
+            "weather.home",
+            HomeAssistantWeatherForecastType.Daily);
+
+        Assert.Null(Assert.Single(update.Forecast).Condition);
+    }
+
     [Theory]
     [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"temperature\":20,\"temperature\":21}")]
     [InlineData("{\"datetime\":\"2026-08-26T10:00:00Z\",\"humidity\":-1}")]

@@ -453,6 +453,7 @@ public sealed class HomeAssistantWeatherClient
                 || timestamp.ValueKind != JsonValueKind.String
                 || !HasValidTimestamp(timestamp.GetString(), cancellationToken)
                 || value.TryGetProperty("condition", out var condition)
+                    && condition.ValueKind != JsonValueKind.Null
                     && (condition.ValueKind != JsonValueKind.String
                         || condition.GetString() is not string conditionText
                         || !IsCanonicalProviderText(conditionText, cancellationToken))
