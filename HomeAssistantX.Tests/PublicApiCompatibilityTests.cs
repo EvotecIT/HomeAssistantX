@@ -1358,6 +1358,7 @@ public sealed class PublicApiCompatibilityTests
             + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
             + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
             + JsonPropertyNameContract(property)
+            + JsonExtensionDataContract(property)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
@@ -1374,6 +1375,15 @@ public sealed class PublicApiCompatibilityTests
         Assert.Contains("json-name(\"app_version\")", FormatProperty(property), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void PropertyFormatterPreservesJsonExtensionDataContract()
+    {
+        var property = typeof(HomeAssistantX.Models.HomeAssistantState)
+            .GetProperty(nameof(HomeAssistantX.Models.HomeAssistantState.AdditionalData))!;
+
+        Assert.Contains("json-extension-data ", FormatProperty(property), StringComparison.Ordinal);
+    }
+
     private static string JsonPropertyNameContract(PropertyInfo property)
     {
         var attribute = property.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
@@ -1385,6 +1395,14 @@ public sealed class PublicApiCompatibilityTests
                 ? "json-name(" + FormatDefault(name) + ") "
                 : string.Empty;
     }
+
+    private static string JsonExtensionDataContract(PropertyInfo property)
+        => property.GetCustomAttributesData().Any(value => string.Equals(
+            value.AttributeType.FullName,
+            typeof(JsonExtensionDataAttribute).FullName,
+            StringComparison.Ordinal))
+                ? "json-extension-data "
+                : string.Empty;
 
     private static void ParameterDirectionFixture(ref int byReference, out int output, in int input)
     {

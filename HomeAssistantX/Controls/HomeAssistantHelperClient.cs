@@ -1,3 +1,4 @@
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 
 namespace HomeAssistantX.Controls;
@@ -58,8 +59,11 @@ public sealed class HomeAssistantHelperClient
 
     public Task<HomeAssistantServiceCallResult> SetTextAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, string value, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         RequireDomain(domain, HomeAssistantHelperDomain.Text, HomeAssistantHelperDomain.InputText);
-        return CallAsync(domain, "set_value", target, call => call.WithData("value", value ?? throw new ArgumentNullException(nameof(value))), cancellationToken);
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        CancellationAwareString.Observe(value, cancellationToken);
+        return CallAsync(domain, "set_value", target, call => call.WithData("value", value), cancellationToken);
     }
 
     public Task<HomeAssistantServiceCallResult> SetDateAsync(HomeAssistantHelperDomain domain, HomeAssistantTarget target, DateTime value, CancellationToken cancellationToken = default)

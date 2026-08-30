@@ -217,6 +217,50 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task HelperTextPreservesExactValue()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("input_text.note");
+
+        await client.Controls.Helpers.SetTextAsync(HomeAssistantHelperDomain.InputText, target, "  keep this exactly  ");
+        using (var call = LastCall(server))
+        {
+            Assert.Equal("  keep this exactly  ", call.RootElement.GetProperty("service_data").GetProperty("value").GetString());
+        }
+
+    }
+
+    [Fact]
+    public async Task HelperTextTraversalStopsWhenCancellationArrivesBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        using var started = new ManualResetEventSlim();
+        var longValue = new string('x', 20_000_000);
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.Set();
+                await client.Controls.Helpers.SetTextAsync(
+                    HomeAssistantHelperDomain.InputText,
+                    HomeAssistantTarget.ForEntity("input_text.note"),
+                    longValue,
+                    cancellation.Token).ConfigureAwait(false);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task InvalidControlShapesFailBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

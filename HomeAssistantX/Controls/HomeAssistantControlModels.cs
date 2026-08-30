@@ -277,20 +277,6 @@ internal static class ControlValidation
         string name,
         CancellationToken cancellationToken = default)
     {
-        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
-        {
-            throw new ArgumentException("A non-empty value is required.", name);
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        return value!;
-    }
-
-    public static string RequiredUnchanged(
-        string? value,
-        string name,
-        CancellationToken cancellationToken)
-    {
         cancellationToken.ThrowIfCancellationRequested();
         if (value is null)
         {
