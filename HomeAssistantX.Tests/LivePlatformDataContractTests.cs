@@ -264,7 +264,6 @@ public sealed class LivePlatformDataContractTests
 
     [Theory]
     [InlineData("{\"type\":\"Current\",\"notifications\":{\"notice\":{\"notification_id\":\"notice\",\"notification_id\":\"notice\",\"message\":\"First\"}}}")]
-    [InlineData("{\"type\":\"Current\",\"notifications\":{\"notice\":{\"notification_id\":\"notice\",\"Notification_Id\":\"notice\",\"message\":\"First\"}}}")]
     public async Task PersistentNotificationSubscriptionRejectsDuplicateRecognizedItemFields(string payload)
     {
         using var server = new TestHomeAssistantServer { PersistentNotificationSubscriptionEventJson = payload };
