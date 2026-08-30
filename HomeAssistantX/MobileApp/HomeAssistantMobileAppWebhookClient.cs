@@ -95,7 +95,8 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             update.AppVersion,
             update.DeviceName,
             update.Manufacturer,
-            update.Model)
+            update.Model,
+            cancellationToken)
         {
             OperatingSystemVersion = operatingSystemVersion,
             AppData = HomeAssistantJson.FreezeObject(update.AppData, nameof(update.AppData), "AppData", cancellationToken)

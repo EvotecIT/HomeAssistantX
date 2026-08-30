@@ -650,6 +650,19 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsDiscoveryRejectsInvalidUtf8InNames()
+    {
+        var packet = CreateDiscoveryPacket();
+        Assert.True(packet.Length > 13);
+        packet[13] = 0xFF;
+        var aggregate = new DnsDiscoveryAggregate();
+
+        DnsDiscoveryPacket.ReadInto(packet, aggregate);
+
+        Assert.Empty(aggregate.Build());
+    }
+
+    [Fact]
     public async Task DnsSdDiscoveryKeepsIdenticalResponsesSeparatedAcrossInterfaces()
     {
         var addresses = new[] { IPAddress.Parse("192.0.2.10"), IPAddress.Parse("198.51.100.20") };
@@ -1494,6 +1507,11 @@ public sealed class StableControlAndAdapterContractTests
                 OperatingSystemVersion = new string(' ', 1_000_000),
                 AppData = cyclic
             }, cancellation.Token));
+        var longRequiredField = new string(' ', 1_000_000) + "1.0";
+        var requiredFieldUpdate = new HomeAssistantMobileAppRegistrationUpdate(
+            longRequiredField, "CasaRay", "Evotec", "Windows");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            webhook.UpdateRegistrationAsync(requiredFieldUpdate, cancellation.Token));
         var registration = RegistrationRequest(false);
         registration.AppData = cyclic;
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>

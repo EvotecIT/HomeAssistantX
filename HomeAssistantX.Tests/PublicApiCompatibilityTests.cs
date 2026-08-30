@@ -6,6 +6,7 @@ using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 #if NET10_0
 using System.Runtime.Loader;
 #endif
@@ -1356,11 +1357,33 @@ public sealed class PublicApiCompatibilityTests
         return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(property) + ObsoleteContract(property)
             + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
             + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
+            + JsonPropertyNameContract(property)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
             + FormatPropertyType(property) + " " + property.Name + FormatIndexerParameters(property)
             + " {" + FormatPropertyAccessors(property) + "}";
+    }
+
+    [Fact]
+    public void PropertyFormatterPreservesExplicitJsonWireNames()
+    {
+        var property = typeof(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate)
+            .GetProperty(nameof(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate.AppVersion))!;
+
+        Assert.Contains("json-name(\"app_version\")", FormatProperty(property), StringComparison.Ordinal);
+    }
+
+    private static string JsonPropertyNameContract(PropertyInfo property)
+    {
+        var attribute = property.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            typeof(JsonPropertyNameAttribute).FullName,
+            StringComparison.Ordinal));
+        return attribute?.ConstructorArguments.Count == 1
+            && attribute.ConstructorArguments[0].Value is string name
+                ? "json-name(" + FormatDefault(name) + ") "
+                : string.Empty;
     }
 
     private static void ParameterDirectionFixture(ref int byReference, out int output, in int input)

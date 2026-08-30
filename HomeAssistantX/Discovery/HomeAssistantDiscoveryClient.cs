@@ -1091,7 +1091,14 @@ internal static class DnsDiscoveryPacket
             Require(packet, position, length);
             expandedLength = checked(expandedLength + length + (labels.Count == 0 ? 0 : 1));
             if (expandedLength > 255 || labels.Count >= 127) throw new InvalidDataException("DNS name exceeds the protocol limit.");
-            labels.Add(Encoding.UTF8.GetString(packet, position, length));
+            try
+            {
+                labels.Add(StrictUtf8.GetString(packet, position, length));
+            }
+            catch (DecoderFallbackException exception)
+            {
+                throw new InvalidDataException("DNS names must contain valid UTF-8 labels.", exception);
+            }
             position += length;
         }
         offset = next < 0 ? position : next;

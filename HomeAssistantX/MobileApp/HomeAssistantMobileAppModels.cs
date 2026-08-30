@@ -136,11 +136,21 @@ public sealed class HomeAssistantMobileAppRegistrationUpdate
         string deviceName,
         string manufacturer,
         string model)
+        : this(appVersion, deviceName, manufacturer, model, default)
     {
-        AppVersion = Required(appVersion, nameof(appVersion));
-        DeviceName = Required(deviceName, nameof(deviceName));
-        Manufacturer = Required(manufacturer, nameof(manufacturer));
-        Model = Required(model, nameof(model));
+    }
+
+    internal HomeAssistantMobileAppRegistrationUpdate(
+        string appVersion,
+        string deviceName,
+        string manufacturer,
+        string model,
+        CancellationToken cancellationToken)
+    {
+        AppVersion = Required(appVersion, nameof(appVersion), cancellationToken);
+        DeviceName = Required(deviceName, nameof(deviceName), cancellationToken);
+        Manufacturer = Required(manufacturer, nameof(manufacturer), cancellationToken);
+        Model = Required(model, nameof(model), cancellationToken);
     }
 
     [JsonPropertyName("app_version")]
@@ -172,9 +182,10 @@ public sealed class HomeAssistantMobileAppRegistrationUpdate
         return value;
     }
 
-    private static string Required(string value, string name)
+    private static string Required(string value, string name, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("A required value cannot be empty.", name);
+        if (HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
+            throw new ArgumentException("A required value cannot be empty.", name);
         return value;
     }
 
