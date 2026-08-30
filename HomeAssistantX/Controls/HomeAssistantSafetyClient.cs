@@ -72,14 +72,6 @@ public sealed class HomeAssistantSirenOptions
     }
 
     internal void SetValidatedTone(string? value) => _tone = value;
-
-    internal void Apply(HomeAssistantServiceCall call)
-    {
-        if (Tone is not null) call.WithData("tone", Tone);
-        if (ToneId.HasValue) call.WithData("tone", ToneId.Value);
-        if (VolumePercent.HasValue) call.WithData("volume_level", VolumePercent.Value / 100d);
-        if (Duration.HasValue) call.WithData("duration", (int)Duration.Value.TotalSeconds);
-    }
 }
 
 /// <summary>Controls alarm panels; callers remain responsible for product authorization and confirmation policy.</summary>
@@ -115,10 +107,25 @@ public sealed class HomeAssistantSirenClient : HomeAssistantControlClientBase
 
     public Task<HomeAssistantServiceCallResult> ActAsync(HomeAssistantTarget target, HomeAssistantSirenAction action, HomeAssistantSirenOptions? options = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (options is not null && action != HomeAssistantSirenAction.TurnOn)
         {
             throw new ArgumentException("Siren options are valid only when turning a siren on.", nameof(options));
         }
+
+        var tone = options?.Tone;
+        var toneId = options?.ToneId;
+        var volumePercent = options?.VolumePercent;
+        var duration = options?.Duration;
+        if (tone is not null)
+        {
+            tone = ControlValidation.RequiredUnchanged(tone, nameof(options), cancellationToken);
+        }
+        if (tone is not null && toneId.HasValue)
+        {
+            throw new ArgumentException("Tone and ToneId cannot be combined.", nameof(options));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
 
         return CallAsync(action switch
         {
@@ -126,6 +133,12 @@ public sealed class HomeAssistantSirenClient : HomeAssistantControlClientBase
             HomeAssistantSirenAction.TurnOff => "turn_off",
             HomeAssistantSirenAction.Toggle => "toggle",
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported siren action.")
-        }, target, options is null ? null : options.Apply, cancellationToken);
+        }, target, options is null ? null : call =>
+        {
+            if (tone is not null) call.WithData("tone", tone);
+            if (toneId.HasValue) call.WithData("tone", toneId.Value);
+            if (volumePercent.HasValue) call.WithData("volume_level", volumePercent.Value / 100d);
+            if (duration.HasValue) call.WithData("duration", (int)duration.Value.TotalSeconds);
+        }, cancellationToken);
     }
 }

@@ -16,6 +16,18 @@ namespace HomeAssistantX.Tests;
 public sealed class NetFrameworkWebSocketContractTests
 {
     [Fact]
+    public void WebhookClientEscapesLongIdentifiersAcrossFrameworks()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "webhook-" + new string('a', 40_000)
+            });
+    }
+
+    [Fact]
     public async Task NetFrameworkAuthenticatesSubscribesAndReconcilesAfterReconnect()
     {
         using var server = await CrossProcessHomeAssistantServer.StartAsync();

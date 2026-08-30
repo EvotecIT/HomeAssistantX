@@ -172,6 +172,35 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task SirenToneValidationStopsWhenCancellationArrivesBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        using var started = new ManualResetEventSlim();
+        var options = new HomeAssistantSirenOptions { Tone = new string('x', 20_000_000) };
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.Set();
+                await client.Controls.Sirens.ActAsync(
+                    HomeAssistantTarget.ForEntity("siren.house"),
+                    HomeAssistantSirenAction.TurnOn,
+                    options,
+                    cancellation.Token).ConfigureAwait(false);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task RoutineAndHelperControlsKeepDomainsAndValueShapesTyped()
     {
         using var server = new TestHomeAssistantServer();

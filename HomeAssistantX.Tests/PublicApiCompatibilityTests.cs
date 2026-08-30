@@ -944,7 +944,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + AsyncMethodBuilderContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + AsyncMethodBuilderContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + JsonNumberHandlingContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -1405,6 +1405,7 @@ public sealed class PublicApiCompatibilityTests
             + JsonExtensionDataContract(property)
             + JsonIgnoreContract(property)
             + JsonConverterContract(property)
+            + JsonNumberHandlingContract(property)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
@@ -1459,6 +1460,23 @@ public sealed class PublicApiCompatibilityTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void FormatterPreservesJsonNumberHandlingContracts()
+    {
+        Assert.Contains(
+            "AllowReadingFromString",
+            JsonNumberHandlingContract(typeof(JsonNumberHandlingTypeFixture)),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "WriteAsString",
+            FormatProperty(typeof(JsonNumberHandlingTypeFixture).GetProperty(nameof(JsonNumberHandlingTypeFixture.Value))!),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Strict",
+            FormatField(typeof(JsonNumberHandlingTypeFixture).GetField(nameof(JsonNumberHandlingTypeFixture.Field))!),
+            StringComparison.Ordinal);
+    }
+
     private static string JsonPropertyNameContract(PropertyInfo property)
     {
         var attribute = property.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
@@ -1508,10 +1526,31 @@ public sealed class PublicApiCompatibilityTests
                 : "json-converter ";
     }
 
+    private static string JsonNumberHandlingContract(MemberInfo member)
+    {
+        var attribute = member.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            typeof(JsonNumberHandlingAttribute).FullName,
+            StringComparison.Ordinal));
+        return attribute?.ConstructorArguments.Count == 1
+            ? "json-number-handling(" + FormatAttributeArgument(attribute.ConstructorArguments[0]) + ") "
+            : string.Empty;
+    }
+
     private sealed class JsonFieldFixture
     {
         [JsonExtensionData]
         public Dictionary<string, object?> AdditionalData = new();
+    }
+
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    private sealed class JsonNumberHandlingTypeFixture
+    {
+        [JsonNumberHandling(JsonNumberHandling.WriteAsString)]
+        public int Value { get; set; }
+
+        [JsonNumberHandling(JsonNumberHandling.Strict)]
+        public int Field = 1;
     }
 
     private static void ParameterDirectionFixture(ref int byReference, out int output, in int input)
@@ -2411,7 +2450,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonExtensionDataContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonExtensionDataContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
     }
 
     private static string FormatEnumField(Type type, string name)

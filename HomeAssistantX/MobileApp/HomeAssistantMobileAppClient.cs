@@ -102,7 +102,9 @@ public sealed class HomeAssistantMobileAppClient
         if (registration is null) throw new ArgumentNullException(nameof(registration));
         if (string.IsNullOrWhiteSpace(registration.WebhookId)) throw new ArgumentException("A webhook identifier is required.", nameof(registration));
         _options.Validate();
-        var uri = registration.CloudhookUri ?? new Uri(_options.BaseUri, "api/webhook/" + Uri.EscapeDataString(registration.WebhookId));
+        var uri = registration.CloudhookUri ?? new Uri(
+            _options.BaseUri,
+            "api/webhook/" + HomeAssistantUri.EscapeDataString(registration.WebhookId, CancellationToken.None));
         if (handlerFactory is null)
         {
             return new HomeAssistantMobileAppWebhookClient(
