@@ -421,19 +421,15 @@ public sealed class PublicApiCompatibilityTests
         var varArgsMethod = typeof(PublicApiCompatibilityTests).GetMethod(
             nameof(ManagedVarArgsFixture),
             BindingFlags.NonPublic | BindingFlags.Static)!;
-        var builderMethod = typeof(PublicApiCompatibilityTests).GetMethod(
-            nameof(AsyncMethodBuilderFixture),
-            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var builderMethod = CreateAsyncMethodBuilderFixture();
         var varArgsConstructor = typeof(ManagedVarArgsConstructorFixture).GetConstructors().Single();
 
         Assert.Contains("json-constructor ", FormatConstructor(jsonConstructor), StringComparison.Ordinal);
         Assert.Equal(
             "async-method-builder(HomeAssistantX.Tests.PublicApiCompatibilityTests+AsyncBuilderFixture) ",
             AsyncMethodBuilderContract(typeof(AsyncTaskLikeFixture)));
-        Assert.StartsWith(
-            "async-method-builder(HomeAssistantX.Tests.PublicApiCompatibilityTests+AsyncBuilderFixture) AsyncMethodBuilderFixture",
-            FormatMethod(builderMethod),
-            StringComparison.Ordinal);
+        Assert.StartsWith("async-method-builder(", FormatMethod(builderMethod), StringComparison.Ordinal);
+        Assert.Contains(" AsyncMethodBuilderFixture(", FormatMethod(builderMethod), StringComparison.Ordinal);
         Assert.StartsWith("managed-varargs ManagedVarArgsFixture", FormatMethod(varArgsMethod), StringComparison.Ordinal);
         Assert.Contains("managed-varargs ", FormatConstructor(varArgsConstructor), StringComparison.Ordinal);
     }
@@ -1560,9 +1556,42 @@ public sealed class PublicApiCompatibilityTests
     {
     }
 
-    [AsyncMethodBuilder(typeof(AsyncBuilderFixture))]
-    private static void AsyncMethodBuilderFixture()
+    private static MethodInfo CreateAsyncMethodBuilderFixture()
     {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("HomeAssistantX.AsyncMethodBuilderFixture." + Guid.NewGuid().ToString("N")),
+            AssemblyBuilderAccess.Run);
+        var module = assembly.DefineDynamicModule("main");
+        var attributeBuilder = module.DefineType(
+            "System.Runtime.CompilerServices.AsyncMethodBuilderAttribute",
+            TypeAttributes.Class | TypeAttributes.Sealed | TypeAttributes.Public,
+            typeof(Attribute));
+        var attributeConstructor = attributeBuilder.DefineConstructor(
+            MethodAttributes.Public,
+            CallingConventions.Standard,
+            new[] { typeof(Type) });
+        var attributeIl = attributeConstructor.GetILGenerator();
+        attributeIl.Emit(OpCodes.Ldarg_0);
+        attributeIl.Emit(OpCodes.Call, typeof(Attribute).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            null,
+            Type.EmptyTypes,
+            null)!);
+        attributeIl.Emit(OpCodes.Ret);
+        var attributeType = attributeBuilder.CreateType()!;
+        var targetBuilder = module.DefineType(
+            "AsyncMethodFixture",
+            TypeAttributes.Class | TypeAttributes.Public);
+        var methodBuilder = targetBuilder.DefineMethod(
+            "AsyncMethodBuilderFixture",
+            MethodAttributes.Public | MethodAttributes.Static,
+            typeof(void),
+            Type.EmptyTypes);
+        methodBuilder.SetCustomAttribute(new CustomAttributeBuilder(
+            attributeType.GetConstructor(new[] { typeof(Type) })!,
+            new object[] { typeof(AsyncBuilderFixture) }));
+        methodBuilder.GetILGenerator().Emit(OpCodes.Ret);
+        return targetBuilder.CreateType()!.GetMethod("AsyncMethodBuilderFixture")!;
     }
 
     private sealed class AsyncBuilderFixture
