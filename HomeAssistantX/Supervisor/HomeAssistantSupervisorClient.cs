@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 using HomeAssistantX.Authentication;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
@@ -301,7 +302,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             throw new ArgumentException("A non-empty Supervisor identifier is required.", parameterName);
         }
 
-        return Uri.EscapeDataString(value);
+        return HomeAssistantUri.EscapeDataString(value!, CancellationToken.None);
     }
 
     private static string EscapeApp(string? value, string parameterName)
@@ -311,7 +312,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             throw new ArgumentException("A valid Supervisor app/add-on slug is required.", parameterName);
         }
 
-        return Uri.EscapeDataString(normalized);
+        return HomeAssistantUri.EscapeDataString(normalized, CancellationToken.None);
     }
 
     private static void ValidateEndpoint(string endpoint)
