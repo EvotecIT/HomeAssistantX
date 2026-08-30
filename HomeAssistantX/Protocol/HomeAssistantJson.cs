@@ -200,6 +200,32 @@ internal static class HomeAssistantJson
         return stream.ToArray();
     }
 
+    internal static bool HasDuplicateProperties(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (HasDuplicateProperties(item, cancellationToken)) return true;
+            }
+            return false;
+        }
+
+        if (value.ValueKind != JsonValueKind.Object) return false;
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
+            if (!names.Add(property.Name) || HasDuplicateProperties(property.Value, cancellationToken)) return true;
+        }
+        return false;
+    }
+
     private static JsonDocument SerializeSnapshot(object? value, CancellationToken cancellationToken)
     {
         using var stream = new MemoryStream();
