@@ -85,11 +85,7 @@ public sealed class HomeAssistantMediaBrowserClient
         var result = FindSearchResult(value, cancellationToken);
         if (result.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media search response had an unexpected shape.");
-        foreach (var item in result.EnumerateArray())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            ValidateItemShape(item, cancellationToken);
-        }
+        ValidateItemShapes(result, cancellationToken);
 
         var response = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantMediaSearchResponse>(
             value,
@@ -126,6 +122,28 @@ public sealed class HomeAssistantMediaBrowserClient
     }
 
     internal static void ValidateItemShape(JsonElement value, CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                ValidateItemShapeCore(value, cancellationToken);
+                return true;
+            },
+            cancellationToken);
+
+    private static void ValidateItemShapes(JsonElement values, CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                foreach (var item in values.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    ValidateItemShapeCore(item, cancellationToken);
+                }
+                return true;
+            },
+            cancellationToken);
+
+    private static void ValidateItemShapeCore(JsonElement value, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object)
@@ -205,7 +223,7 @@ public sealed class HomeAssistantMediaBrowserClient
         foreach (var child in children.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ValidateItemShape(child, cancellationToken);
+            ValidateItemShapeCore(child, cancellationToken);
         }
     }
 

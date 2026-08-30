@@ -42,6 +42,23 @@ public static class HomeAssistantAutomationIdentifier
         JsonElement definition,
         string parameterName,
         CancellationToken cancellationToken = default)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                ValidateDefinitionForSaveCore(
+                    automationId,
+                    definition,
+                    parameterName,
+                    cancellationToken);
+                return true;
+            },
+            cancellationToken);
+
+    private static void ValidateDefinitionForSaveCore(
+        string automationId,
+        JsonElement definition,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (definition.ValueKind != JsonValueKind.Object)
