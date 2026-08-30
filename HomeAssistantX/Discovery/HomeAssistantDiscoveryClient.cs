@@ -1102,7 +1102,27 @@ internal static class DnsDiscoveryPacket
             position += length;
         }
         offset = next < 0 ? position : next;
-        return string.Join(".", labels);
+        return FormatName(labels);
+    }
+
+    internal static string FormatName(IReadOnlyList<string> labels)
+    {
+        if (labels.Count == 0) return string.Empty;
+        var builder = new StringBuilder();
+        for (var labelIndex = 0; labelIndex < labels.Count; labelIndex++)
+        {
+            if (labelIndex > 0) builder.Append('.');
+            var label = labels[labelIndex];
+            foreach (var character in label)
+            {
+                // DNS presentation syntax escapes separators that are literal
+                // bytes inside a label. This keeps aggregate dictionary keys
+                // distinct from an equivalent-looking sequence of labels.
+                if (character == '.' || character == '\\') builder.Append('\\');
+                builder.Append(character);
+            }
+        }
+        return builder.ToString();
     }
 
     private static ushort ReadUInt16(byte[] packet, ref int offset)

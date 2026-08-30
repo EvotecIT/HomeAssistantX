@@ -396,6 +396,20 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdPresentationNamesPreserveWireLabelBoundaries()
+    {
+        var literalDot = DnsDiscoveryPacket.FormatName(new[] { "Test.Home", "local" });
+        var labelSeparator = DnsDiscoveryPacket.FormatName(new[] { "Test", "Home", "local" });
+        var literalEscape = DnsDiscoveryPacket.FormatName(new[] { "Test\\Home", "local" });
+
+        Assert.Equal("Test\\.Home.local", literalDot);
+        Assert.Equal("Test.Home.local", labelSeparator);
+        Assert.Equal("Test\\\\Home.local", literalEscape);
+        Assert.NotEqual(literalDot, labelSeparator);
+        Assert.NotEqual(literalEscape, labelSeparator);
+    }
+
+    [Fact]
     public void DnsSdParserHonorsGoodbyeTtlAndCacheFlushRecordSets()
     {
         var now = TimeSpan.Zero;
