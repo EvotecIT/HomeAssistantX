@@ -594,8 +594,16 @@ internal static partial class HomeAssistantAtomicFile
             Architecture.X86 => 353,
             Architecture.Arm => 382,
             Architecture.Arm64 => 276,
-            _ => throw new PlatformNotSupportedException(
-                "Atomic Linux file replacement is not supported on this processor architecture.")
+            _ => architecture.ToString() switch
+            {
+                "Armv6" => 382,
+                "S390x" => 347,
+                "Ppc64le" => 357,
+                "LoongArch64" => 276,
+                "RiscV64" => 276,
+                _ => throw new PlatformNotSupportedException(
+                    "Atomic Linux file replacement is not supported on this processor architecture.")
+            }
         };
 
     [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]

@@ -28,14 +28,20 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Theory]
-    [InlineData(System.Runtime.InteropServices.Architecture.X64, 316)]
-    [InlineData(System.Runtime.InteropServices.Architecture.X86, 353)]
-    [InlineData(System.Runtime.InteropServices.Architecture.Arm, 382)]
-    [InlineData(System.Runtime.InteropServices.Architecture.Arm64, 276)]
+    [InlineData("X64", 316)]
+    [InlineData("X86", 353)]
+    [InlineData("Arm", 382)]
+    [InlineData("Arm64", 276)]
+    [InlineData("Armv6", 382)]
+    [InlineData("S390x", 347)]
+    [InlineData("Ppc64le", 357)]
+    [InlineData("LoongArch64", 276)]
+    [InlineData("RiscV64", 276)]
     public void LinuxAtomicExchangeUsesKernelRenameAt2Numbers(
-        System.Runtime.InteropServices.Architecture architecture,
+        string architectureName,
         int expected)
     {
+        var architecture = Enum.Parse<System.Runtime.InteropServices.Architecture>(architectureName);
         Assert.Equal(expected, HomeAssistantAtomicFile.GetLinuxRenameAt2SystemCallNumber(architecture));
     }
 
