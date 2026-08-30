@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using Microsoft.Win32.SafeHandles;
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace HomeAssistantX.IO;
@@ -19,12 +18,16 @@ internal static partial class HomeAssistantAtomicFile
     private const int MacExtendedAcl = 0x00000100;
     private const uint OwnerReadWriteMode = 0x180;
     private const int LinuxWriteOnly = 0x0001;
+    private const int LinuxReadOnly = 0x0000;
     private const int LinuxCreate = 0x0040;
     private const int LinuxExclusive = 0x0080;
+    private const int LinuxNoFollow = 0x20000;
     private const int LinuxCloseOnExec = 0x80000;
     private const int MacWriteOnly = 0x0001;
+    private const int MacReadOnly = 0x0000;
     private const int MacCreate = 0x0200;
     private const int MacExclusive = 0x0800;
+    private const int MacNoFollow = 0x0100;
     private const int MacCloseOnExec = 0x1000000;
     private const int UnixCurrentWorkingDirectory = -100;
     private const uint LinuxRenameExchange = 0x2;
@@ -40,6 +43,9 @@ internal static partial class HomeAssistantAtomicFile
         cancellationToken.ThrowIfCancellationRequested();
         beforeMetadataRecheck?.Invoke();
         cancellationToken.ThrowIfCancellationRequested();
+
+        using var replacementHandle = OpenPinnedUnixFile(temporaryPath);
+        var replacementIdentity = ReadUnixFileMetadata(replacementHandle, includeAccessAcl: false);
 
         var exchangeResult = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
             ? RenameMac(temporaryPath, destinationPath, MacRenameSwap)
@@ -59,12 +65,27 @@ internal static partial class HomeAssistantAtomicFile
                 // Once the paths have been exchanged this is a non-cancellable
                 // commit section: either finish or restore the displaced file.
                 afterExchange?.Invoke();
-                var displaced = ReadUnixFileMetadata(temporaryPath);
-                ApplyUnixDestinationMetadata(
-                    temporaryPath,
-                    destinationPath,
-                    displaced,
-                    useManagedApis: true);
+                var displacedIdentity = ReadUnixFileMetadata(temporaryPath, includeAccessAcl: false);
+                if (displacedIdentity.IsSymbolicLink)
+                {
+                    RequireUnixPathIdentity(temporaryPath, displacedIdentity);
+                }
+                else
+                {
+                    using var displacedHandle = OpenPinnedUnixFile(temporaryPath);
+                    var displaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: true);
+                    if (!UnixFileMetadata.SameIdentity(displacedIdentity, displaced))
+                    {
+                        throw new IOException(
+                            "The displaced Unix destination changed before its metadata could be pinned.");
+                    }
+
+                    RequireUnixPathIdentity(temporaryPath, displaced);
+                    ApplyUnixDestinationMetadata(replacementHandle, displaced);
+                    RequireUnixPathIdentity(temporaryPath, displaced);
+                }
+
+                RequireUnixPathIdentity(destinationPath, replacementIdentity);
                 File.Delete(temporaryPath);
             }
             catch (Exception commitException)
@@ -120,16 +141,28 @@ internal static partial class HomeAssistantAtomicFile
         string temporaryPath,
         bool useManagedApis)
     {
-        var metadata = TryReadUnixFileMetadata(destinationPath);
-        if (!metadata.HasValue) return;
-        ApplyUnixDestinationMetadata(destinationPath, temporaryPath, metadata.Value, useManagedApis);
+        _ = useManagedApis;
+        var sourceIdentity = TryReadUnixFileMetadata(destinationPath, includeAccessAcl: false);
+        if (!sourceIdentity.HasValue || sourceIdentity.Value.IsSymbolicLink) return;
+
+        using var sourceHandle = OpenPinnedUnixFile(destinationPath);
+        var metadata = ReadUnixFileMetadata(sourceHandle, includeAccessAcl: true);
+        if (!UnixFileMetadata.SameIdentity(sourceIdentity.Value, metadata))
+        {
+            throw new IOException(
+                "The Unix destination changed before its metadata could be pinned.");
+        }
+        RequireUnixPathIdentity(destinationPath, metadata);
+
+        using var temporaryHandle = OpenPinnedUnixFile(temporaryPath);
+        var temporaryIdentity = ReadUnixFileMetadata(temporaryHandle, includeAccessAcl: false);
+        ApplyUnixDestinationMetadata(temporaryHandle, metadata);
+        RequireUnixPathIdentity(temporaryPath, temporaryIdentity);
     }
 
     private static void ApplyUnixDestinationMetadata(
-        string destinationPath,
-        string temporaryPath,
-        UnixFileMetadata metadata,
-        bool useManagedApis)
+        SafeFileHandle temporaryHandle,
+        UnixFileMetadata metadata)
     {
         if (metadata.IsSymbolicLink) return;
 
@@ -137,9 +170,9 @@ internal static partial class HomeAssistantAtomicFile
         // changing. Transfer ownership before applying the destination ACL so an
         // ACL update can never expose the exchanged inode under the exporter identity.
         // Applying an ACL can update POSIX mode bits, so expose the final mode last.
-        SetUnixMode(temporaryPath, 0, useManagedApis: false);
+        SetUnixMode(temporaryHandle, 0);
 
-        if (Chown(temporaryPath, metadata.UserId, metadata.GroupId) != 0)
+        if (FChown(temporaryHandle, metadata.UserId, metadata.GroupId) != 0)
         {
             throw new IOException(
                 "The temporary Unix file ownership could not be preserved.",
@@ -148,31 +181,44 @@ internal static partial class HomeAssistantAtomicFile
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            ApplyLinuxAccessAcl(temporaryPath, metadata.LinuxAccessAcl);
+            ApplyLinuxAccessAcl(temporaryHandle, metadata.LinuxAccessAcl);
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             ApplyMacAccessAcl(
-                temporaryPath,
+                temporaryHandle,
                 metadata.MacAccessAcl
                     ?? throw new IOException("The snapshotted macOS access ACL was unavailable."));
         }
 
-        SetUnixMode(temporaryPath, 0, useManagedApis: false);
-        SetUnixMode(temporaryPath, metadata.Mode, useManagedApis);
+        SetUnixMode(temporaryHandle, 0);
+        SetUnixMode(temporaryHandle, metadata.Mode);
     }
 
-    private static void SetUnixMode(string path, uint mode, bool useManagedApis)
+    private static void SetUnixMode(SafeFileHandle handle, uint mode)
     {
-        if (!useManagedApis || !TrySetUnixModeWithManagedApi(path, mode))
+        if (FChmod(handle, mode) != 0)
         {
-            if (Chmod(path, mode) != 0)
-            {
-                throw new IOException(
-                    "The temporary Unix file mode could not be preserved.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
+            throw new IOException(
+                "The temporary Unix file mode could not be preserved.",
+                new Win32Exception(Marshal.GetLastWin32Error()));
         }
+    }
+
+    private static SafeFileHandle OpenPinnedUnixFile(string path)
+    {
+        var flags = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            ? MacReadOnly | MacNoFollow | MacCloseOnExec
+            : LinuxReadOnly | LinuxNoFollow | LinuxCloseOnExec;
+        var descriptor = Open(path, flags, 0);
+        if (descriptor < 0)
+        {
+            throw new IOException(
+                "The Unix file could not be pinned without following symbolic links.",
+                new Win32Exception(Marshal.GetLastWin32Error()));
+        }
+
+        return new SafeFileHandle(new IntPtr(descriptor), ownsHandle: true);
     }
 
     private static FileStream CreateSecureUnixTemporaryFileStream(string temporaryPath)
@@ -200,11 +246,13 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
-    private static UnixFileMetadata? TryReadUnixFileMetadata(string path)
+    private static UnixFileMetadata? TryReadUnixFileMetadata(
+        string path,
+        bool includeAccessAcl = true)
     {
         try
         {
-            return ReadUnixFileMetadata(path);
+            return ReadUnixFileMetadata(path, includeAccessAcl);
         }
         catch (IOException exception) when (
             exception.InnerException is Win32Exception native
@@ -214,7 +262,9 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
-    private static UnixFileMetadata ReadUnixFileMetadata(string path)
+    private static UnixFileMetadata ReadUnixFileMetadata(
+        string path,
+        bool includeAccessAcl = true)
     {
         var offsets = UnixMetadataOffsets();
         var buffer = Marshal.AllocHGlobal(512);
@@ -234,10 +284,14 @@ internal static partial class HomeAssistantAtomicFile
 
             var rawMode = Marshal.ReadInt32(buffer, offsets.Mode);
             var isSymbolicLink = (rawMode & UnixFileTypeBits) == UnixSymbolicLink;
-            var linuxAccessAcl = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !isSymbolicLink
+            var linuxAccessAcl = includeAccessAcl
+                && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                && !isSymbolicLink
                 ? ReadLinuxAccessAcl(path)
                 : null;
-            var macAccessAcl = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && !isSymbolicLink
+            var macAccessAcl = includeAccessAcl
+                && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                && !isSymbolicLink
                 ? ReadMacAccessAcl(path)
                 : null;
             return new UnixFileMetadata(
@@ -256,162 +310,70 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
+    private static UnixFileMetadata ReadUnixFileMetadata(
+        SafeFileHandle handle,
+        bool includeAccessAcl)
+    {
+        var offsets = UnixMetadataOffsets();
+        var buffer = Marshal.AllocHGlobal(512);
+        try
+        {
+            for (var offset = 0; offset < 512; offset += sizeof(long))
+            {
+                Marshal.WriteInt64(buffer, offset, 0L);
+            }
+
+            if (FStat(handle, buffer) != 0)
+            {
+                throw new IOException(
+                    "The pinned Unix file metadata could not be read.",
+                    new Win32Exception(Marshal.GetLastWin32Error()));
+            }
+
+            var rawMode = Marshal.ReadInt32(buffer, offsets.Mode);
+            var isSymbolicLink = (rawMode & UnixFileTypeBits) == UnixSymbolicLink;
+            var linuxAccessAcl = includeAccessAcl
+                && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                && !isSymbolicLink
+                    ? ReadLinuxAccessAcl(handle)
+                    : null;
+            var macAccessAcl = includeAccessAcl
+                && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                && !isSymbolicLink
+                    ? ReadMacAccessAcl(handle)
+                    : null;
+            return new UnixFileMetadata(
+                ReadNativeUnsigned(buffer, offsets.Device, offsets.DeviceIs32Bit),
+                ReadNativeUnsigned(buffer, offsets.Inode, offsets.InodeIs32Bit),
+                unchecked((uint)(rawMode & SafeReplacementModeBits)),
+                unchecked((uint)Marshal.ReadInt32(buffer, offsets.UserId)),
+                unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)),
+                isSymbolicLink,
+                linuxAccessAcl,
+                macAccessAcl);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private static void RequireUnixPathIdentity(
+        string path,
+        UnixFileMetadata expected)
+    {
+        var current = ReadUnixFileMetadata(path, includeAccessAcl: false);
+        if (!UnixFileMetadata.SameIdentity(expected, current))
+        {
+            throw new IOException(
+                "The Unix file path no longer names the pinned inode.");
+        }
+    }
+
     private static ulong ReadNativeUnsigned(IntPtr buffer, int offset, bool is32Bit)
         => is32Bit
             ? unchecked((uint)Marshal.ReadInt32(buffer, offset))
             : unchecked((ulong)Marshal.ReadInt64(buffer, offset));
-
-    private static bool TrySetUnixModeWithManagedApi(string path, uint mode)
-    {
-        var getMode = typeof(File).GetMethod(
-            "GetUnixFileMode",
-            BindingFlags.Public | BindingFlags.Static,
-            binder: null,
-            types: new[] { typeof(string) },
-            modifiers: null);
-        if (getMode is null) return false;
-        var modeType = getMode.ReturnType;
-        var setMode = typeof(File).GetMethod(
-            "SetUnixFileMode",
-            BindingFlags.Public | BindingFlags.Static,
-            binder: null,
-            types: new[] { typeof(string), modeType },
-            modifiers: null);
-        if (setMode is null) return false;
-        setMode.Invoke(null, new[] { (object)path, Enum.ToObject(modeType, mode) });
-        return true;
-    }
-
-    private static byte[]? ReadLinuxAccessAcl(string sourcePath)
-    {
-        var size = GetExtendedAttribute(sourcePath, LinuxAccessAclAttribute, IntPtr.Zero, UIntPtr.Zero).ToInt64();
-        if (size < 0)
-        {
-            var error = Marshal.GetLastWin32Error();
-            if (error == LinuxNoData || error == LinuxOperationNotSupported) return null;
-            throw new IOException("The destination Unix access ACL could not be read.", new Win32Exception(error));
-        }
-        if (size == 0) return Array.Empty<byte>();
-
-        var buffer = Marshal.AllocHGlobal(checked((int)size));
-        try
-        {
-            var read = GetExtendedAttribute(
-                sourcePath,
-                LinuxAccessAclAttribute,
-                buffer,
-                new UIntPtr(unchecked((ulong)size))).ToInt64();
-            if (read != size)
-            {
-                throw new IOException(
-                    "The destination Unix access ACL changed while it was being read.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
-            var result = new byte[checked((int)size)];
-            Marshal.Copy(buffer, result, 0, result.Length);
-            return result;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    private static void ApplyLinuxAccessAcl(string destinationPath, byte[]? accessAcl)
-    {
-        if (accessAcl is null)
-        {
-            if (RemoveExtendedAttribute(destinationPath, LinuxAccessAclAttribute) != 0)
-            {
-                var error = Marshal.GetLastWin32Error();
-                if (error != LinuxNoData && error != LinuxOperationNotSupported)
-                {
-                    throw new IOException(
-                        "The temporary Unix access ACL could not be cleared.",
-                        new Win32Exception(error));
-                }
-            }
-            return;
-        }
-
-        var buffer = Marshal.AllocHGlobal(accessAcl.Length);
-        try
-        {
-            if (accessAcl.Length > 0) Marshal.Copy(accessAcl, 0, buffer, accessAcl.Length);
-            if (SetExtendedAttribute(
-                    destinationPath,
-                    LinuxAccessAclAttribute,
-                    buffer,
-                    new UIntPtr(unchecked((ulong)accessAcl.Length)),
-                    0) != 0)
-            {
-                throw new IOException(
-                    "The temporary Unix access ACL could not be preserved.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
-    private static string ReadMacAccessAcl(string sourcePath)
-    {
-        var acl = AclGetFile(sourcePath, MacExtendedAcl);
-        if (acl == IntPtr.Zero)
-        {
-            throw new IOException(
-                "The destination macOS access ACL could not be read.",
-                new Win32Exception(Marshal.GetLastWin32Error()));
-        }
-        try
-        {
-            var text = AclToText(acl, out _);
-            if (text == IntPtr.Zero)
-            {
-                throw new IOException(
-                    "The destination macOS access ACL could not be snapshotted.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
-            try
-            {
-                return Marshal.PtrToStringAnsi(text) ?? string.Empty;
-            }
-            finally
-            {
-                AclFree(text);
-            }
-        }
-        finally
-        {
-            AclFree(acl);
-        }
-    }
-
-    private static void ApplyMacAccessAcl(string destinationPath, string accessAcl)
-    {
-        var acl = AclFromText(accessAcl);
-        if (acl == IntPtr.Zero)
-        {
-            throw new IOException(
-                "The snapshotted macOS access ACL could not be decoded.",
-                new Win32Exception(Marshal.GetLastWin32Error()));
-        }
-        try
-        {
-            if (AclSetFile(destinationPath, MacExtendedAcl, acl) != 0)
-            {
-                throw new IOException(
-                    "The temporary macOS access ACL could not be preserved.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
-        }
-        finally
-        {
-            AclFree(acl);
-        }
-    }
 
     private static UnixMetadataOffset UnixMetadataOffsets()
     {
@@ -501,6 +463,13 @@ internal static partial class HomeAssistantAtomicFile
         internal byte[]? LinuxAccessAcl { get; }
         internal string? MacAccessAcl { get; }
 
+        internal static bool SameIdentity(
+            UnixFileMetadata left,
+            UnixFileMetadata right)
+            => left.Device == right.Device
+                && left.Inode == right.Inode
+                && left.IsSymbolicLink == right.IsSymbolicLink;
+
         internal static bool SameIdentityAndPermissions(
             UnixFileMetadata? expected,
             UnixFileMetadata? current)
@@ -538,14 +507,14 @@ internal static partial class HomeAssistantAtomicFile
     [DllImport("libc", EntryPoint = "lstat", SetLastError = true)]
     private static extern int LStat(string path, IntPtr buffer);
 
-    [DllImport("libc", EntryPoint = "chmod", SetLastError = true)]
-    private static extern int Chmod(string path, uint mode);
+    [DllImport("libc", EntryPoint = "fstat", SetLastError = true)]
+    private static extern int FStat(SafeFileHandle handle, IntPtr buffer);
 
-    [DllImport("libc", EntryPoint = "chown", SetLastError = true)]
-    private static extern int Chown(string path, uint owner, uint group);
+    [DllImport("libc", EntryPoint = "fchmod", SetLastError = true)]
+    private static extern int FChmod(SafeFileHandle handle, uint mode);
 
-    [DllImport("libc", EntryPoint = "rename", SetLastError = true)]
-    private static extern int Rename(string oldPath, string newPath);
+    [DllImport("libc", EntryPoint = "fchown", SetLastError = true)]
+    private static extern int FChown(SafeFileHandle handle, uint owner, uint group);
 
     [DllImport("libc", EntryPoint = "renameat2", SetLastError = true)]
     private static extern int RenameLinux(
@@ -558,36 +527,4 @@ internal static partial class HomeAssistantAtomicFile
     [DllImport("libc", EntryPoint = "renamex_np", SetLastError = true)]
     private static extern int RenameMac(string oldPath, string newPath, uint flags);
 
-    [DllImport("libc", EntryPoint = "getxattr", SetLastError = true)]
-    private static extern IntPtr GetExtendedAttribute(
-        string path,
-        string name,
-        IntPtr value,
-        UIntPtr size);
-
-    [DllImport("libc", EntryPoint = "setxattr", SetLastError = true)]
-    private static extern int SetExtendedAttribute(
-        string path,
-        string name,
-        IntPtr value,
-        UIntPtr size,
-        int flags);
-
-    [DllImport("libc", EntryPoint = "removexattr", SetLastError = true)]
-    private static extern int RemoveExtendedAttribute(string path, string name);
-
-    [DllImport("libc", EntryPoint = "acl_get_file", SetLastError = true)]
-    private static extern IntPtr AclGetFile(string path, int type);
-
-    [DllImport("libc", EntryPoint = "acl_set_file", SetLastError = true)]
-    private static extern int AclSetFile(string path, int type, IntPtr acl);
-
-    [DllImport("libc", EntryPoint = "acl_to_text", SetLastError = true)]
-    private static extern IntPtr AclToText(IntPtr acl, out IntPtr length);
-
-    [DllImport("libc", EntryPoint = "acl_from_text", SetLastError = true)]
-    private static extern IntPtr AclFromText(string text);
-
-    [DllImport("libc", EntryPoint = "acl_free", SetLastError = true)]
-    private static extern int AclFree(IntPtr acl);
 }

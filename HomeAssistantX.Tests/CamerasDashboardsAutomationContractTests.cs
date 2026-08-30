@@ -1491,6 +1491,55 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void UnixAtomicExportsNeverApplyMetadataThroughAnExchangedSymlink()
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists("/usr/bin/ln")) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-exchange-symlink-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var victim = Path.Combine(directory, "victim.bin");
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(victim, new byte[] { 9 });
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            File.SetUnixFileMode(victim, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.SetUnixFileMode(
+                destination,
+                UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+            var exception = Assert.Throws<IOException>(() =>
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None,
+                    beforeUnixMetadataRecheck: null,
+                    beforeWindowsNoReplaceMove: null,
+                    afterUnixExchange: () =>
+                    {
+                        File.Delete(destination);
+                        RunUnixCommand("/usr/bin/ln", "-s", victim, destination);
+                    }));
+
+            Assert.Contains("original destination was restored", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 9 }, File.ReadAllBytes(victim));
+            Assert.Equal(
+                UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                File.GetUnixFileMode(victim)
+                    & (UnixFileMode.UserRead | UnixFileMode.UserWrite
+                        | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void LinuxAtomicExportsReapplyAccessAclWhenIdentityAndModeStayStable()
     {
         if (!OperatingSystem.IsLinux()
