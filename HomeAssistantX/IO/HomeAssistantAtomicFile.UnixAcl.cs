@@ -196,7 +196,7 @@ internal static partial class HomeAssistantAtomicFile
         }
         try
         {
-            if (AclSetFileDescriptor(destinationHandle, MacExtendedAcl, acl) != 0)
+            if (AclSetFileDescriptor(destinationHandle, acl, MacExtendedAcl) != 0)
             {
                 throw new IOException(
                     "The temporary macOS access ACL could not be preserved.",
@@ -241,7 +241,7 @@ internal static partial class HomeAssistantAtomicFile
     private static extern IntPtr AclGetFileDescriptor(SafeFileHandle handle, int type);
 
     [DllImport("libc", EntryPoint = "acl_set_fd_np", SetLastError = true)]
-    private static extern int AclSetFileDescriptor(SafeFileHandle handle, int type, IntPtr acl);
+    private static extern int AclSetFileDescriptor(SafeFileHandle handle, IntPtr acl, int type);
 
     [DllImport("libc", EntryPoint = "acl_to_text", SetLastError = true)]
     private static extern IntPtr AclToText(IntPtr acl, out IntPtr length);

@@ -10,6 +10,7 @@ internal static partial class HomeAssistantAtomicFile
     // setuid/setgid onto an inode containing newly exported bytes.
     private const int SafeReplacementModeBits = 0x03FF;
     private const int UnixFileTypeBits = 0xF000;
+    private const int UnixRegularFile = 0x8000;
     private const int UnixSymbolicLink = 0xA000;
     private const string LinuxAccessAclAttribute = "system.posix_acl_access";
     private const int UnixNoEntry = 2;
@@ -23,12 +24,14 @@ internal static partial class HomeAssistantAtomicFile
     private const int LinuxExclusive = 0x0080;
     private const int LinuxNoFollow = 0x20000;
     private const int LinuxCloseOnExec = 0x80000;
+    private const int LinuxNonBlocking = 0x0800;
     private const int MacWriteOnly = 0x0001;
     private const int MacReadOnly = 0x0000;
     private const int MacCreate = 0x0200;
     private const int MacExclusive = 0x0800;
     private const int MacNoFollow = 0x0100;
     private const int MacCloseOnExec = 0x1000000;
+    private const int MacNonBlocking = 0x0004;
     private const int UnixCurrentWorkingDirectory = -100;
     private const uint LinuxRenameExchange = 0x2;
     private const uint MacRenameSwap = 0x2;
@@ -46,6 +49,7 @@ internal static partial class HomeAssistantAtomicFile
 
         using var replacementHandle = OpenPinnedUnixFile(temporaryPath);
         var replacementIdentity = ReadUnixFileMetadata(replacementHandle, includeAccessAcl: false);
+        RequireRegularUnixFile(replacementIdentity, "The Unix replacement must be a regular file.");
 
         var exchangeResult = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
             ? RenameMac(temporaryPath, destinationPath, MacRenameSwap)
@@ -72,8 +76,14 @@ internal static partial class HomeAssistantAtomicFile
                 }
                 else
                 {
+                    RequireRegularUnixFile(
+                        displacedIdentity,
+                        "The Unix destination must be a regular file or symbolic link.");
                     using var displacedHandle = OpenPinnedUnixFile(temporaryPath);
                     var displaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: true);
+                    RequireRegularUnixFile(
+                        displaced,
+                        "The pinned Unix destination must be a regular file.");
                     if (!UnixFileMetadata.SameIdentity(displacedIdentity, displaced))
                     {
                         throw new IOException(
@@ -144,9 +154,13 @@ internal static partial class HomeAssistantAtomicFile
         _ = useManagedApis;
         var sourceIdentity = TryReadUnixFileMetadata(destinationPath, includeAccessAcl: false);
         if (!sourceIdentity.HasValue || sourceIdentity.Value.IsSymbolicLink) return;
+        RequireRegularUnixFile(
+            sourceIdentity.Value,
+            "The Unix destination must be a regular file or symbolic link.");
 
         using var sourceHandle = OpenPinnedUnixFile(destinationPath);
         var metadata = ReadUnixFileMetadata(sourceHandle, includeAccessAcl: true);
+        RequireRegularUnixFile(metadata, "The pinned Unix destination must be a regular file.");
         if (!UnixFileMetadata.SameIdentity(sourceIdentity.Value, metadata))
         {
             throw new IOException(
@@ -156,6 +170,7 @@ internal static partial class HomeAssistantAtomicFile
 
         using var temporaryHandle = OpenPinnedUnixFile(temporaryPath);
         var temporaryIdentity = ReadUnixFileMetadata(temporaryHandle, includeAccessAcl: false);
+        RequireRegularUnixFile(temporaryIdentity, "The Unix replacement must be a regular file.");
         ApplyUnixDestinationMetadata(temporaryHandle, metadata);
         RequireUnixPathIdentity(temporaryPath, temporaryIdentity);
     }
@@ -208,9 +223,9 @@ internal static partial class HomeAssistantAtomicFile
     private static SafeFileHandle OpenPinnedUnixFile(string path)
     {
         var flags = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-            ? MacReadOnly | MacNoFollow | MacCloseOnExec
-            : LinuxReadOnly | LinuxNoFollow | LinuxCloseOnExec;
-        var descriptor = Open(path, flags, 0);
+            ? MacReadOnly | MacNoFollow | MacCloseOnExec | MacNonBlocking
+            : LinuxReadOnly | LinuxNoFollow | LinuxCloseOnExec | LinuxNonBlocking;
+        var descriptor = EnsureUsableUnixDescriptor(Open(path, flags, 0));
         if (descriptor < 0)
         {
             throw new IOException(
@@ -226,7 +241,7 @@ internal static partial class HomeAssistantAtomicFile
         var flags = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
             ? MacWriteOnly | MacCreate | MacExclusive | MacCloseOnExec
             : LinuxWriteOnly | LinuxCreate | LinuxExclusive | LinuxCloseOnExec;
-        var descriptor = Open(temporaryPath, flags, OwnerReadWriteMode);
+        var descriptor = EnsureUsableUnixDescriptor(Open(temporaryPath, flags, OwnerReadWriteMode));
         if (descriptor < 0)
         {
             throw new IOException(
@@ -283,15 +298,16 @@ internal static partial class HomeAssistantAtomicFile
             }
 
             var rawMode = Marshal.ReadInt32(buffer, offsets.Mode);
-            var isSymbolicLink = (rawMode & UnixFileTypeBits) == UnixSymbolicLink;
+            var fileType = rawMode & UnixFileTypeBits;
+            var isRegularFile = fileType == UnixRegularFile;
             var linuxAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                && !isSymbolicLink
+                && isRegularFile
                 ? ReadLinuxAccessAcl(path)
                 : null;
             var macAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                && !isSymbolicLink
+                && isRegularFile
                 ? ReadMacAccessAcl(path)
                 : null;
             return new UnixFileMetadata(
@@ -300,7 +316,7 @@ internal static partial class HomeAssistantAtomicFile
                 unchecked((uint)(rawMode & SafeReplacementModeBits)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.UserId)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)),
-                isSymbolicLink,
+                unchecked((uint)fileType),
                 linuxAccessAcl,
                 macAccessAcl);
         }
@@ -331,15 +347,16 @@ internal static partial class HomeAssistantAtomicFile
             }
 
             var rawMode = Marshal.ReadInt32(buffer, offsets.Mode);
-            var isSymbolicLink = (rawMode & UnixFileTypeBits) == UnixSymbolicLink;
+            var fileType = rawMode & UnixFileTypeBits;
+            var isRegularFile = fileType == UnixRegularFile;
             var linuxAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                && !isSymbolicLink
+                && isRegularFile
                     ? ReadLinuxAccessAcl(handle)
                     : null;
             var macAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                && !isSymbolicLink
+                && isRegularFile
                     ? ReadMacAccessAcl(handle)
                     : null;
             return new UnixFileMetadata(
@@ -348,7 +365,7 @@ internal static partial class HomeAssistantAtomicFile
                 unchecked((uint)(rawMode & SafeReplacementModeBits)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.UserId)),
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)),
-                isSymbolicLink,
+                unchecked((uint)fileType),
                 linuxAccessAcl,
                 macAccessAcl);
         }
@@ -368,6 +385,38 @@ internal static partial class HomeAssistantAtomicFile
             throw new IOException(
                 "The Unix file path no longer names the pinned inode.");
         }
+    }
+
+    private static void RequireRegularUnixFile(UnixFileMetadata metadata, string message)
+    {
+        if (!metadata.IsRegularFile) throw new IOException(message);
+    }
+
+    private static int EnsureUsableUnixDescriptor(int descriptor)
+        => EnsureUsableUnixDescriptor(descriptor, DuplicateDescriptor, CloseDescriptor);
+
+    internal static int EnsureUsableUnixDescriptor(
+        int descriptor,
+        Func<int, int> duplicate,
+        Func<int, int> close)
+    {
+        if (descriptor != 0) return descriptor;
+        var duplicated = duplicate(descriptor);
+        if (duplicated < 0)
+        {
+            var error = Marshal.GetLastWin32Error();
+            _ = close(descriptor);
+            throw new IOException(
+                "Unix descriptor zero could not be duplicated into a safe handle.",
+                new Win32Exception(error));
+        }
+
+        if (close(descriptor) == 0) return duplicated;
+        var closeError = Marshal.GetLastWin32Error();
+        _ = close(duplicated);
+        throw new IOException(
+            "Unix descriptor zero could not be closed after duplication.",
+            new Win32Exception(closeError));
     }
 
     private static ulong ReadNativeUnsigned(IntPtr buffer, int offset, bool is32Bit)
@@ -440,7 +489,7 @@ internal static partial class HomeAssistantAtomicFile
             uint mode,
             uint userId,
             uint groupId,
-            bool isSymbolicLink,
+            uint fileType,
             byte[]? linuxAccessAcl,
             string? macAccessAcl)
         {
@@ -449,7 +498,7 @@ internal static partial class HomeAssistantAtomicFile
             Mode = mode;
             UserId = userId;
             GroupId = groupId;
-            IsSymbolicLink = isSymbolicLink;
+            FileType = fileType;
             LinuxAccessAcl = linuxAccessAcl;
             MacAccessAcl = macAccessAcl;
         }
@@ -459,7 +508,9 @@ internal static partial class HomeAssistantAtomicFile
         internal uint Mode { get; }
         internal uint UserId { get; }
         internal uint GroupId { get; }
-        internal bool IsSymbolicLink { get; }
+        internal uint FileType { get; }
+        internal bool IsRegularFile => FileType == UnixRegularFile;
+        internal bool IsSymbolicLink => FileType == UnixSymbolicLink;
         internal byte[]? LinuxAccessAcl { get; }
         internal string? MacAccessAcl { get; }
 
@@ -468,7 +519,7 @@ internal static partial class HomeAssistantAtomicFile
             UnixFileMetadata right)
             => left.Device == right.Device
                 && left.Inode == right.Inode
-                && left.IsSymbolicLink == right.IsSymbolicLink;
+                && left.FileType == right.FileType;
 
         internal static bool SameIdentityAndPermissions(
             UnixFileMetadata? expected,
@@ -484,7 +535,7 @@ internal static partial class HomeAssistantAtomicFile
                 && expected.Value.Mode == current.Value.Mode
                 && expected.Value.UserId == current.Value.UserId
                 && expected.Value.GroupId == current.Value.GroupId
-                && expected.Value.IsSymbolicLink == current.Value.IsSymbolicLink
+                && expected.Value.FileType == current.Value.FileType
                 && EqualBytes(expected.Value.LinuxAccessAcl, current.Value.LinuxAccessAcl)
                 && string.Equals(expected.Value.MacAccessAcl, current.Value.MacAccessAcl, StringComparison.Ordinal);
         }
@@ -503,6 +554,12 @@ internal static partial class HomeAssistantAtomicFile
 
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int Open(string path, int flags, uint mode);
+
+    [DllImport("libc", EntryPoint = "dup", SetLastError = true)]
+    private static extern int DuplicateDescriptor(int descriptor);
+
+    [DllImport("libc", EntryPoint = "close", SetLastError = true)]
+    private static extern int CloseDescriptor(int descriptor);
 
     [DllImport("libc", EntryPoint = "lstat", SetLastError = true)]
     private static extern int LStat(string path, IntPtr buffer);

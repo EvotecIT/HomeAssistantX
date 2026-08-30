@@ -1357,6 +1357,35 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void LinuxAtomicExportsRejectFifoDestinationsWithoutBlocking()
+    {
+        if (!OperatingSystem.IsLinux() || !File.Exists("/usr/bin/mkfifo")) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-fifo-overwrite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.pipe");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            RunUnixCommand("/usr/bin/mkfifo", destination);
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+
+            var exception = Assert.Throws<IOException>(() => HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None));
+
+            Assert.Contains("original destination was restored", exception.Message, StringComparison.Ordinal);
+            Assert.Equal("fifo", RunUnixCommand("/usr/bin/stat", "-c", "%F", destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void UnixTemporaryExportsAreRestrictiveWhileBeingWritten()
     {
         if (OperatingSystem.IsWindows()) return;
@@ -1658,6 +1687,36 @@ public sealed class CamerasDashboardsAutomationContractTests
     public void AtomicExportsRejectUnknownNativeStatLayouts()
     {
         Assert.Throws<PlatformNotSupportedException>(() => HomeAssistantAtomicFile.UnixModeOffset("Linux", "FutureCpu"));
+    }
+
+    [Fact]
+    public void AtomicExportsKeepDescriptorZeroOwnedThroughDuplication()
+    {
+        var closed = new List<int>();
+        var descriptor = HomeAssistantAtomicFile.EnsureUsableUnixDescriptor(
+            0,
+            value => value == 0 ? 7 : -1,
+            value =>
+            {
+                closed.Add(value);
+                return 0;
+            });
+
+        Assert.Equal(7, descriptor);
+        Assert.Equal(new[] { 0 }, closed);
+        Assert.Equal(8, HomeAssistantAtomicFile.EnsureUsableUnixDescriptor(8, _ => -1, _ => -1));
+    }
+
+    [Fact]
+    public void MacAclSetterMatchesTheNativeArgumentOrder()
+    {
+        var method = typeof(HomeAssistantAtomicFile).GetMethod(
+            "AclSetFileDescriptor",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+
+        Assert.Equal(
+            new[] { typeof(Microsoft.Win32.SafeHandles.SafeFileHandle), typeof(IntPtr), typeof(int) },
+            method.GetParameters().Select(parameter => parameter.ParameterType));
     }
 
     private static string RunUnixCommand(string fileName, params string[] arguments)
