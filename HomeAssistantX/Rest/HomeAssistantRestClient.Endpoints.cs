@@ -129,9 +129,9 @@ public sealed partial class HomeAssistantRestClient
             }
 
             if (expectedEntityId is not null
-                && (!HomeAssistantEntityId.TryNormalize(entry.EntityId, out var returnedEntityId)
-                    || !string.Equals(returnedEntityId, entry.EntityId, StringComparison.Ordinal)
-                    || !string.Equals(returnedEntityId, expectedEntityId, StringComparison.Ordinal)))
+                && (!HomeAssistantEntityId.TryNormalize(entry.EntityId, cancellationToken, out var returnedEntityId)
+                    || !CancellationAwareString.EqualsOrdinal(returnedEntityId, entry.EntityId, cancellationToken)
+                    || !CancellationAwareString.EqualsOrdinal(returnedEntityId, expectedEntityId, cancellationToken)))
             {
                 throw new HomeAssistantProtocolException(
                     "The Home Assistant logbook response contained an entry for an unexpected entity.");

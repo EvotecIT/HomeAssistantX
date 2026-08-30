@@ -10,6 +10,29 @@ namespace HomeAssistantX.Tests;
 public sealed class CoreRestApiContractTests
 {
     [Fact]
+    public void LogbookEntityCorrelationHonorsCancellationDuringIdentifierValidation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var entries = new[]
+        {
+            new HomeAssistantX.Rest.HomeAssistantLogbookEntry
+            {
+                EntityId = "sensor." + new string('a', 1_000_000),
+                When = DateTimeOffset.UtcNow
+            }
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantX.Rest.HomeAssistantRestClient.ValidateLogbookEntries(
+                entries,
+                null,
+                null,
+                "sensor.expected",
+                cancellation.Token));
+    }
+
+    [Fact]
     public void ExtensionDataPreservesCaseDistinctUnknownFields()
     {
         var configuration = JsonSerializer.Deserialize<HomeAssistantConfiguration>(
