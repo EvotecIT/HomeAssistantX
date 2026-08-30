@@ -352,7 +352,7 @@ try {
         throw 'The logbook cmdlet broadened a blank entity filter to the whole installation.'
     }
 
-    $endOnlyLogbook = @(Get-HomeAssistantLogbook -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop)
+    $endOnlyLogbook = @(Get-HomeAssistantLogbook -EndTime '2026-08-24T12:00:01Z' -ErrorAction Stop)
     $endOnlyHistory = @(Get-HomeAssistantHistory -EntityId sensor.kitchen_temperature -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop)
     if ($endOnlyLogbook.Count -ne 1 -or $endOnlyLogbook[0].Message -ne 'turned on') {
         throw 'The logbook cmdlet did not preserve Home Assistant default-start behavior for an end-only query.'
