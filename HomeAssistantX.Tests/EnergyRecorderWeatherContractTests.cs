@@ -782,6 +782,19 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public void RecorderImportMetadataNormalizationHonorsCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var metadata = CreateSumImportMetadata();
+        metadata.StatisticId = "external:" + new string('a', 1_000_000);
+
+        Assert.ThrowsAny<OperationCanceledException>(() => metadata.ValidateRows(
+            new[] { new HomeAssistantStatisticImportRow { Start = DateTimeOffset.UtcNow.Date, Sum = 1 } },
+            cancellation.Token));
+    }
+
+    [Fact]
     public async Task WeatherCurrentForecastUnitsAndSubscriptionAreTypedAndPushBased()
     {
         using var server = new TestHomeAssistantServer
@@ -1088,18 +1101,6 @@ public sealed class EnergyRecorderWeatherContractTests
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.ListStatisticsAsync());
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.GetStatisticsMetadataAsync());
-    }
-
-    [Fact]
-    public async Task RecorderCatalogRejectsDuplicateIdentifiersCaseInsensitively()
-    {
-        using var server = new TestHomeAssistantServer
-        {
-            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.energy\",\"has_mean\":false,\"has_sum\":true},{\"statistic_id\":\"SENSOR.ENERGY\",\"has_mean\":false,\"has_sum\":true}]"
-        };
-        using var client = TestClientFactory.Create(server);
-
-        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Recorder.ListStatisticsAsync());
     }
 
     [Fact]

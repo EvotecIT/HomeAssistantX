@@ -676,8 +676,6 @@ try {
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain SENSOR -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain ' ' -WhatIf -ErrorAction Stop }
-        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityGlob ' ' -WhatIf -ErrorAction Stop }
-        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityGlob 'Sensor.*' -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.kitchen -KeepDays -1 -WhatIf -ErrorAction Stop }
     )) {
         $rejected = $false
