@@ -216,7 +216,8 @@ internal static class HomeAssistantJson
         }
 
         if (value.ValueKind != JsonValueKind.Object) return false;
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        var names = new HashSet<string>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
