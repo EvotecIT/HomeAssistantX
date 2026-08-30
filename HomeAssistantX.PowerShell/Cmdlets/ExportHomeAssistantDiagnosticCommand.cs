@@ -60,9 +60,7 @@ public sealed class ExportHomeAssistantDiagnosticCommand : HomeAssistantCmdlet
 
         var directory = System.IO.Path.GetDirectoryName(_resolvedPath)
             ?? throw new IOException("The diagnostic destination directory could not be resolved.");
-        var temporaryPath = System.IO.Path.Combine(
-            directory,
-            "." + System.IO.Path.GetFileName(_resolvedPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        var temporaryPath = HomeAssistantAtomicFile.CreateTemporaryPath(directory);
         var preserveTemporaryFile = false;
         try
         {

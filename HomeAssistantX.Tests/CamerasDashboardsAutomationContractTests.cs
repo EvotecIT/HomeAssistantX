@@ -17,6 +17,17 @@ namespace HomeAssistantX.Tests;
 public sealed class CamerasDashboardsAutomationContractTests
 {
     [Fact]
+    public void AtomicExportTemporaryNamesAreBoundedAndDestinationIndependent()
+    {
+        var directory = Path.GetTempPath();
+        var temporary = HomeAssistantAtomicFile.CreateTemporaryPath(directory);
+
+        Assert.Equal(directory.TrimEnd(Path.DirectorySeparatorChar), Path.GetDirectoryName(temporary)!.TrimEnd(Path.DirectorySeparatorChar));
+        Assert.Matches("^\\.homeassistantx-[0-9a-f]{32}\\.tmp$", Path.GetFileName(temporary));
+        Assert.True(Path.GetFileName(temporary).Length < 64);
+    }
+
+    [Fact]
     public void CameraSubscriptionStateProjectionPreservesIdentityCancellation()
     {
         using var cancellation = new CancellationTokenSource();

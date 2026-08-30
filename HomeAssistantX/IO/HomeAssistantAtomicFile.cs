@@ -4,6 +4,12 @@ namespace HomeAssistantX.IO;
 
 internal static partial class HomeAssistantAtomicFile
 {
+    internal static string CreateTemporaryPath(string directory)
+    {
+        if (directory is null) throw new ArgumentNullException(nameof(directory));
+        return Path.Combine(directory, ".homeassistantx-" + Guid.NewGuid().ToString("N") + ".tmp");
+    }
+
     internal static void CommitTemporaryFile(
         string temporaryPath,
         string destinationPath,

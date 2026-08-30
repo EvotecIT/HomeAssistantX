@@ -582,7 +582,7 @@ try {
         if (-not $diagnosticFile.Exists -or -not ([IO.File]::ReadAllText($diagnosticPath).Contains('REDACTED'))) {
             throw 'The diagnostic export did not atomically replace the destination with the server response.'
         }
-        $temporaryPattern = '.' + [IO.Path]::GetFileName($diagnosticPath) + '.*.tmp'
+        $temporaryPattern = '.homeassistantx-*.tmp'
         if (@(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($diagnosticPath)) -Filter $temporaryPattern).Count -ne 0) {
             throw 'The diagnostic export left a temporary file behind.'
         }
@@ -623,7 +623,7 @@ try {
         [IO.File]::WriteAllText($cameraPath, 'old image')
         $cameraFile = Export-HomeAssistantCameraSnapshot camera.front $cameraPath -Width 640 -Height 360 -Force -Confirm:$false
         if (-not $cameraFile.Exists -or [IO.File]::ReadAllText($cameraPath) -ne 'test-image-bytes') { throw 'Camera snapshot export did not atomically replace the destination.' }
-        $temporaryPattern = '.' + [IO.Path]::GetFileName($cameraPath) + '.*.tmp'
+        $temporaryPattern = '.homeassistantx-*.tmp'
         if (@(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($cameraPath)) -Filter $temporaryPattern).Count -ne 0) { throw 'Camera snapshot export left a temporary file behind.' }
     } finally {
         if (Test-Path -LiteralPath $cameraPath) { Remove-Item -LiteralPath $cameraPath -Force }

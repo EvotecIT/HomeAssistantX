@@ -37,7 +37,7 @@ public sealed class ExportHomeAssistantCameraSnapshotCommand : HomeAssistantCmdl
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) throw new DirectoryNotFoundException("The snapshot destination directory does not exist.");
         if (!ShouldProcess(_resolvedPath, "Export Home Assistant camera snapshot")) return;
         var bytes = await Client.Cameras.GetSnapshotAsync(_entityId, Width, Height, CancelToken).ConfigureAwait(false);
-        var temporaryPath = System.IO.Path.Combine(directory, "." + System.IO.Path.GetFileName(_resolvedPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        var temporaryPath = HomeAssistantAtomicFile.CreateTemporaryPath(directory);
         var preserveTemporaryFile = false;
         try
         {
