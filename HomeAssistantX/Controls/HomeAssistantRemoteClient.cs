@@ -1,5 +1,6 @@
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.Subscriptions;
@@ -78,7 +79,10 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         string? activity = null,
         CancellationToken cancellationToken = default)
     {
-        var normalizedActivity = activity is null ? null : RequiredSelector(activity, nameof(activity));
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalizedActivity = activity is null
+            ? null
+            : RequiredSelector(activity, nameof(activity), cancellationToken);
         var service = action switch
         {
             HomeAssistantPowerAction.On => "turn_on",
@@ -103,7 +107,9 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
     {
         cancellationToken.ThrowIfCancellationRequested();
         var values = ValidateCommands(commands, nameof(commands), cancellationToken);
-        var device = options?.Device is null ? null : RequiredSelector(options.Device, nameof(options.Device));
+        var device = options?.Device is null
+            ? null
+            : RequiredSelector(options.Device, nameof(options.Device), cancellationToken);
         var repeatCount = options?.RepeatCount;
         var delay = options?.Delay;
         var hold = options?.Hold;
@@ -142,7 +148,9 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var device = options?.Device is null ? null : RequiredSelector(options.Device, nameof(options.Device));
+        var device = options?.Device is null
+            ? null
+            : RequiredSelector(options.Device, nameof(options.Device), cancellationToken);
         var timeout = options?.Timeout;
         var commandTypeOption = options?.CommandType;
         var alternative = options?.Alternative;
@@ -235,7 +243,9 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
     {
         cancellationToken.ThrowIfCancellationRequested();
         var values = ValidateCommands(commands, nameof(commands), cancellationToken);
-        var normalizedDevice = device is null ? null : RequiredSelector(device, nameof(device));
+        var normalizedDevice = device is null
+            ? null
+            : RequiredSelector(device, nameof(device), cancellationToken);
         return CallAsync(
             "delete_command",
             target,
@@ -285,10 +295,14 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         return values;
     }
 
-    private static string RequiredSelector(string value, string parameterName)
+    private static string RequiredSelector(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
             throw new ArgumentException("A non-empty selector is required.", parameterName);
+        cancellationToken.ThrowIfCancellationRequested();
         return value;
     }
 

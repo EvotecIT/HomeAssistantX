@@ -1,3 +1,5 @@
+using HomeAssistantX.Protocol;
+
 namespace HomeAssistantX.Controls;
 
 public enum HomeAssistantPowerAction
@@ -165,13 +167,17 @@ internal static class ControlValidation
         return value!.Trim();
     }
 
-    public static string RequiredUnchanged(string? value, string name)
+    public static string RequiredUnchanged(
+        string? value,
+        string name,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty value is required.", name);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return value!;
     }
 

@@ -94,11 +94,14 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var playback = options.Playback;
         var volumePercent = options.VolumePercent;
         var muted = options.Muted;
-        var source = NormalizeOptional(options.Source, nameof(options.Source));
-        var soundMode = NormalizeOptional(options.SoundMode, nameof(options.SoundMode));
+        var source = PreserveOptional(options.Source, nameof(options.Source), cancellationToken);
+        var soundMode = PreserveOptional(options.SoundMode, nameof(options.SoundMode), cancellationToken);
         var shuffle = options.Shuffle;
         var repeat = options.Repeat;
-        var mediaContentId = PreserveOptional(options.MediaContentId, nameof(options.MediaContentId));
+        var mediaContentId = PreserveOptional(
+            options.MediaContentId,
+            nameof(options.MediaContentId),
+            cancellationToken);
         var mediaContentType = NormalizeOptional(options.MediaContentType, nameof(options.MediaContentType));
         var enqueue = options.Enqueue;
         var announce = options.Announce;
@@ -309,7 +312,10 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         string soundMode,
         CancellationToken cancellationToken = default)
     {
-        var normalizedSoundMode = ControlValidation.Required(soundMode, nameof(soundMode));
+        var normalizedSoundMode = ControlValidation.RequiredUnchanged(
+            soundMode,
+            nameof(soundMode),
+            cancellationToken);
 
         return CallAsync(
             "select_sound_mode",
@@ -354,7 +360,10 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        mediaContentId = ControlValidation.RequiredUnchanged(mediaContentId, nameof(mediaContentId));
+        mediaContentId = ControlValidation.RequiredUnchanged(
+            mediaContentId,
+            nameof(mediaContentId),
+            cancellationToken);
         mediaContentType = ControlValidation.Required(mediaContentType, nameof(mediaContentType));
         var enqueueOption = options?.Enqueue;
         var announce = options?.Announce;
@@ -449,7 +458,10 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
         if (mediaContentId is not null || mediaContentType is not null)
         {
-            mediaContentId = ControlValidation.RequiredUnchanged(mediaContentId!, nameof(mediaContentId));
+            mediaContentId = ControlValidation.RequiredUnchanged(
+                mediaContentId!,
+                nameof(mediaContentId),
+                cancellationToken);
             mediaContentType = ControlValidation.Required(mediaContentType!, nameof(mediaContentType));
             var enqueueOption = playMediaOptions?.Enqueue;
             var announce = playMediaOptions?.Announce;
@@ -526,8 +538,13 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
     private static string? NormalizeOptional(string? value, string name)
         => value is null ? null : ControlValidation.Required(value, name);
 
-    private static string? PreserveOptional(string? value, string name)
-        => value is null ? null : ControlValidation.RequiredUnchanged(value, name);
+    private static string? PreserveOptional(
+        string? value,
+        string name,
+        CancellationToken cancellationToken)
+        => value is null
+            ? null
+            : ControlValidation.RequiredUnchanged(value, name, cancellationToken);
 
     private static string PowerAction(HomeAssistantPowerAction value) => value switch
     {

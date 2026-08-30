@@ -1078,6 +1078,30 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task RemotePowerCancellationPrecedesInvalidInputs()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var target = HomeAssistantTarget.ForEntity("remote.living_room");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Remotes.SetPowerAsync(
+                target,
+                HomeAssistantPowerAction.On,
+                " ",
+                cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Controls.Remotes.SetPowerAsync(
+                target,
+                (HomeAssistantPowerAction)99,
+                cancellationToken: cancellation.Token));
+
+        Assert.Empty(server.ServiceCallBodies);
+    }
+
+    [Fact]
     public async Task RemoteActivityAndDeviceSelectorsPreserveIntegrationDefinedText()
     {
         using var server = new TestHomeAssistantServer();
@@ -1224,17 +1248,40 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
-    public async Task DirectSoundModeSelectionNormalizesTheSelector()
+    public async Task MediaSelectorsPreserveProviderDefinedText()
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("media_player.kitchen");
+
+        await client.Controls.MediaPlayers.SetAsync(
+            target,
+            new HomeAssistantMediaPlayerOptions
+            {
+                Source = " Living Room TV ",
+                SoundMode = " Night Mode "
+            });
 
         await client.Controls.MediaPlayers.SelectSoundModeAsync(
-            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            target,
             " Music ");
 
-        using var call = FindCall(server, "select_sound_mode");
-        Assert.Equal("Music", call.RootElement.GetProperty("service_data").GetProperty("sound_mode").GetString());
+        using var source = FindCall(server, "select_source");
+        Assert.Equal(" Living Room TV ", source.RootElement.GetProperty("service_data").GetProperty("source").GetString());
+        var soundModes = server.ServiceCallBodies
+            .Select(body => JsonDocument.Parse(body))
+            .Where(call => call.RootElement.GetProperty("service").GetString() == "select_sound_mode")
+            .ToArray();
+        try
+        {
+            Assert.Equal(2, soundModes.Length);
+            Assert.Equal(" Night Mode ", soundModes[0].RootElement.GetProperty("service_data").GetProperty("sound_mode").GetString());
+            Assert.Equal(" Music ", soundModes[1].RootElement.GetProperty("service_data").GetProperty("sound_mode").GetString());
+        }
+        finally
+        {
+            foreach (var soundMode in soundModes) soundMode.Dispose();
+        }
     }
 
     [Fact]
