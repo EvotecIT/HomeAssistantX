@@ -1318,6 +1318,21 @@ public sealed class EnergyRecorderWeatherContractTests
         Assert.Equal(HomeAssistantStatisticMeanType.Circular, metadata.MeanType);
     }
 
+    [Fact]
+    public async Task RecorderMetadataPreservesFutureMeanTypes()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RecorderMetadataResponseJson = "[{\"statistic_id\":\"sensor.future\",\"source\":\"recorder\",\"has_mean\":false,\"has_sum\":false,\"mean_type\":99}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var metadata = Assert.Single(await client.Recorder.GetStatisticsMetadataAsync());
+        Assert.Equal((HomeAssistantStatisticMeanType)99, metadata.MeanType);
+        var listed = Assert.Single(await client.Recorder.ListStatisticsAsync(HomeAssistantStatisticKind.Mean));
+        Assert.Equal((HomeAssistantStatisticMeanType)99, listed.MeanType);
+    }
+
     [Theory]
     [InlineData("{\"sensor.energy\":[{\"end\":1}]}" )]
     [InlineData("{\"sensor.energy\":[{\"start\":1}]}" )]

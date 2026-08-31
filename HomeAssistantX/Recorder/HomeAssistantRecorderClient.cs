@@ -77,7 +77,7 @@ public sealed class HomeAssistantRecorderClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (kind == HomeAssistantStatisticKind.Mean
-                    && !item.HasMean && item.MeanType != HomeAssistantStatisticMeanType.Circular
+                    && !item.HasMean && (!item.MeanType.HasValue || item.MeanType == HomeAssistantStatisticMeanType.None)
                 || kind == HomeAssistantStatisticKind.Sum && !item.HasSum)
                 throw new HomeAssistantProtocolException("Recorder statistic identifiers did not match the requested statistic type.");
         }
@@ -374,10 +374,12 @@ public sealed class HomeAssistantRecorderClient
         foreach (var item in metadata)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (item.MeanType.HasValue
-                    && (!Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value)
-                        || item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic))
-                || !item.HasMean && !item.HasSum && item.MeanType != HomeAssistantStatisticMeanType.Circular
+            var hasKnownMeanType = !item.MeanType.HasValue
+                || Enum.IsDefined(typeof(HomeAssistantStatisticMeanType), item.MeanType.Value);
+            if (hasKnownMeanType
+                    && (item.MeanType.HasValue
+                        && item.HasMean != (item.MeanType.Value == HomeAssistantStatisticMeanType.Arithmetic)
+                        || !item.HasMean && !item.HasSum && item.MeanType != HomeAssistantStatisticMeanType.Circular)
                 || item.UnitClass is not null && !HomeAssistantStatisticIdentifier.IsSlug(item.UnitClass, cancellationToken))
                 throw new HomeAssistantProtocolException(failureMessage);
         }
