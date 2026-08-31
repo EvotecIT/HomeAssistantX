@@ -345,7 +345,7 @@ public sealed class HomeAssistantDashboardClient
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested URL path.");
         if (expectedTitle is not null && !CancellationAwareString.EqualsOrdinal(dashboard.Title, expectedTitle, cancellationToken))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested title.");
-        if (validateIcon && !string.Equals(dashboard.Icon, expectedIcon, StringComparison.Ordinal))
+        if (validateIcon && !CancellationAwareString.EqualsOrdinal(dashboard.Icon, expectedIcon, cancellationToken))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested icon.");
         if (expectedShowInSidebar.HasValue
             && dashboard.ShowInSidebar != expectedShowInSidebar.Value)
