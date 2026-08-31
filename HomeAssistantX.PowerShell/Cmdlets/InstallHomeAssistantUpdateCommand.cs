@@ -1,5 +1,6 @@
 using System.Management.Automation;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using System.Text.Json;
 using HomeAssistantX.Services;
 using HomeAssistantX.Supervisor;
@@ -63,11 +64,11 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        var version = NormalizeOptionalVersion(Version);
+        var version = NormalizeOptionalVersion(Version, CancelToken);
         object? result;
         if (ParameterSetName == EntityParameterSet)
         {
-            var entityId = NormalizeUpdateEntityId(EntityId);
+            var entityId = NormalizeUpdateEntityId(EntityId, CancelToken);
             if (!ShouldProcess(entityId, "Install Home Assistant update"))
             {
                 return;
@@ -85,7 +86,9 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
                 AppParameterSet => HomeAssistantSupervisorUpdateTarget.App,
                 _ => throw new InvalidOperationException("Unexpected update parameter set.")
             };
-            var app = target == HomeAssistantSupervisorUpdateTarget.App ? NormalizeSupervisorApp(App) : App;
+            var app = target == HomeAssistantSupervisorUpdateTarget.App
+                ? NormalizeSupervisorApp(App, CancelToken)
+                : App;
             var description = target == HomeAssistantSupervisorUpdateTarget.App ? "app " + app : target.ToString();
             if (!ShouldProcess(description, "Install Home Assistant update"))
             {
@@ -101,9 +104,9 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
         }
     }
 
-    private static string NormalizeUpdateEntityId(string value)
+    private static string NormalizeUpdateEntityId(string value, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(value, "update", out var normalized))
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(value, "update", cancellationToken, out var normalized))
         {
             throw new ArgumentException("An update entity identifier is required.", nameof(EntityId));
         }
@@ -111,24 +114,25 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
         return normalized;
     }
 
-    private static string? NormalizeOptionalVersion(string? value)
+    private static string? NormalizeOptionalVersion(string? value, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (value is null)
         {
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A supplied update version cannot be empty.", nameof(Version));
         }
 
-        return value.Trim();
+        return CancellationAwareString.Trim(value, cancellationToken);
     }
 
-    private static string NormalizeSupervisorApp(string value)
+    private static string NormalizeSupervisorApp(string value, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantSupervisorIdentifier.TryNormalizeAppSlug(value, out var normalized))
+        if (!HomeAssistantSupervisorIdentifier.TryNormalizeAppSlug(value, cancellationToken, out var normalized))
         {
             throw new ArgumentException("A valid Supervisor app/add-on slug is required.", nameof(App));
         }
