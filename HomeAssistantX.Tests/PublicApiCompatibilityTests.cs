@@ -280,6 +280,7 @@ public sealed class PublicApiCompatibilityTests
         Assert.Contains("add-platform(SupportedOSPlatform:\"windows10.0\")", contract, StringComparison.Ordinal);
         Assert.Contains("remove-platform(UnsupportedOSPlatform:\"browser\")", contract, StringComparison.Ordinal);
         Assert.Contains("add-requires-unreferenced-code(message=\"add trim\"", contract, StringComparison.Ordinal);
+        Assert.Contains("add-requires-assembly-files(message=\"add files\"", contract, StringComparison.Ordinal);
         Assert.Contains("remove-requires-dynamic-code(message=\"remove dynamic\"", contract, StringComparison.Ordinal);
     }
 
@@ -1469,6 +1470,12 @@ public sealed class PublicApiCompatibilityTests
     }
 
     private static string RequiresCodeContract(params ICustomAttributeProvider?[] providers)
+        => RequiresCodeContractCore(null, providers);
+
+    private static string NamedRequiresCodeContract(string name, ICustomAttributeProvider? provider)
+        => RequiresCodeContractCore(name, new[] { provider });
+
+    private static string RequiresCodeContractCore(string? owner, ICustomAttributeProvider?[] providers)
     {
         var contracts = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var provider in providers.Where(value => value is not null))
@@ -1488,7 +1495,7 @@ public sealed class PublicApiCompatibilityTests
                     ? attribute.ConstructorArguments[0].Value
                     : null;
                 var url = attribute.NamedArguments.FirstOrDefault(value => value.MemberName == "Url").TypedValue.Value;
-                contracts.Add(name + "(message=" + FormatDefault(message) + ",url=" + FormatDefault(url) + ")");
+                contracts.Add(OwnContract(owner, name + "(message=" + FormatDefault(message) + ",url=" + FormatDefault(url) + ")"));
             }
         }
         return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
@@ -1537,12 +1544,12 @@ public sealed class PublicApiCompatibilityTests
         var getter = includeNonPublic || IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
         var setter = includeNonPublic || IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
         return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(property) + ObsoleteContract(property)
-            + ExperimentalContract(property, getter, setter) + NamedContract("get", ExperimentalContract(getter)) + NamedContract("set", ExperimentalContract(setter))
-            + PreviewFeatureContract(property, getter, setter) + NamedContract("get", PreviewFeatureContract(getter)) + NamedContract("set", PreviewFeatureContract(setter)) + PlatformContract(property)
+            + ExperimentalContract(property, getter, setter) + NamedExperimentalContract("get", getter) + NamedExperimentalContract("set", setter)
+            + PreviewFeatureContract(property, getter, setter) + NamedPreviewFeatureContract("get", getter) + NamedPreviewFeatureContract("set", setter) + PlatformContract(property)
             + NamedPlatformContract("get", getter) + NamedPlatformContract("set", setter) + RequiresCodeContract(property, getter, setter)
-            + NamedContract("get", RequiresCodeContract(getter)) + NamedContract("set", RequiresCodeContract(setter))
-            + ClsComplianceContract(property, getter, setter) + NamedContract("get", ClsComplianceContract(getter)) + NamedContract("set", ClsComplianceContract(setter))
-            + ComVisibilityContract(property, getter, setter) + NamedContract("get", ComVisibilityContract(getter)) + NamedContract("set", ComVisibilityContract(setter)) + DispIdContract(property)
+            + NamedRequiresCodeContract("get", getter) + NamedRequiresCodeContract("set", setter)
+            + ClsComplianceContract(property, getter, setter) + NamedClsComplianceContract("get", getter) + NamedClsComplianceContract("set", setter)
+            + ComVisibilityContract(property, getter, setter) + NamedComVisibilityContract("get", getter) + NamedComVisibilityContract("set", setter) + DispIdContract(property)
             + JsonPropertyNameContract(property)
             + JsonPropertyOrderContract(property)
             + JsonExtensionDataContract(property)
@@ -2157,6 +2164,7 @@ public sealed class PublicApiCompatibilityTests
         {
             [System.Runtime.Versioning.SupportedOSPlatform("windows10.0")]
             [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("add trim")]
+            [System.Diagnostics.CodeAnalysis.RequiresAssemblyFiles("add files")]
             add => _changed += value;
             [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
             [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("remove dynamic")]
@@ -2905,6 +2913,12 @@ public sealed class PublicApiCompatibilityTests
     }
 
     private static string PreviewFeatureContract(params ICustomAttributeProvider?[] providers)
+        => PreviewFeatureContractCore(null, providers);
+
+    private static string NamedPreviewFeatureContract(string name, ICustomAttributeProvider? provider)
+        => PreviewFeatureContractCore(name, new[] { provider });
+
+    private static string PreviewFeatureContractCore(string? owner, ICustomAttributeProvider?[] providers)
     {
         var contracts = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var provider in providers.Where(value => value is not null))
@@ -2914,7 +2928,7 @@ public sealed class PublicApiCompatibilityTests
                          "System.Runtime.Versioning.RequiresPreviewFeaturesAttribute",
                          StringComparison.Ordinal)))
             {
-                contracts.Add(FormatPreviewFeature(attribute));
+                contracts.Add(OwnContract(owner, FormatPreviewFeature(attribute)));
             }
         }
         return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
@@ -2933,12 +2947,19 @@ public sealed class PublicApiCompatibilityTests
     }
 
     private static string ClsComplianceContract(params ICustomAttributeProvider?[] providers)
-        => BooleanAttributeContract("cls-compliant", "System.CLSCompliantAttribute", providers);
+        => BooleanAttributeContract(null, "cls-compliant", "System.CLSCompliantAttribute", providers);
+
+    private static string NamedClsComplianceContract(string name, ICustomAttributeProvider? provider)
+        => BooleanAttributeContract(name, "cls-compliant", "System.CLSCompliantAttribute", new[] { provider });
 
     private static string ComVisibilityContract(params ICustomAttributeProvider?[] providers)
-        => BooleanAttributeContract("com-visible", "System.Runtime.InteropServices.ComVisibleAttribute", providers);
+        => BooleanAttributeContract(null, "com-visible", "System.Runtime.InteropServices.ComVisibleAttribute", providers);
+
+    private static string NamedComVisibilityContract(string name, ICustomAttributeProvider? provider)
+        => BooleanAttributeContract(name, "com-visible", "System.Runtime.InteropServices.ComVisibleAttribute", new[] { provider });
 
     private static string BooleanAttributeContract(
+        string? owner,
         string contractName,
         string attributeName,
         params ICustomAttributeProvider?[] providers)
@@ -2953,7 +2974,7 @@ public sealed class PublicApiCompatibilityTests
             {
                 if (TryGetBooleanArgument(attribute, out var value))
                 {
-                    contracts.Add(contractName + "(" + FormatBoolean(value) + ")");
+                    contracts.Add(OwnContract(owner, contractName + "(" + FormatBoolean(value) + ")"));
                 }
             }
         }
@@ -2961,6 +2982,12 @@ public sealed class PublicApiCompatibilityTests
     }
 
     private static string ExperimentalContract(params ICustomAttributeProvider?[] providers)
+        => ExperimentalContractCore(null, providers);
+
+    private static string NamedExperimentalContract(string name, ICustomAttributeProvider? provider)
+        => ExperimentalContractCore(name, new[] { provider });
+
+    private static string ExperimentalContractCore(string? owner, ICustomAttributeProvider?[] providers)
     {
         var contracts = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var provider in providers.Where(value => value is not null))
@@ -2974,13 +3001,16 @@ public sealed class PublicApiCompatibilityTests
                     ? attribute.ConstructorArguments[0].Value
                     : null;
                 var url = attribute.NamedArguments.FirstOrDefault(value => value.MemberName == "UrlFormat").TypedValue.Value;
-                contracts.Add("experimental(id=" + FormatDefault(diagnosticId) + ",url=" + FormatDefault(url) + ")");
+                contracts.Add(OwnContract(owner, "experimental(id=" + FormatDefault(diagnosticId) + ",url=" + FormatDefault(url) + ")"));
             }
         }
         return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
     }
 
     private static string PlatformContract(params ICustomAttributeProvider?[] providers)
+        => PlatformContractCore(null, providers);
+
+    private static string PlatformContractCore(string? owner, ICustomAttributeProvider?[] providers)
     {
         var contracts = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var provider in providers.Where(value => value is not null))
@@ -2997,20 +3027,17 @@ public sealed class PublicApiCompatibilityTests
                 var named = attribute.NamedArguments
                     .OrderBy(value => value.MemberName, StringComparer.Ordinal)
                     .Select(value => value.MemberName + "=" + FormatDefault(value.TypedValue.Value));
-                contracts.Add("platform(" + name + ":" + string.Join(",", arguments.Concat(named)) + ")");
+                contracts.Add(OwnContract(owner, "platform(" + name + ":" + string.Join(",", arguments.Concat(named)) + ")"));
             }
         }
         return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
     }
 
     private static string NamedPlatformContract(string name, ICustomAttributeProvider? provider)
-    {
-        var contract = PlatformContract(provider);
-        return NamedContract(name, contract);
-    }
+        => PlatformContractCore(name, new[] { provider });
 
-    private static string NamedContract(string name, string contract)
-        => contract.Length == 0 ? string.Empty : name + "-" + contract;
+    private static string OwnContract(string? owner, string contract)
+        => owner is null ? contract : owner + "-" + contract;
 
     private static string ObsoleteContract(params ICustomAttributeProvider?[] providers)
     {
@@ -3169,29 +3196,29 @@ public sealed class PublicApiCompatibilityTests
             + SpecialNameContract(eventInfo)
             + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
             + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
-            + NamedContract("add", ExperimentalContract(eventInfo.AddMethod))
-            + NamedContract("remove", ExperimentalContract(eventInfo.RemoveMethod))
-            + NamedContract("raise", ExperimentalContract(eventInfo.RaiseMethod))
+            + NamedExperimentalContract("add", eventInfo.AddMethod)
+            + NamedExperimentalContract("remove", eventInfo.RemoveMethod)
+            + NamedExperimentalContract("raise", eventInfo.RaiseMethod)
             + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
-            + NamedContract("add", PreviewFeatureContract(eventInfo.AddMethod))
-            + NamedContract("remove", PreviewFeatureContract(eventInfo.RemoveMethod))
-            + NamedContract("raise", PreviewFeatureContract(eventInfo.RaiseMethod))
+            + NamedPreviewFeatureContract("add", eventInfo.AddMethod)
+            + NamedPreviewFeatureContract("remove", eventInfo.RemoveMethod)
+            + NamedPreviewFeatureContract("raise", eventInfo.RaiseMethod)
             + PlatformContract(eventInfo)
             + NamedPlatformContract("add", eventInfo.AddMethod)
             + NamedPlatformContract("remove", eventInfo.RemoveMethod)
             + NamedPlatformContract("raise", eventInfo.RaiseMethod)
             + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
-            + NamedContract("add", RequiresCodeContract(eventInfo.AddMethod))
-            + NamedContract("remove", RequiresCodeContract(eventInfo.RemoveMethod))
-            + NamedContract("raise", RequiresCodeContract(eventInfo.RaiseMethod))
+            + NamedRequiresCodeContract("add", eventInfo.AddMethod)
+            + NamedRequiresCodeContract("remove", eventInfo.RemoveMethod)
+            + NamedRequiresCodeContract("raise", eventInfo.RaiseMethod)
             + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
-            + NamedContract("add", ClsComplianceContract(eventInfo.AddMethod))
-            + NamedContract("remove", ClsComplianceContract(eventInfo.RemoveMethod))
-            + NamedContract("raise", ClsComplianceContract(eventInfo.RaiseMethod))
+            + NamedClsComplianceContract("add", eventInfo.AddMethod)
+            + NamedClsComplianceContract("remove", eventInfo.RemoveMethod)
+            + NamedClsComplianceContract("raise", eventInfo.RaiseMethod)
             + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
-            + NamedContract("add", ComVisibilityContract(eventInfo.AddMethod))
-            + NamedContract("remove", ComVisibilityContract(eventInfo.RemoveMethod))
-            + NamedContract("raise", ComVisibilityContract(eventInfo.RaiseMethod))
+            + NamedComVisibilityContract("add", eventInfo.AddMethod)
+            + NamedComVisibilityContract("remove", eventInfo.RemoveMethod)
+            + NamedComVisibilityContract("raise", eventInfo.RaiseMethod)
             + DispIdContract(eventInfo)
             + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name
             + " {" + FormatEventAccessors(eventInfo) + "}";
