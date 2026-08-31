@@ -286,6 +286,13 @@ internal static class HomeAssistantJson
     internal static bool HasDuplicateProperties(
         JsonElement value,
         CancellationToken cancellationToken = default)
+        => RunCancellationIsolated(
+            () => HasDuplicatePropertiesCore(value, cancellationToken),
+            cancellationToken);
+
+    private static bool HasDuplicatePropertiesCore(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind == JsonValueKind.Array)
@@ -293,7 +300,7 @@ internal static class HomeAssistantJson
             foreach (var item in value.EnumerateArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (HasDuplicateProperties(item, cancellationToken)) return true;
+                if (HasDuplicatePropertiesCore(item, cancellationToken)) return true;
             }
             return false;
         }
@@ -305,7 +312,7 @@ internal static class HomeAssistantJson
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
-            if (!names.Add(property.Name) || HasDuplicateProperties(property.Value, cancellationToken)) return true;
+            if (!names.Add(property.Name) || HasDuplicatePropertiesCore(property.Value, cancellationToken)) return true;
         }
         return false;
     }
@@ -313,6 +320,13 @@ internal static class HomeAssistantJson
     internal static bool HasDuplicateObjectProperties(
         JsonElement value,
         CancellationToken cancellationToken = default)
+        => RunCancellationIsolated(
+            () => HasDuplicateObjectPropertiesCore(value, cancellationToken),
+            cancellationToken);
+
+    private static bool HasDuplicateObjectPropertiesCore(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object) return false;
