@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Microsoft.Win32.SafeHandles;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace HomeAssistantX.IO;
@@ -7,11 +8,14 @@ namespace HomeAssistantX.IO;
 internal static partial class HomeAssistantAtomicFile
 {
     private const int DaclSecurityInformation = 0x00000004;
+    private const int SaclSecurityInformation = 0x00000008;
     private const int OwnerSecurityInformation = 0x00000001;
     private const int GroupSecurityInformation = 0x00000002;
     private const int LabelSecurityInformation = 0x00000010;
-    private const int PreservedWindowsSecurityInformation =
+    private const int BasePreservedWindowsSecurityInformation =
         OwnerSecurityInformation | GroupSecurityInformation | DaclSecurityInformation | LabelSecurityInformation;
+    private const int PreservedWindowsSecurityInformation =
+        BasePreservedWindowsSecurityInformation | SaclSecurityInformation;
     private const uint WindowsCreateNew = 1;
     private const uint WindowsFileAttributeNormal = 0x00000080;
     private const uint WindowsFileFlagBackupSemantics = 0x02000000;
@@ -23,6 +27,7 @@ internal static partial class HomeAssistantAtomicFile
     private const uint WindowsDelete = 0x00010000;
     private const uint WindowsWriteDac = 0x00040000;
     private const uint WindowsWriteOwner = 0x00080000;
+    private const uint WindowsAccessSystemSecurity = 0x01000000;
     private const uint WindowsFileShareRead = 0x00000001;
     private const uint WindowsFileShareWrite = 0x00000002;
     private const uint WindowsFileShareDelete = 0x00000004;
@@ -30,6 +35,8 @@ internal static partial class HomeAssistantAtomicFile
     private const int WindowsFileNotFound = 2;
     private const int WindowsPathNotFound = 3;
     private const int WindowsInsufficientBuffer = 122;
+    private const int WindowsAccessDenied = 5;
+    private const int WindowsPrivilegeNotHeld = 1314;
     private const ushort SecurityDescriptorDaclProtected = 0x1000;
     private const string RestrictiveTemporaryFileSddl = "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;OW)";
     private const int WindowsFileExists = 80;
@@ -40,27 +47,51 @@ internal static partial class HomeAssistantAtomicFile
     private const uint WindowsFileRenameReplaceIfExists = 0x00000001;
     private const uint WindowsFileRenamePosixSemantics = 0x00000002;
     private const uint WindowsFileAttributeEncrypted = 0x00004000;
+    private static readonly ConditionalWeakTable<FileStream, WindowsTemporarySecurityAccess> TemporarySecurityAccess = new();
 
     private static FileStream CreateSecureWindowsTemporaryFileStream(
         string temporaryPath,
         bool encrypted)
     {
+        var desiredAccess = WindowsGenericWrite | WindowsWriteDac | WindowsWriteOwner | WindowsDelete;
         var handle = CreateFile(
             temporaryPath,
-            WindowsGenericWrite | WindowsWriteDac | WindowsWriteOwner | WindowsDelete,
+            desiredAccess | WindowsAccessSystemSecurity,
             0,
             IntPtr.Zero,
             WindowsCreateNew,
             WindowsFileAttributeNormal | WindowsFileFlagOverlapped
                 | (encrypted ? WindowsFileAttributeEncrypted : 0),
             IntPtr.Zero);
+        var canWriteAudit = !handle.IsInvalid;
         if (handle.IsInvalid)
         {
             var error = Marshal.GetLastWin32Error();
             handle.Dispose();
-            throw new IOException(
-                "The secure Windows temporary file could not be created.",
-                new Win32Exception(error));
+            if (error is not WindowsAccessDenied and not WindowsPrivilegeNotHeld)
+            {
+                throw new IOException(
+                    "The secure Windows temporary file could not be created.",
+                    new Win32Exception(error));
+            }
+
+            handle = CreateFile(
+                temporaryPath,
+                desiredAccess,
+                0,
+                IntPtr.Zero,
+                WindowsCreateNew,
+                WindowsFileAttributeNormal | WindowsFileFlagOverlapped
+                    | (encrypted ? WindowsFileAttributeEncrypted : 0),
+                IntPtr.Zero);
+            if (handle.IsInvalid)
+            {
+                error = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                throw new IOException(
+                    "The secure Windows temporary file could not be created.",
+                    new Win32Exception(error));
+            }
         }
 
         try
@@ -69,6 +100,7 @@ internal static partial class HomeAssistantAtomicFile
             try
             {
                 ApplyRestrictiveWindowsDacl(stream);
+                TemporarySecurityAccess.Add(stream, new WindowsTemporarySecurityAccess(canWriteAudit));
                 return stream;
             }
             catch
@@ -96,8 +128,10 @@ internal static partial class HomeAssistantAtomicFile
         temporaryStream.Flush(flushToDisk: true);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var canWriteAudit = TemporarySecurityAccess.TryGetValue(temporaryStream, out var temporaryAccess)
+            && temporaryAccess.CanWriteAudit;
         using var destinationSecurity = overwrite
-            ? TryCaptureWindowsDestinationSecurity(destinationPath)
+            ? TryCaptureWindowsDestinationSecurity(destinationPath, canWriteAudit)
             : null;
         var inheritedDestinationSecurity = false;
         var committed = false;
@@ -115,11 +149,11 @@ internal static partial class HomeAssistantAtomicFile
 
                 if (!SetKernelObjectSecurity(
                         temporaryStream.SafeFileHandle,
-                        PreservedWindowsSecurityInformation,
+                        destinationSecurity.SecurityInformation,
                         destinationSecurity.Descriptor))
                 {
                     throw new IOException(
-                        "The Windows destination owner or access control list could not be preserved on the pinned replacement.",
+                        "The Windows destination security metadata could not be preserved on the pinned replacement.",
                         new Win32Exception(Marshal.GetLastWin32Error()));
                 }
                 inheritedDestinationSecurity = true;
@@ -182,16 +216,41 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
-    private static WindowsSecurityDescriptor? TryCaptureWindowsDestinationSecurity(string destinationPath)
+    private static WindowsSecurityDescriptor? TryCaptureWindowsDestinationSecurity(
+        string destinationPath,
+        bool includeAudit)
     {
+        var securityInformation = includeAudit
+            ? PreservedWindowsSecurityInformation
+            : BasePreservedWindowsSecurityInformation;
+        var desiredAccess = WindowsReadControl | WindowsFileReadAttributes
+            | (includeAudit ? WindowsAccessSystemSecurity : 0);
         var handle = CreateFile(
             destinationPath,
-            WindowsReadControl | WindowsFileReadAttributes,
+            desiredAccess,
             WindowsFileShareRead,
             IntPtr.Zero,
             WindowsOpenExisting,
             WindowsDestinationSecurityOpenFlags,
             IntPtr.Zero);
+        if (handle.IsInvalid && includeAudit)
+        {
+            var auditError = Marshal.GetLastWin32Error();
+            handle.Dispose();
+            if (auditError is WindowsAccessDenied or WindowsPrivilegeNotHeld)
+            {
+                securityInformation = BasePreservedWindowsSecurityInformation;
+                handle = CreateFile(
+                    destinationPath,
+                    WindowsReadControl | WindowsFileReadAttributes,
+                    WindowsFileShareRead,
+                    IntPtr.Zero,
+                    WindowsOpenExisting,
+                    WindowsDestinationSecurityOpenFlags,
+                    IntPtr.Zero);
+            }
+        }
+
         if (handle.IsInvalid)
         {
             var error = Marshal.GetLastWin32Error();
@@ -206,7 +265,7 @@ internal static partial class HomeAssistantAtomicFile
         {
             if (GetKernelObjectSecurity(
                     handle,
-                    PreservedWindowsSecurityInformation,
+                    securityInformation,
                     IntPtr.Zero,
                     0,
                     out var required)
@@ -220,7 +279,7 @@ internal static partial class HomeAssistantAtomicFile
             var descriptor = Marshal.AllocHGlobal(checked((int)required));
             if (GetKernelObjectSecurity(
                     handle,
-                    PreservedWindowsSecurityInformation,
+                    securityInformation,
                     descriptor,
                     required,
                 out _))
@@ -228,7 +287,8 @@ internal static partial class HomeAssistantAtomicFile
                 return new WindowsSecurityDescriptor(
                     descriptor,
                     handle,
-                    IsWindowsFileEncrypted(handle));
+                    IsWindowsFileEncrypted(handle),
+                    securityInformation);
             }
 
             var error = Marshal.GetLastWin32Error();
@@ -260,6 +320,9 @@ internal static partial class HomeAssistantAtomicFile
 
     internal static int WindowsMandatoryLabelSecurityInformation =>
         LabelSecurityInformation;
+
+    internal static int WindowsAuditSecurityInformation =>
+        SaclSecurityInformation;
 
     internal static uint WindowsEncryptedAttribute =>
         WindowsFileAttributeEncrypted;
@@ -375,15 +438,18 @@ internal static partial class HomeAssistantAtomicFile
         internal WindowsSecurityDescriptor(
             IntPtr descriptor,
             SafeFileHandle destinationHandle,
-            bool isEncrypted)
+            bool isEncrypted,
+            int securityInformation)
         {
             Descriptor = descriptor;
             _destinationHandle = destinationHandle;
             IsEncrypted = isEncrypted;
+            SecurityInformation = securityInformation;
         }
 
         internal IntPtr Descriptor { get; private set; }
         internal bool IsEncrypted { get; }
+        internal int SecurityInformation { get; }
 
         public void Dispose()
         {
@@ -395,6 +461,16 @@ internal static partial class HomeAssistantAtomicFile
             _destinationHandle?.Dispose();
             _destinationHandle = null;
         }
+    }
+
+    private sealed class WindowsTemporarySecurityAccess
+    {
+        internal WindowsTemporarySecurityAccess(bool canWriteAudit)
+        {
+            CanWriteAudit = canWriteAudit;
+        }
+
+        internal bool CanWriteAudit { get; }
     }
 
     private static bool IsWindowsFileEncrypted(SafeFileHandle handle)

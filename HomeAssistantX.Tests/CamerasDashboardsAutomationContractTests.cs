@@ -58,8 +58,9 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Equal(0u, HomeAssistantAtomicFile.WindowsDestinationSecurityShareMode & 0x00000004u);
         Assert.Equal(22, HomeAssistantAtomicFile.WindowsAtomicRenameInformationClass);
         Assert.Equal(0x00000003u, HomeAssistantAtomicFile.WindowsAtomicRenameFlags);
-        Assert.Equal(0x00000017, HomeAssistantAtomicFile.WindowsPreservedSecurityInformation);
+        Assert.Equal(0x0000001F, HomeAssistantAtomicFile.WindowsPreservedSecurityInformation);
         Assert.Equal(0x00000010, HomeAssistantAtomicFile.WindowsMandatoryLabelSecurityInformation);
+        Assert.Equal(0x00000008, HomeAssistantAtomicFile.WindowsAuditSecurityInformation);
         Assert.Equal(0x00004000u, HomeAssistantAtomicFile.WindowsEncryptedAttribute);
         Assert.Equal(3, HomeAssistantAtomicFile.GetWindowsRenameInformationClass(overwrite: true, destinationPinned: false));
         Assert.Equal(0u, HomeAssistantAtomicFile.GetWindowsRenameFlags(overwrite: true, destinationPinned: false));
