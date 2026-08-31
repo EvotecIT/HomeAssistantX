@@ -104,6 +104,31 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task CameraAndPanelResponseProjectionPrioritizeCancellation()
+    {
+        var escaped = string.Concat(Enumerable.Repeat("\\u0061", 1_000_000));
+        using var cameraDocument = JsonDocument.Parse(
+            "{\"" + escaped + "\":0,\"preload_stream\":true,\"orientation\":1}");
+        using var panelDocument = JsonDocument.Parse(
+            "{\"" + escaped + "\":0,\"component_name\":\"custom\",\"require_admin\":false}");
+        using var cameraCancellation = new CancellationTokenSource();
+        using var panelCancellation = new CancellationTokenSource();
+
+        var cameraTask = Task.Run(() => HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantCameraPreferences>(
+            cameraDocument.RootElement,
+            "Invalid camera response.",
+            cameraCancellation.Token));
+        cameraCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cameraTask);
+
+        var panelTask = Task.Run(() => HomeAssistantDashboardClient.RequirePanelBooleans(
+            panelDocument.RootElement,
+            panelCancellation.Token));
+        panelCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await panelTask);
+    }
+
+    [Fact]
     public void LinuxExtendedAttributeComparisonSkipsOnlyIdenticalValues()
     {
         Assert.True(HomeAssistantAtomicFile.ExtendedAttributeEquals(null, null));

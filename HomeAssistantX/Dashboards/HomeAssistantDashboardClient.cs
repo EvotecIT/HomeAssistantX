@@ -32,7 +32,7 @@ public sealed class HomeAssistantDashboardClient
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
             var embeddedRoute = RequirePanelBooleans(property.Value, cancellationToken);
-            var panel = HomeAssistantJson.DeserializeResponse<HomeAssistantPanel>(
+            var panel = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantPanel>(
                 property.Value,
                 "A frontend panel could not be decoded.",
                 cancellationToken: cancellationToken);
@@ -84,7 +84,7 @@ public sealed class HomeAssistantDashboardClient
             value,
             "The Lovelace information contained duplicate JSON properties.",
             cancellationToken);
-        var info = HomeAssistantJson.DeserializeResponse<HomeAssistantLovelaceInfo>(
+        var info = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantLovelaceInfo>(
             value,
             "The Lovelace information could not be decoded.",
             cancellationToken: cancellationToken);
@@ -107,7 +107,7 @@ public sealed class HomeAssistantDashboardClient
             cancellationToken.ThrowIfCancellationRequested();
             RequireDashboardVisibility(item, "A dashboard did not contain its required visibility fields.", cancellationToken);
         }
-        var dashboards = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard[]>(
+        var dashboards = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantDashboard[]>(
             value,
             "The dashboard list could not be decoded.",
             cancellationToken: cancellationToken);
@@ -262,7 +262,7 @@ public sealed class HomeAssistantDashboardClient
             value,
             "The Lovelace resource list contained duplicate JSON properties.",
             cancellationToken);
-        var resources = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource[]>(
+        var resources = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantDashboardResource[]>(
             value,
             "The Lovelace resource list could not be decoded.",
             cancellationToken: cancellationToken);
@@ -332,7 +332,7 @@ public sealed class HomeAssistantDashboardClient
             value,
             "A dashboard mutation response contained duplicate JSON properties.",
             cancellationToken);
-        var dashboard = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboard>(
+        var dashboard = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantDashboard>(
             value,
             "The dashboard response could not be decoded.",
             cancellationToken: cancellationToken);
@@ -369,7 +369,7 @@ public sealed class HomeAssistantDashboardClient
             value,
             "A Lovelace resource mutation response contained duplicate JSON properties.",
             cancellationToken);
-        var resource = HomeAssistantJson.DeserializeResponse<HomeAssistantDashboardResource>(
+        var resource = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantDashboardResource>(
             value,
             "The Lovelace resource response could not be decoded.",
             cancellationToken: cancellationToken);
@@ -489,7 +489,12 @@ public sealed class HomeAssistantDashboardClient
         }
     }
 
-    private static JsonElement RequirePanelBooleans(JsonElement value, CancellationToken cancellationToken)
+    internal static JsonElement RequirePanelBooleans(JsonElement value, CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => RequirePanelBooleansCore(value, cancellationToken),
+            cancellationToken);
+
+    private static JsonElement RequirePanelBooleansCore(JsonElement value, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object)

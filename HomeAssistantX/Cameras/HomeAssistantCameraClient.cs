@@ -81,7 +81,7 @@ public sealed class HomeAssistantCameraClient
         {
             throw new HomeAssistantProtocolException("The camera capabilities omitted their frontend stream-type collection.");
         }
-        var result = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraCapabilities>(
+        var result = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantCameraCapabilities>(
             value,
             "The camera capabilities could not be decoded.",
             cancellationToken: cancellationToken);
@@ -100,7 +100,7 @@ public sealed class HomeAssistantCameraClient
         var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var value = await _webSocket.RequestAsync("camera/stream", new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId, ["format"] = "hls" }, cancellationToken).ConfigureAwait(false);
         RequireNoDuplicateProperties(value, "The camera stream response contained duplicate JSON properties.", cancellationToken);
-        var stream = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraStream>(
+        var stream = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantCameraStream>(
             value,
             "The camera stream response could not be decoded.",
             cancellationToken: cancellationToken);
@@ -153,7 +153,7 @@ public sealed class HomeAssistantCameraClient
             throw new HomeAssistantProtocolException(failureMessage);
         }
 
-        var preferences = HomeAssistantJson.DeserializeResponse<HomeAssistantCameraPreferences>(
+        var preferences = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantCameraPreferences>(
             value,
             failureMessage,
             cancellationToken: cancellationToken);
