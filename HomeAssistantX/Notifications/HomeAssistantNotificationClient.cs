@@ -118,51 +118,63 @@ public sealed class HomeAssistantNotificationClient
         JsonElement value,
         CancellationToken token)
     {
-            var shape = HomeAssistantJson.RunCancellationIsolated(
-                () => ReadPersistentUpdateShape(value, token),
-                token);
-            var typeValue = shape.Type;
-            var notificationsValue = shape.Notifications;
+        var projected = HomeAssistantJson.RunCancellationIsolated(
+            () => ProjectPersistentUpdate(value, token),
+            token);
+        var raw = await HomeAssistantJson.SnapshotResponseAsync(
+            value,
+            "The Home Assistant persistent-notification update could not be snapshotted.",
+            token).ConfigureAwait(false);
+        return new HomeAssistantPersistentNotificationUpdate
+        {
+            RawType = projected.RawType,
+            Type = projected.Type,
+            Notifications = projected.Notifications,
+            Raw = raw
+        };
+    }
 
-            var rawType = await HomeAssistantJson.GetStringAsync(typeValue, token).ConfigureAwait(false)
-                ?? string.Empty;
-            if (CancellationAwareString.IsNullOrWhiteSpace(rawType, token)
-                || !CancellationAwareString.EqualsOrdinal(
-                    rawType,
-                    CancellationAwareString.Trim(rawType, token),
-                    token))
+    private static (
+        string RawType,
+        HomeAssistantPersistentNotificationUpdateType Type,
+        IReadOnlyDictionary<string, HomeAssistantPersistentNotification> Notifications) ProjectPersistentUpdate(
+        JsonElement value,
+        CancellationToken token)
+    {
+        var shape = ReadPersistentUpdateShape(value, token);
+        var typeValue = shape.Type;
+        var notificationsValue = shape.Notifications;
+
+        var rawType = HomeAssistantJson.GetString(typeValue, token)
+            ?? string.Empty;
+        if (CancellationAwareString.IsNullOrWhiteSpace(rawType, token)
+            || !CancellationAwareString.EqualsOrdinal(
+                rawType,
+                CancellationAwareString.Trim(rawType, token),
+                token))
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained an invalid event type.");
+        }
+        ValidateNotificationObjectsCore(
+            notificationsValue,
+            dictionary: true,
+            "The Home Assistant persistent-notification update",
+            token);
+        var notifications = DeserializeNotificationDictionary(
+            notificationsValue,
+            "The Home Assistant persistent-notification update could not be decoded.",
+            token);
+        ValidateNotifications(notifications.Values, "The Home Assistant persistent-notification update", token);
+        foreach (var item in notifications)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!CancellationAwareString.EqualsOrdinal(item.Key, item.Value.NotificationId, token))
             {
-                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained an invalid event type.");
+                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a mismatched notification identifier.");
             }
-            ValidateNotificationObjects(
-                notificationsValue,
-                dictionary: true,
-                "The Home Assistant persistent-notification update",
-                token);
-            var notifications = DeserializeNotificationDictionary(
-                notificationsValue,
-                "The Home Assistant persistent-notification update could not be decoded.",
-                token);
-            ValidateNotifications(notifications.Values, "The Home Assistant persistent-notification update", token);
-            foreach (var item in notifications)
-            {
-                token.ThrowIfCancellationRequested();
-                if (!CancellationAwareString.EqualsOrdinal(item.Key, item.Value.NotificationId, token))
-                {
-                    throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a mismatched notification identifier.");
-                }
-            }
-            var raw = await HomeAssistantJson.SnapshotResponseAsync(
-                value,
-                "The Home Assistant persistent-notification update could not be snapshotted.",
-                token).ConfigureAwait(false);
-            return new HomeAssistantPersistentNotificationUpdate
-            {
-                RawType = rawType,
-                Type = ParseType(rawType, token),
-                Notifications = notifications,
-                Raw = raw
-            };
+        }
+        token.ThrowIfCancellationRequested();
+        return (rawType, ParseType(rawType, token), notifications);
     }
 
     private static (JsonElement Type, JsonElement Notifications) ReadPersistentUpdateShape(
@@ -234,10 +246,10 @@ public sealed class HomeAssistantNotificationClient
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object)
             throw new HomeAssistantProtocolException(failureMessage);
-        var decoded = HomeAssistantJson.DeserializeResponseIsolated<Dictionary<string, HomeAssistantPersistentNotification>>(
+        var decoded = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantPersistentNotification>>(
             value,
             failureMessage,
-            cancellationToken);
+            cancellationToken: cancellationToken);
         return new Dictionary<string, HomeAssistantPersistentNotification>(decoded, StringComparer.Ordinal);
     }
 
