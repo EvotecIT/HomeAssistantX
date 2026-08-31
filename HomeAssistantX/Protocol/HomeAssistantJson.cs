@@ -592,6 +592,20 @@ internal static class HomeAssistantJson
         }
     }
 
+    /// <summary>Decodes a complete DTO graph on one isolated worker when framework-owned member projection cannot poll cancellation.</summary>
+    internal static T DeserializeResponseIsolated<T>(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken,
+        bool allowNullCollectionEntries = false)
+        => RunCancellationIsolated(
+            () => DeserializeResponse<T>(
+                value,
+                failureMessage,
+                allowNullCollectionEntries,
+                CancellationToken.None),
+            cancellationToken);
+
     /// <summary>Rejects null entries in a built-in response collection, including nested collections.</summary>
     public static T RequireNoNullCollectionEntries<T>(
         T value,
