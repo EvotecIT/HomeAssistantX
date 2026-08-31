@@ -108,22 +108,30 @@ public sealed class HomeAssistantPlayMediaOptions
     internal HomeAssistantPlayMediaOptions Snapshot(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        HomeAssistantMediaEnqueueMode? enqueue;
+        bool? announce;
+        IReadOnlyDictionary<string, object?>? extra;
         lock (_sync)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return new HomeAssistantPlayMediaOptions
-            {
-                Enqueue = _enqueue,
-                Announce = _announce,
-                Extra = _extra is null
-                    ? null
-                    : HomeAssistantJson.FreezeObject(
-                        _extra,
-                        nameof(Extra),
-                        "MediaExtra",
-                        cancellationToken)
-            };
+            enqueue = _enqueue;
+            announce = _announce;
+            extra = _extra;
         }
+
+        var frozenExtra = extra is null
+            ? null
+            : HomeAssistantJson.FreezeObject(
+                extra,
+                nameof(Extra),
+                "MediaExtra",
+                cancellationToken);
+        return new HomeAssistantPlayMediaOptions
+        {
+            Enqueue = enqueue,
+            Announce = announce,
+            Extra = frozenExtra
+        };
     }
 }
 
@@ -230,32 +238,60 @@ public sealed class HomeAssistantMediaPlayerOptions
     internal HomeAssistantMediaPlayerOptions Snapshot(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        double? volumePercent;
+        HomeAssistantPowerAction? power;
+        HomeAssistantMediaPlaybackAction? playback;
+        bool? muted;
+        string? source;
+        string? soundMode;
+        bool? shuffle;
+        HomeAssistantMediaRepeatMode? repeat;
+        string? mediaContentId;
+        string? mediaContentType;
+        HomeAssistantMediaEnqueueMode? enqueue;
+        bool? announce;
+        IReadOnlyDictionary<string, object?>? mediaExtra;
         lock (_sync)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return new HomeAssistantMediaPlayerOptions
-            {
-                Power = _power,
-                Playback = _playback,
-                VolumePercent = _volumePercent,
-                Muted = _muted,
-                Source = _source,
-                SoundMode = _soundMode,
-                Shuffle = _shuffle,
-                Repeat = _repeat,
-                MediaContentId = _mediaContentId,
-                MediaContentType = _mediaContentType,
-                Enqueue = _enqueue,
-                Announce = _announce,
-                MediaExtra = _mediaExtra is null
-                    ? null
-                    : HomeAssistantJson.FreezeObject(
-                        _mediaExtra,
-                        nameof(MediaExtra),
-                        "MediaExtra",
-                        cancellationToken)
-            };
+            volumePercent = _volumePercent;
+            power = _power;
+            playback = _playback;
+            muted = _muted;
+            source = _source;
+            soundMode = _soundMode;
+            shuffle = _shuffle;
+            repeat = _repeat;
+            mediaContentId = _mediaContentId;
+            mediaContentType = _mediaContentType;
+            enqueue = _enqueue;
+            announce = _announce;
+            mediaExtra = _mediaExtra;
         }
+
+        var frozenMediaExtra = mediaExtra is null
+            ? null
+            : HomeAssistantJson.FreezeObject(
+                mediaExtra,
+                nameof(MediaExtra),
+                "MediaExtra",
+                cancellationToken);
+        return new HomeAssistantMediaPlayerOptions
+        {
+            Power = power,
+            Playback = playback,
+            VolumePercent = volumePercent,
+            Muted = muted,
+            Source = source,
+            SoundMode = soundMode,
+            Shuffle = shuffle,
+            Repeat = repeat,
+            MediaContentId = mediaContentId,
+            MediaContentType = mediaContentType,
+            Enqueue = enqueue,
+            Announce = announce,
+            MediaExtra = frozenMediaExtra
+        };
     }
 }
 
@@ -519,6 +555,13 @@ public sealed class HomeAssistantMediaPlayerStatus
     internal static IReadOnlyList<string> GetGroupMembers(
         IReadOnlyDictionary<string, JsonElement> attributes,
         CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => GetGroupMembersCore(attributes, cancellationToken),
+            cancellationToken);
+
+    private static IReadOnlyList<string> GetGroupMembersCore(
+        IReadOnlyDictionary<string, JsonElement> attributes,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!HomeAssistantAttributeReader.TryGetValue(
@@ -541,9 +584,12 @@ public sealed class HomeAssistantMediaPlayerStatus
         foreach (var item in value.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var rawMember = item.ValueKind == JsonValueKind.String
+                ? HomeAssistantJson.GetString(item, cancellationToken)
+                : null;
             if (item.ValueKind != JsonValueKind.String
-                || !HomeAssistantEntityId.TryNormalizeForDomain(item.GetString(), "media_player", cancellationToken, out var member)
-                || !string.Equals(item.GetString(), member, StringComparison.Ordinal)
+                || !HomeAssistantEntityId.TryNormalizeForDomain(rawMember, "media_player", cancellationToken, out var member)
+                || !CancellationAwareString.EqualsOrdinal(rawMember, member, cancellationToken)
                 || !unique.Add(member))
             {
                 throw new HomeAssistantProtocolException("The Home Assistant media-player group members contained an invalid or duplicate entity identifier.");

@@ -67,16 +67,16 @@ internal static class CancellationAwareJsonValueReader
         cancellationToken.ThrowIfCancellationRequested();
         if (!cancellationToken.CanBeCanceled || payload.Count <= CopyChunkLength)
         {
-            using var document = JsonDocument.Parse(payload.AsMemory());
-            var value = document.RootElement.Clone();
+            var document = JsonDocument.Parse(payload.AsMemory());
+            var value = document.RootElement;
             cancellationToken.ThrowIfCancellationRequested();
             return value;
         }
 
         var parseTask = Task.Run(() =>
         {
-            using var document = JsonDocument.Parse(payload.AsMemory());
-            return document.RootElement.Clone();
+            var document = JsonDocument.Parse(payload.AsMemory());
+            return document.RootElement;
         });
         var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));

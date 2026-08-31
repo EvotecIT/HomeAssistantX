@@ -930,6 +930,54 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task MediaOptionLocksAreReleasedBeforeCallerJsonIsSerialized()
+    {
+        using var playEntered = new ManualResetEventSlim();
+        using var playRelease = new ManualResetEventSlim();
+        var play = new HomeAssistantPlayMediaOptions
+        {
+            Extra = new Dictionary<string, object?>
+            {
+                ["probe"] = new BlockingSerializationProbe(playEntered, playRelease)
+            }
+        };
+        var playSnapshot = Task.Run(() => play.Snapshot(CancellationToken.None));
+        Assert.True(playEntered.Wait(TimeSpan.FromSeconds(5)));
+        try
+        {
+            var setter = Task.Run(() => play.Extra = new Dictionary<string, object?> { ["replacement"] = true });
+            await setter.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            playRelease.Set();
+        }
+        await playSnapshot;
+
+        using var setEntered = new ManualResetEventSlim();
+        using var setRelease = new ManualResetEventSlim();
+        var set = new HomeAssistantMediaPlayerOptions
+        {
+            MediaExtra = new Dictionary<string, object?>
+            {
+                ["probe"] = new BlockingSerializationProbe(setEntered, setRelease)
+            }
+        };
+        var setSnapshot = Task.Run(() => set.Snapshot(CancellationToken.None));
+        Assert.True(setEntered.Wait(TimeSpan.FromSeconds(5)));
+        try
+        {
+            var setter = Task.Run(() => set.MediaExtra = new Dictionary<string, object?> { ["replacement"] = true });
+            await setter.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            setRelease.Set();
+        }
+        await setSnapshot;
+    }
+
+    [Fact]
     public async Task ContradictoryOrInvalidAdvancedMediaOperationsFailBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();
@@ -1909,6 +1957,28 @@ public sealed class MediaAndRemoteContractTests
             get
             {
                 _mutation();
+                return "preserved";
+            }
+        }
+    }
+
+    private sealed class BlockingSerializationProbe
+    {
+        private readonly ManualResetEventSlim _entered;
+        private readonly ManualResetEventSlim _release;
+
+        internal BlockingSerializationProbe(ManualResetEventSlim entered, ManualResetEventSlim release)
+        {
+            _entered = entered;
+            _release = release;
+        }
+
+        public string Value
+        {
+            get
+            {
+                _entered.Set();
+                _release.Wait();
                 return "preserved";
             }
         }
