@@ -6,36 +6,36 @@ schema: 2.0.0
 ---
 # Set-HomeAssistantMediaPlayer
 ## SYNOPSIS
-Sets common media-player power, playback, volume, mute, source, and content values.
+Controls media-player power, playback, volume, source, grouping, queueing, and content.
 
 ## SYNTAX
 ### Entity (Default)
 ```powershell
-Set-HomeAssistantMediaPlayer [-Entity] <string[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-Muted <Boolean>] [-Source <string>] [-MediaContentId <string>] [-MediaContentType <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-HomeAssistantMediaPlayer [-Entity] <string[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-VolumeStep <HomeAssistantMediaVolumeStepAction>] [-Muted <Boolean>] [-Source <string>] [-SoundMode <string>] [-Shuffle <Boolean>] [-Repeat <HomeAssistantMediaRepeatMode>] [-SeekSeconds <Double>] [-ClearPlaylist] [-JoinMember <string[]>] [-Unjoin] [-MediaContentId <string>] [-MediaContentType <string>] [-Enqueue <HomeAssistantMediaEnqueueMode>] [-Announce] [-MediaExtra <hashtable>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### InputObject
 ```powershell
-Set-HomeAssistantMediaPlayer -InputObject <HomeAssistantEntityInfo[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-Muted <Boolean>] [-Source <string>] [-MediaContentId <string>] [-MediaContentType <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-HomeAssistantMediaPlayer -InputObject <HomeAssistantEntityInfo[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-VolumeStep <HomeAssistantMediaVolumeStepAction>] [-Muted <Boolean>] [-Source <string>] [-SoundMode <string>] [-Shuffle <Boolean>] [-Repeat <HomeAssistantMediaRepeatMode>] [-SeekSeconds <Double>] [-ClearPlaylist] [-JoinMember <string[]>] [-Unjoin] [-MediaContentId <string>] [-MediaContentType <string>] [-Enqueue <HomeAssistantMediaEnqueueMode>] [-Announce] [-MediaExtra <hashtable>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Area
 ```powershell
-Set-HomeAssistantMediaPlayer [-Area] <string[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-Muted <Boolean>] [-Source <string>] [-MediaContentId <string>] [-MediaContentType <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-HomeAssistantMediaPlayer [-Area] <string[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-VolumeStep <HomeAssistantMediaVolumeStepAction>] [-Muted <Boolean>] [-Source <string>] [-SoundMode <string>] [-Shuffle <Boolean>] [-Repeat <HomeAssistantMediaRepeatMode>] [-SeekSeconds <Double>] [-ClearPlaylist] [-JoinMember <string[]>] [-Unjoin] [-MediaContentId <string>] [-MediaContentType <string>] [-Enqueue <HomeAssistantMediaEnqueueMode>] [-Announce] [-MediaExtra <hashtable>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Device
 ```powershell
-Set-HomeAssistantMediaPlayer [-Device] <string[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-Muted <Boolean>] [-Source <string>] [-MediaContentId <string>] [-MediaContentType <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-HomeAssistantMediaPlayer [-Device] <string[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-VolumeStep <HomeAssistantMediaVolumeStepAction>] [-Muted <Boolean>] [-Source <string>] [-SoundMode <string>] [-Shuffle <Boolean>] [-Repeat <HomeAssistantMediaRepeatMode>] [-SeekSeconds <Double>] [-ClearPlaylist] [-JoinMember <string[]>] [-Unjoin] [-MediaContentId <string>] [-MediaContentType <string>] [-Enqueue <HomeAssistantMediaEnqueueMode>] [-Announce] [-MediaExtra <hashtable>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Floor
 ```powershell
-Set-HomeAssistantMediaPlayer [-Floor] <string[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-Muted <Boolean>] [-Source <string>] [-MediaContentId <string>] [-MediaContentType <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-HomeAssistantMediaPlayer [-Floor] <string[]> [-Power <HomeAssistantPowerAction>] [-Playback <HomeAssistantMediaPlaybackAction>] [-VolumePercent <Double>] [-VolumeStep <HomeAssistantMediaVolumeStepAction>] [-Muted <Boolean>] [-Source <string>] [-SoundMode <string>] [-Shuffle <Boolean>] [-Repeat <HomeAssistantMediaRepeatMode>] [-SeekSeconds <Double>] [-ClearPlaylist] [-JoinMember <string[]>] [-Unjoin] [-MediaContentId <string>] [-MediaContentType <string>] [-Enqueue <HomeAssistantMediaEnqueueMode>] [-Announce] [-MediaExtra <hashtable>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Sets common media-player power, playback, volume, mute, source, and content values.
+Controls media-player power, playback, volume, source, grouping, queueing, and content.
 
 ## EXAMPLES
 
@@ -45,7 +45,29 @@ Set-HomeAssistantMediaPlayer -Area LivingRoom -VolumePercent 30 -Playback Play -
 ```
 
 
+### EXAMPLE 2
+```powershell
+Set-HomeAssistantMediaPlayer -Entity media_player.kitchen -MediaContentId 'media-source://media_source/local/dinner.mp3' -MediaContentType music -Announce
+```
+
+
 ## PARAMETERS
+
+### -Announce
+Requests announcement playback. Home Assistant does not allow this with Enqueue.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -Area
 One or more area names, aliases, or native area IDs. Room is an alias.
@@ -58,6 +80,22 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ClearPlaylist
+Clears the target playlist.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -90,6 +128,22 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Enqueue
+Controls where content is placed in the target's queue.
+
+```yaml
+Type: HomeAssistantMediaEnqueueMode
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values: Add, Next, Play, Replace
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -143,6 +197,22 @@ Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
+### -JoinMember
+Media-player entity identifiers to join to the selected group leader.
+
+```yaml
+Type: String[]
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -MediaContentId
 Content identifier passed to media_player.play_media.
 
@@ -164,6 +234,22 @@ Content type paired with MediaContentId.
 
 ```yaml
 Type: String
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -MediaExtra
+Provider-specific extra play-media values. Use only when the integration requires them.
+
+```yaml
+Type: Hashtable
 Parameter Sets: Entity, InputObject, Area, Device, Floor
 Aliases: None
 Possible values:
@@ -223,11 +309,91 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -Repeat
+Sets the repeat mode.
+
+```yaml
+Type: HomeAssistantMediaRepeatMode
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values: Off, One, All
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SeekSeconds
+Seeks to an absolute position in seconds.
+
+```yaml
+Type: Double
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Shuffle
+Enables or disables shuffle.
+
+```yaml
+Type: Boolean
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SoundMode
+Sound mode exposed by the target.
+
+```yaml
+Type: String
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -Source
 Input source exposed by the target.
 
 ```yaml
 Type: String
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Unjoin
+Removes the selected media players from their groups.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: Entity, InputObject, Area, Device, Floor
 Aliases: None
 Possible values:
@@ -247,6 +413,22 @@ Type: Double
 Parameter Sets: Entity, InputObject, Area, Device, Floor
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -VolumeStep
+Raises or lowers the volume by the target's native step.
+
+```yaml
+Type: HomeAssistantMediaVolumeStepAction
+Parameter Sets: Entity, InputObject, Area, Device, Floor
+Aliases: None
+Possible values: Up, Down
 
 Required: False
 Position: named

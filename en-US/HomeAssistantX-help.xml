@@ -4445,6 +4445,1066 @@
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Invoke-HomeAssistantRemote</command:name>
+      <command:verb>Invoke</command:verb>
+      <command:noun>HomeAssistantRemote</command:noun>
+      <maml:description>
+        <maml:para>Controls a Home Assistant remote, including sending, learning, and deleting commands.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Controls a Home Assistant remote, including sending, learning, and deleting commands.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="Entity">
+        <maml:name>Invoke-HomeAssistantRemote</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Action</maml:name>
+          <maml:description>
+            <maml:para>Remote operation to perform.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantRemoteAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">TurnOn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TurnOff</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Toggle</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SendCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LearnCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">DeleteCommand</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Activity</maml:name>
+          <maml:description>
+            <maml:para>Activity passed to a remote power operation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Alternative</maml:name>
+          <maml:description>
+            <maml:para>Requests the integration's alternative learning mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Command</maml:name>
+          <maml:description>
+            <maml:para>One or more commands to send, learn, or delete.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CommandType</maml:name>
+          <maml:description>
+            <maml:para>IR or RF command type used while learning.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantRemoteCommandType</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Ir</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Rf</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteCommandType</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DelaySeconds</maml:name>
+          <maml:description>
+            <maml:para>Delay between repeated sent commands, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="EntityId">
+          <maml:name>Entity</maml:name>
+          <maml:description>
+            <maml:para>One or more entity friendly names or native entity IDs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>HoldSeconds</maml:name>
+          <maml:description>
+            <maml:para>Duration for which a sent command is held, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="DeviceName">
+          <maml:name>RemoteDevice</maml:name>
+          <maml:description>
+            <maml:para>Optional receiver or device known by the remote integration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepeatCount</maml:name>
+          <maml:description>
+            <maml:para>Number of times each sent command is repeated.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Learning timeout in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="InputObject">
+        <maml:name>Invoke-HomeAssistantRemote</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Action</maml:name>
+          <maml:description>
+            <maml:para>Remote operation to perform.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantRemoteAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">TurnOn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TurnOff</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Toggle</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SendCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LearnCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">DeleteCommand</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Activity</maml:name>
+          <maml:description>
+            <maml:para>Activity passed to a remote power operation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Alternative</maml:name>
+          <maml:description>
+            <maml:para>Requests the integration's alternative learning mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Command</maml:name>
+          <maml:description>
+            <maml:para>One or more commands to send, learn, or delete.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CommandType</maml:name>
+          <maml:description>
+            <maml:para>IR or RF command type used while learning.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantRemoteCommandType</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Ir</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Rf</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteCommandType</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DelaySeconds</maml:name>
+          <maml:description>
+            <maml:para>Delay between repeated sent commands, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>HoldSeconds</maml:name>
+          <maml:description>
+            <maml:para>Duration for which a sent command is held, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Joined entities accepted from Get-HomeAssistantEntity.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantEntityInfo[]</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantEntityInfo[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="DeviceName">
+          <maml:name>RemoteDevice</maml:name>
+          <maml:description>
+            <maml:para>Optional receiver or device known by the remote integration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepeatCount</maml:name>
+          <maml:description>
+            <maml:para>Number of times each sent command is repeated.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Learning timeout in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Area">
+        <maml:name>Invoke-HomeAssistantRemote</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Action</maml:name>
+          <maml:description>
+            <maml:para>Remote operation to perform.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantRemoteAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">TurnOn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TurnOff</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Toggle</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SendCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LearnCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">DeleteCommand</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Activity</maml:name>
+          <maml:description>
+            <maml:para>Activity passed to a remote power operation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Alternative</maml:name>
+          <maml:description>
+            <maml:para>Requests the integration's alternative learning mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="AreaId,Room">
+          <maml:name>Area</maml:name>
+          <maml:description>
+            <maml:para>One or more area names, aliases, or native area IDs. Room is an alias.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Command</maml:name>
+          <maml:description>
+            <maml:para>One or more commands to send, learn, or delete.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CommandType</maml:name>
+          <maml:description>
+            <maml:para>IR or RF command type used while learning.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantRemoteCommandType</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Ir</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Rf</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteCommandType</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DelaySeconds</maml:name>
+          <maml:description>
+            <maml:para>Delay between repeated sent commands, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>HoldSeconds</maml:name>
+          <maml:description>
+            <maml:para>Duration for which a sent command is held, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="DeviceName">
+          <maml:name>RemoteDevice</maml:name>
+          <maml:description>
+            <maml:para>Optional receiver or device known by the remote integration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepeatCount</maml:name>
+          <maml:description>
+            <maml:para>Number of times each sent command is repeated.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Learning timeout in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Device">
+        <maml:name>Invoke-HomeAssistantRemote</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Action</maml:name>
+          <maml:description>
+            <maml:para>Remote operation to perform.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantRemoteAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">TurnOn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TurnOff</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Toggle</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SendCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LearnCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">DeleteCommand</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Activity</maml:name>
+          <maml:description>
+            <maml:para>Activity passed to a remote power operation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Alternative</maml:name>
+          <maml:description>
+            <maml:para>Requests the integration's alternative learning mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Command</maml:name>
+          <maml:description>
+            <maml:para>One or more commands to send, learn, or delete.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CommandType</maml:name>
+          <maml:description>
+            <maml:para>IR or RF command type used while learning.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantRemoteCommandType</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Ir</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Rf</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteCommandType</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DelaySeconds</maml:name>
+          <maml:description>
+            <maml:para>Delay between repeated sent commands, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="DeviceId">
+          <maml:name>Device</maml:name>
+          <maml:description>
+            <maml:para>One or more device friendly names or native device IDs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>HoldSeconds</maml:name>
+          <maml:description>
+            <maml:para>Duration for which a sent command is held, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="DeviceName">
+          <maml:name>RemoteDevice</maml:name>
+          <maml:description>
+            <maml:para>Optional receiver or device known by the remote integration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepeatCount</maml:name>
+          <maml:description>
+            <maml:para>Number of times each sent command is repeated.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Learning timeout in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Floor">
+        <maml:name>Invoke-HomeAssistantRemote</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Action</maml:name>
+          <maml:description>
+            <maml:para>Remote operation to perform.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">HomeAssistantRemoteAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">TurnOn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TurnOff</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Toggle</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SendCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LearnCommand</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">DeleteCommand</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Activity</maml:name>
+          <maml:description>
+            <maml:para>Activity passed to a remote power operation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Alternative</maml:name>
+          <maml:description>
+            <maml:para>Requests the integration's alternative learning mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Command</maml:name>
+          <maml:description>
+            <maml:para>One or more commands to send, learn, or delete.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CommandType</maml:name>
+          <maml:description>
+            <maml:para>IR or RF command type used while learning.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantRemoteCommandType</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Ir</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Rf</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantRemoteCommandType</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DelaySeconds</maml:name>
+          <maml:description>
+            <maml:para>Delay between repeated sent commands, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="FloorId">
+          <maml:name>Floor</maml:name>
+          <maml:description>
+            <maml:para>One or more floor names, aliases, or native floor IDs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>HoldSeconds</maml:name>
+          <maml:description>
+            <maml:para>Duration for which a sent command is held, in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="DeviceName">
+          <maml:name>RemoteDevice</maml:name>
+          <maml:description>
+            <maml:para>Optional receiver or device known by the remote integration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepeatCount</maml:name>
+          <maml:description>
+            <maml:para>Number of times each sent command is repeated.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Learning timeout in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Action</maml:name>
+        <maml:description>
+          <maml:para>Remote operation to perform.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">HomeAssistantRemoteAction</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">TurnOn</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">TurnOff</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Toggle</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SendCommand</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">LearnCommand</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DeleteCommand</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantRemoteAction</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Activity</maml:name>
+        <maml:description>
+          <maml:para>Activity passed to a remote power operation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Alternative</maml:name>
+        <maml:description>
+          <maml:para>Requests the integration's alternative learning mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="AreaId,Room">
+        <maml:name>Area</maml:name>
+        <maml:description>
+          <maml:para>One or more area names, aliases, or native area IDs. Room is an alias.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Command</maml:name>
+        <maml:description>
+          <maml:para>One or more commands to send, learn, or delete.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CommandType</maml:name>
+        <maml:description>
+          <maml:para>IR or RF command type used while learning.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantRemoteCommandType</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Ir</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Rf</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantRemoteCommandType</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Connection</maml:name>
+        <maml:description>
+          <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantConnection</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DelaySeconds</maml:name>
+        <maml:description>
+          <maml:para>Delay between repeated sent commands, in seconds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+        <dev:type>
+          <maml:name>Double</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="DeviceId">
+        <maml:name>Device</maml:name>
+        <maml:description>
+          <maml:para>One or more device friendly names or native device IDs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="EntityId">
+        <maml:name>Entity</maml:name>
+        <maml:description>
+          <maml:para>One or more entity friendly names or native entity IDs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="FloorId">
+        <maml:name>Floor</maml:name>
+        <maml:description>
+          <maml:para>One or more floor names, aliases, or native floor IDs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>HoldSeconds</maml:name>
+        <maml:description>
+          <maml:para>Duration for which a sent command is held, in seconds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+        <dev:type>
+          <maml:name>Double</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>InputObject</maml:name>
+        <maml:description>
+          <maml:para>Joined entities accepted from Get-HomeAssistantEntity.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">HomeAssistantEntityInfo[]</command:parameterValue>
+        <dev:type>
+          <maml:name>HomeAssistantEntityInfo[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="DeviceName">
+        <maml:name>RemoteDevice</maml:name>
+        <maml:description>
+          <maml:para>Optional receiver or device known by the remote integration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RepeatCount</maml:name>
+        <maml:description>
+          <maml:para>Number of times each sent command is repeated.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Learning timeout in seconds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+        <dev:type>
+          <maml:name>Double</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.Inventory.HomeAssistantEntityInfo[]</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>HomeAssistantX.PowerShell.HomeAssistantConnection</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An explicit, disposable Home Assistant session passed between cmdlets.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>HomeAssistantX.Services.HomeAssistantServiceCallResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Send a power command twice</maml:title>
+        <dev:code>Invoke-HomeAssistantRemote -Entity remote.living_room -Action SendCommand -Command Power -RepeatCount 2 -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Start an activity</maml:title>
+        <dev:code>Invoke-HomeAssistantRemote -Entity remote.harmony -Action TurnOn -Activity 'Watch TV'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>New-HomeAssistantBackup</command:name>
       <command:verb>New</command:verb>
       <command:noun>HomeAssistantBackup</command:noun>
@@ -7701,15 +8761,39 @@
       <command:verb>Set</command:verb>
       <command:noun>HomeAssistantMediaPlayer</command:noun>
       <maml:description>
-        <maml:para>Sets common media-player power, playback, volume, mute, source, and content values.</maml:para>
+        <maml:para>Controls media-player power, playback, volume, source, grouping, queueing, and content.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Sets common media-player power, playback, volume, mute, source, and content values.</maml:para>
+      <maml:para>Controls media-player power, playback, volume, source, grouping, queueing, and content.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="Entity">
         <maml:name>Set-HomeAssistantMediaPlayer</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Announce</maml:name>
+          <maml:description>
+            <maml:para>Requests announcement playback. Home Assistant does not allow this with Enqueue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearPlaylist</maml:name>
+          <maml:description>
+            <maml:para>Clears the target playlist.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
           <maml:name>Connection</maml:name>
           <maml:description>
@@ -7718,6 +8802,24 @@
           <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
           <dev:type>
             <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enqueue</maml:name>
+          <maml:description>
+            <maml:para>Controls where content is placed in the target's queue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaEnqueueMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Add</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Next</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Play</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Replace</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaEnqueueMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7734,6 +8836,18 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JoinMember</maml:name>
+          <maml:description>
+            <maml:para>Media-player entity identifiers to join to the selected group leader.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>MediaContentId</maml:name>
           <maml:description>
@@ -7754,6 +8868,18 @@
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MediaExtra</maml:name>
+          <maml:description>
+            <maml:para>Provider-specific extra play-media values. Use only when the integration requires them.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7808,6 +8934,59 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Repeat</maml:name>
+          <maml:description>
+            <maml:para>Sets the repeat mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaRepeatMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">One</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaRepeatMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SeekSeconds</maml:name>
+          <maml:description>
+            <maml:para>Seeks to an absolute position in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Shuffle</maml:name>
+          <maml:description>
+            <maml:para>Enables or disables shuffle.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SoundMode</maml:name>
+          <maml:description>
+            <maml:para>Sound mode exposed by the target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Source</maml:name>
           <maml:description>
             <maml:para>Input source exposed by the target.</maml:para>
@@ -7815,6 +8994,18 @@
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Unjoin</maml:name>
+          <maml:description>
+            <maml:para>Removes the selected media players from their groups.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7831,9 +9022,49 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VolumeStep</maml:name>
+          <maml:description>
+            <maml:para>Raises or lowers the volume by the target's native step.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaVolumeStepAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Up</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Down</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaVolumeStepAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="InputObject">
         <maml:name>Set-HomeAssistantMediaPlayer</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Announce</maml:name>
+          <maml:description>
+            <maml:para>Requests announcement playback. Home Assistant does not allow this with Enqueue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearPlaylist</maml:name>
+          <maml:description>
+            <maml:para>Clears the target playlist.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
           <maml:name>Connection</maml:name>
           <maml:description>
@@ -7842,6 +9073,24 @@
           <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
           <dev:type>
             <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enqueue</maml:name>
+          <maml:description>
+            <maml:para>Controls where content is placed in the target's queue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaEnqueueMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Add</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Next</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Play</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Replace</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaEnqueueMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7858,6 +9107,18 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JoinMember</maml:name>
+          <maml:description>
+            <maml:para>Media-player entity identifiers to join to the selected group leader.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>MediaContentId</maml:name>
           <maml:description>
@@ -7878,6 +9139,18 @@
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MediaExtra</maml:name>
+          <maml:description>
+            <maml:para>Provider-specific extra play-media values. Use only when the integration requires them.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7932,6 +9205,59 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Repeat</maml:name>
+          <maml:description>
+            <maml:para>Sets the repeat mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaRepeatMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">One</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaRepeatMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SeekSeconds</maml:name>
+          <maml:description>
+            <maml:para>Seeks to an absolute position in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Shuffle</maml:name>
+          <maml:description>
+            <maml:para>Enables or disables shuffle.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SoundMode</maml:name>
+          <maml:description>
+            <maml:para>Sound mode exposed by the target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Source</maml:name>
           <maml:description>
             <maml:para>Input source exposed by the target.</maml:para>
@@ -7939,6 +9265,18 @@
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Unjoin</maml:name>
+          <maml:description>
+            <maml:para>Removes the selected media players from their groups.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7955,9 +9293,37 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VolumeStep</maml:name>
+          <maml:description>
+            <maml:para>Raises or lowers the volume by the target's native step.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaVolumeStepAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Up</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Down</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaVolumeStepAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="Area">
         <maml:name>Set-HomeAssistantMediaPlayer</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Announce</maml:name>
+          <maml:description>
+            <maml:para>Requests announcement playback. Home Assistant does not allow this with Enqueue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="AreaId,Room">
           <maml:name>Area</maml:name>
           <maml:description>
@@ -7966,6 +9332,18 @@
           <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearPlaylist</maml:name>
+          <maml:description>
+            <maml:para>Clears the target playlist.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7983,6 +9361,36 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enqueue</maml:name>
+          <maml:description>
+            <maml:para>Controls where content is placed in the target's queue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaEnqueueMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Add</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Next</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Play</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Replace</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaEnqueueMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JoinMember</maml:name>
+          <maml:description>
+            <maml:para>Media-player entity identifiers to join to the selected group leader.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>MediaContentId</maml:name>
           <maml:description>
             <maml:para>Content identifier passed to media_player.play_media.</maml:para>
@@ -8002,6 +9410,18 @@
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MediaExtra</maml:name>
+          <maml:description>
+            <maml:para>Provider-specific extra play-media values. Use only when the integration requires them.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -8056,6 +9476,59 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Repeat</maml:name>
+          <maml:description>
+            <maml:para>Sets the repeat mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaRepeatMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">One</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaRepeatMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SeekSeconds</maml:name>
+          <maml:description>
+            <maml:para>Seeks to an absolute position in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Shuffle</maml:name>
+          <maml:description>
+            <maml:para>Enables or disables shuffle.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SoundMode</maml:name>
+          <maml:description>
+            <maml:para>Sound mode exposed by the target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Source</maml:name>
           <maml:description>
             <maml:para>Input source exposed by the target.</maml:para>
@@ -8063,6 +9536,18 @@
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Unjoin</maml:name>
+          <maml:description>
+            <maml:para>Removes the selected media players from their groups.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -8079,9 +9564,49 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VolumeStep</maml:name>
+          <maml:description>
+            <maml:para>Raises or lowers the volume by the target's native step.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaVolumeStepAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Up</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Down</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaVolumeStepAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="Device">
         <maml:name>Set-HomeAssistantMediaPlayer</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Announce</maml:name>
+          <maml:description>
+            <maml:para>Requests announcement playback. Home Assistant does not allow this with Enqueue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearPlaylist</maml:name>
+          <maml:description>
+            <maml:para>Clears the target playlist.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
           <maml:name>Connection</maml:name>
           <maml:description>
@@ -8107,123 +9632,29 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>MediaContentId</maml:name>
+          <maml:name>Enqueue</maml:name>
           <maml:description>
-            <maml:para>Content identifier passed to media_player.play_media.</maml:para>
+            <maml:para>Controls where content is placed in the target's queue.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>MediaContentType</maml:name>
-          <maml:description>
-            <maml:para>Content type paired with MediaContentId.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Muted</maml:name>
-          <maml:description>
-            <maml:para>Sets or clears mute.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
-          <dev:type>
-            <maml:name>Boolean</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Playback</maml:name>
-          <maml:description>
-            <maml:para>Optional playback action.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaPlaybackAction</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaEnqueueMode</command:parameterValue>
           <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">Play</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Pause</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">PlayPause</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Add</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Next</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Previous</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Play</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Replace</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
-            <maml:name>HomeAssistantMediaPlaybackAction</maml:name>
+            <maml:name>HomeAssistantMediaEnqueueMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Power</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JoinMember</maml:name>
           <maml:description>
-            <maml:para>Optional power action.</maml:para>
+            <maml:para>Media-player entity identifiers to join to the selected group leader.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">HomeAssistantPowerAction</command:parameterValue>
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">On</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Toggle</command:parameterValue>
-          </command:parameterValueGroup>
-          <dev:type>
-            <maml:name>HomeAssistantPowerAction</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Source</maml:name>
-          <maml:description>
-            <maml:para>Input source exposed by the target.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>VolumePercent</maml:name>
-          <maml:description>
-            <maml:para>Volume from 0 through 100 percent.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
-          <dev:type>
-            <maml:name>Double</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-      <command:syntaxItem parameterSetName="Floor">
-        <maml:name>Set-HomeAssistantMediaPlayer</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
-          <maml:name>Connection</maml:name>
-          <maml:description>
-            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
-          <dev:type>
-            <maml:name>HomeAssistantConnection</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="FloorId">
-          <maml:name>Floor</maml:name>
-          <maml:description>
-            <maml:para>One or more floor names, aliases, or native floor IDs.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -8255,6 +9686,18 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MediaExtra</maml:name>
+          <maml:description>
+            <maml:para>Provider-specific extra play-media values. Use only when the integration requires them.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Muted</maml:name>
           <maml:description>
             <maml:para>Sets or clears mute.</maml:para>
@@ -8304,6 +9747,59 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Repeat</maml:name>
+          <maml:description>
+            <maml:para>Sets the repeat mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaRepeatMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">One</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaRepeatMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SeekSeconds</maml:name>
+          <maml:description>
+            <maml:para>Seeks to an absolute position in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Shuffle</maml:name>
+          <maml:description>
+            <maml:para>Enables or disables shuffle.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SoundMode</maml:name>
+          <maml:description>
+            <maml:para>Sound mode exposed by the target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Source</maml:name>
           <maml:description>
             <maml:para>Input source exposed by the target.</maml:para>
@@ -8311,6 +9807,18 @@
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Unjoin</maml:name>
+          <maml:description>
+            <maml:para>Removes the selected media players from their groups.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -8327,9 +9835,308 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VolumeStep</maml:name>
+          <maml:description>
+            <maml:para>Raises or lowers the volume by the target's native step.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaVolumeStepAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Up</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Down</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaVolumeStepAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Floor">
+        <maml:name>Set-HomeAssistantMediaPlayer</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Announce</maml:name>
+          <maml:description>
+            <maml:para>Requests announcement playback. Home Assistant does not allow this with Enqueue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ClearPlaylist</maml:name>
+          <maml:description>
+            <maml:para>Clears the target playlist.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Enqueue</maml:name>
+          <maml:description>
+            <maml:para>Controls where content is placed in the target's queue.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaEnqueueMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Add</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Next</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Play</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Replace</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaEnqueueMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="FloorId">
+          <maml:name>Floor</maml:name>
+          <maml:description>
+            <maml:para>One or more floor names, aliases, or native floor IDs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JoinMember</maml:name>
+          <maml:description>
+            <maml:para>Media-player entity identifiers to join to the selected group leader.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MediaContentId</maml:name>
+          <maml:description>
+            <maml:para>Content identifier passed to media_player.play_media.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MediaContentType</maml:name>
+          <maml:description>
+            <maml:para>Content type paired with MediaContentId.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MediaExtra</maml:name>
+          <maml:description>
+            <maml:para>Provider-specific extra play-media values. Use only when the integration requires them.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Muted</maml:name>
+          <maml:description>
+            <maml:para>Sets or clears mute.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Playback</maml:name>
+          <maml:description>
+            <maml:para>Optional playback action.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaPlaybackAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Play</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Pause</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PlayPause</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Stop</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Next</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Previous</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaPlaybackAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Power</maml:name>
+          <maml:description>
+            <maml:para>Optional power action.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantPowerAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">On</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Toggle</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantPowerAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Repeat</maml:name>
+          <maml:description>
+            <maml:para>Sets the repeat mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaRepeatMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">One</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaRepeatMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SeekSeconds</maml:name>
+          <maml:description>
+            <maml:para>Seeks to an absolute position in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Shuffle</maml:name>
+          <maml:description>
+            <maml:para>Enables or disables shuffle.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SoundMode</maml:name>
+          <maml:description>
+            <maml:para>Sound mode exposed by the target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Source</maml:name>
+          <maml:description>
+            <maml:para>Input source exposed by the target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Unjoin</maml:name>
+          <maml:description>
+            <maml:para>Removes the selected media players from their groups.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VolumePercent</maml:name>
+          <maml:description>
+            <maml:para>Volume from 0 through 100 percent.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VolumeStep</maml:name>
+          <maml:description>
+            <maml:para>Raises or lowers the volume by the target's native step.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantMediaVolumeStepAction</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Up</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Down</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>HomeAssistantMediaVolumeStepAction</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Announce</maml:name>
+        <maml:description>
+          <maml:para>Requests announcement playback. Home Assistant does not allow this with Enqueue.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="AreaId,Room">
         <maml:name>Area</maml:name>
         <maml:description>
@@ -8338,6 +10145,18 @@
         <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ClearPlaylist</maml:name>
+        <maml:description>
+          <maml:para>Clears the target playlist.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -8362,6 +10181,24 @@
         <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Enqueue</maml:name>
+        <maml:description>
+          <maml:para>Controls where content is placed in the target's queue.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantMediaEnqueueMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Add</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Next</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Play</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Replace</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantMediaEnqueueMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -8402,6 +10239,18 @@
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JoinMember</maml:name>
+        <maml:description>
+          <maml:para>Media-player entity identifiers to join to the selected group leader.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>MediaContentId</maml:name>
         <maml:description>
@@ -8422,6 +10271,18 @@
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MediaExtra</maml:name>
+        <maml:description>
+          <maml:para>Provider-specific extra play-media values. Use only when the integration requires them.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -8476,6 +10337,59 @@
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Repeat</maml:name>
+        <maml:description>
+          <maml:para>Sets the repeat mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantMediaRepeatMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">One</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantMediaRepeatMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SeekSeconds</maml:name>
+        <maml:description>
+          <maml:para>Seeks to an absolute position in seconds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+        <dev:type>
+          <maml:name>Double</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Shuffle</maml:name>
+        <maml:description>
+          <maml:para>Enables or disables shuffle.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SoundMode</maml:name>
+        <maml:description>
+          <maml:para>Sound mode exposed by the target.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Source</maml:name>
         <maml:description>
           <maml:para>Input source exposed by the target.</maml:para>
@@ -8488,6 +10402,18 @@
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Unjoin</maml:name>
+        <maml:description>
+          <maml:para>Removes the selected media players from their groups.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>VolumePercent</maml:name>
         <maml:description>
           <maml:para>Volume from 0 through 100 percent.</maml:para>
@@ -8495,6 +10421,22 @@
         <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
         <dev:type>
           <maml:name>Double</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>VolumeStep</maml:name>
+        <maml:description>
+          <maml:para>Raises or lowers the volume by the target's native step.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">HomeAssistantMediaVolumeStepAction</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Up</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Down</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>HomeAssistantMediaVolumeStepAction</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -8531,6 +10473,13 @@
       <command:example>
         <maml:title>Set room volume and begin playback</maml:title>
         <dev:code>Set-HomeAssistantMediaPlayer -Area LivingRoom -VolumePercent 30 -Playback Play -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Play an announcement without guessing the Home Assistant payload shape</maml:title>
+        <dev:code>Set-HomeAssistantMediaPlayer -Entity media_player.kitchen -MediaContentId 'media-source://media_source/local/dinner.mp3' -MediaContentType music -Announce</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

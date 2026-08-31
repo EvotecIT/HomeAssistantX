@@ -1,0 +1,271 @@
+using System.Management.Automation;
+using HomeAssistantX.Controls;
+using HomeAssistantX.Protocol;
+using HomeAssistantX.Services;
+
+namespace HomeAssistantX.PowerShell;
+
+/// <summary>Remote operations exposed as one task-oriented PowerShell action.</summary>
+public enum HomeAssistantRemoteAction
+{
+    TurnOn,
+    TurnOff,
+    Toggle,
+    SendCommand,
+    LearnCommand,
+    DeleteCommand
+}
+
+/// <summary>Controls a Home Assistant remote, including sending, learning, and deleting commands.</summary>
+/// <example>
+///   <summary>Send a power command twice</summary>
+///   <code>Invoke-HomeAssistantRemote -Entity remote.living_room -Action SendCommand -Command Power -RepeatCount 2 -WhatIf</code>
+/// </example>
+/// <example>
+///   <summary>Start an activity</summary>
+///   <code>Invoke-HomeAssistantRemote -Entity remote.harmony -Action TurnOn -Activity 'Watch TV'</code>
+/// </example>
+[Cmdlet(VerbsLifecycle.Invoke, "HomeAssistantRemote", SupportsShouldProcess = true, DefaultParameterSetName = EntityParameterSet)]
+[OutputType(typeof(HomeAssistantServiceCallResult))]
+public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
+{
+    /// <summary>Remote operation to perform.</summary>
+    [Parameter(Mandatory = true)]
+    public HomeAssistantRemoteAction Action { get; set; }
+
+    /// <summary>Activity passed to a remote power operation.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? Activity { get; set; }
+
+    /// <summary>One or more commands to send, learn, or delete.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string[]? Command { get; set; }
+
+    /// <summary>Optional receiver or device known by the remote integration.</summary>
+    [Parameter]
+    [Alias("DeviceName")]
+    [ValidateNotNullOrEmpty]
+    public string? RemoteDevice { get; set; }
+
+    /// <summary>Number of times each sent command is repeated.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int? RepeatCount { get; set; }
+
+    /// <summary>Delay between repeated sent commands, in seconds.</summary>
+    [Parameter]
+    public double? DelaySeconds { get; set; }
+
+    /// <summary>Duration for which a sent command is held, in seconds.</summary>
+    [Parameter]
+    public double? HoldSeconds { get; set; }
+
+    /// <summary>IR or RF command type used while learning.</summary>
+    [Parameter]
+    public HomeAssistantRemoteCommandType? CommandType { get; set; }
+
+    /// <summary>Requests the integration's alternative learning mode.</summary>
+    [Parameter]
+    public bool? Alternative { get; set; }
+
+    /// <summary>Learning timeout in seconds.</summary>
+    [Parameter]
+    public double? TimeoutSeconds { get; set; }
+
+    protected override async Task ProcessTargetRecordAsync()
+    {
+        CancelToken.ThrowIfCancellationRequested();
+        if (!Enum.IsDefined(typeof(HomeAssistantRemoteAction), Action))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Action), Action, "Unsupported remote action.");
+        }
+
+        if (CommandType.HasValue && !Enum.IsDefined(typeof(HomeAssistantRemoteCommandType), CommandType.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(CommandType), CommandType.Value, "Unsupported remote command type.");
+        }
+
+        CancelToken.ThrowIfCancellationRequested();
+        var commands = Command?.ToArray();
+        CancelToken.ThrowIfCancellationRequested();
+        ValidateFiniteDuration(DelaySeconds, nameof(DelaySeconds), allowZero: true);
+        ValidateFiniteDuration(HoldSeconds, nameof(HoldSeconds), allowZero: true);
+        ValidateFiniteDuration(TimeoutSeconds, nameof(TimeoutSeconds), allowZero: false);
+        var activity = Activity is null ? null : RequireSelector(Activity, nameof(Activity), CancelToken);
+        var remoteDevice = RemoteDevice is null ? null : RequireSelector(RemoteDevice, nameof(RemoteDevice), CancelToken);
+        ValidateShape(commands, CancelToken);
+        var target = await ResolveTargetAsync("remote").ConfigureAwait(false);
+        var learningTimeout = ToDuration(TimeoutSeconds);
+        var learningResponseMargin = TimeSpan.FromSeconds(1);
+        var availableLearningTime = Client.Options.RequestTimeout > learningResponseMargin
+            ? Client.Options.RequestTimeout - learningResponseMargin
+            : TimeSpan.Zero;
+        if (Action == HomeAssistantRemoteAction.LearnCommand && !learningTimeout.HasValue)
+        {
+            var effectiveSeconds = Math.Min(30d, Math.Floor(availableLearningTime.TotalSeconds));
+            if (effectiveSeconds >= 1d)
+            {
+                learningTimeout = TimeSpan.FromSeconds(effectiveSeconds);
+            }
+        }
+
+        if (Action == HomeAssistantRemoteAction.LearnCommand
+            && (!learningTimeout.HasValue
+                || TimeSpan.FromSeconds(Math.Ceiling(learningTimeout.Value.TotalSeconds)) > availableLearningTime))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(TimeoutSeconds),
+                $"TimeoutSeconds must leave at least one second inside the configured request timeout of {Client.Options.RequestTimeout.TotalSeconds:g} seconds for dispatch and response handling.");
+        }
+
+        if (!ShouldProcess(target.Description, Action.ToString()))
+        {
+            return;
+        }
+
+        var result = Action switch
+        {
+            HomeAssistantRemoteAction.TurnOn => await Client.Controls.Remotes.SetPowerAsync(
+                target.Target, HomeAssistantPowerAction.On, activity, CancelToken).ConfigureAwait(false),
+            HomeAssistantRemoteAction.TurnOff => await Client.Controls.Remotes.SetPowerAsync(
+                target.Target, HomeAssistantPowerAction.Off, activity, CancelToken).ConfigureAwait(false),
+            HomeAssistantRemoteAction.Toggle => await Client.Controls.Remotes.SetPowerAsync(
+                target.Target, HomeAssistantPowerAction.Toggle, activity, CancelToken).ConfigureAwait(false),
+            HomeAssistantRemoteAction.SendCommand => await Client.Controls.Remotes.SendCommandsAsync(
+                target.Target,
+                commands!,
+                new HomeAssistantRemoteSendOptions
+                {
+                    Device = remoteDevice,
+                    RepeatCount = RepeatCount,
+                    Delay = ToDuration(DelaySeconds),
+                    Hold = ToDuration(HoldSeconds)
+                },
+                CancelToken).ConfigureAwait(false),
+            HomeAssistantRemoteAction.LearnCommand => await Client.Controls.Remotes.LearnCommandsAsync(
+                target.Target,
+                new HomeAssistantRemoteLearnOptions
+                {
+                    Device = remoteDevice,
+                    Commands = commands,
+                    CommandType = CommandType,
+                    Alternative = Alternative,
+                    Timeout = learningTimeout
+                },
+                CancelToken).ConfigureAwait(false),
+            HomeAssistantRemoteAction.DeleteCommand => await Client.Controls.Remotes.DeleteCommandsAsync(
+                target.Target, commands!, remoteDevice, CancelToken).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(Action), Action, "Unsupported remote action.")
+        };
+        WriteObject(result);
+    }
+
+    private static string RequireSelector(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
+    {
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
+            throw new ArgumentException("A non-empty selector is required.", parameterName);
+        cancellationToken.ThrowIfCancellationRequested();
+        return value;
+    }
+
+    private void ValidateShape(
+        IReadOnlyList<string>? commands,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var hasCommands = commands is not null;
+        if (hasCommands && commands!.Count == 0)
+        {
+            throw new ArgumentException("Command must contain at least one non-empty value.", nameof(Command));
+        }
+        if (hasCommands)
+        {
+            foreach (var command in commands!)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (CancellationAwareString.IsNullOrWhiteSpace(command, cancellationToken))
+                {
+                    throw new ArgumentException("Command must contain at least one non-empty value.", nameof(Command));
+                }
+            }
+        }
+
+        var hasSendValues = RepeatCount.HasValue || DelaySeconds.HasValue || HoldSeconds.HasValue;
+        var hasLearnValues = CommandType.HasValue || Alternative.HasValue || TimeoutSeconds.HasValue;
+        var hasActivity = Activity is not null
+            && !CancellationAwareString.IsNullOrWhiteSpace(Activity, cancellationToken);
+        var hasRemoteDevice = RemoteDevice is not null
+            && !CancellationAwareString.IsNullOrWhiteSpace(RemoteDevice, cancellationToken);
+        switch (Action)
+        {
+            case HomeAssistantRemoteAction.TurnOn:
+            case HomeAssistantRemoteAction.TurnOff:
+            case HomeAssistantRemoteAction.Toggle:
+                if (hasCommands || hasRemoteDevice || hasSendValues || hasLearnValues)
+                {
+                    throw new ArgumentException("Power actions accept only the optional Activity value.");
+                }
+
+                break;
+            case HomeAssistantRemoteAction.SendCommand:
+                if (!hasCommands)
+                {
+                    throw new ArgumentException("SendCommand requires Command.", nameof(Command));
+                }
+
+                if (hasActivity || hasLearnValues)
+                {
+                    throw new ArgumentException("SendCommand does not accept Activity or learning options.");
+                }
+
+                break;
+            case HomeAssistantRemoteAction.LearnCommand:
+                if (hasActivity || hasSendValues)
+                {
+                    throw new ArgumentException("LearnCommand does not accept Activity or send timing options.");
+                }
+
+                break;
+            case HomeAssistantRemoteAction.DeleteCommand:
+                if (!hasCommands)
+                {
+                    throw new ArgumentException("DeleteCommand requires Command.", nameof(Command));
+                }
+
+                if (hasActivity || hasSendValues || hasLearnValues)
+                {
+                    throw new ArgumentException("DeleteCommand accepts only Command and RemoteDevice.");
+                }
+
+                break;
+        }
+    }
+
+    private static TimeSpan? ToDuration(double? seconds)
+    {
+        return seconds.HasValue ? TimeSpan.FromSeconds(seconds.Value) : null;
+    }
+
+    private static void ValidateFiniteDuration(double? value, string name, bool allowZero)
+    {
+        if (!value.HasValue)
+        {
+            return;
+        }
+
+        var minimum = allowZero ? 0d : double.Epsilon;
+        if (double.IsNaN(value.Value)
+            || double.IsInfinity(value.Value)
+            || value.Value < minimum
+            || value.Value > int.MaxValue
+            || (!allowZero && TimeSpan.FromSeconds(value.Value) <= TimeSpan.Zero))
+        {
+            throw new ArgumentOutOfRangeException(name, $"The value must be a finite number of seconds between {(allowZero ? "zero" : "greater than zero")} and {int.MaxValue}.");
+        }
+    }
+}

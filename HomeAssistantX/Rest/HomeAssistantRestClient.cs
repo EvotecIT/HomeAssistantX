@@ -56,7 +56,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             "api/states/" + EscapePath(normalizedEntityId, cancellationToken),
             null,
             cancellationToken).ConfigureAwait(false);
-        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
+        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId, cancellationToken);
     }
 
     public Task<JsonElement> GetServicesAsync(CancellationToken cancellationToken = default)
@@ -64,18 +64,38 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         return SendHomeAssistantAsync<JsonElement>(HttpMethod.Get, "api/services", null, cancellationToken);
     }
 
-    public async Task<HomeAssistantServiceCallResult> CallServiceAsync(
+    public Task<HomeAssistantServiceCallResult> CallServiceAsync(
         HomeAssistantServiceCall call,
         CancellationToken cancellationToken = default)
+    {
+        var requestTimeout = _options.RequestTimeout;
+        return CallServiceAsync(call, requestTimeout, cancellationToken);
+    }
+
+    internal async Task<HomeAssistantServiceCallResult> CallServiceAsync(
+        HomeAssistantServiceCall call,
+        TimeSpan requestTimeout,
+        CancellationToken cancellationToken)
     {
         if (call is null)
         {
             throw new ArgumentNullException(nameof(call));
         }
 
+        if (requestTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(requestTimeout));
+        }
+
         var path = "api/services/" + EscapePath(call.Domain, cancellationToken) + "/" + EscapePath(call.Service, cancellationToken)
             + (call.ReturnResponse ? "?return_response" : string.Empty);
-        var result = await SendHomeAssistantAsync<JsonElement>(HttpMethod.Post, path, call.ToRestPayload(), cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = await SendHomeAssistantAsync<JsonElement>(
+            HttpMethod.Post,
+            path,
+            call.ToRestPayload(cancellationToken),
+            requestTimeout,
+            cancellationToken).ConfigureAwait(false);
 
         if (result.ValueKind == JsonValueKind.Array)
         {
@@ -144,7 +164,8 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             body,
             HomeAssistantJson.RawSerializerOptions,
             validateHomeAssistantResponse: false,
-            cancellationToken);
+            requestTimeout: null,
+            cancellationToken: cancellationToken);
     }
 
     internal Task<T> SendHomeAssistantAsync<T>(
@@ -159,6 +180,24 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             body,
             HomeAssistantJson.SerializerOptions,
             validateHomeAssistantResponse: true,
+            requestTimeout: null,
+            cancellationToken: cancellationToken);
+    }
+
+    private Task<T> SendHomeAssistantAsync<T>(
+        HttpMethod method,
+        string pathOrAbsoluteUri,
+        object? body,
+        TimeSpan requestTimeout,
+        CancellationToken cancellationToken)
+    {
+        return SendTypedAsync<T>(
+            method,
+            pathOrAbsoluteUri,
+            body,
+            HomeAssistantJson.SerializerOptions,
+            validateHomeAssistantResponse: true,
+            requestTimeout,
             cancellationToken);
     }
 
@@ -178,6 +217,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         object? body,
         JsonSerializerOptions serializerOptions,
         bool validateHomeAssistantResponse,
+        TimeSpan? requestTimeout,
         CancellationToken cancellationToken)
     {
         return await ExecuteWithTimeoutAsync(
@@ -194,10 +234,14 @@ public sealed partial class HomeAssistantRestClient : IDisposable
                     operationToken).ConfigureAwait(false);
                 operationToken.ThrowIfCancellationRequested();
                 using var stream = new MemoryStream(bytes, writable: false);
-                var value = await JsonSerializer.DeserializeAsync<T>(
-                    stream,
-                    serializerOptions,
-                    operationToken).ConfigureAwait(false);
+                T? value;
+                using (HomeAssistantAttributeDictionaryConverter.UseCancellationToken(operationToken))
+                {
+                    value = await JsonSerializer.DeserializeAsync<T>(
+                        stream,
+                        serializerOptions,
+                        operationToken).ConfigureAwait(false);
+                }
                 operationToken.ThrowIfCancellationRequested();
                 var result = value ?? throw new HomeAssistantProtocolException("Home Assistant returned an empty JSON response.");
                 return validateHomeAssistantResponse
@@ -207,7 +251,8 @@ public sealed partial class HomeAssistantRestClient : IDisposable
                         cancellationToken: operationToken)
                     : result;
             },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            requestTimeout).ConfigureAwait(false);
     }
 
     private async Task<string> SendStringAsync(
@@ -230,7 +275,8 @@ public sealed partial class HomeAssistantRestClient : IDisposable
                     operationToken).ConfigureAwait(false);
                 return Encoding.UTF8.GetString(bytes);
             },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            requestTimeout: null).ConfigureAwait(false);
     }
 
     private async Task<HttpRequestMessage> CreateRequestAsync(
@@ -393,10 +439,11 @@ public sealed partial class HomeAssistantRestClient : IDisposable
 
     private async Task<T> ExecuteWithTimeoutAsync<T>(
         Func<CancellationToken, Task<T>> operation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? requestTimeout = null)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(_options.RequestTimeout);
+        timeout.CancelAfter(requestTimeout ?? _options.RequestTimeout);
         try
         {
             return await operation(timeout.Token).ConfigureAwait(false);
@@ -502,6 +549,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             throw new ArgumentException("A Home Assistant entity identifier is required.", nameof(entityId));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return normalized;
     }
 

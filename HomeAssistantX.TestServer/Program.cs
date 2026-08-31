@@ -10,6 +10,14 @@ while (await Console.In.ReadLineAsync() is { } command)
             server.SetStates("[" + TestHomeAssistantServer.KitchenLightOnStateJson + "]");
             Console.WriteLine("STATES_SET");
             break;
+        case "SET_REMOTE_STATES":
+            server.SetStates("[" + TestHomeAssistantServer.LivingRoomRemoteStateJson + "]");
+            Console.WriteLine("REMOTE_STATES_SET");
+            break;
+        case "SET_DEFAULT_STATES":
+            server.SetStates(TestHomeAssistantServer.DefaultStatesJson);
+            Console.WriteLine("DEFAULT_STATES_SET");
+            break;
         case "DROP":
             await server.DropWebSocketsAsync();
             Console.WriteLine("DROPPED");

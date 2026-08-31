@@ -1,5 +1,6 @@
 ﻿using HomeAssistantX.Authentication;
 using HomeAssistantX.Diagnostics;
+using HomeAssistantX.Services;
 
 namespace HomeAssistantX.Configuration;
 
@@ -33,6 +34,13 @@ public sealed class HomeAssistantClientOptions
 
     /// <summary>Enables Home Assistant WebSocket message coalescing during feature negotiation.</summary>
     public bool EnableWebSocketMessageCoalescing { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the transport used by typed clients under <c>HomeAssistantClient.Controls</c>.
+    /// Explicit calls through <c>HomeAssistantClient.Services</c> retain their selected method.
+    /// </summary>
+    public HomeAssistantServiceCallTransport ControlServiceCallTransport { get; set; }
+        = HomeAssistantServiceCallTransport.WebSocket;
 
     public int MaximumRestResponseBytes { get; set; } = 64 * 1024 * 1024;
 
@@ -70,6 +78,11 @@ public sealed class HomeAssistantClientOptions
         if (SubscriptionBufferCapacity < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(SubscriptionBufferCapacity));
+        }
+
+        if (!Enum.IsDefined(typeof(HomeAssistantServiceCallTransport), ControlServiceCallTransport))
+        {
+            throw new ArgumentOutOfRangeException(nameof(ControlServiceCallTransport));
         }
 
         if (ReconnectMinimumDelay < TimeSpan.Zero || ReconnectMaximumDelay < ReconnectMinimumDelay)

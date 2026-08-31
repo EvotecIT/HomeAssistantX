@@ -209,7 +209,9 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, "{not-json").ConfigureAwait(false);
                 break;
             case "POST /api/services/light/turn_on":
+            case "POST /api/services/media_player/volume_set":
                 LastServiceCallBody = body;
+                _serviceCallBodies.Enqueue(body);
                 await WriteHttpResponseAsync(stream, 200, "[]").ConfigureAwait(false);
                 break;
             case "POST /api/services/test/fail":

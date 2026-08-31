@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Text.Json;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Registries;
@@ -57,7 +58,7 @@ public sealed class HomeAssistantIntegrationClient
     {
         return _rest.SendHomeAssistantAsync<HomeAssistantIntegrationOperationResult>(
             HttpMethod.Post,
-            "api/config/config_entries/entry/" + Escape(entryId, nameof(entryId)) + "/reload",
+            "api/config/config_entries/entry/" + Escape(entryId, nameof(entryId), cancellationToken) + "/reload",
             null,
             cancellationToken);
     }
@@ -110,7 +111,7 @@ public sealed class HomeAssistantIntegrationClient
 
         return _rest.SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
-            "api/config/config_entries/flow/" + Escape(flowId, nameof(flowId)),
+            "api/config/config_entries/flow/" + Escape(flowId, nameof(flowId), cancellationToken),
             input,
             cancellationToken);
     }
@@ -138,8 +139,34 @@ public sealed class HomeAssistantIntegrationClient
             : value;
     }
 
-    private static string Escape(string value, string parameterName)
+    private static string Escape(string value, string parameterName, CancellationToken cancellationToken)
     {
-        return Uri.EscapeDataString(Required(value, parameterName));
+        if (value is null)
+        {
+            throw new ArgumentNullException(parameterName);
+        }
+
+        var hasContent = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (!char.IsWhiteSpace(value[index]))
+            {
+                hasContent = true;
+                break;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!hasContent)
+        {
+            throw new ArgumentException("A non-empty identifier is required.", parameterName);
+        }
+
+        return HomeAssistantUri.EscapeDataString(value, cancellationToken);
     }
 }

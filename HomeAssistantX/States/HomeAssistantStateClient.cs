@@ -209,7 +209,9 @@ public sealed class HomeAssistantStateClient : IDisposable
             throw new HomeAssistantProtocolException("A state_changed event omitted entity_id.");
         }
 
-        var entityId = HomeAssistantEntityId.RequireResponseEntityId(entityProperty.GetString());
+        var entityId = HomeAssistantEntityId.RequireResponseEntityId(
+            entityProperty.GetString(),
+            cancellationToken);
         var previous = DeserializeOptionalState(eventValue.Data, "old_state", entityId, cancellationToken);
         var current = DeserializeOptionalState(eventValue.Data, "new_state", entityId, cancellationToken);
         var change = new HomeAssistantStateChange(entityId, previous, current);
@@ -528,7 +530,9 @@ public sealed class HomeAssistantStateClient : IDisposable
             value,
             "A Home Assistant state change could not be decoded.",
             cancellationToken: cancellationToken);
-        var stateEntityId = HomeAssistantEntityId.RequireResponseEntityId(state.EntityId);
+        var stateEntityId = HomeAssistantEntityId.RequireResponseEntityId(
+            state.EntityId,
+            cancellationToken);
         if (!string.Equals(stateEntityId, expectedEntityId, StringComparison.Ordinal))
         {
             throw new HomeAssistantProtocolException("A Home Assistant state change contained a mismatched entity identifier.");
@@ -551,7 +555,9 @@ public sealed class HomeAssistantStateClient : IDisposable
                 throw new HomeAssistantProtocolException("The get_states response contained a null entity state.");
             }
 
-            var entityId = HomeAssistantEntityId.RequireResponseEntityId(state.EntityId);
+            var entityId = HomeAssistantEntityId.RequireResponseEntityId(
+                state.EntityId,
+                cancellationToken);
             if (!entityIds.Add(entityId))
             {
                 throw new HomeAssistantProtocolException("The get_states response contained a duplicate entity identifier.");

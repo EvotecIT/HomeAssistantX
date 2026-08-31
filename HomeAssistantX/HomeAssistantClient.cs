@@ -26,11 +26,11 @@ public sealed class HomeAssistantClient : IDisposable
         Rest = new HomeAssistantRestClient(options, httpClient);
         WebSocket = new HomeAssistantWebSocketClient(options);
         States = new HomeAssistantStateClient(Rest, WebSocket, options);
-        Services = new HomeAssistantServiceClient(Rest, WebSocket);
+        Services = new HomeAssistantServiceClient(Rest, WebSocket, options);
         Events = new HomeAssistantEventClient(WebSocket);
         Registries = new HomeAssistantRegistryClient(WebSocket);
         Inventory = new HomeAssistantInventoryClient(Registries, States, Services);
-        Controls = new HomeAssistantControlsClient(Services);
+        Controls = new HomeAssistantControlsClient(Services, States, options);
         System = new HomeAssistantSystemClient(WebSocket);
         Operations = new HomeAssistantOperationsClient(Rest, WebSocket, States, Services);
         Supervisor = HomeAssistantSupervisorClient.CreateViaCore(Rest, WebSocket);

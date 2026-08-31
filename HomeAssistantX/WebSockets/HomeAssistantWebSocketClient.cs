@@ -228,9 +228,24 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         IReadOnlyDictionary<string, object?>? payload = null,
         CancellationToken cancellationToken = default)
     {
+        var requestTimeout = _options.RequestTimeout;
+        return await RequestAsync(commandType, payload, requestTimeout, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal async Task<JsonElement> RequestAsync(
+        string commandType,
+        IReadOnlyDictionary<string, object?>? payload,
+        TimeSpan requestTimeout,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(commandType))
         {
             throw new ArgumentException("A WebSocket command type is required.", nameof(commandType));
+        }
+
+        if (requestTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(requestTimeout));
         }
 
         await ConnectAsync(cancellationToken).ConfigureAwait(false);
@@ -240,13 +255,14 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             throw CreateNotConnectedException();
         }
 
-        return await RequestOnSocketAsync(socket, commandType, payload, cancellationToken).ConfigureAwait(false);
+        return await RequestOnSocketAsync(socket, commandType, payload, requestTimeout, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<JsonElement> RequestOnSocketAsync(
         ClientWebSocket socket,
         string commandType,
         IReadOnlyDictionary<string, object?>? payload,
+        TimeSpan requestTimeout,
         CancellationToken cancellationToken)
     {
         var commandId = NextCommandId();
@@ -259,7 +275,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         try
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            deadline.CancelAfter(_options.RequestTimeout);
+            deadline.CancelAfter(requestTimeout);
             try
             {
                 await SendCommandAsync(socket, commandId, commandType, payload, deadline.Token).ConfigureAwait(false);
@@ -594,6 +610,7 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                 serverSocket,
                 "unsubscribe_events",
                 new Dictionary<string, object?> { ["subscription"] = serverId.Value },
+                _options.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)

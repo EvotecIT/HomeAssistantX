@@ -143,7 +143,7 @@ public sealed partial class HomeAssistantRestClient
             "api/states/" + EscapePath(normalizedEntityId, cancellationToken),
             update,
             cancellationToken).ConfigureAwait(false);
-        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
+        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId, cancellationToken);
     }
 
     /// <summary>Deletes a state representation from Home Assistant.</summary>

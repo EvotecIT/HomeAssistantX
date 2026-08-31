@@ -17,56 +17,73 @@ public sealed class HomeAssistantClimateClient : HomeAssistantControlClientBase
             throw new ArgumentNullException(nameof(options));
         }
 
-        options.Validate();
-        var results = new List<HomeAssistantServiceCallResult>();
-        if (options.HasTemperature)
-        {
-            results.Add(await CallAsync("set_temperature", target, call =>
-            {
-                if (options.Temperature.HasValue)
-                {
-                    call.WithData("temperature", options.Temperature.Value);
-                }
-
-                if (options.TargetTemperatureLow.HasValue)
-                {
-                    call.WithData("target_temp_low", options.TargetTemperatureLow.Value);
-                }
-
-                if (options.TargetTemperatureHigh.HasValue)
-                {
-                    call.WithData("target_temp_high", options.TargetTemperatureHigh.Value);
-                }
-
-                if (!string.IsNullOrWhiteSpace(options.HvacMode))
-                {
-                    call.WithData("hvac_mode", options.HvacMode);
-                }
-            }, cancellationToken).ConfigureAwait(false));
-        }
-        else if (!string.IsNullOrWhiteSpace(options.HvacMode))
-        {
-            results.Add(await CallAsync("set_hvac_mode", target, call => call.WithData("hvac_mode", options.HvacMode), cancellationToken).ConfigureAwait(false));
-        }
-
-        if (!string.IsNullOrWhiteSpace(options.FanMode))
-        {
-            results.Add(await CallAsync("set_fan_mode", target, call => call.WithData("fan_mode", options.FanMode), cancellationToken).ConfigureAwait(false));
-        }
-
-        if (!string.IsNullOrWhiteSpace(options.PresetMode))
-        {
-            results.Add(await CallAsync("set_preset_mode", target, call => call.WithData("preset_mode", options.PresetMode), cancellationToken).ConfigureAwait(false));
-        }
-
-        if (options.Humidity.HasValue)
-        {
-            results.Add(await CallAsync("set_humidity", target, call => call.WithData("humidity", options.Humidity.Value), cancellationToken).ConfigureAwait(false));
-        }
-
-        if (results.Count == 0)
+        cancellationToken.ThrowIfCancellationRequested();
+        var frozenOptions = options.Snapshot(cancellationToken);
+        frozenOptions.Validate();
+        var temperature = frozenOptions.Temperature;
+        var targetTemperatureLow = frozenOptions.TargetTemperatureLow;
+        var targetTemperatureHigh = frozenOptions.TargetTemperatureHigh;
+        var hvacMode = frozenOptions.HvacMode;
+        var fanMode = frozenOptions.FanMode;
+        var presetMode = frozenOptions.PresetMode;
+        var humidity = frozenOptions.Humidity;
+        var hasTemperature = temperature.HasValue || targetTemperatureLow.HasValue || targetTemperatureHigh.HasValue;
+        if (!hasTemperature
+            && string.IsNullOrWhiteSpace(hvacMode)
+            && string.IsNullOrWhiteSpace(fanMode)
+            && string.IsNullOrWhiteSpace(presetMode)
+            && !humidity.HasValue)
         {
             throw new ArgumentException("At least one climate value is required.", nameof(options));
+        }
+
+        var context = CaptureContext(cancellationToken);
+        var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
+            .NormalizeForDomain(Domain, cancellationToken);
+        var results = new List<HomeAssistantServiceCallResult>();
+        if (hasTemperature)
+        {
+            results.Add(await CallAsync("set_temperature", frozenTarget, call =>
+            {
+                if (temperature.HasValue)
+                {
+                    call.WithData("temperature", temperature.Value);
+                }
+
+                if (targetTemperatureLow.HasValue)
+                {
+                    call.WithData("target_temp_low", targetTemperatureLow.Value);
+                }
+
+                if (targetTemperatureHigh.HasValue)
+                {
+                    call.WithData("target_temp_high", targetTemperatureHigh.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(hvacMode))
+                {
+                    call.WithData("hvac_mode", hvacMode);
+                }
+            }, context, cancellationToken).ConfigureAwait(false));
+        }
+        else if (!string.IsNullOrWhiteSpace(hvacMode))
+        {
+            results.Add(await CallAsync("set_hvac_mode", frozenTarget, call => call.WithData("hvac_mode", hvacMode), context, cancellationToken).ConfigureAwait(false));
+        }
+
+        if (!string.IsNullOrWhiteSpace(fanMode))
+        {
+            results.Add(await CallAsync("set_fan_mode", frozenTarget, call => call.WithData("fan_mode", fanMode), context, cancellationToken).ConfigureAwait(false));
+        }
+
+        if (!string.IsNullOrWhiteSpace(presetMode))
+        {
+            results.Add(await CallAsync("set_preset_mode", frozenTarget, call => call.WithData("preset_mode", presetMode), context, cancellationToken).ConfigureAwait(false));
+        }
+
+        if (humidity.HasValue)
+        {
+            results.Add(await CallAsync("set_humidity", frozenTarget, call => call.WithData("humidity", humidity.Value), context, cancellationToken).ConfigureAwait(false));
         }
 
         return results;

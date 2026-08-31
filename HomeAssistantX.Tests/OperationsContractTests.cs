@@ -2,8 +2,10 @@
 using System.Text.Json;
 using System.Collections.Concurrent;
 using System.Net.Http;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Supervisor;
 using HomeAssistantX.Tests.Infrastructure;
@@ -12,6 +14,83 @@ namespace HomeAssistantX.Tests;
 
 public sealed class OperationsContractTests
 {
+    [Fact]
+    public void UpdateProjectionDoesNotCoerceNonStringIdentityAttributes()
+    {
+        using var title = JsonDocument.Parse("42");
+        using var installed = JsonDocument.Parse("true");
+        using var latest = JsonDocument.Parse("false");
+        var state = new HomeAssistantState
+        {
+            EntityId = "update.platform",
+            State = "on",
+            Attributes = new Dictionary<string, JsonElement>
+            {
+                ["title"] = title.RootElement.Clone(),
+                ["installed_version"] = installed.RootElement.Clone(),
+                ["latest_version"] = latest.RootElement.Clone()
+            }
+        };
+
+        var update = HomeAssistantUpdateClient.ToUpdate(state, CancellationToken.None);
+
+        Assert.Null(update.Title);
+        Assert.Null(update.InstalledVersion);
+        Assert.Null(update.LatestVersion);
+    }
+
+    [Fact]
+    public void UpdateProjectionPreservesCancellationAcrossProviderAttributes()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        using var title = JsonDocument.Parse("\"" + new string('x', 1_000_000) + "\"");
+        var state = new HomeAssistantState
+        {
+            EntityId = "update.platform",
+            State = "on",
+            Attributes = new Dictionary<string, JsonElement>
+            {
+                ["title"] = title.RootElement.Clone()
+            }
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantUpdateClient.ToUpdate(state, cancellation.Token));
+    }
+
+    [Fact]
+    public void SharedUriEscapingSupportsLongValuesAndCancellation()
+    {
+        var value = new string('a', 40000) + " /";
+        var escaped = HomeAssistantUri.EscapeDataString(value, CancellationToken.None);
+
+        Assert.StartsWith(new string('a', 40000), escaped);
+        Assert.EndsWith("%20%2F", escaped);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.Throws<OperationCanceledException>(() =>
+            HomeAssistantUri.EscapeDataString(value, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task DiagnosticAndIntegrationPathValidationHonorsCancellationBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var identifier = new string(' ', 40000);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Operations.Diagnostics.GetConfigEntryAsync(identifier, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Operations.Integrations.ReloadAsync(identifier, cancellation.Token));
+
+        Assert.Null(server.LastRequestPath);
+    }
+
     [Fact]
     public async Task TypedDomainListingsRejectDuplicateEntityIdentities()
     {
@@ -163,7 +242,7 @@ public sealed class OperationsContractTests
     public async Task UpdateOperationsUseUpdateEntitiesAndOneGenericActionContract()
     {
         using var server = new TestHomeAssistantServer();
-        server.SetStates("[{\"entity_id\":\"update.home_assistant_core_update\",\"state\":\"on\",\"attributes\":{\"title\":\"Home Assistant Core\",\"installed_version\":\"2026.8.3\",\"latest_version\":\"2026.8.4\",\"in_progress\":false,\"update_percentage\":null}}]");
+        server.SetStates("[{\"entity_id\":\"update.home_assistant_core_update\",\"state\":\"on\",\"attributes\":{\"Title\":\"Home Assistant Core\",\"installed_version\":\"2026.8.3\",\"LATEST_VERSION\":\"2026.8.4\",\"In_Progress\":false,\"update_percentage\":null}}]");
         using var client = TestClientFactory.Create(server);
 
         var updates = await client.Operations.Updates.GetAllAsync(availableOnly: true);
@@ -171,7 +250,9 @@ public sealed class OperationsContractTests
         await client.Operations.Updates.InstallAsync(updates[0].EntityId, backup: true);
 
         Assert.Single(updates);
+        Assert.Equal("Home Assistant Core", updates[0].Title);
         Assert.Equal("2026.8.4", updates[0].LatestVersion);
+        Assert.False(updates[0].IsInProgress);
         Assert.Equal("Test release notes", notes);
         using var command = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
         Assert.Equal("update", command.RootElement.GetProperty("domain").GetString());

@@ -209,6 +209,45 @@ public sealed class ProtocolResponseContractTests
                 cancellationToken: cancellation.Token));
     }
 
+    [Fact]
+    public void DomainTargetValidationHonorsCallerCancellation()
+    {
+        var target = HomeAssistantX.Services.HomeAssistantTarget.ForEntity("light.kitchen");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            target.NormalizeRequiredForDomain("light", nameof(target), cancellation.Token));
+    }
+
+    [Fact]
+    public void NonEntityTargetNormalizationObservesCancellationDuringTraversal()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var target = new HomeAssistantX.Services.HomeAssistantTarget
+        {
+            AreaIds = new CancellationProbeStringList(cancellation, "kitchen")
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            target.NormalizeRequiredForDomain("light", nameof(target), cancellation.Token));
+    }
+
+    [Fact]
+    public void StateAttributeDictionaryConverterHonorsResponseCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        using var scope = HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellation.Token);
+        var options = new JsonSerializerOptions();
+        options.Converters.Add(new HomeAssistantAttributeDictionaryConverter());
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                "{\"provider_payload\":[1,2,3]}",
+                options));
+    }
+
     [Theory]
     [InlineData("sensor.kitchen")]
     [InlineData(" media_player.kitchen")]
@@ -242,6 +281,37 @@ public sealed class ProtocolResponseContractTests
                 if (ReadCount > 16) throw new InvalidOperationException("Serialization continued after cancellation.");
                 yield return new string('x', 4096);
             }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancellationProbeStringList : IReadOnlyList<string>
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private readonly string _value;
+
+        internal CancellationProbeStringList(CancellationTokenSource cancellation, string value)
+        {
+            _cancellation = cancellation;
+            _value = value;
+        }
+
+        public int Count => 1;
+
+        public string this[int index]
+        {
+            get
+            {
+                if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                _cancellation.Cancel();
+                return _value;
+            }
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            yield return this[0];
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();

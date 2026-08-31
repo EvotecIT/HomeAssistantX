@@ -22,5 +22,5 @@ public sealed class HomeAssistantOAuthTokens
     public DateTimeOffset ExpiresAt { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }

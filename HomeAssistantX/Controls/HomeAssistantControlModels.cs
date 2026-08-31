@@ -1,3 +1,5 @@
+using HomeAssistantX.Protocol;
+
 namespace HomeAssistantX.Controls;
 
 public enum HomeAssistantPowerAction
@@ -13,16 +15,6 @@ public enum HomeAssistantCoverAction
     Close,
     Stop,
     Toggle
-}
-
-public enum HomeAssistantMediaPlaybackAction
-{
-    Play,
-    Pause,
-    PlayPause,
-    Stop,
-    Next,
-    Previous
 }
 
 public enum HomeAssistantLockAction
@@ -116,24 +108,78 @@ public sealed class HomeAssistantLightOptions
 /// <summary>Typed climate values that may be applied in one logical operation.</summary>
 public sealed class HomeAssistantClimateOptions
 {
+    private readonly object _sync = new();
+    private double? _temperature;
+    private double? _targetTemperatureLow;
+    private double? _targetTemperatureHigh;
+    private string? _hvacMode;
+    private string? _fanMode;
+    private string? _presetMode;
     private double? _humidity;
 
-    public double? Temperature { get; set; }
+    public double? Temperature
+    {
+        get { lock (_sync) return _temperature; }
+        set { lock (_sync) _temperature = value; }
+    }
 
-    public double? TargetTemperatureLow { get; set; }
+    public double? TargetTemperatureLow
+    {
+        get { lock (_sync) return _targetTemperatureLow; }
+        set { lock (_sync) _targetTemperatureLow = value; }
+    }
 
-    public double? TargetTemperatureHigh { get; set; }
+    public double? TargetTemperatureHigh
+    {
+        get { lock (_sync) return _targetTemperatureHigh; }
+        set { lock (_sync) _targetTemperatureHigh = value; }
+    }
 
-    public string? HvacMode { get; set; }
+    public string? HvacMode
+    {
+        get { lock (_sync) return _hvacMode; }
+        set { lock (_sync) _hvacMode = value; }
+    }
 
-    public string? FanMode { get; set; }
+    public string? FanMode
+    {
+        get { lock (_sync) return _fanMode; }
+        set { lock (_sync) _fanMode = value; }
+    }
 
-    public string? PresetMode { get; set; }
+    public string? PresetMode
+    {
+        get { lock (_sync) return _presetMode; }
+        set { lock (_sync) _presetMode = value; }
+    }
 
     public double? Humidity
     {
-        get => _humidity;
-        set => _humidity = ControlValidation.Percent(value, nameof(Humidity));
+        get { lock (_sync) return _humidity; }
+        set
+        {
+            var validated = ControlValidation.Percent(value, nameof(Humidity));
+            lock (_sync) _humidity = validated;
+        }
+    }
+
+    internal HomeAssistantClimateOptions Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantClimateOptions
+            {
+                Temperature = _temperature,
+                TargetTemperatureLow = _targetTemperatureLow,
+                TargetTemperatureHigh = _targetTemperatureHigh,
+                HvacMode = _hvacMode,
+                FanMode = _fanMode,
+                PresetMode = _presetMode,
+                Humidity = _humidity
+            };
+        }
     }
 
     internal bool HasTemperature => Temperature.HasValue || TargetTemperatureLow.HasValue || TargetTemperatureHigh.HasValue;
@@ -163,49 +209,32 @@ public sealed class HomeAssistantClimateOptions
     }
 }
 
-/// <summary>Typed media-player changes that may be applied in one logical operation.</summary>
-public sealed class HomeAssistantMediaPlayerOptions
-{
-    private double? _volumePercent;
-
-    public HomeAssistantPowerAction? Power { get; set; }
-
-    public HomeAssistantMediaPlaybackAction? Playback { get; set; }
-
-    public double? VolumePercent
-    {
-        get => _volumePercent;
-        set => _volumePercent = ControlValidation.Percent(value, nameof(VolumePercent));
-    }
-
-    public bool? Muted { get; set; }
-
-    public string? Source { get; set; }
-
-    public string? MediaContentId { get; set; }
-
-    public string? MediaContentType { get; set; }
-}
-
 internal static class ControlValidation
 {
-    public static string Required(string? value, string name)
+    public static string Required(
+        string? value,
+        string name,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty value is required.", name);
         }
 
-        return value!.Trim();
+        return CancellationAwareString.Trim(value!, cancellationToken);
     }
 
-    public static string RequiredUnchanged(string? value, string name)
+    public static string RequiredUnchanged(
+        string? value,
+        string name,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty value is required.", name);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return value!;
     }
 

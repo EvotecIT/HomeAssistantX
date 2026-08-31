@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace HomeAssistantX.Supervisor;
@@ -84,7 +84,7 @@ public sealed class HomeAssistantSupervisorInfo
     public string? TimeZone { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>Combined installation overview reported by the Supervisor root endpoint.</summary>
@@ -124,7 +124,7 @@ public sealed class HomeAssistantSupervisorOverview
     public string[] Features { get; set; } = Array.Empty<string>();
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantSupervisorUpdate
@@ -142,7 +142,7 @@ public sealed class HomeAssistantSupervisorUpdate
     public string? PanelPath { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantApp
@@ -178,7 +178,7 @@ public sealed class HomeAssistantApp
     public string? Repository { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantBackup
@@ -211,7 +211,7 @@ public sealed class HomeAssistantBackup
     public JsonElement Content { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantSupervisorJob
@@ -238,7 +238,7 @@ public sealed class HomeAssistantSupervisorJob
     public JsonElement Extra { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantBackupRequest

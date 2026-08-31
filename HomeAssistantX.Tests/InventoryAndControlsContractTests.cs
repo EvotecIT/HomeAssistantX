@@ -3,6 +3,9 @@ using System.Text.Json;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Inventory;
+using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
+using HomeAssistantX.Registries;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
 
@@ -57,6 +60,21 @@ public sealed class InventoryAndControlsContractTests
         var temperature = Assert.Single(snapshot.Entities, item => item.EntityId == "sensor.kitchen_temperature");
 
         Assert.NotNull(temperature.RegistryEntry);
+    }
+
+    [Fact]
+    public async Task InventoryRejectsNegativeCapabilityMasks()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates(
+            "[{\"entity_id\":\"light.kitchen\",\"state\":\"off\",\"attributes\":{" +
+            "\"supported_features\":-1}}]");
+        using var client = TestClientFactory.Create(server);
+
+        var snapshot = await client.Inventory.GetSnapshotAsync();
+        var light = Assert.Single(snapshot.Entities, value => value.EntityId == "light.kitchen");
+
+        Assert.Null(light.SupportedFeatures);
     }
 
     [Fact]
@@ -289,6 +307,41 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task TypedControlsRejectWrongDomainOrMalformedEntityTargetsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Lights.TurnOnAsync(
+            HomeAssistantTarget.ForEntity("switch.kitchen")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Lights.TurnOnAsync(
+            HomeAssistantTarget.ForEntity("light.")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Lights.TurnOnAsync(
+            HomeAssistantTarget.ForEntity("light.kitchen.extra")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Lights.TurnOnAsync(
+            new HomeAssistantTarget
+            {
+                EntityIds = new[] { "light.kitchen", "switch.kitchen" },
+                AreaIds = new[] { "kitchen" }
+            }));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task TypedControlsNormalizeCallerTargetsOnlyOnceBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var entityIds = new SingleEnumerationList("light.kitchen");
+
+        await client.Controls.Lights.TurnOnAsync(new HomeAssistantTarget { EntityIds = entityIds });
+
+        Assert.Equal(1, entityIds.EnumerationCount);
+        Assert.NotNull(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task ClimateShapeValidationFailsBeforeAnyServiceCall()
     {
         using var server = new TestHomeAssistantServer();
@@ -309,6 +362,32 @@ public sealed class InventoryAndControlsContractTests
             new HomeAssistantClimateOptions { Temperature = double.NaN }));
 
         Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public void ClimateOptionSnapshotIsIndependentFromLaterCallerMutation()
+    {
+        var options = new HomeAssistantClimateOptions
+        {
+            Temperature = 21,
+            HvacMode = "heat",
+            FanMode = "auto",
+            PresetMode = "comfort",
+            Humidity = 45
+        };
+
+        var snapshot = options.Snapshot(CancellationToken.None);
+        options.Temperature = 18;
+        options.HvacMode = "off";
+        options.FanMode = "quiet";
+        options.PresetMode = "eco";
+        options.Humidity = 30;
+
+        Assert.Equal(21, snapshot.Temperature);
+        Assert.Equal("heat", snapshot.HvacMode);
+        Assert.Equal("auto", snapshot.FanMode);
+        Assert.Equal("comfort", snapshot.PresetMode);
+        Assert.Equal(45, snapshot.Humidity);
     }
 
     [Fact]
@@ -420,6 +499,184 @@ public sealed class InventoryAndControlsContractTests
             RgbColor = new[] { 10, 20, 30 },
             ColorTemperatureKelvin = 3000
         });
+    }
+
+    [Fact]
+    public async Task CompoundClimateControlPinsOneRequestTimeoutBeforeTargetPreparation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(3));
+        var target = new HomeAssistantTarget
+        {
+            EntityIds = new MutatingTargetList(
+                () => client.Options.RequestTimeout = TimeSpan.Zero,
+                "climate.living_room")
+        };
+
+        var results = await client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { Temperature = 21, FanMode = "auto" });
+
+        Assert.Equal(2, results.Count);
+    }
+
+    [Fact]
+    public void InventoryProjectionStopsWhenRegistryTraversalIsCanceled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var entities = new CancellationProbeList<HomeAssistantEntityRegistryEntry>(
+            cancellation,
+            new HomeAssistantEntityRegistryEntry { EntityId = "light.kitchen" });
+        var registries = new HomeAssistantRegistrySnapshot { Entities = entities };
+
+        Assert.Throws<OperationCanceledException>(() => HomeAssistantInventoryClient.Build(
+            registries,
+            Array.Empty<HomeAssistantState>(),
+            Array.Empty<HomeAssistantActionDefinition>(),
+            cancellation.Token));
+        Assert.Equal(1, entities.ReadCount);
+    }
+
+    [Fact]
+    public void InventoryTextComparisonAndHashingHonorLateCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var comparer = new CancellationAwareStringEqualityComparer(cancellation.Token);
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            comparer.GetHashCode(new string('a', 1_000_000)));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            CancellationAwareString.CompareOrdinalIgnoreCase(
+                new string('a', 1_000_000),
+                new string('a', 1_000_000),
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void InventoryTextComparisonPreservesOrdinalIgnoreCaseSupplementaryUnicodeSemantics()
+    {
+        const string upperDeseretLongI = "\U00010400";
+        const string lowerDeseretLongI = "\U00010428";
+        var comparer = new CancellationAwareStringEqualityComparer(CancellationToken.None);
+
+        Assert.True(StringComparer.OrdinalIgnoreCase.Equals(upperDeseretLongI, lowerDeseretLongI));
+        Assert.True(comparer.Equals(upperDeseretLongI, lowerDeseretLongI));
+        Assert.Equal(comparer.GetHashCode(upperDeseretLongI), comparer.GetHashCode(lowerDeseretLongI));
+        Assert.Equal(
+            0,
+            CancellationAwareString.CompareOrdinalIgnoreCase(
+                upperDeseretLongI,
+                lowerDeseretLongI,
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public void InventorySortPreservesCancellationClassification()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var values = new List<int> { 2, 1 };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantInventoryClient.Sort(
+                values,
+                (left, right) =>
+                {
+                    cancellation.Cancel();
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    return left.CompareTo(right);
+                },
+                cancellation.Token));
+    }
+
+    private sealed class MutatingTargetList : IReadOnlyList<string>
+    {
+        private readonly Action _onRead;
+        private readonly string _value;
+        private int _read;
+
+        internal MutatingTargetList(Action onRead, string value)
+        {
+            _onRead = onRead;
+            _value = value;
+        }
+
+        public int Count => 1;
+
+        public string this[int index]
+        {
+            get
+            {
+                MutateOnce();
+                return _value;
+            }
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            MutateOnce();
+            yield return _value;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        private void MutateOnce()
+        {
+            if (Interlocked.Exchange(ref _read, 1) == 0) _onRead();
+        }
+    }
+
+    private sealed class SingleEnumerationList : IReadOnlyList<string>
+    {
+        private readonly string[] _values;
+
+        internal SingleEnumerationList(params string[] values)
+        {
+            _values = values;
+        }
+
+        internal int EnumerationCount { get; private set; }
+
+        public int Count => _values.Length;
+
+        public string this[int index] => _values[index];
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            EnumerationCount++;
+            if (EnumerationCount > 1)
+                throw new InvalidOperationException("The target collection was enumerated more than once.");
+            return ((IEnumerable<string>)_values).GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancellationProbeList<T> : IReadOnlyList<T>
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private readonly T _value;
+
+        internal CancellationProbeList(CancellationTokenSource cancellation, T value)
+        {
+            _cancellation = cancellation;
+            _value = value;
+        }
+
+        internal int ReadCount { get; private set; }
+
+        public int Count => 1;
+
+        public T this[int index] => _value;
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            ReadCount++;
+            _cancellation.Cancel();
+            yield return _value;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }
 #endif

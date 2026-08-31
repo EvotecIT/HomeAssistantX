@@ -1,5 +1,6 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
@@ -34,7 +35,7 @@ public sealed class HomeAssistantDiagnosticsClient
         CancellationToken cancellationToken = default)
     {
         return _rest.GetBytesAsync(
-            "api/diagnostics/config_entry/" + Escape(entryId, nameof(entryId)),
+            "api/diagnostics/config_entry/" + Escape(entryId, nameof(entryId), cancellationToken),
             cancellationToken);
     }
 
@@ -44,19 +45,40 @@ public sealed class HomeAssistantDiagnosticsClient
         CancellationToken cancellationToken = default)
     {
         return _rest.GetBytesAsync(
-            "api/diagnostics/config_entry/" + Escape(entryId, nameof(entryId))
-            + "/device/" + Escape(deviceId, nameof(deviceId)),
+            "api/diagnostics/config_entry/" + Escape(entryId, nameof(entryId), cancellationToken)
+            + "/device/" + Escape(deviceId, nameof(deviceId), cancellationToken),
             cancellationToken);
     }
 
-    private static string Escape(string value, string parameterName)
+    private static string Escape(string value, string parameterName, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (value is null)
+        {
+            throw new ArgumentNullException(parameterName);
+        }
+
+        var hasContent = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (!char.IsWhiteSpace(value[index]))
+            {
+                hasContent = true;
+                break;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!hasContent)
         {
             throw new ArgumentException("A non-empty identifier is required.", parameterName);
         }
 
-        return Uri.EscapeDataString(value);
+        return HomeAssistantUri.EscapeDataString(value, cancellationToken);
     }
 }
 
@@ -69,7 +91,7 @@ public sealed class HomeAssistantDiagnosticHandler
     public HomeAssistantDiagnosticHandlerSupport Handlers { get; set; } = new();
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 public sealed class HomeAssistantDiagnosticHandlerSupport
@@ -81,5 +103,5 @@ public sealed class HomeAssistantDiagnosticHandlerSupport
     public bool Device { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }

@@ -6,6 +6,8 @@ namespace HomeAssistantX.Models;
 /// <summary>A provider-neutral representation of a raw Home Assistant entity state.</summary>
 public sealed class HomeAssistantState
 {
+    private Dictionary<string, JsonElement> _attributes = new(StringComparer.Ordinal);
+
     [JsonPropertyName("entity_id")]
     public string EntityId { get; set; } = string.Empty;
 
@@ -13,7 +15,12 @@ public sealed class HomeAssistantState
     public string State { get; set; } = string.Empty;
 
     [JsonPropertyName("attributes")]
-    public Dictionary<string, JsonElement> Attributes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    [JsonConverter(typeof(HomeAssistantAttributeDictionaryConverter))]
+    public Dictionary<string, JsonElement> Attributes
+    {
+        get => _attributes;
+        set => _attributes = value ?? new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+    }
 
     [JsonPropertyName("last_changed")]
     public DateTimeOffset? LastChanged { get; set; }
@@ -28,7 +35,7 @@ public sealed class HomeAssistantState
     public HomeAssistantContext? Context { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 
     [JsonIgnore]
     public string Domain
@@ -43,7 +50,7 @@ public sealed class HomeAssistantState
 
     public bool TryGetAttribute<T>(string name, out T? value)
     {
-        if (Attributes.TryGetValue(name, out var raw))
+        if (HomeAssistantAttributeReader.TryGetValue(Attributes, name, out var raw))
         {
             try
             {

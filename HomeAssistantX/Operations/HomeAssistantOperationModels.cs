@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using HomeAssistantX.Models;
 
@@ -66,7 +66,7 @@ public sealed class HomeAssistantSystemLogEntry
     public double FirstOccurred { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>An issue from Home Assistant's repairs registry.</summary>
@@ -109,7 +109,7 @@ public sealed class HomeAssistantRepairIssue
     public Dictionary<string, string>? TranslationPlaceholders { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>A completed snapshot emitted by the system health subscription.</summary>
@@ -147,7 +147,7 @@ public sealed class HomeAssistantTraceSummary
     public JsonElement Timestamp { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>An update entity together with normalized version and progress fields.</summary>
@@ -177,5 +177,5 @@ public sealed class HomeAssistantIntegrationOperationResult
     public bool RequiresRestart { get; set; }
 
     [JsonExtensionData]
-    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 }

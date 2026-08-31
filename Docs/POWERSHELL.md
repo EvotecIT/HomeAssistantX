@@ -79,6 +79,9 @@ Set-HomeAssistantSwitch -Device 'Coffee machine' -Power Off
 Set-HomeAssistantClimate -Entity climate.downstairs -Temperature 21.5 -HvacMode heat
 Set-HomeAssistantCover -Entity cover.kitchen -PositionPercent 60
 Set-HomeAssistantMediaPlayer -Area LivingRoom -VolumePercent 30 -Playback Play
+Set-HomeAssistantMediaPlayer -Entity media_player.kitchen -SoundMode Movie -Shuffle:$false
+Invoke-HomeAssistantRemote -Entity remote.harmony -Action TurnOn -Activity 'Watch TV'
+Invoke-HomeAssistantRemote -Entity remote.living_room -Action SendCommand -Command Power -RepeatCount 2 -WhatIf
 Set-HomeAssistantLock -Entity lock.front_door -Action Unlock -WhatIf
 ```
 
@@ -89,8 +92,12 @@ and joined entity pipeline input. It validates common values and uses
 Climate target ranges require both low and high values and are mutually
 exclusive with `-Temperature`. Media-player `-Power Off` and `-Power Toggle`
 are standalone operations; use `-Power On` or omit `-Power` when applying
-playback, source, mute, volume, or content changes in the same command. Content
-launch and `-Playback` are mutually exclusive because both start playback.
+playback, source, sound mode, shuffle, repeat, mute, volume, or content changes
+in the same command. Content launch is mutually exclusive with `-Playback` and
+`-SeekSeconds`; queue placement and announcement playback are also alternative
+Home Assistant modes. `Invoke-HomeAssistantRemote` selects power, send, learn,
+or delete through one action parameter and rejects parameters that do not apply
+to that action before resolving a target or entering `ShouldProcess`.
 `-ColorTemperatureKelvin` and `-RgbColor` are also mutually exclusive.
 
 `Invoke-HomeAssistantAction` remains the extensible path for a custom action or
@@ -112,7 +119,7 @@ Invoke-HomeAssistantAction vacuum send_command `
 | Connect | `Connect-HomeAssistant`, `Get-HomeAssistantConnection`, `Disconnect-HomeAssistant` |
 | Discover the house | `Get-HomeAssistantFloor`, `Get-HomeAssistantArea`, `Get-HomeAssistantDevice`, `Get-HomeAssistantEntity` |
 | Discover and invoke actions | `Get-HomeAssistantAction`, `Invoke-HomeAssistantAction` |
-| Typed everyday controls | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Set-HomeAssistantLock` |
+| Typed everyday controls | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Invoke-HomeAssistantRemote`, `Set-HomeAssistantLock` |
 | Read current/history | `Get-HomeAssistantEntity`, `Get-HomeAssistantHistory` |
 | Receive notifications | `Receive-HomeAssistantEvent` |
 | Inspect the installation | `Get-HomeAssistantInfo` |

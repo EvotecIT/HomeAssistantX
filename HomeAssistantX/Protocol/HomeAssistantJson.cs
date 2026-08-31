@@ -4,6 +4,7 @@ using System.Collections;
 using System.Reflection;
 using System.Globalization;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Models;
 
 namespace HomeAssistantX.Protocol;
 
@@ -133,6 +134,7 @@ internal static class HomeAssistantJson
             foreach (var property in document.RootElement.EnumerateObject())
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
                 // JsonElement retains its parent document, transferring the immutable
                 // snapshot without an additional uninterruptible deep clone.
                 result.Add(property.Name, property.Value);
@@ -188,6 +190,7 @@ internal static class HomeAssistantJson
         cancellationToken.ThrowIfCancellationRequested();
         using var stream = new MemoryStream();
         var options = CreateCancellationAwareOptions(cancellationToken);
+        using var cancellationScope = HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellationToken);
         JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
             .ConfigureAwait(false)
             .GetAwaiter()
@@ -200,6 +203,7 @@ internal static class HomeAssistantJson
     {
         using var stream = new MemoryStream();
         var options = CreateCancellationAwareOptions(cancellationToken);
+        using var cancellationScope = HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellationToken);
         JsonSerializer.SerializeAsync(stream, value, options, cancellationToken)
             .ConfigureAwait(false)
             .GetAwaiter()
@@ -220,7 +224,7 @@ internal static class HomeAssistantJson
         return options;
     }
 
-    private static void WriteJsonElement(
+    internal static void WriteJsonElement(
         Utf8JsonWriter writer,
         JsonElement value,
         CancellationToken cancellationToken)
@@ -233,6 +237,7 @@ internal static class HomeAssistantJson
                 foreach (var property in value.EnumerateObject())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
                     writer.WritePropertyName(property.Name);
                     WriteJsonElement(writer, property.Value, cancellationToken);
                 }
@@ -248,7 +253,9 @@ internal static class HomeAssistantJson
                 writer.WriteEndArray();
                 break;
             case JsonValueKind.String:
-                writer.WriteStringValue(value.GetString());
+                var stringValue = value.GetString();
+                ThrowIfStringTraversalCanceled(stringValue, cancellationToken);
+                writer.WriteStringValue(stringValue);
                 break;
             case JsonValueKind.Number:
                 writer.WriteRawValue(value.GetRawText(), skipInputValidation: true);
@@ -265,6 +272,22 @@ internal static class HomeAssistantJson
             default:
                 throw new JsonException("Undefined JSON values cannot be snapshotted.");
         }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    internal static void ThrowIfStringTraversalCanceled(
+        string? value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is not null)
+        {
+            for (var index = 0; index < value.Length; index += 64)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
     }
 
@@ -349,11 +372,15 @@ internal static class HomeAssistantJson
 
             cancellationToken.ThrowIfCancellationRequested();
             stream.Position = 0;
-            var result = await JsonSerializer.DeserializeAsync<T>(
-                stream,
-                SerializerOptions,
-                cancellationToken).ConfigureAwait(false)
-                ?? throw new HomeAssistantProtocolException(failureMessage);
+            T result;
+            using (HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellationToken))
+            {
+                result = await JsonSerializer.DeserializeAsync<T>(
+                    stream,
+                    SerializerOptions,
+                    cancellationToken).ConfigureAwait(false)
+                    ?? throw new HomeAssistantProtocolException(failureMessage);
+            }
             return RequireNoNullCollectionEntries(
                 result,
                 failureMessage,

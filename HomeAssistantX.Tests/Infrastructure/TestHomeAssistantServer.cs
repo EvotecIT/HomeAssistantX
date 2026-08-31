@@ -1142,6 +1142,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public const string KitchenLightOnStateJson =
         "{\"entity_id\":\"light.kitchen\",\"state\":\"on\",\"attributes\":{\"friendly_name\":\"Kitchen light\",\"brightness\":180},\"last_changed\":\"2026-08-25T12:00:02+00:00\",\"last_updated\":\"2026-08-25T12:00:02+00:00\",\"context\":{\"id\":\"context-3\"}}";
 
+    public const string LivingRoomRemoteStateJson =
+        "{\"entity_id\":\"remote.living_room\",\"state\":\"on\",\"attributes\":{\"friendly_name\":\"Living room remote\"}}";
+
     public const string DefaultStatesJson = "[" + KitchenTemperatureStateJson + "," + KitchenLightOffStateJson + "]";
 
     private sealed class SocketSession : IDisposable

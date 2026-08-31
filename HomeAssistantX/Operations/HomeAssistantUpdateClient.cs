@@ -1,6 +1,7 @@
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.WebSockets;
@@ -29,10 +30,18 @@ public sealed class HomeAssistantUpdateClient
         CancellationToken cancellationToken = default)
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        var updates = HomeAssistantEntityId.RequireResponseDomainStates(states, "update")
-            .Select(ToUpdate)
-            .Where(update => !availableOnly || update.IsAvailable)
-            .ToArray();
+        var updates = new List<HomeAssistantUpdate>();
+        foreach (var state in HomeAssistantEntityId.RequireResponseDomainStates(states, "update", cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var update = ToUpdate(state, cancellationToken);
+            if (!availableOnly || update.IsAvailable)
+            {
+                updates.Add(update);
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         return updates;
     }
 
@@ -93,39 +102,44 @@ public sealed class HomeAssistantUpdateClient
         return normalized;
     }
 
-    private static HomeAssistantUpdate ToUpdate(HomeAssistantState state)
+    internal static HomeAssistantUpdate ToUpdate(
+        HomeAssistantState state,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return new HomeAssistantUpdate
         {
             State = state,
-            Title = GetString(state, "title") ?? GetString(state, "friendly_name"),
-            InstalledVersion = GetString(state, "installed_version"),
-            LatestVersion = GetString(state, "latest_version"),
-            IsAvailable = string.Equals(state.State, "on", StringComparison.OrdinalIgnoreCase),
-            IsInProgress = GetBoolean(state, "in_progress"),
-            ProgressPercentage = GetDouble(state, "update_percentage")
+            Title = GetString(state, "title", cancellationToken) ?? GetString(state, "friendly_name", cancellationToken),
+            InstalledVersion = GetString(state, "installed_version", cancellationToken),
+            LatestVersion = GetString(state, "latest_version", cancellationToken),
+            IsAvailable = CancellationAwareString.EqualsOrdinalIgnoreCase(state.State, "on", cancellationToken),
+            IsInProgress = GetBoolean(state, "in_progress", cancellationToken),
+            ProgressPercentage = GetDouble(state, "update_percentage", cancellationToken)
         };
     }
 
-    private static string? GetString(HomeAssistantState state, string name)
+    private static string? GetString(
+        HomeAssistantState state,
+        string name,
+        CancellationToken cancellationToken)
     {
-        return state.Attributes.TryGetValue(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
+        return HomeAssistantAttributeReader.GetStrictString(state.Attributes, name, cancellationToken);
     }
 
-    private static bool GetBoolean(HomeAssistantState state, string name)
+    private static bool GetBoolean(
+        HomeAssistantState state,
+        string name,
+        CancellationToken cancellationToken)
     {
-        return state.Attributes.TryGetValue(name, out var value)
-            && value.ValueKind == JsonValueKind.True;
+        return HomeAssistantAttributeReader.GetBoolean(state.Attributes, name, cancellationToken) == true;
     }
 
-    private static double? GetDouble(HomeAssistantState state, string name)
+    private static double? GetDouble(
+        HomeAssistantState state,
+        string name,
+        CancellationToken cancellationToken)
     {
-        return state.Attributes.TryGetValue(name, out var value)
-            && value.ValueKind == JsonValueKind.Number
-            && value.TryGetDouble(out var number)
-                ? number
-                : null;
+        return HomeAssistantAttributeReader.GetDouble(state.Attributes, name, cancellationToken);
     }
 }
