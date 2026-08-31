@@ -276,6 +276,26 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         return recipients;
     }
 
+    public async Task<int> PublishRawStateEventAsync(
+        string eventJson,
+        CancellationToken cancellationToken = default)
+    {
+        using var document = JsonDocument.Parse(eventJson);
+        var payload = document.RootElement.Clone();
+        var recipients = 0;
+        foreach (var session in _sessions.Values)
+        {
+            if (session.StateSubscriptionId is not int subscriptionId) continue;
+            recipients++;
+            await session.SendSubscriptionEventAsync(
+                subscriptionId,
+                payload,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return recipients;
+    }
+
     public async Task DropWebSocketsAsync()
     {
         foreach (var session in _sessions.Values)

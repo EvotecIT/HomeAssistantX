@@ -493,6 +493,26 @@ public sealed class WebSocketContractTests
         Assert.DoesNotContain(diagnostics.Events, value => value.Name == "subscription.handler_failed");
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"data\":{}}")]
+    [InlineData("{\"event_type\":\"state_changed\"}")]
+    [InlineData("{\"event_type\":\"   \",\"data\":{}}")]
+    public async Task EventSubscriptionRejectsOmittedOrBlankRequiredEnvelopeFields(string eventJson)
+    {
+        using var server = new TestHomeAssistantServer();
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+
+        await server.PublishRawStateEventAsync(eventJson);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(diagnostics.Events, value => value.Name == "subscription.upstream_failed");
+        Assert.DoesNotContain(diagnostics.Events, value => value.Name == "subscription.handler_failed");
+    }
+
     [Fact]
     public async Task AuthenticatesPingsAndReassemblesFragmentedResponses()
     {
