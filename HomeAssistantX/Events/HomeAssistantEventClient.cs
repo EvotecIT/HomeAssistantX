@@ -97,7 +97,7 @@ public sealed class HomeAssistantEventClient
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (CancellationAwareString.IsNullOrWhiteSpace(value.EventType, cancellationToken)
+        if (string.IsNullOrWhiteSpace(value.EventType)
             || value.Data is null)
         {
             throw new HomeAssistantProtocolException(
