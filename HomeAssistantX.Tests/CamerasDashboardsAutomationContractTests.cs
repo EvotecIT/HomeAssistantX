@@ -62,7 +62,7 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData(38)]
     [InlineData(45)]
     [InlineData(95)]
-    public void UnixAtomicExchangeRecognizesUnsupportedPlatformErrors(int error)
+    public void UnixAtomicExchangeClassifiesErrorsThatMustFailClosed(int error)
     {
         Assert.True(HomeAssistantAtomicFile.IsUnixExchangeUnsupported(error));
         Assert.False(HomeAssistantAtomicFile.IsUnixExchangeUnsupported(2));

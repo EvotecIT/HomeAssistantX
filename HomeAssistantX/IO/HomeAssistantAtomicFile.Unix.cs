@@ -239,15 +239,10 @@ internal static partial class HomeAssistantAtomicFile
 
         if (IsUnixExchangeUnsupported(exchangeError))
         {
-            CommitUnixOverwriteWithoutExchange(
-                replacementHandle,
-                replacementIdentity,
-                displacedHandle,
-                pinnedDisplaced,
-                temporaryPath,
-                destinationPath,
-                cancellationToken);
-            return;
+            throw new IOException(
+                "The Unix filesystem does not support atomic exchange replacement. " +
+                "The existing destination was left unchanged because a plain rename cannot preserve the pinned-destination security guarantees.",
+                new Win32Exception(exchangeError));
         }
 
         throw new IOException(
@@ -260,39 +255,6 @@ internal static partial class HomeAssistantAtomicFile
             or LinuxFunctionNotImplemented
             or LinuxOperationNotSupported
             or MacOperationNotSupported;
-
-    private static void CommitUnixOverwriteWithoutExchange(
-        SafeFileHandle replacementHandle,
-        UnixFileMetadata replacementIdentity,
-        SafeFileHandle displacedHandle,
-        UnixFileMetadata pinnedDisplaced,
-        string temporaryPath,
-        string destinationPath,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        RequireUnixPathIdentity(temporaryPath, replacementIdentity);
-        RequireUnixPathIdentity(destinationPath, pinnedDisplaced);
-
-        if (!pinnedDisplaced.IsSymbolicLink)
-        {
-            var displaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: true);
-            RequireUnixPathIdentity(destinationPath, pinnedDisplaced);
-            ApplyUnixDestinationMetadata(replacementHandle, displaced);
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        RequireUnixPathIdentity(temporaryPath, replacementIdentity);
-        RequireUnixPathIdentity(destinationPath, pinnedDisplaced);
-        if (RenameUnix(temporaryPath, destinationPath) != 0)
-        {
-            throw new IOException(
-                "The Unix destination could not be replaced atomically after exchange support was unavailable.",
-                new Win32Exception(Marshal.GetLastWin32Error()));
-        }
-
-        RequireUnixPathIdentity(destinationPath, replacementIdentity);
-    }
 
     private static void MovePinnedUnixFile(
         string temporaryPath,
@@ -835,9 +797,6 @@ internal static partial class HomeAssistantAtomicFile
 
     [DllImport("libc", EntryPoint = "fchown", SetLastError = true)]
     private static extern int FChown(SafeFileHandle handle, uint owner, uint group);
-
-    [DllImport("libc", EntryPoint = "rename", SetLastError = true)]
-    private static extern int RenameUnix(string oldPath, string newPath);
 
     private static int RenameLinux(
         int oldDirectory,
