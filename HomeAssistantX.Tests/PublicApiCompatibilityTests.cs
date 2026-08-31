@@ -769,6 +769,29 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void MemberFormatterPreservesJsonRequiredContracts()
+    {
+        var property = typeof(PropertyAccessorFixture).GetProperty(nameof(PropertyAccessorFixture.JsonRequired))!;
+        var field = typeof(JsonFieldFixture).GetField(nameof(JsonFieldFixture.RequiredValue))!;
+
+        Assert.Contains("json-required ", FormatProperty(property), StringComparison.Ordinal);
+        Assert.Contains("json-required ", FormatField(field), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MethodFormatterPreservesUnknownRequiredCustomModifiers()
+    {
+        var method = CreateRequiredCustomModifierFixture();
+
+        Assert.Equal(
+            "modreq(System.ObsoleteAttribute) System.Int32 value",
+            FormatParameters(method.GetParameters()));
+        Assert.Equal(
+            "modreq(System.CLSCompliantAttribute) System.Int32",
+            FormatReturnType(method));
+    }
+
+    [Fact]
     public void MemberFormatterPreservesScopedParametersAndReadonlyRefReturns()
     {
         var scoped = typeof(PublicApiCompatibilityTests).GetMethod(
@@ -1431,6 +1454,7 @@ public sealed class PublicApiCompatibilityTests
             + JsonIgnoreContract(property)
             + JsonConverterContract(property)
             + JsonNumberHandlingContract(property)
+            + JsonRequiredContract(property)
             + OverloadResolutionPriorityContract(property) + MethodFlowContract(property)
             + NamedMethodFlowContract("get", getter) + NamedMethodFlowContract("set", setter)
             + RequiredMember(property)
@@ -1562,10 +1586,21 @@ public sealed class PublicApiCompatibilityTests
             : string.Empty;
     }
 
+    private static string JsonRequiredContract(MemberInfo member)
+        => member.CustomAttributes.Any(attribute => string.Equals(
+            attribute.AttributeType.FullName,
+            "System.Text.Json.Serialization.JsonRequiredAttribute",
+            StringComparison.Ordinal))
+            ? "json-required "
+            : string.Empty;
+
     private sealed class JsonFieldFixture
     {
         [JsonExtensionData]
         public Dictionary<string, object?> AdditionalData = new();
+
+        [JsonRequired]
+        public string RequiredValue = string.Empty;
     }
 
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
@@ -2322,6 +2357,9 @@ public sealed class PublicApiCompatibilityTests
         public required string Required { get; set; }
 
         public required string RequiredField = string.Empty;
+
+        [JsonRequired]
+        public string JsonRequired { get; set; } = string.Empty;
     }
 
     private sealed class RequiredConstructorFixture
@@ -2475,7 +2513,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonExtensionDataContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonExtensionDataContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + JsonRequiredContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + RequiredCustomModifierContract(field.GetRequiredCustomModifiers(), "System.Runtime.CompilerServices.IsVolatile", "System.Runtime.CompilerServices.IsReadOnlyAttribute") + FormatFieldType(field) + " " + field.Name + value;
     }
 
     private static string FormatEnumField(Type type, string name)
@@ -2857,7 +2895,14 @@ public sealed class PublicApiCompatibilityTests
         var suffix = parameter.HasDefaultValue
             ? " = " + FormatDefault(parameter.DefaultValue)
             : parameter.IsOptional ? " [optional]" : string.Empty;
-        return MarshalAsContract(parameter) + ClsComplianceContract(parameter) + ParameterDirectionContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + FormatParameterType(parameter) + " " + parameter.Name + suffix;
+        return MarshalAsContract(parameter) + ClsComplianceContract(parameter) + ParameterDirectionContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter)
+            + RequiredCustomModifierContract(
+                parameter.GetRequiredCustomModifiers(),
+                "System.Runtime.InteropServices.InAttribute",
+                "System.Runtime.CompilerServices.IsReadOnlyAttribute",
+                "System.Runtime.CompilerServices.RequiresLocationAttribute",
+                "System.Runtime.CompilerServices.ScopedRefAttribute")
+            + FormatParameterType(parameter) + " " + parameter.Name + suffix;
     }));
 
     private static string ParameterDirectionContract(ParameterInfo parameter)
@@ -2938,6 +2983,13 @@ public sealed class PublicApiCompatibilityTests
     {
         var parameter = method.ReturnParameter;
         var safetyPrefix = MarshalAsContract(parameter) + ClsComplianceContract(parameter) + NullableFlowContract(parameter) + DynamicallyAccessedMembersContract(parameter) + RefSafetyPrefix(parameter)
+            + RequiredCustomModifierContract(
+                parameter.GetRequiredCustomModifiers(),
+                "System.Runtime.InteropServices.InAttribute",
+                "System.Runtime.CompilerServices.IsReadOnlyAttribute",
+                "System.Runtime.CompilerServices.IsExternalInit",
+                "System.Runtime.CompilerServices.RequiresLocationAttribute",
+                "System.Runtime.CompilerServices.ScopedRefAttribute")
             + (HasAttribute(owner, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")
                 || HasAttribute(method, "System.Diagnostics.CodeAnalysis.UnscopedRefAttribute") ? "unscoped " : string.Empty);
         if (!method.ReturnType.IsByRef)
@@ -2950,6 +3002,16 @@ public sealed class PublicApiCompatibilityTests
                 StringComparison.Ordinal));
         return safetyPrefix + (readOnly ? "ref readonly " : "ref ")
             + FormatAnnotatedType(method.ReturnType.GetElementType()!, parameter);
+    }
+
+    private static string RequiredCustomModifierContract(
+        IEnumerable<Type> modifiers,
+        params string[] excludedNames)
+    {
+        var excluded = new HashSet<string>(excludedNames, StringComparer.Ordinal);
+        return string.Concat(modifiers
+            .Where(modifier => modifier.FullName is not string name || !excluded.Contains(name))
+            .Select(modifier => "modreq(" + FormatType(modifier) + ") "));
     }
 
     private static string MethodFlowContract(ICustomAttributeProvider provider)
@@ -3586,6 +3648,31 @@ public sealed class PublicApiCompatibilityTests
             Module module => CustomAttributeData.GetCustomAttributes(module),
             _ => Array.Empty<CustomAttributeData>()
         };
+
+    private static MethodInfo CreateRequiredCustomModifierFixture()
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("HomeAssistantX.RequiredModifierFixture." + Guid.NewGuid().ToString("N")),
+            AssemblyBuilderAccess.Run);
+        var type = assembly.DefineDynamicModule("Main").DefineType(
+            "RequiredModifierFixture",
+            TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.Abstract);
+        var method = type.DefineMethod(
+            "Invoke",
+            MethodAttributes.Public | MethodAttributes.Static);
+        method.SetSignature(
+            typeof(int),
+            new[] { typeof(CLSCompliantAttribute) },
+            null,
+            new[] { typeof(int) },
+            new[] { new[] { typeof(ObsoleteAttribute) } },
+            null);
+        method.DefineParameter(1, ParameterAttributes.None, "value");
+        var il = method.GetILGenerator();
+        il.Emit(OpCodes.Ldarg_0);
+        il.Emit(OpCodes.Ret);
+        return type.CreateType()!.GetMethod("Invoke")!;
+    }
 
     private sealed class NullabilityCursor
     {

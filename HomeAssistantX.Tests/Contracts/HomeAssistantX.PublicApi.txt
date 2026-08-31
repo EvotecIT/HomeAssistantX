@@ -886,8 +886,8 @@ T before-field-init sealed class HomeAssistantX.Models.HomeAssistantEvent
   C special-name HomeAssistantX.Models.HomeAssistantEvent()
   P instance json-extension-data System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> AdditionalData {get;set;}
   P instance json-name("context") HomeAssistantX.Models.HomeAssistantContext? Context {get;set;}
-  P instance json-name("data") System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> Data {get;set;}
-  P instance json-name("event_type") System.String EventType {get;set;}
+  P instance json-name("data") json-required System.Collections.Generic.Dictionary<System.String,System.Text.Json.JsonElement> Data {get;set;}
+  P instance json-name("event_type") json-required System.String EventType {get;set;}
   P instance json-name("origin") System.String? Origin {get;set;}
   P instance json-name("time_fired") System.Nullable<System.DateTimeOffset> TimeFired {get;set;}
 T before-field-init sealed class HomeAssistantX.Models.HomeAssistantState
