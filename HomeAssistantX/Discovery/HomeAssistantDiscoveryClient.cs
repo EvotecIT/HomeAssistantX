@@ -1143,7 +1143,7 @@ internal static class DnsDiscoveryPacket
         var position = offset;
         var next = -1;
         var hops = 0;
-        var expandedLength = 0;
+        var expandedWireLength = 1; // The terminating root-label byte.
         while (true)
         {
             Require(packet, position, 1);
@@ -1161,8 +1161,8 @@ internal static class DnsDiscoveryPacket
             }
             if ((length & 0xC0) != 0 || length > 63) throw new InvalidDataException("Invalid DNS label.");
             Require(packet, position, length);
-            expandedLength = checked(expandedLength + length + (labels.Count == 0 ? 0 : 1));
-            if (expandedLength > 255 || labels.Count >= 127) throw new InvalidDataException("DNS name exceeds the protocol limit.");
+            expandedWireLength = checked(expandedWireLength + length + 1); // Length byte plus label bytes.
+            if (expandedWireLength > 255 || labels.Count >= 127) throw new InvalidDataException("DNS name exceeds the protocol limit.");
             try
             {
                 labels.Add(StrictUtf8.GetString(packet, position, length));

@@ -804,6 +804,18 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsDiscoveryCountsExpandedNamesByWireBytesIncludingTheRootTerminator()
+    {
+        var valid = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(CreateBoundaryDiscoveryNamePacket(34), valid);
+        Assert.Equal(1, valid.InstanceCount);
+
+        var oversized = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(CreateBoundaryDiscoveryNamePacket(35), oversized);
+        Assert.Equal(0, oversized.InstanceCount);
+    }
+
+    [Fact]
     public void DnsSdAggregationUsesTheNativeInstanceAsAStableNameTieBreaker()
     {
         var aggregate = new DnsDiscoveryAggregate();
@@ -1606,6 +1618,22 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task MobileAppRegistrationFreezesAppDataBeforeSerializingExtensions()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var request = RegistrationRequest(false);
+        var appData = new Dictionary<string, object?> { ["push_token"] = "original" };
+        request.AppData = appData;
+        request.AdditionalData["future"] = new RegistrationMutationProbe(() => appData["push_token"] = "changed");
+
+        _ = await client.MobileApp.RegisterAsync(request);
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.Equal("original", body.RootElement.GetProperty("app_data").GetProperty("push_token").GetString());
+    }
+
+    [Fact]
     public async Task MobileAppRegistrationAllowsHomeAssistantsOptionalOperatingSystemVersion()
     {
         using var server = new TestHomeAssistantServer();
@@ -1714,6 +1742,26 @@ public sealed class StableControlAndAdapterContractTests
 
         using var call = LastCall(server);
         Assert.Equal("original", call.RootElement.GetProperty("service_data").GetProperty("params").GetProperty("zone").GetString());
+    }
+
+    [Fact]
+    public async Task VacuumCommandFreezesItsTargetBeforeSerializingProviderParameters()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var entityIds = new List<string> { "vacuum.downstairs" };
+        var target = new HomeAssistantTarget { EntityIds = entityIds };
+        var parameters = new Dictionary<string, object?>
+        {
+            ["future"] = new RegistrationMutationProbe(() => entityIds[0] = "vacuum.upstairs")
+        };
+
+        await client.Controls.Vacuums.SendCommandAsync(target, "provider_command", parameters);
+
+        using var call = LastCall(server);
+        Assert.Equal(
+            "vacuum.downstairs",
+            call.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
     }
 
     [Theory]
@@ -2422,6 +2470,24 @@ public sealed class StableControlAndAdapterContractTests
         Name(stream, "_home-assistant._tcp.local"); U16(stream, 12); U16(stream, 1); U32(stream, 120);
         using var data = new MemoryStream();
         for (var index = 0; index < 5; index++) Label(data, new string((char)('a' + index), 63));
+        data.WriteByte(0);
+        WriteData(stream, data.ToArray());
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateBoundaryDiscoveryNamePacket(int finalPrefixLength)
+    {
+        using var stream = new MemoryStream();
+        U16(stream, 0); U16(stream, 0x8400); U16(stream, 0); U16(stream, 1); U16(stream, 0); U16(stream, 0);
+        Name(stream, "_home-assistant._tcp.local"); U16(stream, 12); U16(stream, 1); U32(stream, 120);
+        using var data = new MemoryStream();
+        Label(data, new string('a', 63));
+        Label(data, new string('b', 63));
+        Label(data, new string('c', 63));
+        Label(data, new string('d', finalPrefixLength));
+        Label(data, "_home-assistant");
+        Label(data, "_tcp");
+        Label(data, "local");
         data.WriteByte(0);
         WriteData(stream, data.ToArray());
         return stream.ToArray();

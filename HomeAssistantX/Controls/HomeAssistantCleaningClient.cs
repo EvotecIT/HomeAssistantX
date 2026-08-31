@@ -52,11 +52,13 @@ public sealed class HomeAssistantVacuumClient : HomeAssistantControlClientBase
     public Task<HomeAssistantServiceCallResult> SendCommandAsync(HomeAssistantTarget target, string command, object? parameters = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (target is null) throw new ArgumentNullException(nameof(target));
         var normalizedCommand = ControlValidation.RequiredUnchanged(command, nameof(command), cancellationToken);
+        var normalizedTarget = target.NormalizeRequiredForDomain(Domain, nameof(target), cancellationToken);
         var frozenParameters = parameters is null ? (System.Text.Json.JsonElement?)null : HomeAssistantJson.FreezeValue(parameters, nameof(parameters), "Parameters", cancellationToken);
         if (frozenParameters.HasValue && frozenParameters.Value.ValueKind != System.Text.Json.JsonValueKind.Object)
             throw new ArgumentException("Vacuum command parameters must serialize as a JSON object.", nameof(parameters));
-        return CallAsync("send_command", target, call =>
+        return CallAsync("send_command", normalizedTarget, call =>
         {
             call.WithData("command", normalizedCommand);
             if (frozenParameters.HasValue)
