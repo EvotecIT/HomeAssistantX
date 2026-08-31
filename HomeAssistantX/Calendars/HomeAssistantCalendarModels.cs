@@ -9,11 +9,15 @@ namespace HomeAssistantX.Calendars;
 /// <summary>Describes a timed or all-day calendar event to create or update.</summary>
 public sealed class HomeAssistantCalendarEventInput
 {
-    private HomeAssistantCalendarEventInput(string start, string end, string summary)
+    private HomeAssistantCalendarEventInput(
+        string start,
+        string end,
+        string summary,
+        CancellationToken cancellationToken)
     {
         Start = start;
         End = end;
-        Summary = Require(summary, nameof(summary));
+        Summary = Require(summary, nameof(summary), cancellationToken);
     }
 
     public string Start { get; }
@@ -49,17 +53,37 @@ public sealed class HomeAssistantCalendarEventInput
     public bool IsAllDay { get; private set; }
 
     public static HomeAssistantCalendarEventInput Timed(DateTimeOffset start, DateTimeOffset end, string summary)
+        => Timed(start, end, summary, default);
+
+    internal static HomeAssistantCalendarEventInput Timed(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        string summary,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (end <= start)
         {
             throw new ArgumentOutOfRangeException(nameof(end), "The event end must be after its start.");
         }
-        return new HomeAssistantCalendarEventInput(start.ToString("O", CultureInfo.InvariantCulture), end.ToString("O", CultureInfo.InvariantCulture), summary);
+        return new HomeAssistantCalendarEventInput(
+            start.ToString("O", CultureInfo.InvariantCulture),
+            end.ToString("O", CultureInfo.InvariantCulture),
+            summary,
+            cancellationToken);
     }
 
     /// <summary>Creates an all-day event. The end date is exclusive, matching Home Assistant calendar semantics.</summary>
     public static HomeAssistantCalendarEventInput AllDay(string startDate, string endDate, string summary)
+        => AllDay(startDate, endDate, summary, default);
+
+    internal static HomeAssistantCalendarEventInput AllDay(
+        string startDate,
+        string endDate,
+        string summary,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var start = ParseDate(startDate, nameof(startDate));
         var end = ParseDate(endDate, nameof(endDate));
         if (end <= start)
@@ -70,7 +94,8 @@ public sealed class HomeAssistantCalendarEventInput
         return new HomeAssistantCalendarEventInput(
             start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             end.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            summary)
+            summary,
+            cancellationToken)
         {
             IsAllDay = true
         };
@@ -100,9 +125,12 @@ public sealed class HomeAssistantCalendarEventInput
         return date;
     }
 
-    private static string Require(string value, string parameterName)
+    private static string Require(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty value is required.", parameterName);
         }
@@ -131,8 +159,15 @@ public sealed class HomeAssistantCalendarEventInput
 public sealed class HomeAssistantCalendarEventReference
 {
     public HomeAssistantCalendarEventReference(string uid)
+        : this(uid, default)
     {
-        Uid = string.IsNullOrWhiteSpace(uid) ? throw new ArgumentException("An event UID is required.", nameof(uid)) : uid;
+    }
+
+    internal HomeAssistantCalendarEventReference(string uid, CancellationToken cancellationToken)
+    {
+        Uid = CancellationAwareString.IsNullOrWhiteSpace(uid, cancellationToken)
+            ? throw new ArgumentException("An event UID is required.", nameof(uid))
+            : uid;
     }
 
     public string Uid { get; }

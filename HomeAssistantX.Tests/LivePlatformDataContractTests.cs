@@ -3,6 +3,7 @@ using System.Text.Json;
 using HomeAssistantX.Calendars;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Notifications;
+using HomeAssistantX.Models;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
@@ -511,6 +512,32 @@ public sealed class LivePlatformDataContractTests
         cancellation.Cancel();
 
         Assert.ThrowsAny<OperationCanceledException>(() => reference.Validate(cancellation.Token));
+    }
+
+    [Fact]
+    public void CalendarFactoriesAndReferencesPrioritizeCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var summary = new string(' ', 1_000_000);
+        var now = DateTimeOffset.UtcNow;
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCalendarEventInput.Timed(now, now.AddHours(1), summary, cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCalendarEventInput.AllDay("2026-08-27", "2026-08-28", summary, cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            new HomeAssistantCalendarEventReference(new string(' ', 1_000_000), cancellation.Token));
+    }
+
+    [Fact]
+    public void EntityIdentifierNormalizationPrioritizesCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantEntityId.TryNormalize(" " + new string('x', 1_000_000), cancellation.Token, out _));
     }
 
     [Fact]

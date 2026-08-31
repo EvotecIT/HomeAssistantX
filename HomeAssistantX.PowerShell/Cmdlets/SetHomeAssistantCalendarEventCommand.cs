@@ -90,8 +90,8 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
         var allDay = ParameterSetName == CreateAllDay || ParameterSetName == UpdateAllDay;
         var update = ParameterSetName == UpdateTimed || ParameterSetName == UpdateAllDay;
         var input = allDay
-            ? HomeAssistantCalendarEventInput.AllDay(StartDate, EndDate, Summary)
-            : HomeAssistantCalendarEventInput.Timed(StartTime, EndTime, Summary);
+            ? HomeAssistantCalendarEventInput.AllDay(StartDate, EndDate, Summary, CancelToken)
+            : HomeAssistantCalendarEventInput.Timed(StartTime, EndTime, Summary, CancelToken);
         input.Description = Description;
         input.Location = Location;
         input.SetRecurrenceRule(RecurrenceRule, CancelToken);
@@ -99,7 +99,7 @@ public sealed class SetHomeAssistantCalendarEventCommand : HomeAssistantCmdlet
         HomeAssistantCalendarEventReference? reference = null;
         if (update)
         {
-            reference = new HomeAssistantCalendarEventReference(Uid)
+            reference = new HomeAssistantCalendarEventReference(Uid, CancelToken)
             {
                 RecurrenceId = RecurrenceId,
                 RecurrenceRange = RecurrenceRange

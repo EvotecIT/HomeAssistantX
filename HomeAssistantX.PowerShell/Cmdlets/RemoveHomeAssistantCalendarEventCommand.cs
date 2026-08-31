@@ -39,7 +39,7 @@ public sealed class RemoveHomeAssistantCalendarEventCommand : HomeAssistantCmdle
             throw new ArgumentException("A calendar entity identifier is required.", nameof(EntityId));
         }
 
-        var reference = new HomeAssistantCalendarEventReference(Uid)
+        var reference = new HomeAssistantCalendarEventReference(Uid, CancelToken)
         {
             RecurrenceId = RecurrenceId,
             RecurrenceRange = RecurrenceRange
