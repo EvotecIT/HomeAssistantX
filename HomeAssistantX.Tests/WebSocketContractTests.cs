@@ -109,6 +109,18 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task FeatureNegotiationRequiresAResultPayloadOnSuccess()
+    {
+        using var server = new TestHomeAssistantServer { OmitSupportedFeaturesResult = true };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.WebSocket.ConnectAsync());
+
+        Assert.Contains("result payload", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UnsupportedFeatureNegotiationFallsBackToOrdinaryMessages()
     {
         using var server = new TestHomeAssistantServer { RejectSupportedFeatures = true };

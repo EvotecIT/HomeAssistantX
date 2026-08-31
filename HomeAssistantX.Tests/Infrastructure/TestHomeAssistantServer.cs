@@ -172,6 +172,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public bool CoalesceSupportedFeaturesAcknowledgement { get; set; }
 
     public string? SupportedFeaturesSuccessJson { get; set; }
+    public bool OmitSupportedFeaturesResult { get; set; }
 
     public bool ReturnInvalidUpdateReleaseNotes { get; set; }
 
@@ -533,9 +534,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 var acknowledgement = new Dictionary<string, object?>
                 {
                     ["id"] = id,
-                    ["type"] = "result",
-                    ["result"] = null
+                    ["type"] = "result"
                 };
+                if (!OmitSupportedFeaturesResult) acknowledgement["result"] = null;
                 if (!string.Equals(SupportedFeaturesSuccessJson, "omit", StringComparison.Ordinal))
                 {
                     acknowledgement["success"] = SupportedFeaturesSuccessJson is null

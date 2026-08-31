@@ -245,6 +245,13 @@ public sealed partial class HomeAssistantWebSocketClient
                 throw new HomeAssistantProtocolException(
                     "A failed Home Assistant WebSocket result omitted its required error code or message.");
             }
+
+            if (successProperty.ValueKind == JsonValueKind.True
+                && !message.TryGetProperty("result", out _))
+            {
+                throw new HomeAssistantProtocolException(
+                    "A successful Home Assistant WebSocket result omitted its required result payload.");
+            }
         }
 
         if (string.Equals(type, "event", StringComparison.Ordinal)
