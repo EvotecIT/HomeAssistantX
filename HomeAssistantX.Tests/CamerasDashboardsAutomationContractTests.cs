@@ -1481,7 +1481,7 @@ public sealed class CamerasDashboardsAutomationContractTests
                 overwrite: true,
                 CancellationToken.None));
 
-            Assert.Contains("original destination was restored", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("must be a regular file or symbolic link", exception.Message, StringComparison.Ordinal);
             Assert.Equal("fifo", RunUnixCommand("/usr/bin/stat", "-c", "%F", destination));
             Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
         }
