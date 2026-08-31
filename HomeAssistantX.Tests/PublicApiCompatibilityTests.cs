@@ -267,6 +267,8 @@ public sealed class PublicApiCompatibilityTests
 
         Assert.Contains("get-platform(SupportedOSPlatform:\"windows10.0\")", contract, StringComparison.Ordinal);
         Assert.Contains("set-platform(UnsupportedOSPlatform:\"browser\")", contract, StringComparison.Ordinal);
+        Assert.Contains("get-experimental(id=\"HAXGET\"", contract, StringComparison.Ordinal);
+        Assert.Contains("set-experimental(id=\"HAXSET\"", contract, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -277,6 +279,8 @@ public sealed class PublicApiCompatibilityTests
 
         Assert.Contains("add-platform(SupportedOSPlatform:\"windows10.0\")", contract, StringComparison.Ordinal);
         Assert.Contains("remove-platform(UnsupportedOSPlatform:\"browser\")", contract, StringComparison.Ordinal);
+        Assert.Contains("add-requires-unreferenced-code(message=\"add trim\"", contract, StringComparison.Ordinal);
+        Assert.Contains("remove-requires-dynamic-code(message=\"remove dynamic\"", contract, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1533,9 +1537,12 @@ public sealed class PublicApiCompatibilityTests
         var getter = includeNonPublic || IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
         var setter = includeNonPublic || IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
         return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(property) + ObsoleteContract(property)
-            + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property)
+            + ExperimentalContract(property, getter, setter) + NamedContract("get", ExperimentalContract(getter)) + NamedContract("set", ExperimentalContract(setter))
+            + PreviewFeatureContract(property, getter, setter) + NamedContract("get", PreviewFeatureContract(getter)) + NamedContract("set", PreviewFeatureContract(setter)) + PlatformContract(property)
             + NamedPlatformContract("get", getter) + NamedPlatformContract("set", setter) + RequiresCodeContract(property, getter, setter)
-            + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
+            + NamedContract("get", RequiresCodeContract(getter)) + NamedContract("set", RequiresCodeContract(setter))
+            + ClsComplianceContract(property, getter, setter) + NamedContract("get", ClsComplianceContract(getter)) + NamedContract("set", ClsComplianceContract(setter))
+            + ComVisibilityContract(property, getter, setter) + NamedContract("get", ComVisibilityContract(getter)) + NamedContract("set", ComVisibilityContract(setter)) + DispIdContract(property)
             + JsonPropertyNameContract(property)
             + JsonPropertyOrderContract(property)
             + JsonExtensionDataContract(property)
@@ -2139,16 +2146,20 @@ public sealed class PublicApiCompatibilityTests
         public string Value
         {
             [System.Runtime.Versioning.SupportedOSPlatform("windows10.0")]
+            [System.Diagnostics.CodeAnalysis.Experimental("HAXGET", UrlFormat = "https://example.invalid/{0}")]
             get => string.Empty;
             [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
+            [System.Diagnostics.CodeAnalysis.Experimental("HAXSET", UrlFormat = "https://example.invalid/{0}")]
             set { }
         }
 
         public event EventHandler Changed
         {
             [System.Runtime.Versioning.SupportedOSPlatform("windows10.0")]
+            [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("add trim")]
             add => _changed += value;
             [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
+            [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("remove dynamic")]
             remove => _changed -= value;
         }
     }
@@ -2995,8 +3006,11 @@ public sealed class PublicApiCompatibilityTests
     private static string NamedPlatformContract(string name, ICustomAttributeProvider? provider)
     {
         var contract = PlatformContract(provider);
-        return contract.Length == 0 ? string.Empty : name + "-" + contract;
+        return NamedContract(name, contract);
     }
+
+    private static string NamedContract(string name, string contract)
+        => contract.Length == 0 ? string.Empty : name + "-" + contract;
 
     private static string ObsoleteContract(params ICustomAttributeProvider?[] providers)
     {
@@ -3155,14 +3169,29 @@ public sealed class PublicApiCompatibilityTests
             + SpecialNameContract(eventInfo)
             + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
             + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + NamedContract("add", ExperimentalContract(eventInfo.AddMethod))
+            + NamedContract("remove", ExperimentalContract(eventInfo.RemoveMethod))
+            + NamedContract("raise", ExperimentalContract(eventInfo.RaiseMethod))
             + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + NamedContract("add", PreviewFeatureContract(eventInfo.AddMethod))
+            + NamedContract("remove", PreviewFeatureContract(eventInfo.RemoveMethod))
+            + NamedContract("raise", PreviewFeatureContract(eventInfo.RaiseMethod))
             + PlatformContract(eventInfo)
             + NamedPlatformContract("add", eventInfo.AddMethod)
             + NamedPlatformContract("remove", eventInfo.RemoveMethod)
             + NamedPlatformContract("raise", eventInfo.RaiseMethod)
             + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + NamedContract("add", RequiresCodeContract(eventInfo.AddMethod))
+            + NamedContract("remove", RequiresCodeContract(eventInfo.RemoveMethod))
+            + NamedContract("raise", RequiresCodeContract(eventInfo.RaiseMethod))
             + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + NamedContract("add", ClsComplianceContract(eventInfo.AddMethod))
+            + NamedContract("remove", ClsComplianceContract(eventInfo.RemoveMethod))
+            + NamedContract("raise", ClsComplianceContract(eventInfo.RaiseMethod))
             + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + NamedContract("add", ComVisibilityContract(eventInfo.AddMethod))
+            + NamedContract("remove", ComVisibilityContract(eventInfo.RemoveMethod))
+            + NamedContract("raise", ComVisibilityContract(eventInfo.RaiseMethod))
             + DispIdContract(eventInfo)
             + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name
             + " {" + FormatEventAccessors(eventInfo) + "}";
