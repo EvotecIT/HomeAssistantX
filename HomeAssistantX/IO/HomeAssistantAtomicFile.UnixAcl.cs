@@ -137,12 +137,31 @@ internal static partial class HomeAssistantAtomicFile
     private static void ApplyLinuxSecurityContext(
         SafeFileHandle destinationHandle,
         byte[]? securityContext)
-        => ApplyLinuxExtendedAttribute(
+    {
+        if (securityContext is not null)
+        {
+            var current = ReadLinuxSecurityContext(destinationHandle, allowProcDescriptorPath: true);
+            if (ExtendedAttributeEquals(current, securityContext)) return;
+        }
+
+        ApplyLinuxExtendedAttribute(
             destinationHandle,
             LinuxSecurityContextAttribute,
             securityContext,
             clearWhenMissing: false,
             "The temporary SELinux context could not be preserved.");
+    }
+
+    internal static bool ExtendedAttributeEquals(byte[]? left, byte[]? right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null || left.Length != right.Length) return false;
+        for (var index = 0; index < left.Length; index++)
+        {
+            if (left[index] != right[index]) return false;
+        }
+        return true;
+    }
 
     private static void ApplyLinuxExtendedAttribute(
         SafeFileHandle destinationHandle,

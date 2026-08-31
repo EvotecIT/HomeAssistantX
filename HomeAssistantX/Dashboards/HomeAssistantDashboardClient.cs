@@ -45,7 +45,7 @@ public sealed class HomeAssistantDashboardClient
                 if (embeddedRoute.ValueKind != JsonValueKind.String)
                     throw new HomeAssistantProtocolException("A frontend panel contained an invalid route.");
                 panel.UrlPath = RequireResponsePanelRoute(
-                    embeddedRoute.GetString(),
+                    await HomeAssistantJson.GetStringAsync(embeddedRoute, cancellationToken).ConfigureAwait(false),
                     "A frontend panel contained an invalid route.",
                     cancellationToken);
                 if (!CancellationAwareString.EqualsOrdinal(panel.UrlPath, route, cancellationToken))

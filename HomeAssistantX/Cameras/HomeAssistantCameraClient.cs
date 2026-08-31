@@ -171,7 +171,15 @@ public sealed class HomeAssistantCameraClient
             throw new HomeAssistantProtocolException(failureMessage);
     }
 
-    private static IReadOnlyDictionary<string, JsonElement> ReadUniqueObjectProperties(
+    internal static IReadOnlyDictionary<string, JsonElement> ReadUniqueObjectProperties(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => ReadUniqueObjectPropertiesCore(value, failureMessage, cancellationToken),
+            cancellationToken);
+
+    private static IReadOnlyDictionary<string, JsonElement> ReadUniqueObjectPropertiesCore(
         JsonElement value,
         string failureMessage,
         CancellationToken cancellationToken)
@@ -185,9 +193,10 @@ public sealed class HomeAssistantCameraClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (result.ContainsKey(property.Name))
+            var name = property.Name;
+            if (result.ContainsKey(name))
                 throw new HomeAssistantProtocolException(failureMessage);
-            result.Add(property.Name, property.Value);
+            result.Add(name, property.Value);
         }
         cancellationToken.ThrowIfCancellationRequested();
         return result;

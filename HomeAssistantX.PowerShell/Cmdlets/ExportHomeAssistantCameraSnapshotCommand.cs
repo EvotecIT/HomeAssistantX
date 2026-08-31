@@ -41,7 +41,10 @@ public sealed class ExportHomeAssistantCameraSnapshotCommand : HomeAssistantCmdl
         var preserveTemporaryFile = false;
         try
         {
-            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporaryPath))
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(
+                       temporaryPath,
+                       _resolvedPath,
+                       Force))
             {
                 await HomeAssistantAtomicFile.WriteAllBytesAsync(stream, bytes, CancelToken).ConfigureAwait(false);
                 HomeAssistantAtomicFile.CommitTemporaryFile(stream, temporaryPath, _resolvedPath, Force, CancelToken);

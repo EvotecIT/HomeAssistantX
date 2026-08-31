@@ -141,13 +141,24 @@ internal static partial class HomeAssistantAtomicFile
     }
 
     internal static FileStream CreateSecureTemporaryFileStream(string temporaryPath)
+        => CreateSecureTemporaryFileStream(
+            temporaryPath,
+            destinationPath: null,
+            overwrite: false);
+
+    internal static FileStream CreateSecureTemporaryFileStream(
+        string temporaryPath,
+        string? destinationPath,
+        bool overwrite)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             return CreateSecureUnixTemporaryFileStream(temporaryPath);
         }
 
-        return CreateSecureWindowsTemporaryFileStream(temporaryPath);
+        var encrypted = destinationPath is not null
+            && ShouldEncryptWindowsReplacement(destinationPath, overwrite);
+        return CreateSecureWindowsTemporaryFileStream(temporaryPath, encrypted);
     }
 
     internal static async Task WriteAllBytesAsync(

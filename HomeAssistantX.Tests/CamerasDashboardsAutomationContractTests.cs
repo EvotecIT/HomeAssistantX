@@ -58,6 +58,9 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Equal(0u, HomeAssistantAtomicFile.WindowsDestinationSecurityShareMode & 0x00000004u);
         Assert.Equal(22, HomeAssistantAtomicFile.WindowsAtomicRenameInformationClass);
         Assert.Equal(0x00000003u, HomeAssistantAtomicFile.WindowsAtomicRenameFlags);
+        Assert.Equal(0x00000017, HomeAssistantAtomicFile.WindowsPreservedSecurityInformation);
+        Assert.Equal(0x00000010, HomeAssistantAtomicFile.WindowsMandatoryLabelSecurityInformation);
+        Assert.Equal(0x00004000u, HomeAssistantAtomicFile.WindowsEncryptedAttribute);
         Assert.Equal(3, HomeAssistantAtomicFile.GetWindowsRenameInformationClass(overwrite: true, destinationPinned: false));
         Assert.Equal(0u, HomeAssistantAtomicFile.GetWindowsRenameFlags(overwrite: true, destinationPinned: false));
         Assert.Equal(22, HomeAssistantAtomicFile.GetWindowsRenameInformationClass(overwrite: true, destinationPinned: true));
@@ -75,6 +78,38 @@ public sealed class CamerasDashboardsAutomationContractTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             HomeAssistantJson.GetPropertyNameAsync(property, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task CameraAndMediaPropertyNameBatchesPrioritizeCancellation()
+    {
+        var escaped = string.Concat(Enumerable.Repeat("\\u0061", 1_000_000));
+        using var cameraDocument = JsonDocument.Parse("{\"" + escaped + "\":0,\"preload_stream\":true,\"orientation\":1}");
+        using var mediaDocument = JsonDocument.Parse("{\"" + escaped + "\":0,\"result\":[]}");
+        using var cameraCancellation = new CancellationTokenSource();
+        using var mediaCancellation = new CancellationTokenSource();
+
+        var cameraTask = Task.Run(() => HomeAssistantCameraClient.ReadUniqueObjectProperties(
+            cameraDocument.RootElement,
+            "Invalid camera response.",
+            cameraCancellation.Token));
+        cameraCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cameraTask);
+
+        var mediaTask = Task.Run(() => HomeAssistantMediaBrowserClient.FindSearchResult(
+            mediaDocument.RootElement,
+            mediaCancellation.Token));
+        mediaCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await mediaTask);
+    }
+
+    [Fact]
+    public void LinuxExtendedAttributeComparisonSkipsOnlyIdenticalValues()
+    {
+        Assert.True(HomeAssistantAtomicFile.ExtendedAttributeEquals(null, null));
+        Assert.True(HomeAssistantAtomicFile.ExtendedAttributeEquals(new byte[] { 1, 2 }, new byte[] { 1, 2 }));
+        Assert.False(HomeAssistantAtomicFile.ExtendedAttributeEquals(null, Array.Empty<byte>()));
+        Assert.False(HomeAssistantAtomicFile.ExtendedAttributeEquals(new byte[] { 1, 2 }, new byte[] { 1, 3 }));
     }
 
     [Theory]
@@ -1611,6 +1646,103 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void WindowsAtomicExportsPreserveEfsEncryptionWhenAvailable()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-efs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        var destination = Path.Combine(directory, "snapshot.jpg");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            try
+            {
+                File.Encrypt(destination);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            Assert.True((File.GetAttributes(destination) & FileAttributes.Encrypted) != 0);
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(
+                       temporary,
+                       destination,
+                       overwrite: true))
+            {
+                stream.WriteByte(42);
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None);
+            }
+
+            Assert.True((File.GetAttributes(destination) & FileAttributes.Encrypted) != 0);
+            Assert.Equal(new byte[] { 42 }, File.ReadAllBytes(destination));
+        }
+        finally
+        {
+            if (File.Exists(destination))
+            {
+                try { File.Decrypt(destination); } catch { }
+            }
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WindowsAtomicExportsPreserveMandatoryIntegrityLabels()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-integrity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        var destination = Path.Combine(directory, "snapshot.jpg");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            RunCommand("icacls.exe", destination, "/setintegritylevel", "L");
+            string expected;
+            using (var original = new FileStream(
+                       destination,
+                       FileMode.Open,
+                       FileAccess.Read,
+                       FileShare.ReadWrite | FileShare.Delete))
+            {
+                expected = HomeAssistantAtomicFile.ReadWindowsMandatoryLabel(original);
+            }
+
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(
+                       temporary,
+                       destination,
+                       overwrite: true))
+            {
+                stream.WriteByte(42);
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None);
+            }
+
+            using var committed = new FileStream(
+                destination,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            Assert.Equal(expected, HomeAssistantAtomicFile.ReadWindowsMandatoryLabel(committed));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void WindowsPinnedTemporaryExportsCommitIntoAnAbsentDestination()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -2020,6 +2152,9 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     private static string RunUnixCommand(string fileName, params string[] arguments)
+        => RunCommand(fileName, arguments);
+
+    private static string RunCommand(string fileName, params string[] arguments)
     {
         var startInfo = new System.Diagnostics.ProcessStartInfo
         {
@@ -2030,12 +2165,12 @@ public sealed class CamerasDashboardsAutomationContractTests
         };
         foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
         using var process = System.Diagnostics.Process.Start(startInfo)
-            ?? throw new InvalidOperationException("The Unix metadata probe could not be started.");
+            ?? throw new InvalidOperationException("The metadata probe could not be started.");
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
         if (process.ExitCode != 0)
-            throw new InvalidOperationException("The Unix metadata probe failed: " + error.Trim());
+            throw new InvalidOperationException("The metadata probe failed: " + error.Trim());
         return output.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
     }
 
@@ -2300,6 +2435,24 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         Assert.Equal(route, Assert.Single(await client.Dashboards.GetPanelsAsync()).UrlPath);
+    }
+
+    [Fact]
+    public async Task EmbeddedPanelRouteDecodePrioritizesCancellation()
+    {
+        var escapedRoute = string.Concat(Enumerable.Repeat("\\u0061", 1_000_000));
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"custom\":{\"url_path\":\"" + escapedRoute
+                + "\",\"component_name\":\"custom\",\"require_admin\":false}}"
+        };
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+
+        var operation = client.Dashboards.GetPanelsAsync(cancellation.Token);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
     }
 
     [Fact]

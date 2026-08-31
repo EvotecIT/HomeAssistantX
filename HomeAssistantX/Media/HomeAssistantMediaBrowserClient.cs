@@ -394,7 +394,12 @@ public sealed class HomeAssistantMediaBrowserClient
             throw new HomeAssistantProtocolException(failureMessage);
     }
 
-    private static JsonElement FindSearchResult(JsonElement value, CancellationToken cancellationToken)
+    internal static JsonElement FindSearchResult(JsonElement value, CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => FindSearchResultCore(value, cancellationToken),
+            cancellationToken);
+
+    private static JsonElement FindSearchResultCore(JsonElement value, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object) return default;
