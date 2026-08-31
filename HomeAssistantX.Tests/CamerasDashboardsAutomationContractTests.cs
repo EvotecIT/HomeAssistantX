@@ -214,6 +214,7 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("mdi:")]
     [InlineData(":home")]
     [InlineData("custom:room_kitchen")]
+    [InlineData(" mdi:home ")]
     public void DashboardIconsFollowHomeAssistantColonContract(string icon)
     {
         Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeIcon(icon, out var normalized));
@@ -221,10 +222,12 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
-    public void DashboardSelectorsAreBoundedBeforeHashingOrCopying()
+    public void DashboardStorageSelectorsRemainBoundedWithoutBoundingIcons()
     {
         Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeIcon("mdi:" + new string('a', 251), out _));
-        Assert.False(HomeAssistantDashboardIdentifier.TryNormalizeIcon("mdi:" + new string('a', 252), out _));
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeIcon("mdi:" + new string('a', 10_000), out _));
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeSelector(new string('a', 255), out _, CancellationToken.None));
+        Assert.False(HomeAssistantDashboardIdentifier.TryNormalizeSelector(new string('a', 256), out _, CancellationToken.None));
     }
 
     [Theory]
@@ -493,19 +496,35 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Theory]
-    [InlineData("House_Main")]
+    [InlineData("House_Main-panel")]
     [InlineData("House-main")]
     [InlineData("house--main")]
     [InlineData("-house-main")]
     [InlineData("house-main-")]
-    public async Task DashboardCreationRejectsNonCanonicalUrlSlugsBeforeDispatch(string urlPath)
+    [InlineData("house main-panel")]
+    public async Task DashboardCreationPreservesHomeAssistantStorageUrlPaths(string urlPath)
     {
-        using var server = new TestHomeAssistantServer();
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardMutationResponseJson = JsonSerializer.Serialize(new
+            {
+                id = "house-main",
+                url_path = urlPath,
+                title = "House",
+                show_in_sidebar = true,
+                require_admin = false,
+                mode = "storage"
+            })
+        };
         using var client = TestClientFactory.Create(server);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(
-            new HomeAssistantDashboardCreate { UrlPath = urlPath, Title = "House" }));
-        Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
+        var dashboard = await client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate { UrlPath = urlPath, Title = "House" });
+
+        Assert.Equal(urlPath, dashboard.UrlPath);
+        using var command = JsonDocument.Parse(Assert.IsType<string>(
+            server.GetLastWebSocketCommand("lovelace/dashboards/create")));
+        Assert.Equal(urlPath, command.RootElement.GetProperty("url_path").GetString());
     }
 
     [Fact]
@@ -1294,15 +1313,14 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house", Title = "House" }));
         await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House", Icon = "home" }));
         using var emptyConfiguration = JsonDocument.Parse("{}");
-        foreach (var invalidPath in new[] { "House-main", "house--main", "house-main-", "house main" })
-        {
-            await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.GetConfigurationAsync(invalidPath));
-            await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.SaveConfigurationAsync(emptyConfiguration.RootElement, invalidPath));
-            await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.DeleteConfigurationAsync(invalidPath));
-        }
+        await client.Dashboards.GetConfigurationAsync("House_main-panel");
+        await client.Dashboards.SaveConfigurationAsync(emptyConfiguration.RootElement, "House_main-panel");
+        await client.Dashboards.DeleteConfigurationAsync("House_main-panel");
         Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
-        Assert.Null(server.GetLastWebSocketCommand("lovelace/config/save"));
-        Assert.Null(server.GetLastWebSocketCommand("lovelace/config/delete"));
+        using (var save = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/config/save"))))
+            Assert.Equal("House_main-panel", save.RootElement.GetProperty("url_path").GetString());
+        using (var delete = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/config/delete"))))
+            Assert.Equal("House_main-panel", delete.RootElement.GetProperty("url_path").GetString());
     }
 
     [Fact]
@@ -2359,7 +2377,8 @@ public sealed class CamerasDashboardsAutomationContractTests
     [InlineData("House-main")]
     [InlineData("house--main")]
     [InlineData(" house-main ")]
-    public async Task DashboardResponsesRejectNonCanonicalRoutes(string urlPath)
+    [InlineData("house_main-panel")]
+    public async Task DashboardResponsesPreserveNativeStorageRoutes(string urlPath)
     {
         using var server = new TestHomeAssistantServer
         {
@@ -2367,7 +2386,9 @@ public sealed class CamerasDashboardsAutomationContractTests
         };
         using var client = TestClientFactory.Create(server);
 
-        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+        var dashboard = Assert.Single(await client.Dashboards.GetDashboardsAsync());
+
+        Assert.Equal(urlPath, dashboard.UrlPath);
     }
 
     [Fact]
@@ -2589,7 +2610,6 @@ public sealed class CamerasDashboardsAutomationContractTests
 
     [Theory]
     [InlineData("home")]
-    [InlineData(" mdi:home ")]
     public async Task PanelResponsesRejectNoncanonicalIcons(string icon)
     {
         using var server = new TestHomeAssistantServer

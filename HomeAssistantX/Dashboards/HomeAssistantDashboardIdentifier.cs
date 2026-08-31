@@ -21,52 +21,19 @@ public static class HomeAssistantDashboardIdentifier
             return false;
         }
 
-        var start = 0;
-        while (start < value.Length && char.IsWhiteSpace(value[start]))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            start++;
-        }
-
-        var end = value.Length - 1;
-        while (end >= start && char.IsWhiteSpace(value[end]))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            end--;
-        }
-
-        var length = end - start + 1;
-        if (length <= 0)
-        {
-            normalized = string.Empty;
-            return false;
-        }
-        normalized = CancellationAwareString.Slice(value, start, length, cancellationToken);
-        if (normalized.Length == 0 || normalized[0] == '-' || normalized[normalized.Length - 1] == '-') return false;
-
+        normalized = value;
         var hasHyphen = false;
-        var previousWasHyphen = false;
         foreach (var character in normalized)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var isHyphen = character == '-';
-            if (!isHyphen
-                && !(character >= 'a' && character <= 'z')
-                && !(character >= '0' && character <= '9'))
-            {
-                return false;
-            }
-
-            if (isHyphen && previousWasHyphen) return false;
-            hasHyphen |= isHyphen;
-            previousWasHyphen = isHyphen;
+            hasHyphen |= character == '-';
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         return allowSingleWord || hasHyphen;
     }
 
-    /// <summary>Trims and validates Home Assistant's colon-delimited icon selector form.</summary>
+    /// <summary>Validates and preserves Home Assistant's colon-delimited icon form.</summary>
     public static bool TryNormalizeIcon(string? value, out string normalized)
         => TryNormalizeIcon(value, out normalized, default);
 
@@ -75,7 +42,13 @@ public static class HomeAssistantDashboardIdentifier
         out string normalized,
         CancellationToken cancellationToken)
     {
-        if (!TryNormalizeSelector(value, out normalized, cancellationToken)) return false;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null)
+        {
+            normalized = string.Empty;
+            return false;
+        }
+        normalized = value;
         for (var index = 0; index < normalized.Length; index++)
         {
             if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();

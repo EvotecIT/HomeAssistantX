@@ -131,7 +131,7 @@ public sealed class HomeAssistantDashboardClient
     {
         if (create is null) throw new ArgumentNullException(nameof(create));
         if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(create.UrlPath, create.AllowSingleWord, out var urlPath, cancellationToken))
-            throw new ArgumentException("Dashboard URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens; a hyphen is required unless AllowSingleWord is enabled.", nameof(create));
+            throw new ArgumentException("Dashboard URL paths require a hyphen unless AllowSingleWord is enabled.", nameof(create));
         var title = HomeAssistantDashboardIdentifier.RequireTitle(create.Title, nameof(create.Title), cancellationToken);
         var payload = new Dictionary<string, object?>
         {
@@ -248,6 +248,7 @@ public sealed class HomeAssistantDashboardClient
             return DecodeResources(value, resourceMode, cancellationToken);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         throw new HomeAssistantConnectionException(
             "The Lovelace resource mode changed while resources were being read.",
             new InvalidOperationException("The resource mode did not remain stable across the resource-list request."));
@@ -580,7 +581,7 @@ public sealed class HomeAssistantDashboardClient
     private static string RequireConfigurationUrlPath(string? value, string parameterName, CancellationToken cancellationToken)
     {
         if (!HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(value, true, out var normalized, cancellationToken))
-            throw new ArgumentException("Dashboard configuration URL paths must be canonical lowercase slugs containing only letters, numbers, and single hyphens.", parameterName);
+            throw new ArgumentException("A dashboard configuration URL path is required.", parameterName);
         return normalized;
     }
 
