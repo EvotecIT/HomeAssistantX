@@ -665,14 +665,32 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
-    public void AutomationConfigurationPathCompositionObservesCancellationAfterEscaping()
+    public async Task AutomationConfigurationPathCompositionObservesCancellationAfterEscaping()
     {
         var escaped = "automation-" + new string('a', 16_000_000);
         using var cancellation = new CancellationTokenSource();
-        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var canceller = Task.Factory.StartNew(
+            () =>
+            {
+                started.Task.GetAwaiter().GetResult();
+                cancellation.Cancel();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantAutomationClient.ConfigurationPathFromEscapedId(escaped, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
 
-        Assert.ThrowsAny<OperationCanceledException>(() =>
-            HomeAssistantAutomationClient.ConfigurationPathFromEscapedId(escaped, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        await canceller;
     }
 
     [Fact]
