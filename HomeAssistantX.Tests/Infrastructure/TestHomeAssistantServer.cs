@@ -165,6 +165,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string SupportedFeaturesErrorMessage { get; set; } = "Feature negotiation was rejected.";
 
+    public bool OmitSupportedFeaturesErrorMessage { get; set; }
+
     public bool ReturnMalformedSupportedFeatures { get; set; }
 
     public bool CoalesceSupportedFeaturesAcknowledgement { get; set; }
@@ -504,7 +506,22 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 if (SupportedFeaturesErrorCode is string supportedFeaturesErrorCode
                     && !string.IsNullOrWhiteSpace(supportedFeaturesErrorCode))
                 {
-                    await session.SendErrorAsync(id, supportedFeaturesErrorCode, SupportedFeaturesErrorMessage, supportedFeaturesErrorCode, _source.Token).ConfigureAwait(false);
+                    if (OmitSupportedFeaturesErrorMessage)
+                    {
+                        await session.SendAsync(
+                            new Dictionary<string, object?>
+                            {
+                                ["id"] = id,
+                                ["type"] = "result",
+                                ["success"] = false,
+                                ["error"] = new Dictionary<string, object?> { ["code"] = supportedFeaturesErrorCode }
+                            },
+                            _source.Token).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await session.SendErrorAsync(id, supportedFeaturesErrorCode, SupportedFeaturesErrorMessage, supportedFeaturesErrorCode, _source.Token).ConfigureAwait(false);
+                    }
                     return;
                 }
 

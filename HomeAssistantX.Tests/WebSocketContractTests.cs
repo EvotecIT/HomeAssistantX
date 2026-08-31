@@ -121,6 +121,22 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task UnsupportedFeatureFallbackRequiresACompleteErrorEnvelope()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SupportedFeaturesErrorCode = "unknown_command",
+            OmitSupportedFeaturesErrorMessage = true
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.WebSocket.ConnectAsync());
+
+        Assert.Contains("error code or message", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MalformedFeatureNegotiationIsAProtocolFailure()
     {
         using var server = new TestHomeAssistantServer { ReturnMalformedSupportedFeatures = true };

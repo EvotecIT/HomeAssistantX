@@ -441,6 +441,8 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
                 "The Home Assistant supported-features response omitted its required Boolean success flag.");
         }
 
+        RequireRoutedPayload(root, "result");
+
         var success = successProperty.ValueKind == JsonValueKind.True;
         if (!success)
         {
