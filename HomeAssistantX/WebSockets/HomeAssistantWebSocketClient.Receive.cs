@@ -223,12 +223,28 @@ public sealed partial class HomeAssistantWebSocketClient
 
     private static void RequireRoutedPayload(JsonElement message, string type)
     {
-        if (string.Equals(type, "result", StringComparison.Ordinal)
-            && (!message.TryGetProperty("success", out var successProperty)
-                || successProperty.ValueKind is not (JsonValueKind.True or JsonValueKind.False)))
+        if (string.Equals(type, "result", StringComparison.Ordinal))
         {
-            throw new HomeAssistantProtocolException(
-                "A Home Assistant WebSocket result message omitted its required Boolean success flag.");
+            if (!message.TryGetProperty("success", out var successProperty)
+                || successProperty.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                throw new HomeAssistantProtocolException(
+                    "A Home Assistant WebSocket result message omitted its required Boolean success flag.");
+            }
+
+            if (successProperty.ValueKind == JsonValueKind.False
+                && (!message.TryGetProperty("error", out var errorProperty)
+                    || errorProperty.ValueKind != JsonValueKind.Object
+                    || !errorProperty.TryGetProperty("code", out var codeProperty)
+                    || codeProperty.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(codeProperty.GetString())
+                    || !errorProperty.TryGetProperty("message", out var messageProperty)
+                    || messageProperty.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(messageProperty.GetString())))
+            {
+                throw new HomeAssistantProtocolException(
+                    "A failed Home Assistant WebSocket result omitted its required error code or message.");
+            }
         }
 
         if (string.Equals(type, "event", StringComparison.Ordinal)

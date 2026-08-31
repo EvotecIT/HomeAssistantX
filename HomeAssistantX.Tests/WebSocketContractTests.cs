@@ -253,6 +253,23 @@ public sealed class WebSocketContractTests
     }
 
     [Theory]
+    [InlineData("test/coalesced_missing_error")]
+    [InlineData("test/coalesced_malformed_error")]
+    [InlineData("test/standalone_missing_error")]
+    [InlineData("test/standalone_malformed_error")]
+    public async Task FailedResultMessagesRequireAStringErrorCodeAndMessage(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("error code or message", protocolFailure.Message);
+    }
+
+    [Theory]
     [InlineData("test/standalone_zero_id")]
     [InlineData("test/standalone_negative_id")]
     public async Task StandaloneRoutedMessagesRejectNonPositiveCommandIdentifiers(string command)

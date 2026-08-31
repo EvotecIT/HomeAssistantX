@@ -804,6 +804,23 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 }
                 await session.SendCoalescedAsync(new object[] { malformedCoalescedResult }, _source.Token).ConfigureAwait(false);
                 return;
+            case "test/coalesced_missing_error":
+            case "test/coalesced_malformed_error":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = id,
+                            ["type"] = "result",
+                            ["success"] = false,
+                            ["error"] = string.Equals(type, "test/coalesced_missing_error", StringComparison.Ordinal)
+                                ? null
+                                : new Dictionary<string, object?> { ["code"] = 1, ["message"] = "failed" }
+                        }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
             case "test/standalone_missing_success":
             case "test/standalone_null_success":
             case "test/standalone_string_success":
@@ -820,6 +837,20 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                         : "true";
                 }
                 await session.SendAsync(malformedStandaloneResult, _source.Token).ConfigureAwait(false);
+                return;
+            case "test/standalone_missing_error":
+            case "test/standalone_malformed_error":
+                await session.SendAsync(
+                    new Dictionary<string, object?>
+                    {
+                        ["id"] = id,
+                        ["type"] = "result",
+                        ["success"] = false,
+                        ["error"] = string.Equals(type, "test/standalone_missing_error", StringComparison.Ordinal)
+                            ? null
+                            : new Dictionary<string, object?> { ["code"] = "failed", ["message"] = 1 }
+                    },
+                    _source.Token).ConfigureAwait(false);
                 return;
             case "test/standalone_zero_id":
             case "test/standalone_negative_id":
