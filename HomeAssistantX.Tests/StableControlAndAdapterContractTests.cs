@@ -696,10 +696,13 @@ public sealed class StableControlAndAdapterContractTests
         wrongOpcode[2] = 0x88;
         var wrongRcode = CreateDiscoveryPacket();
         wrongRcode[3] = 1;
+        var truncated = CreateDiscoveryPacket();
+        truncated[2] |= 0x02;
         var invalid = new DnsDiscoveryAggregate();
         DnsDiscoveryPacket.ReadInto(query, invalid);
         DnsDiscoveryPacket.ReadInto(wrongOpcode, invalid);
         DnsDiscoveryPacket.ReadInto(wrongRcode, invalid);
+        DnsDiscoveryPacket.ReadInto(truncated, invalid);
         DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(recordClass: 2), invalid);
         Assert.Empty(invalid.Build());
     }

@@ -89,7 +89,7 @@ public sealed class PublicApiCompatibilityTests
         Assert.Equal("dispid(43) ", DispIdContract(
             typeof(DispatchFixture).GetProperty(nameof(DispatchFixture.Value))!));
         Assert.StartsWith(
-            "dispid(44) ",
+            "dispid(44) json-enum-name(\"wire-value\") ",
             FormatEnumField(typeof(EnumStorageFixture), nameof(EnumStorageFixture.Value)),
             StringComparison.Ordinal);
         Assert.Contains(
@@ -2206,6 +2206,7 @@ public sealed class PublicApiCompatibilityTests
     private enum EnumStorageFixture : ulong
     {
         [DispId(44)]
+        [JsonStringEnumMemberName("wire-value")]
         Value = ulong.MaxValue
     }
 
@@ -2634,7 +2635,21 @@ public sealed class PublicApiCompatibilityTests
         var field = type.GetField(name, BindingFlags.Public | BindingFlags.Static)!;
         return DispIdContract(field) + ObsoleteContract(field) + ExperimentalContract(field)
             + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field)
+            + JsonStringEnumMemberNameContract(field)
             + name + " = " + FormatEnumValue(value, Enum.GetUnderlyingType(type));
+    }
+
+    private static string JsonStringEnumMemberNameContract(FieldInfo field)
+    {
+        var attribute = field.CustomAttributes.FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Text.Json.Serialization.JsonStringEnumMemberNameAttribute",
+            StringComparison.Ordinal));
+        if (attribute is null) return string.Empty;
+        if (attribute.ConstructorArguments.Count != 1
+            || attribute.ConstructorArguments[0].ArgumentType != typeof(string))
+            throw new InvalidOperationException("JsonStringEnumMemberNameAttribute had an unexpected constructor shape.");
+        return "json-enum-name(" + FormatDefault(attribute.ConstructorArguments[0].Value) + ") ";
     }
 
     private static string NonSerializedContract(FieldInfo field)

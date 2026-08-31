@@ -1020,7 +1020,10 @@ internal static class DnsDiscoveryPacket
             var offset = 0;
             ReadUInt16(packet, ref offset);
             var flags = ReadUInt16(packet, ref offset);
-            if ((flags & 0x8000) == 0 || (flags & 0x7800) != 0 || (flags & 0x000F) != 0) return;
+            if ((flags & 0x8000) == 0
+                || (flags & 0x7800) != 0
+                || (flags & 0x0200) != 0
+                || (flags & 0x000F) != 0) return;
             var questionCount = ReadUInt16(packet, ref offset);
             var answerCount = ReadUInt16(packet, ref offset);
             var authorityCount = ReadUInt16(packet, ref offset);
