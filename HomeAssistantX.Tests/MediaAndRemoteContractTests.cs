@@ -359,8 +359,7 @@ public sealed class MediaAndRemoteContractTests
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"attributes\":null}")]
-    [InlineData("{\"attributes\":\"malformed\"}")]
-    public void StateDecoderTreatsMissingNullOrMalformedAttributesAsEmpty(string fragment)
+    public void StateDecoderTreatsMissingOrNullAttributesAsEmpty(string fragment)
     {
         using var document = JsonDocument.Parse(fragment);
         var attributes = document.RootElement.TryGetProperty("attributes", out var value)
@@ -370,6 +369,13 @@ public sealed class MediaAndRemoteContractTests
             "{\"entity_id\":\"sensor.compatibility\",\"state\":\"unknown\"" + attributes + "}");
 
         Assert.Empty(state.Attributes);
+    }
+
+    [Fact]
+    public void StateDecoderRejectsNonObjectAttributes()
+    {
+        Assert.Throws<JsonException>(() => DeserializeState(
+            "{\"entity_id\":\"sensor.compatibility\",\"state\":\"unknown\",\"attributes\":\"malformed\"}"));
     }
 
     [Fact]

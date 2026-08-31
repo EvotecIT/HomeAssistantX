@@ -120,7 +120,9 @@ Invoke-HomeAssistantAction vacuum send_command `
 | Discover the house | `Get-HomeAssistantFloor`, `Get-HomeAssistantArea`, `Get-HomeAssistantDevice`, `Get-HomeAssistantEntity` |
 | Discover and invoke actions | `Get-HomeAssistantAction`, `Invoke-HomeAssistantAction` |
 | Typed everyday controls | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Invoke-HomeAssistantRemote`, `Set-HomeAssistantLock` |
-| Read current/history | `Get-HomeAssistantEntity`, `Get-HomeAssistantHistory` |
+| Read current/history/logbook | `Get-HomeAssistantEntity`, `Get-HomeAssistantHistory`, `Get-HomeAssistantLogbook` |
+| Energy and Recorder statistics | `Get/Set-HomeAssistantEnergy`, `Get/Set/Remove/Test-HomeAssistantStatistic`, `Invoke-HomeAssistantRecorderMaintenance` |
+| Weather | `Get-HomeAssistantWeather`, `Receive-HomeAssistantWeatherForecast` |
 | Send/read/stream notifications | `Get-HomeAssistantNotification`, `Send-HomeAssistantNotification`, `Remove-HomeAssistantNotification`, `Receive-HomeAssistantNotification` |
 | Calendars | `Get-HomeAssistantCalendar`, `Get-HomeAssistantCalendarEvent`, `Set-HomeAssistantCalendarEvent`, `Remove-HomeAssistantCalendarEvent`, `Receive-HomeAssistantCalendarEvent` |
 | Labels and scoped categories | `Get/Set/Remove-HomeAssistantLabel`, `Get/Set/Remove-HomeAssistantCategory` |
@@ -163,6 +165,12 @@ Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner `
     -StartTime '2026-08-27T18:00:00+02:00' `
     -EndTime '2026-08-27T20:00:00+02:00' -WhatIf
 Receive-HomeAssistantCalendarEvent -EntityId calendar.home -Count 1
+
+Get-HomeAssistantStatistic -Kind Sum
+Get-HomeAssistantStatistic -StatisticId sensor.grid_energy `
+    -StartTime (Get-Date).AddDays(-1) -Period Hour -Type Change, Sum
+Get-HomeAssistantWeather weather.home -Forecast -ForecastType Daily
+Receive-HomeAssistantWeatherForecast weather.home -ForecastType Hourly -Count 1
 ```
 
 Timed and all-day calendar parameter sets prevent mixed boundary types.

@@ -1,5 +1,6 @@
 using System.Management.Automation;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 using HomeAssistantX.Subscriptions;
 
 namespace HomeAssistantX.PowerShell;
@@ -47,7 +48,9 @@ public sealed class ReceiveHomeAssistantEventCommand : HomeAssistantCmdlet
     {
         var streams = CapturePipelineStreams();
         var filter = ParameterSetName == EntityParameterSet
-            ? new HashSet<string>(NormalizeEntityIds(EntityId), StringComparer.Ordinal)
+            ? new HashSet<string>(
+                NormalizeEntityIds(EntityId, CancelToken),
+                new CancellationAwareOrdinalStringEqualityComparer(CancelToken))
             : null;
         var eventType = ParameterSetName switch
         {
@@ -63,9 +66,9 @@ public sealed class ReceiveHomeAssistantEventCommand : HomeAssistantCmdlet
         {
             subscription = await Client.Events.SubscribeAsync(
                 eventType,
-                (value, _) =>
+                (value, token) =>
                 {
-                    if (filter is null || IsMatchingEntity(value, filter))
+                    if (filter is null || IsMatchingEntity(value, filter, token))
                     {
                         var eventNumber = Interlocked.Increment(ref received);
                         if (!Count.HasValue || eventNumber <= Count.Value)
@@ -108,25 +111,36 @@ public sealed class ReceiveHomeAssistantEventCommand : HomeAssistantCmdlet
         }
     }
 
-    private static bool IsMatchingEntity(HomeAssistantEvent value, ISet<string> filter)
+    private static bool IsMatchingEntity(
+        HomeAssistantEvent value,
+        ISet<string> filter,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return value.Data.TryGetValue("entity_id", out var entityId)
             && entityId.ValueKind == System.Text.Json.JsonValueKind.String
-            && filter.Contains(entityId.GetString() ?? string.Empty);
+            && filter.Contains(HomeAssistantJson.GetString(entityId, cancellationToken) ?? string.Empty);
     }
 
-    private static IEnumerable<string> NormalizeEntityIds(IEnumerable<string> values)
+    private static IReadOnlyList<string> NormalizeEntityIds(
+        IEnumerable<string> values,
+        CancellationToken cancellationToken)
     {
+        var normalizedValues = new List<string>();
         foreach (var value in values)
         {
-            if (!HomeAssistantEntityId.TryNormalize(value, out var normalized))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!HomeAssistantEntityId.TryNormalize(value, cancellationToken, out var normalized))
             {
                 throw new ArgumentException(
                     "EntityId must contain lowercase native Home Assistant entity identifiers.",
                     nameof(EntityId));
             }
 
-            yield return normalized;
+            normalizedValues.Add(normalized);
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return normalizedValues;
     }
 }

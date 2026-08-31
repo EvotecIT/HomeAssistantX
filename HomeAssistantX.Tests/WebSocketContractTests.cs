@@ -934,6 +934,29 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task EntityExposureValidationHonorsCallerCancellationBeforeTraversal()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var longValue = new string(' ', 1_000_000);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.System.SetEntityExposureAsync(
+            new[] { longValue },
+            new[] { "cloud" },
+            true,
+            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.System.SetEntityExposureAsync(
+            new[] { "light.kitchen" },
+            new[] { longValue },
+            true,
+            cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("homeassistant/expose_entity"));
+    }
+
+    [Fact]
     public async Task EventSubscriptionAndDispatchUseTheSameNormalizedType()
     {
         using var server = new TestHomeAssistantServer();

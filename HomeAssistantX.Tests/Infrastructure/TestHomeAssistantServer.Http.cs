@@ -123,19 +123,24 @@ internal sealed partial class TestHomeAssistantServer
                     "[{\"domain\":\"light\",\"services\":{\"turn_on\":{\"fields\":{\"brightness_pct\":{}}}}}]")
                     .ConfigureAwait(false);
                 break;
+            case "GET /api/history/period":
             case "GET /api/history/period/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
                 await WriteHttpResponseAsync(stream, 200, HistoryResponseJson).ConfigureAwait(false);
                 break;
+            case "GET /api/logbook":
             case "GET /api/logbook/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
-                await WriteHttpResponseAsync(stream, 200,
-                    "[{\"when\":\"2026-08-24T12:00:00+00:00\",\"name\":\"Kitchen light\",\"message\":\"turned on\",\"domain\":\"light\",\"entity_id\":\"light.kitchen\"}]")
-                    .ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, LogbookResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/states":
                 await WriteHttpResponseAsync(stream, 200, GetStates()).ConfigureAwait(false);
                 break;
             case "GET /api/states/sensor.kitchen_temperature":
                 await WriteHttpResponseAsync(stream, 200, KitchenTemperatureStateJson).ConfigureAwait(false);
+                break;
+            case "GET /api/states/weather.home":
+                await WriteHttpResponseAsync(stream, 200,
+                    "{\"entity_id\":\"weather.home\",\"state\":\"partlycloudy\",\"attributes\":{\"friendly_name\":\"Home\",\"temperature\":21.5,\"temperature_unit\":\"°C\",\"humidity\":55,\"wind_bearing\":180,\"supported_features\":3}}")
+                    .ConfigureAwait(false);
                 break;
             case "POST /api/states/sensor.virtual":
                 await WriteHttpResponseAsync(stream, 200, StateMutationResponseJson).ConfigureAwait(false);

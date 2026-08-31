@@ -194,6 +194,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string HistoryResponseJson { get; set; } = "[[" + KitchenTemperatureStateJson + "]]";
 
+    public string LogbookResponseJson { get; set; } =
+        "[{\"when\":\"2026-08-24T12:00:00+00:00\",\"name\":\"Kitchen light\",\"message\":\"turned on\",\"domain\":\"light\",\"entity_id\":\"light.kitchen\"}]";
+
     public string ActionCatalogResponseJson { get; set; } =
         "{\"light\":{\"turn_on\":{\"name\":\"Turn on\",\"description\":\"Turns on a light.\",\"fields\":{\"brightness_pct\":{\"name\":\"Brightness\",\"description\":\"Brightness percentage.\",\"required\":false,\"example\":45,\"selector\":{\"number\":{\"min\":0,\"max\":100}}}},\"target\":{\"entity\":[{\"domain\":\"light\"}]}},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}},\"switch\":{\"turn_on\":{\"name\":\"Turn on\"},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}}}";
 
@@ -223,6 +226,33 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string EntityRegistryResponseJson { get; set; } =
         "[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"list_only\":{\"source\":\"partial\"}},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"},{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\"}]";
+
+    public string WeatherForecastResponseJson { get; set; } =
+        "{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T00:00:00+00:00\",\"condition\":\"sunny\",\"temperature\":24.5,\"templow\":15.0,\"precipitation_probability\":10,\"future_field\":\"kept\"}]}}";
+
+    public string WeatherConvertibleUnitsResponseJson { get; set; } =
+        "{\"units\":{\"temperature_unit\":[\"°C\",\"°F\"],\"wind_speed_unit\":[\"km/h\",\"m/s\"]}}";
+
+    public string WeatherForecastSubscriptionEventJson { get; set; } =
+        "{\"type\":\"hourly\",\"forecast\":[{\"datetime\":\"2026-08-26T12:00:00+00:00\",\"condition\":\"rainy\",\"temperature\":18.0,\"precipitation\":1.2}]}";
+
+    public string RecorderStatisticsResponseJson { get; set; } =
+        "{\"sensor.grid_energy\":[{\"start\":1787731200000,\"end\":1787734800000,\"last_reset\":1787727600000,\"change\":1.5,\"state\":42.0,\"sum\":10.5,\"future_row\":true}]}";
+
+    public string RecorderMetadataResponseJson { get; set; } =
+        "[{\"statistic_id\":\"sensor.grid_energy\",\"source\":\"recorder\",\"name\":\"Grid energy\",\"unit_of_measurement\":\"kWh\",\"statistics_unit_of_measurement\":\"kWh\",\"unit_class\":\"energy\",\"has_mean\":false,\"has_sum\":true,\"future_metadata\":\"kept\",\"Future_Metadata\":\"also-kept\"}]";
+
+    public string FossilEnergyResponseJson { get; set; } =
+        "{\"2026-08-26T10:00:00+00:00\":0.42,\"2026-08-26T11:00:00+00:00\":0.25}";
+
+    public string SolarForecastResponseJson { get; set; } =
+        "{\"entry-solar\":{\"wh_hours\":{\"2026-08-27T10:00:00+00:00\":1250},\"future_provider_field\":true}}";
+
+    public string EnergyPreferencesResponseJson { get; set; } =
+        "{\"energy_sources\":[{\"type\":\"solar\",\"stat_energy_from\":\"sensor.solar_energy\",\"provider_extension\":true}],\"device_consumption\":[{\"stat_consumption\":\"sensor.ev_energy\"}],\"device_consumption_water\":[]}";
+
+    public string EnergyInfoResponseJson { get; set; } =
+        "{\"cost_sensors\":{\"sensor.grid_energy\":\"sensor.grid_cost\"},\"solar_forecast_domains\":[\"forecast_solar\"]}";
 
     public Task WaitForSystemHealthEventsAsync()
     {
@@ -736,6 +766,17 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                         await completed.ConfigureAwait(false);
                     }
                 }
+                var serviceDomain = command.TryGetProperty("domain", out var domainValue) ? domainValue.GetString() : null;
+                var serviceName = command.TryGetProperty("service", out var serviceValue) ? serviceValue.GetString() : null;
+                if (serviceDomain == "weather" && serviceName == "get_forecasts")
+                {
+                    await session.SendResultAsync(id, new Dictionary<string, object?>
+                    {
+                        ["context"] = new Dictionary<string, object?> { ["id"] = "weather-context" },
+                        ["response"] = ParseJson(WeatherForecastResponseJson)
+                    }, false, _source.Token).ConfigureAwait(false);
+                    return;
+                }
                 await session.SendResultAsync(id, new Dictionary<string, object?>
                 {
                     ["context"] = new Dictionary<string, object?> { ["id"] = "service-context" },
@@ -759,6 +800,66 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 session.SubscriptionIds.Add(id);
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 await session.SendSubscriptionEventAsync(id, ParseJson(CalendarSubscriptionEventJson), _source.Token).ConfigureAwait(false);
+                return;
+            case "energy/get_prefs":
+            case "energy/save_prefs":
+                await session.SendResultAsync(id, ParseJson(EnergyPreferencesResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "energy/info":
+                await session.SendResultAsync(id, ParseJson(EnergyInfoResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "energy/validate":
+                await session.SendResultAsync(id, ParseJson("{\"energy_sources\":[],\"device_consumption\":[],\"future_validation\":{\"valid\":true}}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "energy/solar_forecast":
+                await session.SendResultAsync(id, ParseJson(SolarForecastResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "energy/fossil_energy_consumption":
+                await session.SendResultAsync(id, ParseJson(FossilEnergyResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "recorder/list_statistic_ids":
+                await session.SendResultAsync(id, ParseJson(RecorderMetadataResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "recorder/get_statistics_metadata":
+                var recorderMetadata = command.TryGetProperty("statistic_ids", out var requestedStatisticIds)
+                    && requestedStatisticIds.ValueKind == JsonValueKind.Array
+                    && requestedStatisticIds.EnumerateArray().Any(value => string.Equals(value.GetString(), "sensor.missing", StringComparison.Ordinal))
+                    ? "[]"
+                    : RecorderMetadataResponseJson;
+                await session.SendResultAsync(id, ParseJson(recorderMetadata), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "recorder/statistics_during_period":
+                await session.SendResultAsync(id, ParseJson(RecorderStatisticsResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "recorder/validate_statistics":
+                await session.SendResultAsync(id, ParseJson("{\"sensor.grid_energy\":{\"issue\":\"unit_changed\"}}"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "recorder/update_statistics_issues":
+            case "recorder/clear_statistics":
+            case "recorder/update_statistics_metadata":
+            case "recorder/change_statistics_unit":
+            case "recorder/adjust_sum_statistics":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
+            case "recorder/import_statistics":
+                if (!command.TryGetProperty("metadata", out var importMetadata)
+                    || !importMetadata.TryGetProperty("has_mean", out var hasMean)
+                    || (hasMean.ValueKind != JsonValueKind.True && hasMean.ValueKind != JsonValueKind.False)
+                    || !importMetadata.TryGetProperty("has_sum", out _))
+                {
+                    await session.SendErrorAsync(id, "invalid_format", "Import metadata is incomplete.", "invalid_format", _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
+            case "weather/convertible_units":
+                await session.SendResultAsync(id, ParseJson(WeatherConvertibleUnitsResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "weather/subscribe_forecast":
+                session.SubscriptionIds.Add(id);
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson(WeatherForecastSubscriptionEventJson), _source.Token).ConfigureAwait(false);
                 return;
             case "test/error":
                 await session.SendErrorAsync(id, "service_validation_error", "Option is not supported.", "unsupported_option", _source.Token)

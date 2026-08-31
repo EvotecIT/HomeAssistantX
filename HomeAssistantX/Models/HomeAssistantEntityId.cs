@@ -1,10 +1,14 @@
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Models;
 
 /// <summary>Validates and normalizes native Home Assistant entity identifiers.</summary>
 public static class HomeAssistantEntityId
 {
+    private const int MaximumEntityIdLength = 255;
+    private const int MaximumDomainLength = 64;
+
     /// <summary>Trims and validates a lowercase Home Assistant entity identifier in the requested domain.</summary>
     public static bool TryNormalizeForDomain(
         string? value,
@@ -24,8 +28,12 @@ public static class HomeAssistantEntityId
             return false;
         }
 
-        var separator = normalized.IndexOf('.');
-        return string.Equals(normalized.Substring(0, separator), normalizedDomain, StringComparison.Ordinal);
+        var separator = FindSeparator(normalized, cancellationToken, out _);
+        return separator > 0
+            && CancellationAwareString.EqualsOrdinal(
+                CancellationAwareString.Slice(normalized, 0, separator, cancellationToken),
+                normalizedDomain,
+                cancellationToken);
     }
 
     /// <summary>Trims and validates a lowercase Home Assistant domain.</summary>
@@ -37,8 +45,8 @@ public static class HomeAssistantEntityId
         CancellationToken cancellationToken,
         out string normalized)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        normalized = value?.Trim() ?? string.Empty;
+        if (!TryNormalizeBounded(value, MaximumDomainLength, cancellationToken, out normalized))
+            return false;
         return IsValidSegment(
             normalized,
             mustStartWithLetter: true,
@@ -57,7 +65,7 @@ public static class HomeAssistantEntityId
         cancellationToken.ThrowIfCancellationRequested();
         if (!TryNormalize(value, cancellationToken, out var normalized)
             || !string.Equals(value, normalized, StringComparison.Ordinal)
-            || normalized.Any(character => character >= 'A' && character <= 'Z'))
+            || ContainsUppercase(normalized, cancellationToken))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned a malformed entity identifier.");
         }
@@ -75,18 +83,18 @@ public static class HomeAssistantEntityId
         CancellationToken cancellationToken,
         out string normalized)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        normalized = value?.Trim() ?? string.Empty;
-        var separator = normalized.IndexOf('.');
+        if (!TryNormalizeBounded(value, MaximumEntityIdLength, cancellationToken, out normalized))
+            return false;
+        var separator = FindSeparator(normalized, cancellationToken, out var lastSeparator);
         if (separator <= 0
-            || separator != normalized.LastIndexOf('.')
+            || separator != lastSeparator
             || separator == normalized.Length - 1)
         {
             return false;
         }
 
-        var domain = normalized.Substring(0, separator);
-        var objectId = normalized.Substring(separator + 1);
+        var domain = CancellationAwareString.Slice(normalized, 0, separator, cancellationToken);
+        var objectId = CancellationAwareString.Slice(normalized, separator + 1, normalized.Length - separator - 1, cancellationToken);
         return IsValidSegment(
                 domain,
                 mustStartWithLetter: true,
@@ -101,6 +109,46 @@ public static class HomeAssistantEntityId
                 cancellationToken);
     }
 
+    private static bool TryNormalizeBounded(
+        string? value,
+        int maximumLength,
+        CancellationToken cancellationToken,
+        out string normalized)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null)
+        {
+            normalized = string.Empty;
+            return false;
+        }
+
+        var start = 0;
+        while (start < value.Length && char.IsWhiteSpace(value[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+
+        var end = value.Length - 1;
+        while (end >= start && char.IsWhiteSpace(value[end]))
+        {
+            if (((value.Length - 1 - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var length = end - start + 1;
+        if (length <= 0 || length > maximumLength)
+        {
+            normalized = string.Empty;
+            return false;
+        }
+
+        normalized = CancellationAwareString.Slice(value, start, length, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return true;
+    }
+
     private static bool IsValidSegment(
         string value,
         bool mustStartWithLetter,
@@ -112,7 +160,7 @@ public static class HomeAssistantEntityId
             || (mustStartWithLetter && (value[0] < 'a' || value[0] > 'z'))
             || (disallowBoundaryUnderscore
                 && (value[0] == '_' || value[value.Length - 1] == '_'))
-            || (disallowDoubleUnderscore && value.Contains("__")))
+            || (disallowDoubleUnderscore && ContainsDoubleUnderscore(value, cancellationToken)))
         {
             return false;
         }
@@ -134,6 +182,43 @@ public static class HomeAssistantEntityId
         return true;
     }
 
+    private static int FindSeparator(string value, CancellationToken cancellationToken, out int lastSeparator)
+    {
+        var first = -1;
+        lastSeparator = -1;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] != '.') continue;
+            if (first < 0) first = index;
+            lastSeparator = index;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return first;
+    }
+
+    private static bool ContainsUppercase(string value, CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] is >= 'A' and <= 'Z') return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
+    private static bool ContainsDoubleUnderscore(string value, CancellationToken cancellationToken)
+    {
+        for (var index = 1; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index - 1] == '_' && value[index] == '_') return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
     internal static HomeAssistantState RequireResponseDomain(
         HomeAssistantState state,
         string domain,
@@ -146,8 +231,11 @@ public static class HomeAssistantEntityId
         }
 
         var entityId = RequireResponseEntityId(state.EntityId, cancellationToken);
-        var separator = entityId.IndexOf('.');
-        if (!string.Equals(entityId.Substring(0, separator), domain, StringComparison.Ordinal))
+        var separator = FindSeparator(entityId, cancellationToken, out _);
+        if (!CancellationAwareString.EqualsOrdinal(
+                CancellationAwareString.Slice(entityId, 0, separator, cancellationToken),
+                domain,
+                cancellationToken))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned an entity outside the requested " + domain + " domain.");
         }

@@ -32,8 +32,7 @@ internal sealed class HomeAssistantAttributeDictionaryConverter
 
         if (reader.TokenType != JsonTokenType.StartObject)
         {
-            _ = CancellationAwareJsonValueReader.Read(ref reader, cancellationToken);
-            return new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            throw new JsonException("Home Assistant state attributes must be an object or null.");
         }
 
         var attributes = new Dictionary<string, JsonElement>(StringComparer.Ordinal);

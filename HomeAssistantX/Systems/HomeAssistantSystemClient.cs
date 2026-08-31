@@ -145,8 +145,8 @@ public sealed class HomeAssistantSystemClient
         bool shouldExpose,
         CancellationToken cancellationToken = default)
     {
-        var validatedEntityIds = ValidateEntityIds(entityIds, nameof(entityIds));
-        var validatedAssistants = ValidateIdentifiers(assistants, nameof(assistants));
+        var validatedEntityIds = ValidateEntityIds(entityIds, nameof(entityIds), cancellationToken);
+        var validatedAssistants = ValidateIdentifiers(assistants, nameof(assistants), cancellationToken);
         return _webSocket.RequestAsync(
             "homeassistant/expose_entity",
             new Dictionary<string, object?>
@@ -371,32 +371,65 @@ public sealed class HomeAssistantSystemClient
             cancellationToken);
     }
 
-    private static string[] ValidateIdentifiers(IReadOnlyList<string> values, string parameterName)
+    private static string[] ValidateIdentifiers(
+        IReadOnlyList<string> values,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (values is null || values.Count == 0 || values.Any(string.IsNullOrWhiteSpace))
+        if (values is null)
         {
             throw new ArgumentException("At least one non-empty identifier is required.", parameterName);
         }
 
-        return values.Select(value => value.Trim()).ToArray();
+        var normalized = new List<string>();
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
+            {
+                throw new ArgumentException("At least one non-empty identifier is required.", parameterName);
+            }
+
+            normalized.Add(CancellationAwareString.Trim(value, cancellationToken));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (normalized.Count == 0)
+        {
+            throw new ArgumentException("At least one non-empty identifier is required.", parameterName);
+        }
+
+        return normalized.ToArray();
     }
 
-    private static string[] ValidateEntityIds(IReadOnlyList<string> values, string parameterName)
+    private static string[] ValidateEntityIds(
+        IReadOnlyList<string> values,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (values is null || values.Count == 0)
+        if (values is null)
         {
             throw new ArgumentException("At least one entity identifier is required.", parameterName);
         }
 
-        var normalized = new string[values.Count];
-        for (var index = 0; index < values.Count; index++)
+        var normalized = new List<string>();
+        foreach (var value in values)
         {
-            if (!HomeAssistantEntityId.TryNormalize(values[index], out normalized[index]))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!HomeAssistantEntityId.TryNormalize(value, cancellationToken, out var entityId))
             {
                 throw new ArgumentException("Entity identifiers must use the native Home Assistant format.", parameterName);
             }
+
+            normalized.Add(entityId);
         }
 
-        return normalized;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (normalized.Count == 0)
+        {
+            throw new ArgumentException("At least one entity identifier is required.", parameterName);
+        }
+
+        return normalized.ToArray();
     }
 }

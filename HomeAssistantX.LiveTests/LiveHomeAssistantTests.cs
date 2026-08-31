@@ -1,6 +1,9 @@
 ﻿using HomeAssistantX.States;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Operations;
+using HomeAssistantX.Exceptions;
+using HomeAssistantX.Recorder;
+using HomeAssistantX.Weather;
 using Xunit.Abstractions;
 
 namespace HomeAssistantX.LiveTests;
@@ -57,6 +60,66 @@ public sealed class LiveHomeAssistantTests
                 MinimalResponse = true,
                 NoAttributes = true
             });
+        }
+
+        var statisticCount = 0;
+        if (components.Contains("recorder", StringComparer.OrdinalIgnoreCase))
+        {
+            var statistics = await client.Recorder.ListStatisticsAsync();
+            statisticCount = statistics.Count;
+            _ = await client.Recorder.ValidateStatisticsAsync();
+            if (statistics.Count > 0)
+            {
+                _ = await client.Recorder.GetStatisticsAsync(new HomeAssistantStatisticsQuery(
+                    DateTimeOffset.UtcNow.AddHours(-2),
+                    HomeAssistantStatisticPeriod.Hour,
+                    statistics[0].StatisticId));
+            }
+        }
+
+        var energyConfigured = false;
+        var energySolarForecastProviders = 0;
+        if (components.Contains("energy", StringComparer.OrdinalIgnoreCase))
+        {
+            var energyInfo = await client.Energy.GetInfoAsync();
+            energySolarForecastProviders = energyInfo.SolarForecastDomains.Count;
+            try
+            {
+                _ = await client.Energy.GetPreferencesAsync();
+                energyConfigured = true;
+                _ = await client.Energy.ValidateAsync();
+                _ = await client.Energy.GetSolarForecastAsync();
+            }
+            catch (HomeAssistantCommandException exception) when (exception.Code == "not_found")
+            {
+            }
+        }
+
+        var weather = await client.Weather.GetAsync();
+        if (weather.Count > 0)
+        {
+            _ = await client.Weather.GetConvertibleUnitsAsync();
+            var forecastTypes = new[]
+            {
+                HomeAssistantWeatherForecastType.Daily,
+                HomeAssistantWeatherForecastType.Hourly,
+                HomeAssistantWeatherForecastType.TwiceDaily
+            };
+            var forecastTarget = weather
+                .SelectMany(entity => forecastTypes
+                    .Where(entity.Supports)
+                    .Select(type => new { Entity = entity, Type = type }))
+                .FirstOrDefault();
+            if (forecastTarget is not null)
+            {
+                var forecastReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using var weatherSubscription = await client.Weather.SubscribeForecastAsync(
+                    forecastTarget.Entity.EntityId,
+                    forecastTarget.Type,
+                    (_, _) => { forecastReceived.TrySetResult(true); return Task.CompletedTask; });
+                await forecastReceived.Task.WaitAsync(TimeSpan.FromSeconds(15));
+                await weatherSubscription.StopAsync();
+            }
         }
 
         var calendars = Array.Empty<HomeAssistantCalendar>();
@@ -153,7 +216,7 @@ public sealed class LiveHomeAssistantTests
         Assert.Equal(System.Text.Json.JsonValueKind.Object, panels.ValueKind);
         Assert.Equal(System.Text.Json.JsonValueKind.Object, displayRegistry.ValueKind);
         Assert.StartsWith("/api/", signedPath);
-        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}, media players={12}, remotes={13}, labels={14}, automation categories={15}, calendars={16}, sampled calendar events={17}, persistent notifications={18}",
+        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}, media players={12}, remotes={13}, labels={14}, automation categories={15}, calendars={16}, sampled calendar events={17}, persistent notifications={18}, statistics={19}, Energy configured={20}, solar forecast providers={21}, weather entities={22}",
             configuration.Version,
             restStates.Count,
             webSocketStates.Count,
@@ -172,7 +235,11 @@ public sealed class LiveHomeAssistantTests
             automationCategories.Count,
             calendars.Length,
             calendarEventCount,
-            persistentNotificationCount);
+            persistentNotificationCount,
+            statisticCount,
+            energyConfigured,
+            energySolarForecastProviders,
+            weather.Count);
     }
 }
 

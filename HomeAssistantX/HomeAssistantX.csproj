@@ -32,6 +32,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="NodaTime" Version="3.3.3" />
+    <PackageReference Include="TimeZoneConverter" Version="7.2.0" />
     <None Include="..\README.md" Pack="true" PackagePath="README.md" />
     <InternalsVisibleTo Include="HomeAssistantX.Tests" />
     <InternalsVisibleTo Include="HomeAssistantX.PowerShell" />

@@ -46,6 +46,9 @@ Gets the default Home Assistant connection for the current PowerShell runspace.
 ### [Get-HomeAssistantDevice](Get-HomeAssistantDevice.md)
 Lists Home Assistant devices, optionally filtered by area or floor.
 
+### [Get-HomeAssistantEnergy](Get-HomeAssistantEnergy.md)
+Reads Energy preferences, capabilities, validation, provider forecasts, or fossil-energy periods.
+
 ### [Get-HomeAssistantEntity](Get-HomeAssistantEntity.md)
 Gets joined entities by name, identifier, domain, device, area, or floor.
 
@@ -73,14 +76,23 @@ Lists Home Assistant labels, optionally selecting one by name or ID.
 ### [Get-HomeAssistantLog](Get-HomeAssistantLog.md)
 Gets structured system-log entries or bounded Core, Supervisor, host, and app log lines.
 
+### [Get-HomeAssistantLogbook](Get-HomeAssistantLogbook.md)
+Reads human-oriented Recorder logbook activity for a bounded time range.
+
 ### [Get-HomeAssistantNotification](Get-HomeAssistantNotification.md)
 Gets persistent notifications currently stored by Home Assistant.
+
+### [Get-HomeAssistantStatistic](Get-HomeAssistantStatistic.md)
+Lists Recorder statistics or returns typed aggregated values.
 
 ### [Get-HomeAssistantTrace](Get-HomeAssistantTrace.md)
 Gets automation or script trace summaries, or one complete trace run.
 
 ### [Get-HomeAssistantUpdate](Get-HomeAssistantUpdate.md)
 Gets update entities or Supervisor component and app updates.
+
+### [Get-HomeAssistantWeather](Get-HomeAssistantWeather.md)
+Reads current observations, forecasts, or supported weather units.
 
 ### [Install-HomeAssistantUpdate](Install-HomeAssistantUpdate.md)
 Installs an update entity or a Supervisor-managed Core, OS, Supervisor, or app update.
@@ -90,6 +102,9 @@ Invokes any Home Assistant action with one target-oriented set of parameters.
 
 ### [Invoke-HomeAssistantApp](Invoke-HomeAssistantApp.md)
 Runs one explicit lifecycle operation for a Supervisor-managed Home Assistant app.
+
+### [Invoke-HomeAssistantRecorderMaintenance](Invoke-HomeAssistantRecorderMaintenance.md)
+Runs a bounded Recorder maintenance task.
 
 ### [Invoke-HomeAssistantRemote](Invoke-HomeAssistantRemote.md)
 Controls a Home Assistant remote, including sending, learning, and deleting commands.
@@ -106,6 +121,9 @@ Streams Home Assistant events without polling until canceled.
 ### [Receive-HomeAssistantNotification](Receive-HomeAssistantNotification.md)
 Streams persistent-notification changes without polling.
 
+### [Receive-HomeAssistantWeatherForecast](Receive-HomeAssistantWeatherForecast.md)
+Streams weather forecast updates without polling.
+
 ### [Remove-HomeAssistantCalendarEvent](Remove-HomeAssistantCalendarEvent.md)
 Deletes a Home Assistant calendar event or recurring occurrence.
 
@@ -117,6 +135,9 @@ Deletes a Home Assistant label.
 
 ### [Remove-HomeAssistantNotification](Remove-HomeAssistantNotification.md)
 Dismisses one or all persistent Home Assistant notifications.
+
+### [Remove-HomeAssistantStatistic](Remove-HomeAssistantStatistic.md)
+Permanently removes long-term statistics for one or more identifiers.
 
 ### [Restart-HomeAssistant](Restart-HomeAssistant.md)
 Restarts Core, Supervisor, host, an app, or reloads one integration.
@@ -136,6 +157,9 @@ Sets common climate values with typed parameters instead of raw action data.
 ### [Set-HomeAssistantCover](Set-HomeAssistantCover.md)
 Moves covers with a typed action, position, or tilt position.
 
+### [Set-HomeAssistantEnergy](Set-HomeAssistantEnergy.md)
+Updates one or more Energy dashboard preference collections.
+
 ### [Set-HomeAssistantLabel](Set-HomeAssistantLabel.md)
 Creates or updates a Home Assistant label while allowing nullable fields to be explicitly cleared.
 
@@ -148,8 +172,14 @@ Locks, unlocks, or opens a lock with high-impact confirmation.
 ### [Set-HomeAssistantMediaPlayer](Set-HomeAssistantMediaPlayer.md)
 Controls media-player power, playback, volume, source, grouping, queueing, and content.
 
+### [Set-HomeAssistantStatistic](Set-HomeAssistantStatistic.md)
+Updates metadata, converts units, adjusts sums, or imports Recorder statistics.
+
 ### [Set-HomeAssistantSwitch](Set-HomeAssistantSwitch.md)
 Turns switches on, off, or toggles them through a resolved Home Assistant target.
 
 ### [Test-HomeAssistantConfiguration](Test-HomeAssistantConfiguration.md)
 Validates the active Home Assistant configuration without restarting Core.
+
+### [Test-HomeAssistantStatistic](Test-HomeAssistantStatistic.md)
+Validates Recorder long-term statistics and returns every issue reported by Home Assistant.

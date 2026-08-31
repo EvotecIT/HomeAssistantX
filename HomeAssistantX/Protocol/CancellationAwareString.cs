@@ -73,7 +73,9 @@ internal static class CancellationAwareString
             result.Append(value[start + index]);
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return result.ToString();
+        return length > 4096 && cancellationToken.CanBeCanceled
+            ? HomeAssistantJson.RunCancellationIsolated(result.ToString, cancellationToken)
+            : result.ToString();
     }
 
     internal static string Concat(
@@ -212,6 +214,27 @@ internal static class CancellationAwareString
         }
         return count;
     }
+
+    internal static int CompareOrdinal(
+        string? left,
+        string? right,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (ReferenceEquals(left, right)) return 0;
+        if (left is null) return -1;
+        if (right is null) return 1;
+        var length = Math.Min(left.Length, right.Length);
+        for (var index = 0; index < length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (left[index] < right[index]) return -1;
+            if (left[index] > right[index]) return 1;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return left.Length.CompareTo(right.Length);
+    }
+
     private static void Append(
         System.Text.StringBuilder builder,
         string value,

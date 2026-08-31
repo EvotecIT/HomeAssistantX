@@ -10,6 +10,29 @@ namespace HomeAssistantX.Tests;
 public sealed class CoreRestApiContractTests
 {
     [Fact]
+    public void LogbookEntityCorrelationHonorsCancellationDuringIdentifierValidation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var entries = new[]
+        {
+            new HomeAssistantX.Rest.HomeAssistantLogbookEntry
+            {
+                EntityId = "sensor." + new string('a', 1_000_000),
+                When = DateTimeOffset.UtcNow
+            }
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantX.Rest.HomeAssistantRestClient.ValidateLogbookEntries(
+                entries,
+                null,
+                null,
+                "sensor.expected",
+                cancellation.Token));
+    }
+
+    [Fact]
     public void ExtensionDataPreservesCaseDistinctUnknownFields()
     {
         var configuration = JsonSerializer.Deserialize<HomeAssistantConfiguration>(
@@ -253,5 +276,116 @@ public sealed class CoreRestApiContractTests
             client.Rest.GetCalendarEventsAsync(entityId, start, start.AddDays(1)));
 
         Assert.Null(server.LastRequestPath);
+    }
+
+    [Theory]
+    [InlineData("[{}]")]
+    [InlineData("[{\"when\":null}]")]
+    [InlineData("[null]")]
+    public async Task LogbookRejectsEntriesWithoutRequiredTimestamps(string responseJson)
+    {
+        using var server = new TestHomeAssistantServer { LogbookResponseJson = responseJson };
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery { StartTime = start }));
+    }
+
+    [Theory]
+    [InlineData("[{\"when\":\"2026-08-24T00:00:00Z\",\"when\":\"2026-08-24T00:00:01Z\"}]")]
+    [InlineData("[{\"when\":\"2026-08-24T00:00:00Z\",\"entity_id\":\"light.one\",\"entity_id\":\"light.two\"}]")]
+    public async Task LogbookRejectsDuplicateFieldsBeforeTypedProjection(string responseJson)
+    {
+        using var server = new TestHomeAssistantServer { LogbookResponseJson = responseJson };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery
+            {
+                StartTime = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero)
+            }));
+    }
+
+    [Fact]
+    public async Task LogbookRejectsEntriesOutsideTheSnapshottedRequestedRange()
+    {
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+        var end = start.AddHours(1);
+        using var server = new TestHomeAssistantServer
+        {
+            LogbookResponseJson = "[{\"when\":\"2026-08-23T23:59:59+00:00\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery { StartTime = start, EndTime = end }));
+    }
+
+    [Theory]
+    [InlineData("[{\"when\":\"2026-08-24T00:30:00+00:00\"}]")]
+    [InlineData("[{\"when\":\"2026-08-24T00:30:00+00:00\",\"entity_id\":\"sensor.Bad\"}]")]
+    [InlineData("[{\"when\":\"2026-08-24T00:30:00+00:00\",\"entity_id\":\"sensor.other\"}]")]
+    public async Task FilteredLogbookCorrelatesEveryReturnedEntity(string responseJson)
+    {
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+        using var server = new TestHomeAssistantServer { LogbookResponseJson = responseJson };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery
+            {
+                StartTime = start,
+                EndTime = start.AddHours(1),
+                EntityId = "sensor.energy"
+            }));
+    }
+
+    [Fact]
+    public void LogbookValidationObservesCancellationDuringProjection()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var entries = new CancellingLogbookEntries(cancellation);
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRestClient.ValidateLogbookEntries(entries, null, null, null, cancellation.Token));
+        Assert.InRange(entries.ReadCount, 1, 2);
+    }
+
+    [Fact]
+    public async Task LogbookRejectsEntriesAtTheExclusiveEndBoundary()
+    {
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+        var end = start.AddHours(1);
+        using var server = new TestHomeAssistantServer
+        {
+            LogbookResponseJson = "[{\"when\":\"2026-08-24T01:00:00+00:00\",\"entity_id\":\"sensor.energy\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantLogbookQuery { StartTime = start, EndTime = end }));
+    }
+
+    private sealed class CancellingLogbookEntries : IEnumerable<HomeAssistantLogbookEntry?>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancellingLogbookEntries(CancellationTokenSource cancellation) => _cancellation = cancellation;
+
+        internal int ReadCount { get; private set; }
+
+        public IEnumerator<HomeAssistantLogbookEntry?> GetEnumerator()
+        {
+            for (var index = 0; index < 1000; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 2) throw new InvalidOperationException("Logbook validation continued after cancellation.");
+                yield return new HomeAssistantLogbookEntry { When = DateTimeOffset.UtcNow };
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

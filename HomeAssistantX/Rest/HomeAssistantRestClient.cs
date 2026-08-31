@@ -520,28 +520,13 @@ public sealed partial class HomeAssistantRestClient : IDisposable
     private static string EscapePath(string value, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var start = 0;
-        while (start < value.Length && char.IsWhiteSpace(value[start]))
-        {
-            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            start++;
-        }
-        var end = value.Length - 1;
-        while (end >= start && char.IsWhiteSpace(value[end]))
-        {
-            if (((value.Length - 1 - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            end--;
-        }
-        if (end < start)
+        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty path identifier is required.", nameof(value));
         }
 
-        var normalized = start == 0 && end == value.Length - 1
-            ? value
-            : value.Substring(start, end - start + 1);
         return HomeAssistantUri.EscapeDataString(
-            normalized,
+            CancellationAwareString.Trim(value, cancellationToken),
             cancellationToken);
     }
 

@@ -48,6 +48,8 @@ raw access for custom integrations.
 - persistent and notify-entity messages, plus reconnect-safe persistent-notification updates
 - calendar discovery, timed/all-day event management, and live event-list updates
 - labels and scoped categories, including create/update/delete with explicit nullable-field clearing
+- Energy preferences, validation, solar forecasts, fossil-energy calculations, Recorder long-term statistics, and maintenance
+- typed current weather observations plus daily, hourly, and twice-daily push forecasts
 - OAuth authorization, proactive and rejection-triggered refresh, revocation,
   and host-owned token persistence
 - logs, Repairs, system health, diagnostics, traces, integrations, and updates
@@ -76,6 +78,8 @@ set.
 | Send and receive notifications | `Get-HomeAssistantNotification`, `Send-HomeAssistantNotification`, `Receive-HomeAssistantNotification` | `client.Notifications` |
 | Work with calendars | `Get-HomeAssistantCalendar`, `Get-HomeAssistantCalendarEvent`, `Set-HomeAssistantCalendarEvent`, `Receive-HomeAssistantCalendarEvent` | `client.Calendars` |
 | Work with labels and categories | `Get/Set/Remove-HomeAssistantLabel`, `Get/Set/Remove-HomeAssistantCategory` | `client.Registries` |
+| Inspect Energy and Recorder data | `Get-HomeAssistantEnergy`, `Get-HomeAssistantStatistic`, `Get-HomeAssistantHistory`, `Get-HomeAssistantLogbook` | `client.Energy`, `client.Recorder`, `client.Rest` |
+| Read and stream weather | `Get-HomeAssistantWeather`, `Receive-HomeAssistantWeatherForecast` | `client.Weather` |
 | Receive general events | `Receive-HomeAssistantEvent` | `client.Events`, `client.States` |
 | Inspect and troubleshoot | `Get-HomeAssistantInfo`, `Get-HomeAssistantLog`, `Get-HomeAssistantIssue`, `Get-HomeAssistantTrace`, `Export-HomeAssistantDiagnostic` | `client.Operations` |
 | Inspect Supervisor and OS | `Get-HomeAssistantApp`, `Get-HomeAssistantBackup`, `Get-HomeAssistantJob`, `Get-HomeAssistantUpdate` | `client.Supervisor` |
@@ -292,6 +296,36 @@ Calendar parameter sets distinguish timed and all-day events, while `-Uid`
 selects update behavior. Label/category setters distinguish create from update;
 `-ClearColor`, `-ClearDescription`, and `-ClearIcon` explicitly send `null`
 instead of silently omitting a field.
+
+### Inspect Energy, statistics, history, and weather
+
+```powershell
+Get-HomeAssistantEnergy
+Get-HomeAssistantEnergy -Info
+Get-HomeAssistantEnergy -Validation
+Get-HomeAssistantEnergy -SolarForecast
+Get-HomeAssistantEnergy -FossilConsumption `
+    -StartTime (Get-Date).AddDays(-1) -EndTime (Get-Date) `
+    -EnergyStatisticId sensor.grid_energy `
+    -Co2StatisticId sensor.co2_intensity -Period Hour
+
+Get-HomeAssistantStatistic -Kind Sum
+Get-HomeAssistantStatistic -StatisticId sensor.grid_energy `
+    -StartTime (Get-Date).AddDays(-7) -Period Hour -Type Change, Sum
+Get-HomeAssistantHistory sensor.grid_energy -StartTime (Get-Date).AddHours(-6)
+Get-HomeAssistantLogbook -StartTime (Get-Date).Date -EntityId light.kitchen
+Test-HomeAssistantStatistic
+
+Get-HomeAssistantWeather
+Get-HomeAssistantWeather weather.home -Forecast -ForecastType Daily
+Receive-HomeAssistantWeatherForecast weather.home -ForecastType Hourly -Count 1
+```
+
+Energy sources and solar forecasts may contain integration-defined fields, so
+their named APIs preserve those portions as JSON while typing stable Home
+Assistant fields. Recorder mutation commands use high-impact confirmation and
+validate their parameter sets before `-WhatIf`; clearing statistics and purging
+Recorder data are deliberately explicit operations.
 
 ### Troubleshoot and administer
 

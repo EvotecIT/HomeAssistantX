@@ -1,6 +1,11 @@
 ﻿using HomeAssistantX.Tests.Infrastructure;
 
-using var server = new TestHomeAssistantServer { SendStateChangeBeforeSnapshot = true };
+using var server = new TestHomeAssistantServer
+{
+    SendStateChangeBeforeSnapshot = true,
+    RecorderMetadataResponseJson =
+        "[{\"statistic_id\":\"sensor.grid_energy\",\"source\":\"recorder\",\"name\":\"Grid energy\",\"unit_of_measurement\":\"Wh\",\"statistics_unit_of_measurement\":\"kWh\",\"unit_class\":\"energy\",\"has_mean\":false,\"has_sum\":true}]"
+};
 Console.WriteLine("READY " + server.BaseUri.AbsoluteUri);
 while (await Console.In.ReadLineAsync() is { } command)
 {
@@ -83,6 +88,19 @@ while (await Console.In.ReadLineAsync() is { } command)
         case "CLEAR_LAST_CATEGORY_LIST":
             server.ClearLastWebSocketCommand("config/category_registry/list");
             Console.WriteLine("CATEGORY_LIST_CLEARED");
+            break;
+        case "GET_LAST_RECORDER_IMPORT":
+            Console.WriteLine(server.GetLastWebSocketCommand("recorder/import_statistics") ?? "RECORDER_IMPORT_NONE");
+            break;
+        case "GET_LAST_RECORDER_METADATA_UPDATE":
+            Console.WriteLine(server.GetLastWebSocketCommand("recorder/update_statistics_metadata") ?? "RECORDER_METADATA_NONE");
+            break;
+        case "GET_LAST_RECORDER_METADATA_LIST":
+            Console.WriteLine(server.GetLastWebSocketCommand("recorder/get_statistics_metadata") ?? "RECORDER_METADATA_LIST_NONE");
+            break;
+        case "CLEAR_LAST_RECORDER_METADATA_LIST":
+            server.ClearLastWebSocketCommand("recorder/get_statistics_metadata");
+            Console.WriteLine("RECORDER_METADATA_LIST_CLEARED");
             break;
         case "GET_UNSUBSCRIBE_COUNT":
             Console.WriteLine(server.UnsubscribeCommandCount);

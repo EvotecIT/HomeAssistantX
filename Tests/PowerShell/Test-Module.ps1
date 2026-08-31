@@ -34,6 +34,7 @@ $expectedCommands = @(
     'Get-HomeAssistantCategory',
     'Get-HomeAssistantConnection',
     'Get-HomeAssistantDevice',
+    'Get-HomeAssistantEnergy',
     'Get-HomeAssistantEntity',
     'Get-HomeAssistantFloor',
     'Get-HomeAssistantHistory',
@@ -43,33 +44,42 @@ $expectedCommands = @(
     'Get-HomeAssistantJob',
     'Get-HomeAssistantLabel',
     'Get-HomeAssistantLog',
+    'Get-HomeAssistantLogbook',
     'Get-HomeAssistantNotification',
+    'Get-HomeAssistantStatistic',
     'Get-HomeAssistantTrace',
     'Get-HomeAssistantUpdate',
+    'Get-HomeAssistantWeather',
     'Install-HomeAssistantUpdate',
     'Invoke-HomeAssistantAction',
     'Invoke-HomeAssistantApp',
+    'Invoke-HomeAssistantRecorderMaintenance',
     'Invoke-HomeAssistantRemote',
     'New-HomeAssistantBackup',
     'Receive-HomeAssistantCalendarEvent',
     'Receive-HomeAssistantEvent',
     'Receive-HomeAssistantNotification',
+    'Receive-HomeAssistantWeatherForecast',
     'Remove-HomeAssistantCalendarEvent',
     'Remove-HomeAssistantCategory',
     'Remove-HomeAssistantLabel',
     'Remove-HomeAssistantNotification',
+    'Remove-HomeAssistantStatistic',
     'Restart-HomeAssistant',
     'Send-HomeAssistantNotification',
     'Set-HomeAssistantCalendarEvent',
     'Set-HomeAssistantCategory',
     'Set-HomeAssistantClimate',
     'Set-HomeAssistantCover',
+    'Set-HomeAssistantEnergy',
     'Set-HomeAssistantLabel',
     'Set-HomeAssistantLight',
     'Set-HomeAssistantLock',
     'Set-HomeAssistantMediaPlayer',
+    'Set-HomeAssistantStatistic',
     'Set-HomeAssistantSwitch',
-    'Test-HomeAssistantConfiguration'
+    'Test-HomeAssistantConfiguration',
+    'Test-HomeAssistantStatistic'
 )
 $importedModuleName = (Get-Command -Name Connect-HomeAssistant -ErrorAction Stop).ModuleName
 $actualCommands = @(Get-Command -Module $importedModuleName | Sort-Object -Property Name | Select-Object -ExpandProperty Name)
@@ -80,14 +90,19 @@ if (($actualCommands -join '|') -ne ($expectedCommands -join '|')) {
 $parameterSetContracts = @{
     'Get-HomeAssistantLog'        = @('App', 'Core', 'Host', 'Legacy', 'Supervisor', 'SystemLog')
     'Get-HomeAssistantInfo'       = @('Capabilities', 'Health', 'Overview', 'Supervisor')
+    'Get-HomeAssistantEnergy'     = @('FossilConsumption', 'Info', 'Preferences', 'SolarForecast', 'Validation')
+    'Get-HomeAssistantStatistic'  = @('Catalog', 'Metadata', 'Values')
+    'Get-HomeAssistantWeather'    = @('Current', 'Forecast', 'Units')
     'Install-HomeAssistantUpdate' = @('App', 'Core', 'Entity', 'OperatingSystem', 'Supervisor')
     'Invoke-HomeAssistantAction'  = @('Area', 'Data', 'Device', 'Entity', 'Floor', 'Label')
     'Invoke-HomeAssistantRemote'  = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Invoke-HomeAssistantRecorderMaintenance' = @('Disable', 'Enable', 'Purge', 'PurgeEntities', 'RefreshStatisticsIssues')
     'Remove-HomeAssistantNotification' = @('All', 'Id')
     'Send-HomeAssistantNotification' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label', 'Persistent')
     'Set-HomeAssistantCalendarEvent' = @('CreateAllDay', 'CreateTimed', 'UpdateAllDay', 'UpdateTimed')
     'Set-HomeAssistantCategory'   = @('Create', 'Update')
     'Set-HomeAssistantLabel'      = @('Create', 'Update')
+    'Set-HomeAssistantStatistic'  = @('AdjustSum', 'Import', 'Metadata', 'Unit')
     'Restart-HomeAssistant'       = @('App', 'Core', 'Host', 'Integration', 'Supervisor')
     'Set-HomeAssistantClimate'    = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
     'Set-HomeAssistantCover'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
@@ -114,9 +129,13 @@ foreach ($command in Get-Command -Module $importedModuleName) {
 }
 
 $operationalOutputTypeContracts = @{
+    'Get-HomeAssistantEnergy' = @('HomeAssistantEnergyInfo', 'HomeAssistantEnergyPreferences', 'HomeAssistantFossilEnergyPeriod', 'IReadOnlyDictionary`2', 'JsonElement')
+    'Get-HomeAssistantStatistic' = @('HomeAssistantStatisticMetadata', 'HomeAssistantStatisticSeries')
+    'Get-HomeAssistantWeather' = @('HomeAssistantWeatherForecastUpdate', 'HomeAssistantWeatherObservation', 'IReadOnlyDictionary`2')
     'Install-HomeAssistantUpdate' = @('HomeAssistantServiceCallResult', 'JsonElement')
     'Invoke-HomeAssistantApp' = @('JsonElement')
     'Restart-HomeAssistant' = @('HomeAssistantIntegrationOperationResult', 'JsonElement')
+    'Test-HomeAssistantStatistic' = @('JsonElement')
 }
 foreach ($entry in $operationalOutputTypeContracts.GetEnumerator()) {
     $actualTypes = @((Get-Command -Name $entry.Key).OutputType.Type.Name | Sort-Object)
@@ -124,6 +143,12 @@ foreach ($entry in $operationalOutputTypeContracts.GetEnumerator()) {
     if (($actualTypes -join '|') -ne ($expectedTypes -join '|')) {
         throw "Unexpected output types for $($entry.Key): $($actualTypes -join ', ')"
     }
+}
+
+$recorderIssuesSet = (Get-Command -Name Invoke-HomeAssistantRecorderMaintenance).ParameterSets |
+    Where-Object Name -EQ 'RefreshStatisticsIssues'
+if ($recorderIssuesSet.Parameters.Name -contains 'PassThru') {
+    throw 'Recorder statistics-issue refresh advertises PassThru without producing an operation result.'
 }
 
 $mediaParameters = (Get-Command -Name Set-HomeAssistantMediaPlayer).Parameters
@@ -140,7 +165,7 @@ foreach ($name in 'Action', 'Activity', 'Command', 'RemoteDevice', 'RepeatCount'
     }
 }
 
-foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSwitch') {
+foreach ($name in 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch') {
     if (-not (Get-Command -Name $name).Parameters.ContainsKey('WhatIf')) {
         throw "$name must support ShouldProcess/WhatIf."
     }
@@ -305,6 +330,37 @@ try {
         throw 'A destructive parameter set accepted its mandatory selector switch as an explicit false value.'
     }
 
+    foreach ($invalidEnergyJson in '[null]', '[1]', '["sensor.energy"]', '[{"type":"grid","type":"solar"}]') {
+        $invalidEnergyRejected = $false
+        try {
+            Set-HomeAssistantEnergy -DeviceConsumptionJson $invalidEnergyJson -WhatIf -ErrorAction Stop
+        } catch {
+            $invalidEnergyRejected = $true
+        }
+        if (-not $invalidEnergyRejected) {
+            throw 'The Energy cmdlet accepted a non-object preference entry before WhatIf confirmation.'
+        }
+    }
+
+    $blankLogbookFilterRejected = $false
+    try {
+        Get-HomeAssistantLogbook -EntityId ' ' -ErrorAction Stop
+    } catch {
+        $blankLogbookFilterRejected = $true
+    }
+    if (-not $blankLogbookFilterRejected) {
+        throw 'The logbook cmdlet broadened a blank entity filter to the whole installation.'
+    }
+
+    $endOnlyLogbook = @(Get-HomeAssistantLogbook -EndTime '2026-08-24T12:00:01Z' -ErrorAction Stop)
+    $endOnlyHistory = @(Get-HomeAssistantHistory -EntityId sensor.kitchen_temperature -EndTime '2026-08-24T12:00:00Z' -ErrorAction Stop)
+    if ($endOnlyLogbook.Count -ne 1 -or $endOnlyLogbook[0].Message -ne 'turned on') {
+        throw 'The logbook cmdlet did not preserve Home Assistant default-start behavior for an end-only query.'
+    }
+    if ($endOnlyHistory.Count -ne 1 -or $endOnlyHistory[0].EntityId -ne 'sensor.kitchen_temperature') {
+        throw 'The history cmdlet did not preserve Home Assistant default-start behavior for an end-only query.'
+    }
+
     $floors = @(Get-HomeAssistantFloor)
     $areas = @(Get-HomeAssistantArea -Floor Ground)
     $devices = @(Get-HomeAssistantDevice -Area Kitchen)
@@ -327,6 +383,18 @@ try {
     $labelByPaddedNativeId = @(Get-HomeAssistantLabel -Label ' security ')
     $categories = @(Get-HomeAssistantCategory -Scope automation)
     $categoryByPaddedName = @(Get-HomeAssistantCategory -Scope automation -Category ' Comfort ')
+    $energyPreferences = Get-HomeAssistantEnergy
+    $energyInfo = Get-HomeAssistantEnergy -Info
+    $energyValidation = Get-HomeAssistantEnergy -Validation
+    $solarForecast = Get-HomeAssistantEnergy -SolarForecast
+    $fossilEnergy = @(Get-HomeAssistantEnergy -FossilConsumption -StartTime '2026-08-26T10:00:00Z' -EndTime '2026-08-26T12:00:00Z' -EnergyStatisticId sensor.grid_energy -Co2StatisticId sensor.co2_intensity -Period Hour)
+    $statistics = @(Get-HomeAssistantStatistic -Kind Sum)
+    $statisticValues = @(Get-HomeAssistantStatistic -StatisticId sensor.grid_energy -StartTime '2026-08-26T00:00:00Z' -EndTime '2026-08-27T00:00:00Z' -Period Hour -Type Change, Sum)
+    $statisticIssues = Test-HomeAssistantStatistic
+    $weatherForecast = Get-HomeAssistantWeather -EntityId weather.home -Forecast -ForecastType Daily
+    $weatherUnits = Get-HomeAssistantWeather -ConvertibleUnits
+    $weatherUpdates = @(Receive-HomeAssistantWeatherForecast weather.home -ForecastType Hourly -Count 1 -TimeoutSeconds 5)
+    $logbook = @(Get-HomeAssistantLogbook -StartTime '2026-08-24T00:00:00Z' -EndTime '2026-08-26T00:00:00Z' -EntityId light.kitchen)
 
     if ($info.Version -ne '2026.8.3') { throw 'Core information was not returned.' }
     if (-not [object]::ReferenceEquals($connection, $defaultConnection)) { throw 'Connect-HomeAssistant did not establish the runspace default.' }
@@ -390,6 +458,18 @@ try {
         $server.StandardInput.Flush()
         if ($server.StandardOutput.ReadLine() -ne 'LABEL_REGISTRY_AVAILABLE') { throw 'The label-registry availability fixture did not reset.' }
     }
+    if ($energyPreferences.EnergySources[0].GetProperty('type').GetString() -ne 'solar') { throw 'Energy preferences were not returned.' }
+    if (@($energyInfo.SolarForecastDomains)[0] -ne 'forecast_solar') { throw 'Energy capabilities were not returned.' }
+    if (-not $energyValidation.GetProperty('future_validation').GetProperty('valid').GetBoolean()) { throw 'Energy validation was not returned.' }
+    if (-not $solarForecast.ContainsKey('entry-solar')) { throw 'Solar provider forecasts were not returned.' }
+    if ($fossilEnergy.Count -ne 2 -or $fossilEnergy[0].EnergyKiloWattHours -ne 0.42) { throw 'Fossil energy periods were not returned.' }
+    if ($statistics.Count -ne 1 -or $statistics[0].StatisticId -ne 'sensor.grid_energy') { throw 'Recorder statistics were not listed.' }
+    if ($statisticValues.Count -ne 1 -or $statisticValues[0].Rows[0].Sum -ne 10.5) { throw 'Recorder statistic values were not returned.' }
+    if ($statisticIssues.GetProperty('sensor.grid_energy').GetProperty('issue').GetString() -ne 'unit_changed') { throw 'Recorder statistics validation was not returned.' }
+    if ($weatherForecast.Forecast[0].Condition -ne 'sunny') { throw 'Weather forecast was not returned.' }
+    if (-not $weatherUnits.ContainsKey('temperature_unit')) { throw 'Weather convertible units were not returned.' }
+    if ($weatherUpdates.Count -ne 1 -or $weatherUpdates[0].Forecast[0].Condition -ne 'rainy') { throw 'Weather forecast streaming was not returned.' }
+    if ($logbook.Count -ne 1 -or $logbook[0].Message -ne 'turned on') { throw 'Recorder logbook activity was not returned.' }
 
     $server.StandardInput.WriteLine('SET_CASE_DISTINCT_LABELS')
     $server.StandardInput.Flush()
@@ -467,6 +547,105 @@ try {
     $null = Set-HomeAssistantCategory -Scope automation -Name Comfort -ClearIcon:$false -WhatIf
     $null = Set-HomeAssistantLabel -Name Security -ClearColor:$false -ClearDescription:$false -ClearIcon:$false -WhatIf
     $null = Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Holiday -StartDate 2026-08-27 -EndDate 2026-08-28 -Confirm:$false
+    $null = Set-HomeAssistantEnergy -DeviceConsumptionJson '[]' -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement MWh -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1.5 -StartTime '2026-08-26T00:00:00Z' -Unit kWh -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement '' -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ChangeUnit -OldUnit '' -NewUnit kWh -WhatIf
+    $null = Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1.5 -StartTime '2026-08-26T00:00:00Z' -Unit '' -WhatIf
+    $null = Remove-HomeAssistantStatistic sensor.grid_energy -WhatIf
+    $null = Invoke-HomeAssistantRecorderMaintenance -Purge -KeepDays 30 -WhatIf
+    $null = Invoke-HomeAssistantRecorderMaintenance -RefreshStatisticsIssues -Confirm:$false
+
+    $null = Set-HomeAssistantStatistic -StatisticId ' sensor.grid_energy ' -UnitOfMeasurement MWh -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_UPDATE')
+    $server.StandardInput.Flush()
+    $metadataUpdate = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($metadataUpdate.unit_class -ne 'energy' -or $metadataUpdate.unit_of_measurement -ne 'MWh') {
+        throw 'The statistics metadata update did not preserve the existing unit class.'
+    }
+
+    $null = Set-HomeAssistantStatistic -StatisticId ' sensor.grid_energy ' -UnitClass power -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_UPDATE')
+    $server.StandardInput.Flush()
+    $metadataUpdate = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($metadataUpdate.unit_class -ne 'power' -or $metadataUpdate.unit_of_measurement -ne 'kWh') {
+        throw 'The statistics metadata update did not preserve the existing unit of measurement.'
+    }
+
+    $importMetadata = [HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata]::new()
+    $importMetadata.StatisticId = ' external:daily_energy '
+    $importMetadata.Source = ' external '
+    $importMetadata.HasMean = $false
+    $importMetadata.HasSum = $true
+    $importMetadata.MeanType = [HomeAssistantX.Recorder.HomeAssistantStatisticMeanType]::None
+    $importMetadata.UnitClass = 'energy'
+    $importMetadata.UnitOfMeasurement = 'kWh'
+    $importRows = 1, 2 | ForEach-Object {
+        $row = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
+        $row.Start = [DateTimeOffset]::Parse("2026-08-26T0$($_):00:00Z")
+        $row.Sum = [double] $_
+        $row
+    }
+    $importRows | Set-HomeAssistantStatistic -ImportMetadata $importMetadata -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_RECORDER_IMPORT')
+    $server.StandardInput.Flush()
+    $importCommand = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($importCommand.stats.Count -ne 2 -or $importCommand.metadata.has_mean -ne $false -or $importCommand.metadata.statistic_id -ne 'external:daily_energy' -or $importCommand.metadata.source -ne 'external') {
+        throw 'Piped statistics rows were not imported as one complete batch.'
+    }
+
+    $reusedImportRow = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
+    & {
+        $reusedImportRow.Start = [DateTimeOffset]::Parse('2026-08-26T03:00:00Z')
+        $reusedImportRow.Sum = 3
+        Write-Output $reusedImportRow
+        $reusedImportRow.Start = [DateTimeOffset]::Parse('2026-08-26T04:00:00Z')
+        $reusedImportRow.Sum = 4
+        Write-Output $reusedImportRow
+    } | Set-HomeAssistantStatistic -ImportMetadata $importMetadata -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_RECORDER_IMPORT')
+    $server.StandardInput.Flush()
+    $reusedImportCommand = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($reusedImportCommand.stats.Count -ne 2 -or $reusedImportCommand.stats[0].sum -ne 3 -or $reusedImportCommand.stats[1].sum -ne 4) {
+        throw 'Piped statistics rows were not snapshotted when each pipeline record arrived.'
+    }
+
+    $recorderPreview = @(
+        Remove-HomeAssistantStatistic sensor.grid_energy -WhatIf 6>&1
+        Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement MWh -WhatIf 6>&1
+        $importRows | Set-HomeAssistantStatistic -ImportMetadata $importMetadata -WhatIf 6>&1
+    ) | Out-String
+    if ($recorderPreview.Contains('sensor.grid_energy') -or $recorderPreview.Contains('external:daily_energy')) {
+        throw 'Recorder WhatIf output exposed statistic identifiers.'
+    }
+
+    $invalidImportSource = [HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata]::new()
+    $invalidImportSource.StatisticId = 'external:source_mismatch'
+    $invalidImportSource.Source = 'homeassistantx'
+    $invalidImportSource.HasSum = $true
+    $invalidImportSource.MeanType = [HomeAssistantX.Recorder.HomeAssistantStatisticMeanType]::None
+    $invalidImportTime = [HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata]::new()
+    $invalidImportTime.StatisticId = 'external:unaligned'
+    $invalidImportTime.Source = 'external'
+    $invalidImportTime.HasSum = $true
+    $invalidImportTime.MeanType = [HomeAssistantX.Recorder.HomeAssistantStatisticMeanType]::None
+    $alignedImportRow = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
+    $alignedImportRow.Start = [DateTimeOffset]::Parse('2026-08-26T01:00:00Z')
+    $alignedImportRow.Sum = 1
+    $unalignedImportRow = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
+    $unalignedImportRow.Start = [DateTimeOffset]::Parse('2026-08-26T01:01:00Z')
+    $unalignedImportRow.Sum = 1
+    $invalidRangeMetadata = [HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata]::new()
+    $invalidRangeMetadata.StatisticId = 'external:invalid_range'
+    $invalidRangeMetadata.Source = 'external'
+    $invalidRangeMetadata.HasMean = $true
+    $invalidRangeMetadata.MeanType = [HomeAssistantX.Recorder.HomeAssistantStatisticMeanType]::Arithmetic
+    $invalidRangeRow = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
+    $invalidRangeRow.Start = [DateTimeOffset]::Parse('2026-08-26T01:00:00Z')
+    $invalidRangeRow.Mean = 5
+    $invalidRangeRow.Minimum = 10
+    $invalidRangeRow.Maximum = 1
 
     foreach ($invalidPlatformData in @(
         { Set-HomeAssistantLabel -LabelId security -WhatIf -ErrorAction Stop },
@@ -483,7 +662,21 @@ try {
         { Set-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceRange THISANDFUTURE -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-28 -WhatIf -ErrorAction Stop },
         { Remove-HomeAssistantCalendarEvent -EntityId calendar.home -Uid event-1 -RecurrenceId 20260827 -RecurrenceRange THIS -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCalendarEvent -EntityId calendar.Home -Summary Invalid -StartDate 2026-08-27 -EndDate 2026-08-28 -WhatIf -ErrorAction Stop },
-        { Remove-HomeAssistantCalendarEvent -EntityId calendar.Home -Uid event-1 -WhatIf -ErrorAction Stop }
+        { Remove-HomeAssistantCalendarEvent -EntityId calendar.Home -Uid event-1 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantEnergy -DeviceConsumptionJson '{}' -WhatIf -ErrorAction Stop },
+        { $alignedImportRow | Set-HomeAssistantStatistic -ImportMetadata $invalidImportSource -WhatIf -ErrorAction Stop },
+        { $unalignedImportRow | Set-HomeAssistantStatistic -ImportMetadata $invalidImportTime -WhatIf -ErrorAction Stop },
+        { $invalidRangeRow | Set-HomeAssistantStatistic -ImportMetadata $invalidRangeMetadata -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum ([double]::NaN) -StartTime '2026-08-26T00:00:00Z' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitClass energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantStatistic ' ' -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain SENSOR -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain ' ' -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.kitchen -KeepDays -1 -WhatIf -ErrorAction Stop }
     )) {
         $rejected = $false
         try { $null = & $invalidPlatformData } catch { $rejected = $true }
@@ -625,6 +818,12 @@ try {
         }
     }
 
+    $server.StandardInput.WriteLine('CLEAR_LAST_RECORDER_METADATA_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'RECORDER_METADATA_LIST_CLEARED') {
+        throw 'Could not establish the Recorder metadata-list command baseline.'
+    }
+
     foreach ($invalidControl in @(
         { Set-HomeAssistantLight -Area Kitchen -ColorTemperatureKelvin 3000 -RgbColor 10, 20, 30 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
@@ -636,6 +835,16 @@ try {
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Source ' ' -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -SoundMode ' ' -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Enqueue 99 -MediaContentId test -MediaContentType music -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantClimate -Area Kitchen -Temperature 21 -HvacMode ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantClimate -Area Kitchen -FanMode ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ChangeUnit -OldUnit ' ' -NewUnit MWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ChangeUnit -OldUnit kWh -NewUnit ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 1 -StartTime ([DateTimeOffset]::UtcNow) -Unit ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -AdjustSum 0 -StartTime ([DateTimeOffset]::UtcNow) -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitClass ' ' -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitClass Energy -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitClass ' energy ' -WhatIf -ErrorAction Stop },
+        { $invalidImportUnit = [HomeAssistantX.Recorder.HomeAssistantStatisticImportMetadata]::new(); $invalidImportUnit.StatisticId = 'external:blank_unit'; $invalidImportUnit.Source = 'external'; $invalidImportUnit.HasSum = $true; $invalidImportUnit.UnitOfMeasurement = ' '; $alignedImportRow | Set-HomeAssistantStatistic -ImportMetadata $invalidImportUnit -WhatIf -ErrorAction Stop },
         { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -EntityId update.home_assistant_core_update -Version ' ' -WhatIf -ErrorAction Stop }
         { Install-HomeAssistantUpdate -Core -Version ' ' -WhatIf -ErrorAction Stop }
@@ -651,12 +860,20 @@ try {
         $invalidEnumRejected = $false
         try {
             $null = & $invalidControl
+        } catch [System.Management.Automation.CommandNotFoundException] {
+            throw "A validation contract referenced an unavailable command: $($_.Exception.Message)"
         } catch {
             $invalidEnumRejected = $true
         }
         if (-not $invalidEnumRejected) {
             throw 'A typed operation accepted invalid input under WhatIf.'
         }
+    }
+
+    $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_LIST')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'RECORDER_METADATA_LIST_NONE') {
+        throw 'Invalid Recorder metadata input queried Home Assistant before local preflight completed.'
     }
 
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')

@@ -41,6 +41,8 @@ public sealed class GetHomeAssistantHistoryCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        if (StartTime.HasValue && EndTime.HasValue && EndTime <= StartTime)
+            throw new ArgumentOutOfRangeException(nameof(EndTime), "EndTime must be after StartTime.");
         var query = new HomeAssistantHistoryQuery(EntityId)
         {
             StartTime = StartTime,

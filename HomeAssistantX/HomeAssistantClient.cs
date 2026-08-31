@@ -4,16 +4,19 @@ using HomeAssistantX.Configuration;
 using HomeAssistantX.Controls;
 using HomeAssistantX.Calendars;
 using HomeAssistantX.Events;
+using HomeAssistantX.Energy;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Inventory;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Notifications;
+using HomeAssistantX.Recorder;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.Systems;
 using HomeAssistantX.Supervisor;
 using HomeAssistantX.WebSockets;
+using HomeAssistantX.Weather;
 
 namespace HomeAssistantX;
 
@@ -33,6 +36,9 @@ public sealed class HomeAssistantClient : IDisposable
         Registries = new HomeAssistantRegistryClient(WebSocket);
         Calendars = new HomeAssistantCalendarClient(Rest, WebSocket);
         Notifications = new HomeAssistantNotificationClient(Services, WebSocket);
+        Energy = new HomeAssistantEnergyClient(WebSocket, Rest);
+        Recorder = new HomeAssistantRecorderClient(Rest, WebSocket, Services);
+        Weather = new HomeAssistantWeatherClient(States, Services, WebSocket);
         Inventory = new HomeAssistantInventoryClient(Registries, States, Services);
         Controls = new HomeAssistantControlsClient(Services, States, options);
         System = new HomeAssistantSystemClient(WebSocket);
@@ -59,6 +65,15 @@ public sealed class HomeAssistantClient : IDisposable
 
     /// <summary>Provides persistent and targeted notifications, including live persistent-notification updates.</summary>
     public HomeAssistantNotificationClient Notifications { get; }
+
+    /// <summary>Provides Energy dashboard preferences, validation, forecasts, and fossil-energy calculations.</summary>
+    public HomeAssistantEnergyClient Energy { get; }
+
+    /// <summary>Provides Recorder statistics and maintenance operations.</summary>
+    public HomeAssistantRecorderClient Recorder { get; }
+
+    /// <summary>Provides typed current weather observations and push-based forecasts.</summary>
+    public HomeAssistantWeatherClient Weather { get; }
 
     /// <summary>Provides a joined, queryable view of the house and its available actions.</summary>
     public HomeAssistantInventoryClient Inventory { get; }

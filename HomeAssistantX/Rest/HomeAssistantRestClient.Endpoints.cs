@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using HomeAssistantX.Calendars;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
@@ -34,10 +35,12 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentNullException(nameof(query));
         }
 
+        ValidateOptionalTimeRange(query.StartTime, query.EndTime, nameof(query));
+
         var path = "api/history/period";
         if (query.StartTime.HasValue)
         {
-            path += "/" + EscapeTimestamp(query.StartTime.Value);
+            path += "/" + EscapeTimestamp(query.StartTime.Value, cancellationToken);
         }
 
         var parameters = new List<KeyValuePair<string, string?>>
@@ -51,7 +54,7 @@ public sealed partial class HomeAssistantRestClient
 
         var response = await SendHomeAssistantAsync<HomeAssistantState[][]>(
             HttpMethod.Get,
-            AppendQuery(path, parameters),
+            AppendQuery(path, parameters, cancellationToken),
             null,
             cancellationToken).ConfigureAwait(false);
         return response;
@@ -63,24 +66,79 @@ public sealed partial class HomeAssistantRestClient
         CancellationToken cancellationToken = default)
     {
         query ??= new HomeAssistantLogbookQuery();
+        var startTime = query.StartTime;
+        var endTime = query.EndTime;
+        var entityId = query.EntityId;
+        string? expectedEntityId = null;
+        ValidateOptionalTimeRange(startTime, endTime, nameof(query));
         var path = "api/logbook";
-        if (query.StartTime.HasValue)
+        if (startTime.HasValue)
         {
-            path += "/" + EscapeTimestamp(query.StartTime.Value);
+            path += "/" + EscapeTimestamp(startTime.Value, cancellationToken);
         }
 
         var parameters = new List<KeyValuePair<string, string?>>();
-        AddTimestamp(parameters, "end_time", query.EndTime);
-        if (!string.IsNullOrWhiteSpace(query.EntityId))
+        AddTimestamp(parameters, "end_time", endTime);
+        if (entityId is not null)
         {
-            parameters.Add(new KeyValuePair<string, string?>("entity", NormalizeEntityId(query.EntityId!, cancellationToken)));
+            expectedEntityId = NormalizeEntityId(entityId, cancellationToken);
+            parameters.Add(new KeyValuePair<string, string?>(
+                "entity",
+                expectedEntityId));
         }
 
-        return await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
+        var rawEntries = await SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Get,
-            AppendQuery(path, parameters),
+            AppendQuery(path, parameters, cancellationToken),
             null,
             cancellationToken).ConfigureAwait(false);
+        if (rawEntries.ValueKind != JsonValueKind.Array
+            || HomeAssistantJson.HasDuplicateProperties(rawEntries, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant logbook response contained duplicate properties or was not an array.");
+        }
+        var entries = HomeAssistantJson.DeserializeResponse<HomeAssistantLogbookEntry[]>(
+            rawEntries,
+            "The Home Assistant logbook response could not be decoded.",
+            cancellationToken: cancellationToken);
+        ValidateLogbookEntries(entries, startTime, endTime, expectedEntityId, cancellationToken);
+        return entries;
+    }
+
+    internal static void ValidateLogbookEntries(
+        IEnumerable<HomeAssistantLogbookEntry?> entries,
+        DateTimeOffset? startTime,
+        DateTimeOffset? endTime,
+        string? expectedEntityId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (entry is null || !entry.When.HasValue)
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant logbook response contained an entry without a timestamp.");
+            }
+
+            if (startTime.HasValue && entry.When.Value < startTime.Value
+                || endTime.HasValue && entry.When.Value >= endTime.Value)
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant logbook response contained an entry outside the requested time range.");
+            }
+
+            if (expectedEntityId is not null
+                && (!HomeAssistantEntityId.TryNormalize(entry.EntityId, cancellationToken, out var returnedEntityId)
+                    || !CancellationAwareString.EqualsOrdinal(returnedEntityId, entry.EntityId, cancellationToken)
+                    || !CancellationAwareString.EqualsOrdinal(returnedEntityId, expectedEntityId, cancellationToken)))
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant logbook response contained an entry for an unexpected entity.");
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     /// <summary>Gets the current Home Assistant error log as plaintext.</summary>
@@ -89,12 +147,23 @@ public sealed partial class HomeAssistantRestClient
         return SendTextAsync(HttpMethod.Get, "api/error_log", null, cancellationToken);
     }
 
+    private static void ValidateOptionalTimeRange(
+        DateTimeOffset? startTime,
+        DateTimeOffset? endTime,
+        string parameterName)
+    {
+        if (startTime.HasValue && endTime.HasValue && endTime.Value <= startTime.Value)
+            throw new ArgumentOutOfRangeException(parameterName, "The end time must be after the start time.");
+    }
+
     /// <summary>Gets an image from a camera entity.</summary>
     public Task<byte[]> GetCameraImageAsync(string entityId, CancellationToken cancellationToken = default)
     {
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", cancellationToken, out var normalizedEntityId))
             throw new ArgumentException("A camera entity identifier is required.", nameof(entityId));
-        return GetBytesAsync("api/camera_proxy/" + EscapePath(normalizedEntityId, cancellationToken), cancellationToken);
+        return GetBytesAsync(
+            "api/camera_proxy/" + EscapePath(normalizedEntityId, cancellationToken),
+            cancellationToken);
     }
 
     /// <summary>Gets all calendar entities.</summary>
@@ -184,7 +253,8 @@ public sealed partial class HomeAssistantRestClient
             {
                 new KeyValuePair<string, string?>("start", FormatTimestamp(start)),
                 new KeyValuePair<string, string?>("end", FormatTimestamp(end))
-            });
+            },
+            cancellationToken);
         var events = await SendHomeAssistantAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
             .ConfigureAwait(false);
         HomeAssistantCalendarClient.ValidateEvents(events, cancellationToken);
@@ -322,26 +392,31 @@ public sealed partial class HomeAssistantRestClient
         }
     }
 
-    private static string AppendQuery(string path, IEnumerable<KeyValuePair<string, string?>> parameters)
+    private static string AppendQuery(
+        string path,
+        IEnumerable<KeyValuePair<string, string?>> parameters,
+        CancellationToken cancellationToken)
     {
         var query = new StringBuilder();
         foreach (var parameter in parameters)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             query.Append(query.Length == 0 ? '?' : '&');
-            query.Append(Uri.EscapeDataString(parameter.Key));
+            query.Append(HomeAssistantUri.EscapeDataString(parameter.Key, cancellationToken));
             if (parameter.Value is not null)
             {
                 query.Append('=');
-                query.Append(Uri.EscapeDataString(parameter.Value));
+                query.Append(HomeAssistantUri.EscapeDataString(parameter.Value, cancellationToken));
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return path + query;
     }
 
-    private static string EscapeTimestamp(DateTimeOffset value)
+    private static string EscapeTimestamp(DateTimeOffset value, CancellationToken cancellationToken)
     {
-        return Uri.EscapeDataString(FormatTimestamp(value));
+        return HomeAssistantUri.EscapeDataString(FormatTimestamp(value), cancellationToken);
     }
 
     private static string FormatTimestamp(DateTimeOffset value)

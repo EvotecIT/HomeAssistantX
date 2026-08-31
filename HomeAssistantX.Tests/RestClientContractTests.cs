@@ -23,6 +23,28 @@ public sealed class RestClientContractTests
     }
 
     [Fact]
+    public async Task HistoricalEndTimesCanUseHomeAssistantDefaultStartsAndOrderedExplicitRanges()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var end = new DateTimeOffset(2026, 8, 24, 12, 0, 1, TimeSpan.Zero);
+
+        await client.Rest.GetLogbookAsync(new HomeAssistantX.Rest.HomeAssistantLogbookQuery { EndTime = end });
+        Assert.StartsWith("/api/logbook?", server.LastRequestPath, StringComparison.Ordinal);
+        Assert.Contains("end_time=", server.LastRequestPath, StringComparison.Ordinal);
+
+        await client.Rest.GetHistoryAsync(
+            new HomeAssistantX.Rest.HomeAssistantHistoryQuery("sensor.kitchen_temperature") { EndTime = end });
+        Assert.StartsWith("/api/history/period?", server.LastRequestPath, StringComparison.Ordinal);
+        Assert.Contains("end_time=", server.LastRequestPath, StringComparison.Ordinal);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Rest.GetLogbookAsync(
+            new HomeAssistantX.Rest.HomeAssistantLogbookQuery { StartTime = end, EndTime = end }));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Rest.GetHistoryAsync(
+            new HomeAssistantX.Rest.HomeAssistantHistoryQuery("sensor.kitchen_temperature") { StartTime = end, EndTime = end }));
+    }
+
+    [Fact]
     public async Task TypedStateReadRejectsAValidButDifferentResponseEntity()
     {
         using var server = new TestHomeAssistantServer
