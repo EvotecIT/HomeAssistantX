@@ -339,7 +339,7 @@ public sealed class HomeAssistantDashboardClient
         RequireDashboardVisibility(value, "A dashboard mutation response did not contain its required visibility fields.", cancellationToken);
         if (expectedDashboardId is not null && !string.Equals(dashboard.Id, expectedDashboardId, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested identifier.");
-        if (expectedUrlPath is not null && !string.Equals(dashboard.UrlPath, expectedUrlPath, StringComparison.Ordinal))
+        if (expectedUrlPath is not null && !CancellationAwareString.EqualsOrdinal(dashboard.UrlPath, expectedUrlPath, cancellationToken))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested URL path.");
         if (expectedTitle is not null && !CancellationAwareString.EqualsOrdinal(dashboard.Title, expectedTitle, cancellationToken))
             throw new HomeAssistantProtocolException("A dashboard mutation response did not match the requested title.");

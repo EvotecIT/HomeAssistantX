@@ -1382,13 +1382,26 @@ public sealed class CamerasDashboardsAutomationContractTests
                 }
 
                 var temporary = Path.Combine(directory, "temporary-" + Guid.NewGuid().ToString("N") + ".bin");
-                File.WriteAllBytes(temporary, new byte[] { 2 });
-
-                HomeAssistantAtomicFile.CommitTemporaryFile(
-                    temporary,
-                    destination,
-                    overwrite: true,
-                    CancellationToken.None);
+                if (OperatingSystem.IsWindows())
+                {
+                    using var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary);
+                    stream.WriteByte(2);
+                    HomeAssistantAtomicFile.CommitTemporaryFile(
+                        stream,
+                        temporary,
+                        destination,
+                        overwrite: true,
+                        CancellationToken.None);
+                }
+                else
+                {
+                    File.WriteAllBytes(temporary, new byte[] { 2 });
+                    HomeAssistantAtomicFile.CommitTemporaryFile(
+                        temporary,
+                        destination,
+                        overwrite: true,
+                        CancellationToken.None);
+                }
 
                 Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
                 Assert.False(File.Exists(temporary));
@@ -1504,13 +1517,44 @@ public sealed class CamerasDashboardsAutomationContractTests
             {
                 Assert.True(HomeAssistantAtomicFile.IsWindowsTemporaryDaclProtected(stream));
                 stream.WriteByte(42);
+                Assert.ThrowsAny<IOException>(() => File.Move(temporary, temporary + ".swapped"));
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None);
             }
 
-            HomeAssistantAtomicFile.CommitTemporaryFile(
-                temporary,
-                destination,
-                overwrite: true,
-                CancellationToken.None);
+            Assert.Equal(new byte[] { 42 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WindowsPinnedTemporaryExportsCommitIntoAnAbsentDestination()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-pinned-windows-temp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        var destination = Path.Combine(directory, "snapshot.jpg");
+        try
+        {
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(42);
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: false,
+                    CancellationToken.None);
+            }
 
             Assert.Equal(new byte[] { 42 }, File.ReadAllBytes(destination));
             Assert.False(File.Exists(temporary));
@@ -1783,7 +1827,7 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
-    public void WindowsAtomicExportsRetryWhenDestinationAppearsBeforeNoReplaceMove()
+    public void WindowsPinnedTemporaryExportsDoNotReplaceAnExistingDestinationWithoutForce()
     {
         if (!OperatingSystem.IsWindows()) return;
         var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-windows-race-" + Guid.NewGuid().ToString("N"));
@@ -1792,24 +1836,20 @@ public sealed class CamerasDashboardsAutomationContractTests
         var temporary = Path.Combine(directory, "temporary.bin");
         try
         {
-            File.WriteAllBytes(temporary, new byte[] { 2 });
-            var callbackCount = 0;
+            File.WriteAllBytes(destination, new byte[] { 3 });
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(2);
+                Assert.Throws<IOException>(() => HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: false,
+                    CancellationToken.None));
+            }
 
-            HomeAssistantAtomicFile.CommitTemporaryFile(
-                temporary,
-                destination,
-                overwrite: true,
-                CancellationToken.None,
-                beforeUnixMetadataRecheck: null,
-                beforeWindowsNoReplaceMove: () =>
-                {
-                    callbackCount++;
-                    File.WriteAllBytes(destination, new byte[] { 3 });
-                });
-
-            Assert.Equal(1, callbackCount);
-            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
-            Assert.False(File.Exists(temporary));
+            Assert.Equal(new byte[] { 3 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
         }
         finally
         {

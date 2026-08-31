@@ -11,20 +11,20 @@ internal static partial class HomeAssistantAtomicFile
     private const uint WindowsFileAttributeNormal = 0x00000080;
     private const uint WindowsFileFlagOverlapped = 0x40000000;
     private const uint WindowsGenericWrite = 0x40000000;
+    private const uint WindowsDelete = 0x00010000;
     private const uint WindowsWriteDac = 0x00040000;
     private const int WindowsInsufficientBuffer = 122;
     private const ushort SecurityDescriptorDaclProtected = 0x1000;
     private const string RestrictiveTemporaryFileSddl = "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;OW)";
-    private const int MoveFileWriteThrough = 0x8;
     private const int WindowsFileExists = 80;
     private const int WindowsAlreadyExists = 183;
-    private const int MaximumWindowsCommitRetries = 4;
+    private const int WindowsFileRenameInfo = 3;
 
     private static FileStream CreateSecureWindowsTemporaryFileStream(string temporaryPath)
     {
         var handle = CreateFile(
             temporaryPath,
-            WindowsGenericWrite | WindowsWriteDac,
+            WindowsGenericWrite | WindowsWriteDac | WindowsDelete,
             0,
             IntPtr.Zero,
             WindowsCreateNew,
@@ -59,6 +59,74 @@ internal static partial class HomeAssistantAtomicFile
             try { File.Delete(temporaryPath); } catch { }
             throw;
         }
+    }
+
+    private static void CommitWindowsPinnedHandle(
+        FileStream temporaryStream,
+        string destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken)
+    {
+        if (temporaryStream is null) throw new ArgumentNullException(nameof(temporaryStream));
+        cancellationToken.ThrowIfCancellationRequested();
+        temporaryStream.Flush(flushToDisk: true);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var fullDestinationPath = Path.GetFullPath(destinationPath);
+        var fileNameBytes = checked(fullDestinationPath.Length * sizeof(char));
+        var fileNameOffset = checked((int)Marshal.OffsetOf<WindowsFileRenameInformation>(
+            nameof(WindowsFileRenameInformation.FileName)));
+        var bufferSize = checked(fileNameOffset + fileNameBytes + sizeof(char));
+        var buffer = Marshal.AllocHGlobal(bufferSize);
+        try
+        {
+            var information = new WindowsFileRenameInformation
+            {
+                ReplaceIfExists = overwrite,
+                RootDirectory = IntPtr.Zero,
+                FileNameLength = checked((uint)fileNameBytes),
+                FileName = '\0'
+            };
+            Marshal.StructureToPtr(information, buffer, fDeleteOld: false);
+            Marshal.Copy(fullDestinationPath.ToCharArray(), 0, IntPtr.Add(buffer, fileNameOffset), fullDestinationPath.Length);
+            Marshal.WriteInt16(buffer, fileNameOffset + fileNameBytes, 0);
+
+            if (SetFileInformationByHandle(
+                    temporaryStream.SafeFileHandle,
+                    WindowsFileRenameInfo,
+                    buffer,
+                    checked((uint)bufferSize)))
+            {
+                return;
+            }
+
+            var error = Marshal.GetLastWin32Error();
+            if (!overwrite
+                && (error == WindowsFileExists || error == WindowsAlreadyExists || File.Exists(destinationPath)))
+            {
+                throw new IOException(
+                    "The destination file already exists. Use -Force to overwrite it.",
+                    new Win32Exception(error));
+            }
+
+            throw new IOException(
+                "The pinned Windows temporary file could not be committed atomically.",
+                new Win32Exception(error));
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WindowsFileRenameInformation
+    {
+        [MarshalAs(UnmanagedType.Bool)]
+        internal bool ReplaceIfExists;
+        internal IntPtr RootDirectory;
+        internal uint FileNameLength;
+        internal char FileName;
     }
 
     private static void ApplyRestrictiveWindowsDacl(FileStream stream)
@@ -130,59 +198,13 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
-    private static void CommitWindowsOverwrite(
-        string temporaryPath,
-        string destinationPath,
-        CancellationToken cancellationToken,
-        Action? beforeNoReplaceMove)
-    {
-        for (var attempt = 0; attempt < MaximumWindowsCommitRetries; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                File.Replace(temporaryPath, destinationPath, null);
-                return;
-            }
-            catch (FileNotFoundException) when (File.Exists(temporaryPath))
-            {
-                // The destination was absent at the replace boundary. The no-replace
-                // move below either commits into that absence or reports a new file.
-            }
-            catch (IOException) when (File.Exists(temporaryPath) && !File.Exists(destinationPath))
-            {
-                // File.Replace can report a platform-specific IOException when its
-                // destination disappears. Never convert that observation into an
-                // overwrite-capable move.
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            beforeNoReplaceMove?.Invoke();
-            beforeNoReplaceMove = null;
-            if (MoveFileEx(temporaryPath, destinationPath, MoveFileWriteThrough))
-            {
-                return;
-            }
-
-            var error = Marshal.GetLastWin32Error();
-            if ((error == WindowsFileExists || error == WindowsAlreadyExists)
-                && File.Exists(temporaryPath))
-            {
-                continue;
-            }
-
-            throw new IOException(
-                "The temporary file could not be committed atomically.",
-                new Win32Exception(error));
-        }
-
-        throw new IOException(
-            "The destination Windows file changed while its security metadata was being preserved.");
-    }
-
-    [DllImport("kernel32.dll", EntryPoint = "MoveFileExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
+    private static extern bool SetFileInformationByHandle(
+        SafeFileHandle file,
+        int fileInformationClass,
+        IntPtr fileInformation,
+        uint bufferSize);
 
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateFile(

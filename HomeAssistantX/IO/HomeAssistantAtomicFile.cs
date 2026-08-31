@@ -101,12 +101,8 @@ internal static partial class HomeAssistantAtomicFile
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            CommitWindowsOverwrite(
-                temporaryPath,
-                destinationPath,
-                cancellationToken,
-                beforeWindowsNoReplaceMove);
-            return;
+            throw new InvalidOperationException(
+                "Windows atomic commits require the still-open secure staging stream so its kernel identity remains pinned.");
         }
 
         CommitUnixOverwrite(
@@ -116,6 +112,25 @@ internal static partial class HomeAssistantAtomicFile
             beforeUnixMetadataRecheck,
             afterUnixExchange,
             beforeUnixCommit);
+    }
+
+    /// <summary>Commits the exact secure staging file represented by the still-open stream.</summary>
+    internal static void CommitTemporaryFile(
+        FileStream temporaryStream,
+        string temporaryPath,
+        string destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken)
+    {
+        if (temporaryStream is null) throw new ArgumentNullException(nameof(temporaryStream));
+        cancellationToken.ThrowIfCancellationRequested();
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            CommitWindowsPinnedHandle(temporaryStream, destinationPath, overwrite, cancellationToken);
+            return;
+        }
+
+        CommitTemporaryFile(temporaryPath, destinationPath, overwrite, cancellationToken);
     }
 
     internal static FileStream CreateSecureTemporaryFileStream(string temporaryPath)

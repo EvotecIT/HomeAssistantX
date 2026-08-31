@@ -67,9 +67,8 @@ public sealed class ExportHomeAssistantDiagnosticCommand : HomeAssistantCmdlet
             using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporaryPath))
             {
                 await HomeAssistantAtomicFile.WriteAllBytesAsync(stream, bytes, CancelToken).ConfigureAwait(false);
+                HomeAssistantAtomicFile.CommitTemporaryFile(stream, temporaryPath, _resolvedPath, Force, CancelToken);
             }
-
-            HomeAssistantAtomicFile.CommitTemporaryFile(temporaryPath, _resolvedPath, Force, CancelToken);
         }
         catch (HomeAssistantAtomicCommitException exception) when (exception.PreserveTemporaryFile)
         {
