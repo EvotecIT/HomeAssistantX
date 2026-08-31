@@ -830,6 +830,46 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task MediaTargetsAreFrozenBeforeCallerOwnedOptionGraphsAreTraversed()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var setTarget = HomeAssistantTarget.ForEntity("media_player.kitchen");
+        var playTarget = HomeAssistantTarget.ForEntity("media_player.office");
+
+        await client.Controls.MediaPlayers.SetAsync(
+            setTarget,
+            new HomeAssistantMediaPlayerOptions
+            {
+                MediaContentId = "media-source://radio/station",
+                MediaContentType = "music",
+                MediaExtra = new Dictionary<string, object?>
+                {
+                    ["probe"] = new SerializationMutationProbe(
+                        () => setTarget.EntityIds = new[] { "media_player.mutated" })
+                }
+            });
+        await client.Controls.MediaPlayers.PlayMediaAsync(
+            playTarget,
+            "media-source://radio/station",
+            "music",
+            new HomeAssistantPlayMediaOptions
+            {
+                Extra = new Dictionary<string, object?>
+                {
+                    ["probe"] = new SerializationMutationProbe(
+                        () => playTarget.EntityIds = new[] { "media_player.mutated" })
+                }
+            });
+
+        Assert.Equal(2, server.ServiceCallBodies.Count);
+        using var set = JsonDocument.Parse(server.ServiceCallBodies[0]);
+        using var play = JsonDocument.Parse(server.ServiceCallBodies[1]);
+        Assert.Equal("media_player.kitchen", set.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+        Assert.Equal("media_player.office", play.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+    }
+
+    [Fact]
     public void MediaOptionSnapshotIsIndependentFromLaterCallerMutation()
     {
         var options = new HomeAssistantMediaPlayerOptions
@@ -1854,6 +1894,22 @@ public sealed class MediaAndRemoteContractTests
             if (Interlocked.Exchange(ref _read, 1) == 0)
             {
                 _onRead();
+            }
+        }
+    }
+
+    private sealed class SerializationMutationProbe
+    {
+        private readonly Action _mutation;
+
+        internal SerializationMutationProbe(Action mutation) => _mutation = mutation;
+
+        public string Value
+        {
+            get
+            {
+                _mutation();
+                return "preserved";
             }
         }
     }

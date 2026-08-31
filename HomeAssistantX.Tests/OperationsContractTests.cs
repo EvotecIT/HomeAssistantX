@@ -15,6 +15,31 @@ namespace HomeAssistantX.Tests;
 public sealed class OperationsContractTests
 {
     [Fact]
+    public void UpdateProjectionDoesNotCoerceNonStringIdentityAttributes()
+    {
+        using var title = JsonDocument.Parse("42");
+        using var installed = JsonDocument.Parse("true");
+        using var latest = JsonDocument.Parse("false");
+        var state = new HomeAssistantState
+        {
+            EntityId = "update.platform",
+            State = "on",
+            Attributes = new Dictionary<string, JsonElement>
+            {
+                ["title"] = title.RootElement.Clone(),
+                ["installed_version"] = installed.RootElement.Clone(),
+                ["latest_version"] = latest.RootElement.Clone()
+            }
+        };
+
+        var update = HomeAssistantUpdateClient.ToUpdate(state, CancellationToken.None);
+
+        Assert.Null(update.Title);
+        Assert.Null(update.InstalledVersion);
+        Assert.Null(update.LatestVersion);
+    }
+
+    [Fact]
     public void UpdateProjectionPreservesCancellationAcrossProviderAttributes()
     {
         using var cancellation = new CancellationTokenSource();

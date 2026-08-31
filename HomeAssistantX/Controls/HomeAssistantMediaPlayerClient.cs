@@ -89,9 +89,9 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var frozenOptions = options.Snapshot(cancellationToken);
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
             .NormalizeForDomain(Domain, cancellationToken);
+        var frozenOptions = options.Snapshot(cancellationToken);
         var power = frozenOptions.Power;
         var playback = frozenOptions.Playback;
         var volumePercent = frozenOptions.VolumePercent;
@@ -369,6 +369,8 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
+            .NormalizeForDomain(Domain, cancellationToken);
         mediaContentId = ControlValidation.RequiredUnchanged(
             mediaContentId,
             nameof(mediaContentId),
@@ -392,7 +394,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var frozenExtra = extra;
         return CallAsync(
             "play_media",
-            target,
+            frozenTarget,
             call =>
             {
                 call.WithData("media_content_id", mediaContentId)
@@ -431,11 +433,13 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
     {
         cancellationToken.ThrowIfCancellationRequested();
         var context = CaptureContext(cancellationToken);
+        var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
+            .NormalizeForDomain(Domain, cancellationToken);
         var frozenPlayMediaOptions = playMediaOptions?.Snapshot(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (settings is not null)
         {
-            results.AddRange(await SetAsync(target, settings, context, cancellationToken).ConfigureAwait(false));
+            results.AddRange(await SetAsync(frozenTarget, settings, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (volumeStep.HasValue)
@@ -446,12 +450,12 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 HomeAssistantMediaVolumeStepAction.Down => "volume_down",
                 _ => throw new ArgumentOutOfRangeException(nameof(volumeStep), volumeStep, "Unsupported volume-step action.")
             };
-            results.Add(await CallAsync(service, target, null, context, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync(service, frozenTarget, null, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (clearPlaylist)
         {
-            results.Add(await CallAsync("clear_playlist", target, null, context, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("clear_playlist", frozenTarget, null, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (groupMembers is not null)
@@ -459,7 +463,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             var members = NormalizeEntityIds(groupMembers, nameof(groupMembers), cancellationToken);
             results.Add(await CallAsync(
                 "join",
-                target,
+                frozenTarget,
                 call => call.WithData("group_members", members),
                 context,
                 cancellationToken).ConfigureAwait(false));
@@ -467,7 +471,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
         if (unjoin)
         {
-            results.Add(await CallAsync("unjoin", target, null, context, cancellationToken).ConfigureAwait(false));
+            results.Add(await CallAsync("unjoin", frozenTarget, null, context, cancellationToken).ConfigureAwait(false));
         }
 
         if (mediaContentId is not null || mediaContentType is not null)
@@ -491,7 +495,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             var frozenExtra = frozenPlayMediaOptions?.Extra;
             results.Add(await CallAsync(
                 "play_media",
-                target,
+                frozenTarget,
                 call =>
                 {
                     call.WithData("media_content_id", mediaContentId)
@@ -520,7 +524,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             var position = ControlValidation.Duration(seekPosition.Value, nameof(seekPosition))!.Value;
             results.Add(await CallAsync(
                 "media_seek",
-                target,
+                frozenTarget,
                 call => call.WithData("seek_position", position.TotalSeconds),
                 context,
                 cancellationToken).ConfigureAwait(false));
@@ -530,7 +534,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         {
             results.Add(await CallAsync(
                 PlaybackAction(playback.Value),
-                target,
+                frozenTarget,
                 null,
                 context,
                 cancellationToken).ConfigureAwait(false));

@@ -124,7 +124,7 @@ public sealed class HomeAssistantUpdateClient
         string name,
         CancellationToken cancellationToken)
     {
-        return HomeAssistantAttributeReader.GetString(state.Attributes, name, cancellationToken);
+        return HomeAssistantAttributeReader.GetStrictString(state.Attributes, name, cancellationToken);
     }
 
     private static bool GetBoolean(
