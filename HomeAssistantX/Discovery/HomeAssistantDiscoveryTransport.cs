@@ -366,8 +366,17 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
         }
     }
 
-    private static async Task<byte[]> ReceiveQueryAsync(UdpClient queryClient)
-        => (await queryClient.ReceiveAsync().ConfigureAwait(false)).Buffer;
+    private async Task<byte[]> ReceiveQueryAsync(UdpClient queryClient)
+    {
+        while (true)
+        {
+            var result = await queryClient.ReceiveAsync().ConfigureAwait(false);
+            if (IsExpectedMdnsSource(result.RemoteEndPoint, _endpoint.Port)) return result.Buffer;
+        }
+    }
+
+    internal static bool IsExpectedMdnsSource(EndPoint? remoteEndPoint, int multicastPort)
+        => remoteEndPoint is IPEndPoint endpoint && endpoint.Port == multicastPort;
 
     private async Task<byte[]> ReceiveMulticastAsync()
     {
@@ -380,6 +389,10 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
                 new ArraySegment<byte>(buffer),
                 SocketFlags.None,
                 remote).ConfigureAwait(false);
+            if (!IsExpectedMdnsSource(result.RemoteEndPoint, _endpoint.Port))
+            {
+                continue;
+            }
             if (!IsExpectedInterface(_interfaceIndex, result.PacketInformation.Interface))
             {
                 continue;

@@ -267,9 +267,11 @@ internal static class ControlValidation
             end--;
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return start == 0 && end == value.Length - 1
-            ? value
-            : value.Substring(start, end - start + 1);
+        return HomeAssistantX.Protocol.CancellationAwareString.Slice(
+            value,
+            start,
+            end - start + 1,
+            cancellationToken);
     }
 
     public static string RequiredUnchanged(

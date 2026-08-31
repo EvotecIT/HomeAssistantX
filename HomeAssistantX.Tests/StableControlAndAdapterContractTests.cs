@@ -1038,6 +1038,12 @@ public sealed class StableControlAndAdapterContractTests
         Assert.True(UdpHomeAssistantDiscoveryTransport.IsExpectedInterface(7, 7));
         Assert.False(UdpHomeAssistantDiscoveryTransport.IsExpectedInterface(7, 8));
         Assert.False(UdpHomeAssistantDiscoveryTransport.IsExpectedInterface(0, 0));
+        Assert.True(UdpHomeAssistantDiscoveryTransport.IsExpectedMdnsSource(
+            new IPEndPoint(IPAddress.Loopback, 5353),
+            5353));
+        Assert.False(UdpHomeAssistantDiscoveryTransport.IsExpectedMdnsSource(
+            new IPEndPoint(IPAddress.Loopback, 12345),
+            5353));
     }
 
     [Fact]
@@ -2351,6 +2357,28 @@ public sealed class StableControlAndAdapterContractTests
             HomeAssistantMobileAppWebhookClient.ParseResponseAsync(
                 Encoding.UTF8.GetBytes("{\"value\":[1,2,3]}"),
                 cancellation.Token));
+    }
+
+    [Fact]
+    public void MobileAppWebhookFinalResponseCopyPrioritizesCancellation()
+    {
+        using var stream = new MemoryStream();
+        stream.Write(new byte[1024 * 1024]);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMobileAppWebhookClient.CopyMemoryStream(stream, cancellation.Token));
+    }
+
+    [Fact]
+    public void ControlStringTrimmingPrioritizesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            ControlValidation.Required(" " + new string('x', 1_000_000) + " ", "value", cancellation.Token));
     }
 
     [Fact]

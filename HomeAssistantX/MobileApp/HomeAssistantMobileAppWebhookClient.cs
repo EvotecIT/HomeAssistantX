@@ -298,7 +298,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             while (true)
             {
                 var read = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
-                if (read == 0) return output.ToArray();
+                if (read == 0) return CopyMemoryStream(output, cancellationToken);
                 if (output.Length + read > maximumResponseBytes) throw new HomeAssistantProtocolException("The mobile-app response exceeded the size limit.");
                 output.Write(buffer, 0, read);
             }
@@ -311,6 +311,23 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         {
             throw new HomeAssistantConnectionException("The Home Assistant mobile-app webhook response could not be read.", ex);
         }
+    }
+
+    internal static byte[] CopyMemoryStream(MemoryStream stream, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var length = checked((int)stream.Length);
+        var result = new byte[length];
+        if (!stream.TryGetBuffer(out var source))
+            throw new HomeAssistantProtocolException("The mobile-app response buffer could not be accessed.");
+        for (var offset = 0; offset < length; offset += 8192)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = Math.Min(8192, length - offset);
+            Buffer.BlockCopy(source.Array!, source.Offset + offset, result, offset, count);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
 #if !NET10_0_OR_GREATER
