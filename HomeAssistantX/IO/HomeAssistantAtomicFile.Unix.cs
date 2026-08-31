@@ -57,6 +57,27 @@ internal static partial class HomeAssistantAtomicFile
         var replacementIdentity = ReadUnixFileMetadata(replacementHandle, includeAccessAcl: false);
         RequireRegularUnixFile(replacementIdentity, "The Unix replacement must be a regular file.");
 
+        if (TryReadUnixFileMetadata(destinationPath, includeAccessAcl: false) is null)
+        {
+            try
+            {
+                File.Move(temporaryPath, destinationPath);
+                return;
+            }
+            catch (IOException) when (File.Exists(destinationPath))
+            {
+                // A destination appeared after the absence check. Continue with
+                // the pinned overwrite path instead of replacing it unchecked.
+            }
+        }
+
+        using var displacedHandle = OpenPinnedUnixMetadataFile(destinationPath);
+        var pinnedDisplaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: false);
+        if (!pinnedDisplaced.IsRegularFile && !pinnedDisplaced.IsSymbolicLink)
+        {
+            throw new IOException("The Unix destination must be a regular file or symbolic link.");
+        }
+
         var exchangeResult = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
             ? RenameMac(temporaryPath, destinationPath, MacRenameSwap)
             : RenameLinux(
@@ -67,35 +88,20 @@ internal static partial class HomeAssistantAtomicFile
                 LinuxRenameExchange);
         if (exchangeResult == 0)
         {
-            // The displaced destination now has temporaryPath. Reading it after the
-            // atomic exchange removes the compare-to-rename race; the replacement
-            // remains restrictive until those exact permissions are applied.
+            // The destination was pinned before the exchange. The displaced entry
+            // must still name that exact inode before any of its metadata is applied.
             try
             {
                 // Once the paths have been exchanged this is a non-cancellable
                 // commit section: either finish or restore the displaced file.
                 afterExchange?.Invoke();
-                var displacedIdentity = ReadUnixFileMetadata(temporaryPath, includeAccessAcl: false);
-                if (displacedIdentity.IsSymbolicLink)
+                RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
+                if (pinnedDisplaced.IsSymbolicLink)
                 {
-                    RequireUnixPathIdentity(temporaryPath, displacedIdentity);
+                    RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
                 }
                 else
                 {
-                    RequireRegularUnixFile(
-                        displacedIdentity,
-                        "The Unix destination must be a regular file or symbolic link.");
-                    using var displacedHandle = OpenPinnedUnixMetadataFile(temporaryPath);
-                    var pinnedDisplaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: false);
-                    RequireRegularUnixFile(
-                        pinnedDisplaced,
-                        "The pinned Unix destination must be a regular file.");
-                    if (!UnixFileMetadata.SameIdentity(displacedIdentity, pinnedDisplaced))
-                    {
-                        throw new IOException(
-                            "The displaced Unix destination changed before its metadata could be pinned.");
-                    }
-
                     var displaced = ReadUnixFileMetadata(
                         displacedHandle,
                         includeAccessAcl: true);
@@ -109,6 +115,15 @@ internal static partial class HomeAssistantAtomicFile
             }
             catch (Exception commitException)
             {
+                if (!UnixPathMatchesIdentity(temporaryPath, pinnedDisplaced))
+                {
+                    throw new HomeAssistantAtomicCommitException(
+                        "The Unix replacement could not be completed because the displaced original was moved by a concurrent directory change. "
+                        + "The replacement remains at the destination with restrictive permissions; no recovery path can be verified.",
+                        commitException,
+                        preserveTemporaryFile: false);
+                }
+
                 var rollbackResult = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
                     ? RenameMac(destinationPath, temporaryPath, MacRenameSwap)
                     : RenameLinux(
@@ -448,6 +463,22 @@ internal static partial class HomeAssistantAtomicFile
         {
             throw new IOException(
                 "The Unix file path no longer names the pinned inode.");
+        }
+    }
+
+    private static bool UnixPathMatchesIdentity(
+        string path,
+        UnixFileMetadata expected)
+    {
+        try
+        {
+            return UnixFileMetadata.SameIdentity(
+                expected,
+                ReadUnixFileMetadata(path, includeAccessAcl: false));
+        }
+        catch (IOException)
+        {
+            return false;
         }
     }
 

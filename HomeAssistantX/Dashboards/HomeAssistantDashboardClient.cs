@@ -47,7 +47,7 @@ public sealed class HomeAssistantDashboardClient
                     embeddedRoute.GetString(),
                     "A frontend panel contained an invalid route.",
                     cancellationToken);
-                if (!string.Equals(panel.UrlPath, route, StringComparison.Ordinal))
+                if (!CancellationAwareString.EqualsOrdinal(panel.UrlPath, route, cancellationToken))
                     throw new HomeAssistantProtocolException("A frontend panel route did not match its registered key.");
             }
             if (string.IsNullOrWhiteSpace(panel.UrlPath))

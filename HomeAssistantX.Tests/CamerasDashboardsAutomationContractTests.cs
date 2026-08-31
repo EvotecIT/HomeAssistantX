@@ -1647,6 +1647,59 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void UnixAtomicExportsRejectDisplacedDestinationSubstitutionBeforeMetadata()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-displaced-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        var movedOriginal = Path.Combine(directory, "moved-original.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(2);
+            }
+            File.SetUnixFileMode(
+                destination,
+                UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+            var exception = Assert.Throws<HomeAssistantAtomicCommitException>(() =>
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None,
+                    beforeUnixMetadataRecheck: null,
+                    beforeWindowsNoReplaceMove: null,
+                    afterUnixExchange: () =>
+                    {
+                        File.Move(temporary, movedOriginal);
+                        File.WriteAllBytes(temporary, new byte[] { 9 });
+                        RunUnixCommand("/bin/chmod", "666", temporary);
+                    }));
+
+            Assert.Contains("concurrent directory change", exception.Message, StringComparison.Ordinal);
+            Assert.False(exception.PreserveTemporaryFile);
+            Assert.Null(exception.RecoveryPath);
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(movedOriginal));
+            Assert.Equal(
+                UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                File.GetUnixFileMode(destination)
+                    & (UnixFileMode.UserRead | UnixFileMode.UserWrite
+                        | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void LinuxAtomicExportsReapplyAccessAclWhenIdentityAndModeStayStable()
     {
         if (!OperatingSystem.IsLinux()
