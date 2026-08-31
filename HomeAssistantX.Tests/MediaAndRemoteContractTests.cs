@@ -1171,6 +1171,55 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task RemoteCommandTargetsAreFrozenBeforeCommandEnumeration()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var sendTarget = HomeAssistantTarget.ForEntity("remote.living_room");
+        var sendCommands = new MutatingStringList(
+            () => sendTarget.EntityIds = new[] { "remote.changed" },
+            "power");
+
+        await client.Controls.Remotes.SendCommandsAsync(sendTarget, sendCommands);
+
+        var deleteTarget = HomeAssistantTarget.ForEntity("remote.living_room");
+        var deleteCommands = new MutatingStringList(
+            () => deleteTarget.EntityIds = new[] { "remote.changed" },
+            "power");
+        await client.Controls.Remotes.DeleteCommandsAsync(deleteTarget, deleteCommands);
+
+        using var send = FindCall(server, "send_command");
+        using var delete = FindCall(server, "delete_command");
+        Assert.Equal("remote.living_room", send.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+        Assert.Equal("remote.living_room", delete.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+    }
+
+    [Fact]
+    public async Task RemoteLearnCommandsAreIndependentFromTheAssignedCollection()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var commands = new List<string> { "power" };
+        var options = new HomeAssistantRemoteLearnOptions { Commands = commands };
+        var pause = server.PauseNextServiceCall();
+
+        var operation = client.Controls.Remotes.LearnCommandsAsync(
+            HomeAssistantTarget.ForEntity("remote.living_room"),
+            options);
+        await pause.Received.WaitAsync(TimeSpan.FromSeconds(2));
+        commands[0] = "mutated";
+        pause.Release();
+        await operation;
+
+        using var call = FindCall(server, "learn_command");
+        Assert.Equal(
+            new[] { "power" },
+            call.RootElement.GetProperty("service_data").GetProperty("command")
+                .EnumerateArray().Select(value => value.GetString()).ToArray());
+        Assert.Equal(new[] { "mutated" }, options.Commands);
+    }
+
+    [Fact]
     public async Task RemoteLearningTimeoutMustFitInsideTheTransportDeadline()
     {
         using var server = new TestHomeAssistantServer();
@@ -1521,16 +1570,19 @@ public sealed class MediaAndRemoteContractTests
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromSeconds(2.2));
         var pause = server.PauseNextServiceCall();
-        var commands = new MutatingStringList(
-            () => client.Options.RequestTimeout = TimeSpan.FromSeconds(10),
-            "power");
+        var target = new HomeAssistantTarget
+        {
+            EntityIds = new MutatingStringList(
+                () => client.Options.RequestTimeout = TimeSpan.FromSeconds(10),
+                "remote.living_room")
+        };
 
         var operation = client.Controls.Remotes.LearnCommandsAsync(
-            HomeAssistantTarget.ForEntity("remote.living_room"),
+            target,
             new HomeAssistantRemoteLearnOptions
             {
                 Timeout = TimeSpan.FromSeconds(1),
-                Commands = commands
+                Commands = new[] { "power" }
             });
 
         await pause.Received;

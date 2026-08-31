@@ -107,6 +107,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var normalizedTarget = NormalizeTarget(target, cancellationToken);
         var optionSnapshot = options?.Snapshot(cancellationToken);
         var values = ValidateCommands(commands, nameof(commands), cancellationToken);
         var device = optionSnapshot?.Device is null
@@ -117,7 +118,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         var hold = optionSnapshot?.Hold;
         return CallAsync(
             "send_command",
-            target,
+            normalizedTarget,
             call =>
             {
                 call.WithData("command", values);
@@ -150,6 +151,9 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var transport = CaptureTransport(cancellationToken);
+        var requestTimeout = _options.RequestTimeout;
+        var normalizedTarget = NormalizeTarget(target, cancellationToken);
         var optionSnapshot = options?.Snapshot(cancellationToken);
         var device = optionSnapshot?.Device is null
             ? null
@@ -158,8 +162,6 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         var commandTypeOption = optionSnapshot?.CommandType;
         var alternative = optionSnapshot?.Alternative;
         var optionCommands = optionSnapshot?.Commands;
-        var transport = CaptureTransport(cancellationToken);
-        var requestTimeout = _options.RequestTimeout;
         var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(
             timeout,
             requestTimeout,
@@ -187,7 +189,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
 
         return CallAsync(
             "learn_command",
-            target,
+            normalizedTarget,
             call =>
             {
                 if (device is not null)
@@ -245,13 +247,14 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var normalizedTarget = NormalizeTarget(target, cancellationToken);
         var values = ValidateCommands(commands, nameof(commands), cancellationToken);
         var normalizedDevice = device is null
             ? null
             : RequiredSelector(device, nameof(device), cancellationToken);
         return CallAsync(
             "delete_command",
-            target,
+            normalizedTarget,
             call =>
             {
                 call.WithData("command", values);
@@ -261,6 +264,15 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
                 }
             },
             cancellationToken);
+    }
+
+    private HomeAssistantTarget NormalizeTarget(
+        HomeAssistantTarget target,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        return target.NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
     }
 
     private static IReadOnlyList<string> ValidateCommands(

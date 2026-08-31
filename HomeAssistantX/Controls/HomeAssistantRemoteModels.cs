@@ -83,7 +83,11 @@ public sealed class HomeAssistantRemoteLearnOptions
 
     public string? Device { get { lock (_sync) return _device; } set { lock (_sync) _device = value; } }
 
-    public IReadOnlyList<string>? Commands { get { lock (_sync) return _commands; } set { lock (_sync) _commands = value; } }
+    public IReadOnlyList<string>? Commands
+    {
+        get { lock (_sync) return _commands; }
+        set { lock (_sync) _commands = value; }
+    }
 
     public HomeAssistantRemoteCommandType? CommandType { get { lock (_sync) return _commandType; } set { lock (_sync) _commandType = value; } }
 
@@ -119,12 +123,30 @@ public sealed class HomeAssistantRemoteLearnOptions
             return new HomeAssistantRemoteLearnOptions
             {
                 Device = _device,
-                Commands = _commands,
+                Commands = SnapshotCommands(_commands, cancellationToken),
                 CommandType = _commandType,
                 Alternative = _alternative,
                 Timeout = _timeout
             };
         }
+    }
+
+    private static IReadOnlyList<string>? SnapshotCommands(
+        IReadOnlyList<string>? commands,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (commands is null) return null;
+
+        var snapshot = new List<string>(commands.Count);
+        foreach (var command in commands)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            snapshot.Add(command);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return snapshot.ToArray();
     }
 }
 
