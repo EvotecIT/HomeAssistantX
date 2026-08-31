@@ -359,14 +359,14 @@ internal static class HomeAssistantCancellationJsonValueReader
         cancellationToken.ThrowIfCancellationRequested();
         if (!cancellationToken.CanBeCanceled)
         {
-            using var document = JsonDocument.Parse(payload.AsMemory());
-            return document.RootElement.Clone();
+            var document = JsonDocument.Parse(payload.AsMemory());
+            return document.RootElement;
         }
 
         var parseTask = Task.Run(() =>
         {
-            using var document = JsonDocument.Parse(payload.AsMemory());
-            return document.RootElement.Clone();
+            var document = JsonDocument.Parse(payload.AsMemory());
+            return document.RootElement;
         });
         var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
