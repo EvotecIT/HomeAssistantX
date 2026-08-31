@@ -46,6 +46,29 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void WindowsDestinationSecurityCaptureOpensTheReparseEntry()
+    {
+        const uint fileFlagOpenReparsePoint = 0x00200000;
+        const uint fileFlagBackupSemantics = 0x02000000;
+
+        Assert.Equal(
+            fileFlagOpenReparsePoint | fileFlagBackupSemantics,
+            HomeAssistantAtomicFile.WindowsDestinationSecurityOpenFlags
+                & (fileFlagOpenReparsePoint | fileFlagBackupSemantics));
+    }
+
+    [Theory]
+    [InlineData(22)]
+    [InlineData(38)]
+    [InlineData(45)]
+    [InlineData(95)]
+    public void UnixAtomicExchangeRecognizesUnsupportedPlatformErrors(int error)
+    {
+        Assert.True(HomeAssistantAtomicFile.IsUnixExchangeUnsupported(error));
+        Assert.False(HomeAssistantAtomicFile.IsUnixExchangeUnsupported(2));
+    }
+
+    [Fact]
     public void CameraSubscriptionStateProjectionPreservesIdentityCancellation()
     {
         using var cancellation = new CancellationTokenSource();

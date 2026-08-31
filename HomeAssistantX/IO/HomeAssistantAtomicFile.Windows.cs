@@ -13,6 +13,8 @@ internal static partial class HomeAssistantAtomicFile
         OwnerSecurityInformation | GroupSecurityInformation | DaclSecurityInformation;
     private const uint WindowsCreateNew = 1;
     private const uint WindowsFileAttributeNormal = 0x00000080;
+    private const uint WindowsFileFlagBackupSemantics = 0x02000000;
+    private const uint WindowsFileFlagOpenReparsePoint = 0x00200000;
     private const uint WindowsFileFlagOverlapped = 0x40000000;
     private const uint WindowsGenericWrite = 0x40000000;
     private const uint WindowsReadControl = 0x00020000;
@@ -157,7 +159,7 @@ internal static partial class HomeAssistantAtomicFile
             WindowsFileShareRead | WindowsFileShareWrite | WindowsFileShareDelete,
             IntPtr.Zero,
             WindowsOpenExisting,
-            WindowsFileAttributeNormal,
+            WindowsDestinationSecurityOpenFlags,
             IntPtr.Zero);
         if (handle.IsInvalid)
         {
@@ -202,6 +204,9 @@ internal static partial class HomeAssistantAtomicFile
                 new Win32Exception(error));
         }
     }
+
+    internal static uint WindowsDestinationSecurityOpenFlags =>
+        WindowsFileAttributeNormal | WindowsFileFlagBackupSemantics | WindowsFileFlagOpenReparsePoint;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WindowsFileRenameInformation
