@@ -22,9 +22,10 @@ public sealed class HomeAssistantMobileAppClient
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         cancellationToken.ThrowIfCancellationRequested();
-        request.Validate(cancellationToken);
+        var requestSnapshot = request.Snapshot(cancellationToken);
+        requestSnapshot.Validate(cancellationToken);
         var frozenAdditionalData = HomeAssistantJson.FreezeObject(
-            request.AdditionalData,
+            requestSnapshot.AdditionalData,
             nameof(request.AdditionalData),
             "Additional registration data",
             cancellationToken)!;
@@ -41,17 +42,17 @@ public sealed class HomeAssistantMobileAppClient
         cancellationToken.ThrowIfCancellationRequested();
         var frozenRequest = new HomeAssistantMobileAppRegistrationRequest
         {
-            AppId = request.AppId,
-            AppName = request.AppName,
-            AppVersion = request.AppVersion,
-            DeviceName = request.DeviceName,
-            Manufacturer = request.Manufacturer,
-            Model = request.Model,
-            DeviceId = request.DeviceId,
-            OperatingSystemName = request.OperatingSystemName,
-            OperatingSystemVersion = request.OperatingSystemVersion,
-            SupportsEncryption = request.SupportsEncryption,
-            AppData = HomeAssistantJson.FreezeObject(request.AppData, nameof(request.AppData), "AppData", cancellationToken)!,
+            AppId = requestSnapshot.AppId,
+            AppName = requestSnapshot.AppName,
+            AppVersion = requestSnapshot.AppVersion,
+            DeviceName = requestSnapshot.DeviceName,
+            Manufacturer = requestSnapshot.Manufacturer,
+            Model = requestSnapshot.Model,
+            DeviceId = requestSnapshot.DeviceId,
+            OperatingSystemName = requestSnapshot.OperatingSystemName,
+            OperatingSystemVersion = requestSnapshot.OperatingSystemVersion,
+            SupportsEncryption = requestSnapshot.SupportsEncryption,
+            AppData = HomeAssistantJson.FreezeObject(requestSnapshot.AppData, nameof(request.AppData), "AppData", cancellationToken)!,
             AdditionalData = frozenAdditionalFields
         };
         var registration = await _rest.SendAsync<HomeAssistantMobileAppRegistration>(HttpMethod.Post, "api/mobile_app/registrations", frozenRequest, cancellationToken).ConfigureAwait(false);

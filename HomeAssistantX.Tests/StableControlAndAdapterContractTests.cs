@@ -441,6 +441,22 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdParserRejectsForwardCompressionPointers()
+    {
+        var packet = CreateDiscoveryPacket();
+        var pointerLocation = Array.IndexOf(packet, (byte)0xC0, 12);
+        Assert.InRange(pointerLocation, 12, packet.Length - 3);
+        var forwardTarget = pointerLocation + 2;
+        packet[pointerLocation] = (byte)(0xC0 | (forwardTarget >> 8));
+        packet[pointerLocation + 1] = (byte)forwardTarget;
+
+        var aggregate = new DnsDiscoveryAggregate();
+        DnsDiscoveryPacket.ReadInto(packet, aggregate);
+
+        Assert.Empty(aggregate.Build());
+    }
+
+    [Fact]
     public void DnsSdPresentationNamesPreserveWireLabelBoundaries()
     {
         var literalDot = DnsDiscoveryPacket.FormatName(new[] { "Test.Home", "local" });
@@ -1575,6 +1591,21 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task MobileAppRegistrationSnapshotsScalarsBeforeSerializingExtensions()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var request = RegistrationRequest(false);
+        request.AdditionalData["future"] = new RegistrationMutationProbe(() => request.AppId = " ");
+
+        _ = await client.MobileApp.RegisterAsync(request);
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.Equal("com.example.app", body.RootElement.GetProperty("app_id").GetString());
+        Assert.Equal("preserved", body.RootElement.GetProperty("future").GetProperty("Value").GetString());
+    }
+
+    [Fact]
     public async Task MobileAppRegistrationAllowsHomeAssistantsOptionalOperatingSystemVersion()
     {
         using var server = new TestHomeAssistantServer();
@@ -2533,6 +2564,25 @@ public sealed class StableControlAndAdapterContractTests
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class RegistrationMutationProbe
+    {
+        private readonly Action _mutation;
+
+        internal RegistrationMutationProbe(Action mutation)
+        {
+            _mutation = mutation;
+        }
+
+        public string Value
+        {
+            get
+            {
+                _mutation();
+                return "preserved";
+            }
+        }
     }
 
     private sealed class TestDiscoveryTransportFactory : IHomeAssistantDiscoveryTransportFactory

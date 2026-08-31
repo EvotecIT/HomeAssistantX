@@ -779,6 +779,16 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void MemberFormatterPreservesJsonIncludeContracts()
+    {
+        var property = typeof(PropertyAccessorFixture).GetProperty(nameof(PropertyAccessorFixture.JsonIncluded))!;
+        var field = typeof(JsonFieldFixture).GetField(nameof(JsonFieldFixture.IncludedValue))!;
+
+        Assert.Contains("json-include ", FormatProperty(property), StringComparison.Ordinal);
+        Assert.Contains("json-include ", FormatField(field), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MethodFormatterPreservesUnknownRequiredCustomModifiers()
     {
         var method = CreateRequiredCustomModifierFixture();
@@ -1451,6 +1461,7 @@ public sealed class PublicApiCompatibilityTests
             + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
             + JsonPropertyNameContract(property)
             + JsonExtensionDataContract(property)
+            + JsonIncludeContract(property)
             + JsonIgnoreContract(property)
             + JsonConverterContract(property)
             + JsonNumberHandlingContract(property)
@@ -1594,6 +1605,14 @@ public sealed class PublicApiCompatibilityTests
             ? "json-required "
             : string.Empty;
 
+    private static string JsonIncludeContract(MemberInfo member)
+        => member.CustomAttributes.Any(attribute => string.Equals(
+            attribute.AttributeType.FullName,
+            typeof(JsonIncludeAttribute).FullName,
+            StringComparison.Ordinal))
+            ? "json-include "
+            : string.Empty;
+
     private sealed class JsonFieldFixture
     {
         [JsonExtensionData]
@@ -1601,6 +1620,9 @@ public sealed class PublicApiCompatibilityTests
 
         [JsonRequired]
         public string RequiredValue = string.Empty;
+
+        [JsonInclude]
+        public string IncludedValue = string.Empty;
     }
 
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
@@ -2360,6 +2382,9 @@ public sealed class PublicApiCompatibilityTests
 
         [JsonRequired]
         public string JsonRequired { get; set; } = string.Empty;
+
+        [JsonInclude]
+        public string JsonIncluded { get; private set; } = string.Empty;
     }
 
     private sealed class RequiredConstructorFixture
@@ -2513,7 +2538,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonExtensionDataContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + JsonRequiredContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + RequiredCustomModifierContract(field.GetRequiredCustomModifiers(), "System.Runtime.CompilerServices.IsVolatile", "System.Runtime.CompilerServices.IsReadOnlyAttribute") + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonExtensionDataContract(field) + JsonIncludeContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + JsonRequiredContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + RequiredCustomModifierContract(field.GetRequiredCustomModifiers(), "System.Runtime.CompilerServices.IsVolatile", "System.Runtime.CompilerServices.IsReadOnlyAttribute") + FormatFieldType(field) + " " + field.Name + value;
     }
 
     private static string FormatEnumField(Type type, string name)

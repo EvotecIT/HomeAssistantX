@@ -1151,9 +1151,10 @@ internal static class DnsDiscoveryPacket
             if (length == 0) break;
             if ((length & 0xC0) == 0xC0)
             {
+                var pointerLocation = position - 1;
                 Require(packet, position, 1);
                 var pointer = ((length & 0x3F) << 8) | packet[position++];
-                if (pointer >= packet.Length || ++hops > 32) throw new InvalidDataException("Invalid DNS compression pointer.");
+                if (pointer >= pointerLocation || ++hops > 32) throw new InvalidDataException("Invalid DNS compression pointer.");
                 if (next < 0) next = position;
                 position = pointer;
                 continue;

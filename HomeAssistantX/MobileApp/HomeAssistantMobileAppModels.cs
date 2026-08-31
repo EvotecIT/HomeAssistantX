@@ -6,50 +6,88 @@ namespace HomeAssistantX.MobileApp;
 /// <summary>Describes a Home Assistant mobile-app registration owned by the calling application.</summary>
 public sealed class HomeAssistantMobileAppRegistrationRequest
 {
+    private readonly object _sync = new();
     private static readonly HashSet<string> KnownPropertyNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "app_id", "app_name", "app_version", "device_name", "manufacturer", "model",
         "device_id", "os_name", "os_version", "supports_encryption", "app_data"
     };
 
+    private string _appId = string.Empty;
+    private string _appName = string.Empty;
+    private string _appVersion = string.Empty;
+    private string _deviceName = string.Empty;
+    private string _manufacturer = string.Empty;
+    private string _model = string.Empty;
+    private string? _deviceId;
+    private string _operatingSystemName = string.Empty;
+    private string? _operatingSystemVersion;
+    private bool _supportsEncryption;
+    private IReadOnlyDictionary<string, object?> _appData = new Dictionary<string, object?>();
+    private Dictionary<string, object?> _additionalData = new(StringComparer.Ordinal);
+
     [JsonPropertyName("app_id")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId { get { lock (_sync) return _appId; } set { lock (_sync) _appId = value; } }
 
     [JsonPropertyName("app_name")]
-    public string AppName { get; set; } = string.Empty;
+    public string AppName { get { lock (_sync) return _appName; } set { lock (_sync) _appName = value; } }
 
     [JsonPropertyName("app_version")]
-    public string AppVersion { get; set; } = string.Empty;
+    public string AppVersion { get { lock (_sync) return _appVersion; } set { lock (_sync) _appVersion = value; } }
 
     [JsonPropertyName("device_name")]
-    public string DeviceName { get; set; } = string.Empty;
+    public string DeviceName { get { lock (_sync) return _deviceName; } set { lock (_sync) _deviceName = value; } }
 
     [JsonPropertyName("manufacturer")]
-    public string Manufacturer { get; set; } = string.Empty;
+    public string Manufacturer { get { lock (_sync) return _manufacturer; } set { lock (_sync) _manufacturer = value; } }
 
     [JsonPropertyName("model")]
-    public string Model { get; set; } = string.Empty;
+    public string Model { get { lock (_sync) return _model; } set { lock (_sync) _model = value; } }
 
     [JsonPropertyName("device_id")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? DeviceId { get; set; }
+    public string? DeviceId { get { lock (_sync) return _deviceId; } set { lock (_sync) _deviceId = value; } }
 
     [JsonPropertyName("os_name")]
-    public string OperatingSystemName { get; set; } = string.Empty;
+    public string OperatingSystemName { get { lock (_sync) return _operatingSystemName; } set { lock (_sync) _operatingSystemName = value; } }
 
     [JsonPropertyName("os_version")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? OperatingSystemVersion { get; set; }
+    public string? OperatingSystemVersion { get { lock (_sync) return _operatingSystemVersion; } set { lock (_sync) _operatingSystemVersion = value; } }
 
     [JsonPropertyName("supports_encryption")]
-    public bool SupportsEncryption { get; set; }
+    public bool SupportsEncryption { get { lock (_sync) return _supportsEncryption; } set { lock (_sync) _supportsEncryption = value; } }
 
     [JsonPropertyName("app_data")]
-    public IReadOnlyDictionary<string, object?> AppData { get; set; } = new Dictionary<string, object?>();
+    public IReadOnlyDictionary<string, object?> AppData { get { lock (_sync) return _appData; } set { lock (_sync) _appData = value; } }
 
     /// <summary>Preserves provider-specific top-level registration fields not yet modeled by HomeAssistantX.</summary>
     [JsonExtensionData]
-    public Dictionary<string, object?> AdditionalData { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, object?> AdditionalData { get { lock (_sync) return _additionalData; } set { lock (_sync) _additionalData = value; } }
+
+    internal HomeAssistantMobileAppRegistrationRequest Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantMobileAppRegistrationRequest
+            {
+                AppId = _appId,
+                AppName = _appName,
+                AppVersion = _appVersion,
+                DeviceName = _deviceName,
+                Manufacturer = _manufacturer,
+                Model = _model,
+                DeviceId = _deviceId,
+                OperatingSystemName = _operatingSystemName,
+                OperatingSystemVersion = _operatingSystemVersion,
+                SupportsEncryption = _supportsEncryption,
+                AppData = _appData,
+                AdditionalData = _additionalData
+            };
+        }
+    }
 
     internal void Validate(CancellationToken cancellationToken)
     {
