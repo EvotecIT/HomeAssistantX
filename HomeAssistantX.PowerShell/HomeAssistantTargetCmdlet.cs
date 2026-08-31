@@ -85,6 +85,9 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
             return new ResolvedHomeAssistantTarget(HomeAssistantTarget.ForEntity(ids), ids.Length + " " + expectedDomain + " entities (" + string.Join(", ", ids) + ")", ids.Length);
         }
 
+        var labelSelectors = ParameterSetName == LabelParameterSet
+            ? Select(Label, value => RequireLookupValue(value, nameof(Label), CancelToken), CancelToken)
+            : null;
         var snapshot = await Client.Inventory.GetSnapshotAsync(CancelToken).ConfigureAwait(false);
         switch (ParameterSetName)
         {
@@ -116,7 +119,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
             case LabelParameterSet:
             {
                 var labels = snapshot.Registries.Labels;
-                var selectors = Select(Label, value => RequireLookupValue(value, nameof(Label)), CancelToken);
+                var selectors = labelSelectors!;
                 var resolved = snapshot.Registries.IsLabelRegistryAvailable
                     ? Select(selectors, value => ResolveLabel(labels, value, CancelToken), CancelToken)
                     : Array.Empty<Registries.HomeAssistantLabel>();
@@ -265,11 +268,14 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         };
     }
 
-    private static string RequireLookupValue(string value, string parameterName)
+    private static string RequireLookupValue(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
             throw new ArgumentException("A non-empty lookup value is required.", parameterName);
-        return value.Trim();
+        return HomeAssistantX.Protocol.CancellationAwareString.Trim(value, cancellationToken);
     }
 
     private static LabelSelectionIndex IndexLabelSelection(
