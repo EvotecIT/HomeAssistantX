@@ -6,6 +6,8 @@ namespace HomeAssistantX.Media;
 /// <summary>A Home Assistant-native media node returned by media-source or media-player browsing.</summary>
 public sealed class HomeAssistantMediaItem
 {
+    private IReadOnlyList<HomeAssistantMediaItem> _children = Array.Empty<HomeAssistantMediaItem>();
+
     [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
 
@@ -40,7 +42,11 @@ public sealed class HomeAssistantMediaItem
     public int NotShown { get; set; }
 
     [JsonPropertyName("children")]
-    public IReadOnlyList<HomeAssistantMediaItem> Children { get; set; } = Array.Empty<HomeAssistantMediaItem>();
+    public IReadOnlyList<HomeAssistantMediaItem> Children
+    {
+        get => _children;
+        set => _children = value ?? Array.Empty<HomeAssistantMediaItem>();
+    }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);

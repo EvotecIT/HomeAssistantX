@@ -217,7 +217,7 @@ public sealed class HomeAssistantMediaBrowserClient
                 || !IsCanonicalActionableSelector(mediaContentTypeText, cancellationToken)))
             throw new HomeAssistantProtocolException("An actionable media response contained a noncanonical selector.");
 
-        if (children.ValueKind == JsonValueKind.Undefined) return;
+        if (children.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return;
         if (children.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The media response contained an invalid children collection.");
         foreach (var child in children.EnumerateArray())
@@ -242,8 +242,7 @@ public sealed class HomeAssistantMediaBrowserClient
             && (!IsActionableContentId(item.MediaContentId, cancellationToken)
                 || !IsCanonicalActionableSelector(item.MediaContentType, cancellationToken)))
             throw new HomeAssistantProtocolException("The media response contained an item without a media content identifier or type.");
-        if (item.Children is null)
-            throw new HomeAssistantProtocolException("The media response contained a null children collection.");
+        item.Children ??= Array.Empty<HomeAssistantMediaItem>();
         if (item.SearchMediaClasses is not null)
         {
             foreach (var mediaClass in item.SearchMediaClasses)

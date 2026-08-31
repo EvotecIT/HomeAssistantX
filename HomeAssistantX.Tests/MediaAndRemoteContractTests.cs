@@ -1910,6 +1910,24 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task MediaBrowseAndSearchNormalizeNullLeafChildrenToEmptyCollections()
+    {
+        const string leaf = "{\"title\":\"Station\",\"media_class\":\"music\",\"media_content_id\":\"station\",\"media_content_type\":\"music\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":null}";
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = leaf,
+            MediaSearchResponseJson = "{\"result\":[" + leaf + "]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var browsed = await client.Media.BrowseSourcesAsync();
+        var searched = await client.Media.SearchSourcesAsync("station");
+
+        Assert.Empty(browsed.Children);
+        Assert.Empty(Assert.Single(searched).Children);
+    }
+
+    [Fact]
     public async Task MediaBrowseAcceptsAnOmittedOptionalMediaClass()
     {
         using var server = new TestHomeAssistantServer
