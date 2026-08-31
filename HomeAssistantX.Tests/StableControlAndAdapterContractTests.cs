@@ -1083,6 +1083,28 @@ public sealed class StableControlAndAdapterContractTests
             System.Globalization.CultureInfo.InvariantCulture));
     }
 
+    [Theory]
+    [InlineData(254, false)]
+    [InlineData(255, true)]
+    public void DnsSdTransportReadsAndValidatesTheReceivedIpv4TimeToLive(
+        int timeToLive,
+        bool expected)
+    {
+        using var receiver = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var sender = new UdpClient(AddressFamily.InterNetwork);
+        HomeAssistantMdnsHopLimit.Configure(receiver.Client);
+        sender.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.IpTimeToLive, timeToLive);
+        var endpoint = Assert.IsType<IPEndPoint>(receiver.Client.LocalEndPoint);
+        var payload = new byte[] { 1 };
+
+        _ = sender.Send(payload, payload.Length, endpoint);
+        Assert.True(receiver.Client.Poll(5_000_000, SelectMode.SelectRead));
+
+        Assert.Equal(timeToLive, HomeAssistantMdnsHopLimit.Peek(receiver.Client));
+        Assert.Equal(expected, HomeAssistantMdnsHopLimit.IsExpected(timeToLive));
+        Assert.Equal(payload, receiver.Receive(ref endpoint));
+    }
+
     [Fact]
     public void DnsSdTransportListensOnTheMulticastServicePort()
     {

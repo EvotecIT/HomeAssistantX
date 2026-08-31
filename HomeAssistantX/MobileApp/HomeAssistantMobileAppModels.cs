@@ -150,24 +150,74 @@ public sealed class HomeAssistantMobileAppRegistrationRequest
 /// <summary>Contains webhook connection data returned once by Home Assistant.</summary>
 public sealed class HomeAssistantMobileAppRegistration
 {
+    private readonly object _connectionGate = new();
+    private string _webhookId = string.Empty;
+    private string? _secret;
+    private Uri? _cloudhookUri;
+    private Uri? _remoteUiUri;
+
     [JsonPropertyName("webhook_id")]
-    public string WebhookId { get; set; } = string.Empty;
+    public string WebhookId
+    {
+        get { lock (_connectionGate) return _webhookId; }
+        set { lock (_connectionGate) _webhookId = value; }
+    }
 
     [JsonPropertyName("secret")]
-    public string? Secret { get; set; }
+    public string? Secret
+    {
+        get { lock (_connectionGate) return _secret; }
+        set { lock (_connectionGate) _secret = value; }
+    }
 
     [JsonPropertyName("cloudhook_url")]
-    public Uri? CloudhookUri { get; set; }
+    public Uri? CloudhookUri
+    {
+        get { lock (_connectionGate) return _cloudhookUri; }
+        set { lock (_connectionGate) _cloudhookUri = value; }
+    }
 
     [JsonPropertyName("remote_ui_url")]
-    public Uri? RemoteUiUri { get; set; }
+    public Uri? RemoteUiUri
+    {
+        get { lock (_connectionGate) return _remoteUiUri; }
+        set { lock (_connectionGate) _remoteUiUri = value; }
+    }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement> AdditionalData { get; set; } = new(StringComparer.Ordinal);
 
-    public override string ToString() => string.IsNullOrWhiteSpace(WebhookId)
+    internal HomeAssistantMobileAppWebhookConnection SnapshotWebhookConnection()
+    {
+        lock (_connectionGate)
+        {
+            return new HomeAssistantMobileAppWebhookConnection(
+                _webhookId,
+                _secret,
+                _cloudhookUri);
+        }
+    }
+
+    public override string ToString() => string.IsNullOrWhiteSpace(SnapshotWebhookConnection().WebhookId)
         ? "Home Assistant mobile-app registration (invalid)"
         : "Home Assistant mobile-app registration (credential redacted)";
+}
+
+internal sealed class HomeAssistantMobileAppWebhookConnection
+{
+    internal HomeAssistantMobileAppWebhookConnection(
+        string webhookId,
+        string? secret,
+        Uri? cloudhookUri)
+    {
+        WebhookId = webhookId;
+        Secret = secret;
+        CloudhookUri = cloudhookUri;
+    }
+
+    internal string WebhookId { get; }
+    internal string? Secret { get; }
+    internal Uri? CloudhookUri { get; }
 }
 
 public sealed class HomeAssistantMobileAppRegistrationUpdate

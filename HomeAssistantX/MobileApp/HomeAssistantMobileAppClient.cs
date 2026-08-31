@@ -127,16 +127,17 @@ public sealed class HomeAssistantMobileAppClient
         Func<HttpMessageHandler>? handlerFactory)
     {
         if (registration is null) throw new ArgumentNullException(nameof(registration));
-        if (string.IsNullOrWhiteSpace(registration.WebhookId)) throw new ArgumentException("A webhook identifier is required.", nameof(registration));
+        var connection = registration.SnapshotWebhookConnection();
+        if (string.IsNullOrWhiteSpace(connection.WebhookId)) throw new ArgumentException("A webhook identifier is required.", nameof(registration));
         _options.Validate();
-        var uri = registration.CloudhookUri ?? new Uri(
+        var uri = connection.CloudhookUri ?? new Uri(
             _options.BaseUri,
-            "api/webhook/" + HomeAssistantUri.EscapeDataString(registration.WebhookId, CancellationToken.None));
+            "api/webhook/" + HomeAssistantUri.EscapeDataString(connection.WebhookId, CancellationToken.None));
         if (handlerFactory is null)
         {
             return new HomeAssistantMobileAppWebhookClient(
                 uri,
-                registration.Secret,
+                connection.Secret,
                 protector,
                 _options.RequestTimeout,
                 _options.MaximumRestResponseBytes);
@@ -148,7 +149,7 @@ public sealed class HomeAssistantMobileAppClient
         {
             return new HomeAssistantMobileAppWebhookClient(
                 uri,
-                registration.Secret,
+                connection.Secret,
                 protector,
                 _options.RequestTimeout,
                 _options.MaximumRestResponseBytes,

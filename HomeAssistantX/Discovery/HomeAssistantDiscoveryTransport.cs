@@ -182,6 +182,7 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
                 try
                 {
                     queryClient = createClient();
+                    HomeAssistantMdnsHopLimit.Configure(queryClient.Client);
                     queryClient.Client.Bind(new IPEndPoint(localAddress, 0));
                     ConfigureOutboundInterface(queryClient.Client, localAddress);
                     ConfigureMulticastTimeToLive(queryClient.Client);
@@ -203,6 +204,7 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
                 multicastClient.Client.ExclusiveAddressUse = false;
                 multicastClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 multicastClient.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
+                HomeAssistantMdnsHopLimit.Configure(multicastClient.Client);
                 multicastClient.Client.Bind(CreateMulticastListenerEndpoint(queryAddresses[0], multicastPort));
                 multicastClient.JoinMulticastGroup(multicastAddress, queryAddresses[0]);
             }
@@ -370,8 +372,14 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
     {
         while (true)
         {
+            await WaitForDatagramAsync(queryClient.Client).ConfigureAwait(false);
+            var timeToLive = HomeAssistantMdnsHopLimit.Peek(queryClient.Client);
             var result = await queryClient.ReceiveAsync().ConfigureAwait(false);
-            if (IsExpectedMdnsSource(result.RemoteEndPoint, _endpoint.Port)) return result.Buffer;
+            if (IsExpectedMdnsSource(result.RemoteEndPoint, _endpoint.Port)
+                && HomeAssistantMdnsHopLimit.IsExpected(timeToLive))
+            {
+                return result.Buffer;
+            }
         }
     }
 
@@ -384,12 +392,18 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
         var buffer = new byte[MaximumDatagramBytes];
         while (true)
         {
+            await WaitForDatagramAsync(multicastClient.Client).ConfigureAwait(false);
+            var timeToLive = HomeAssistantMdnsHopLimit.Peek(multicastClient.Client);
             EndPoint remote = new IPEndPoint(IPAddress.Any, 0);
             var result = await multicastClient.Client.ReceiveMessageFromAsync(
                 new ArraySegment<byte>(buffer),
                 SocketFlags.None,
                 remote).ConfigureAwait(false);
             if (!IsExpectedMdnsSource(result.RemoteEndPoint, _endpoint.Port))
+            {
+                continue;
+            }
+            if (!HomeAssistantMdnsHopLimit.IsExpected(timeToLive))
             {
                 continue;
             }
@@ -402,6 +416,16 @@ internal sealed class UdpHomeAssistantDiscoveryTransport : IHomeAssistantDiscove
             Buffer.BlockCopy(buffer, 0, packet, 0, result.ReceivedBytes);
             return packet;
         }
+    }
+
+    private static async Task WaitForDatagramAsync(Socket socket)
+    {
+        var probe = new byte[1];
+        EndPoint remote = new IPEndPoint(IPAddress.Any, 0);
+        _ = await socket.ReceiveFromAsync(
+            new ArraySegment<byte>(probe),
+            SocketFlags.Peek,
+            remote).ConfigureAwait(false);
     }
 
     private void ThrowIfDisposed()
