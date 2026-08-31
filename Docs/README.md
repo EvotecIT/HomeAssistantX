@@ -22,6 +22,9 @@ Exports one bounded camera snapshot through an atomic local-file replacement.
 ### [Export-HomeAssistantDiagnostic](Export-HomeAssistantDiagnostic.md)
 Downloads Home Assistant-redacted diagnostics for a configuration entry or one device.
 
+### [Find-HomeAssistant](Find-HomeAssistant.md)
+Finds Home Assistant instances advertised on the local IPv4 network.
+
 ### [Get-HomeAssistantAction](Get-HomeAssistantAction.md)
 Lists Home Assistant actions and their runtime-provided field descriptions.
 
@@ -127,6 +130,9 @@ Runs a bounded Recorder maintenance task.
 ### [Invoke-HomeAssistantRemote](Invoke-HomeAssistantRemote.md)
 Controls a Home Assistant remote, including sending, learning, and deleting commands.
 
+### [Invoke-HomeAssistantRoutine](Invoke-HomeAssistantRoutine.md)
+Runs a scene, script, or button routine through one task-oriented command.
+
 ### [New-HomeAssistantBackup](New-HomeAssistantBackup.md)
 Creates a full Supervisor backup with optional compression, location, and database exclusion.
 
@@ -169,6 +175,9 @@ Restarts Core, Supervisor, host, an app, or reloads one integration.
 ### [Send-HomeAssistantNotification](Send-HomeAssistantNotification.md)
 Sends a persistent notification or a message to selected notify entities.
 
+### [Set-HomeAssistantAlarm](Set-HomeAssistantAlarm.md)
+Arms, disarms, or triggers alarm panels with high-impact confirmation.
+
 ### [Set-HomeAssistantAutomation](Set-HomeAssistantAutomation.md)
 Creates or replaces one administrator-managed automation definition.
 
@@ -193,8 +202,20 @@ Creates or updates Lovelace dashboards, configurations, and storage-mode resourc
 ### [Set-HomeAssistantEnergy](Set-HomeAssistantEnergy.md)
 Updates one or more Energy dashboard preference collections.
 
+### [Set-HomeAssistantFan](Set-HomeAssistantFan.md)
+Sets one fan action, speed, oscillation, direction, or preset.
+
+### [Set-HomeAssistantHelper](Set-HomeAssistantHelper.md)
+Sets common boolean, number, select, text, date, time, and date-time helpers.
+
+### [Set-HomeAssistantHumidifier](Set-HomeAssistantHumidifier.md)
+Sets humidifier power, humidity, or mode.
+
 ### [Set-HomeAssistantLabel](Set-HomeAssistantLabel.md)
 Creates or updates a Home Assistant label while allowing nullable fields to be explicitly cleared.
+
+### [Set-HomeAssistantLawnMower](Set-HomeAssistantLawnMower.md)
+Starts, pauses, or docks Home Assistant lawn mower entities.
 
 ### [Set-HomeAssistantLight](Set-HomeAssistantLight.md)
 Controls lights with typed power, brightness, color, effect, and transition parameters.
@@ -205,11 +226,23 @@ Locks, unlocks, or opens a lock with high-impact confirmation.
 ### [Set-HomeAssistantMediaPlayer](Set-HomeAssistantMediaPlayer.md)
 Controls media-player power, playback, volume, source, grouping, queueing, and content.
 
+### [Set-HomeAssistantSiren](Set-HomeAssistantSiren.md)
+Controls sirens with typed tone, volume, and duration options.
+
 ### [Set-HomeAssistantStatistic](Set-HomeAssistantStatistic.md)
 Updates metadata, converts units, adjusts sums, or imports Recorder statistics.
 
 ### [Set-HomeAssistantSwitch](Set-HomeAssistantSwitch.md)
 Turns switches on, off, or toggles them through a resolved Home Assistant target.
+
+### [Set-HomeAssistantVacuum](Set-HomeAssistantVacuum.md)
+Controls common vacuum lifecycle, fan-speed, and area-cleaning operations.
+
+### [Set-HomeAssistantValve](Set-HomeAssistantValve.md)
+Moves a valve with one typed action or target position.
+
+### [Set-HomeAssistantWaterHeater](Set-HomeAssistantWaterHeater.md)
+Sets water-heater power, temperature, operation mode, or away mode.
 
 ### [Test-HomeAssistantConfiguration](Test-HomeAssistantConfiguration.md)
 Validates the active Home Assistant configuration without restarting Core.

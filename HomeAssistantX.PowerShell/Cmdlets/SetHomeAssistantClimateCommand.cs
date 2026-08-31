@@ -50,13 +50,16 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
         ValidateFinite(Temperature, nameof(Temperature));
         ValidateFinite(TargetTemperatureLow, nameof(TargetTemperatureLow));
         ValidateFinite(TargetTemperatureHigh, nameof(TargetTemperatureHigh));
+        HvacMode = NormalizeOptionalMode(HvacMode, nameof(HvacMode), CancelToken);
+        FanMode = PreserveOptionalMode(FanMode, nameof(FanMode), CancelToken);
+        PresetMode = PreserveOptionalMode(PresetMode, nameof(PresetMode), CancelToken);
 
         if (!Temperature.HasValue
             && !TargetTemperatureLow.HasValue
             && !TargetTemperatureHigh.HasValue
-            && string.IsNullOrWhiteSpace(HvacMode)
-            && string.IsNullOrWhiteSpace(FanMode)
-            && string.IsNullOrWhiteSpace(PresetMode)
+            && HvacMode is null
+            && FanMode is null
+            && PresetMode is null
             && !Humidity.HasValue)
         {
             throw new ArgumentException("Specify at least one climate value.");
@@ -100,5 +103,23 @@ public sealed class SetHomeAssistantClimateCommand : HomeAssistantTargetCmdlet
         {
             throw new ArgumentOutOfRangeException(name, "The value must be a finite number.");
         }
+    }
+
+    private static string? NormalizeOptionalMode(
+        string? value,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        if (value is null) return null;
+        return ControlValidation.Required(value, name, cancellationToken);
+    }
+
+    private static string? PreserveOptionalMode(
+        string? value,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        if (value is null) return null;
+        return ControlValidation.RequiredUnchanged(value, name, cancellationToken);
     }
 }

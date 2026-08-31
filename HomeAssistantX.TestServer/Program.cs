@@ -39,6 +39,10 @@ while (await Console.In.ReadLineAsync() is { } command)
             server.LabelRegistryResponseJson = "[{\"label_id\":\"security\",\"name\":\"Safety\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300},{\"label_id\":\"security-name\",\"name\":\"Security\",\"color\":null,\"description\":\"Identifier collision fixture\",\"icon\":null,\"created_at\":1787731200,\"modified_at\":1787731300}]";
             Console.WriteLine("DEFAULT_LABELS_SET");
             break;
+        case "SET_STABLE_CONTROL_STATES":
+            server.SetStates("[" + TestHomeAssistantServer.KitchenTemperatureStateJson + "," + TestHomeAssistantServer.KitchenLightOffStateJson + "," + TestHomeAssistantServer.StableControlStatesJson + "]");
+            Console.WriteLine("STABLE_CONTROL_STATES_SET");
+            break;
         case "DROP":
             await server.DropWebSocketsAsync();
             Console.WriteLine("DROPPED");

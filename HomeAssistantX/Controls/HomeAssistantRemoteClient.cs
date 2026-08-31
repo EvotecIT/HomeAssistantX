@@ -1,6 +1,5 @@
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Models;
-using HomeAssistantX.Protocol;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.Subscriptions;
@@ -289,14 +288,7 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         foreach (var command in commands)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (CancellationAwareString.IsNullOrWhiteSpace(command, cancellationToken))
-            {
-                throw new ArgumentException(
-                    "At least one non-empty remote command is required.",
-                    parameterName);
-            }
-
-            values.Add(command);
+            values.Add(ControlValidation.RequiredUnchanged(command, parameterName, cancellationToken));
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -310,16 +302,8 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         return values;
     }
 
-    private static string RequiredSelector(
-        string value,
-        string parameterName,
-        CancellationToken cancellationToken)
-    {
-        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
-            throw new ArgumentException("A non-empty selector is required.", parameterName);
-        cancellationToken.ThrowIfCancellationRequested();
-        return value;
-    }
+    private static string RequiredSelector(string value, string parameterName, CancellationToken cancellationToken)
+        => ControlValidation.RequiredUnchanged(value, parameterName, cancellationToken);
 
     internal static HomeAssistantRemoteStatus? ToStatus(
         HomeAssistantState? state,

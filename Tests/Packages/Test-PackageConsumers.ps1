@@ -50,13 +50,16 @@ try {
 "@ | Set-Content -LiteralPath $projectPath -Encoding UTF8
         @'
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using HomeAssistantX;
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Controls;
+using HomeAssistantX.Discovery;
 using HomeAssistantX.Inventory;
+using HomeAssistantX.MobileApp;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Services;
 using HomeAssistantX.Supervisor;
@@ -150,6 +153,37 @@ public static class PackageContract
                 new HomeAssistantRemoteSendOptions { RepeatCount = 2 },
                 cancellationToken);
         }
+    }
+
+    public static Task<IReadOnlyList<HomeAssistantDiscoveredInstance>> DiscoverLocalAsync(
+        CancellationToken cancellationToken)
+    {
+        return new HomeAssistantDiscoveryClient().DiscoverAsync(
+            TimeSpan.FromSeconds(2),
+            cancellationToken);
+    }
+
+    public static async Task<HomeAssistantServiceCallResult> SetFanAsync(
+        Uri uri,
+        string token,
+        string entityId,
+        CancellationToken cancellationToken)
+    {
+        using (var client = HomeAssistantClient.Create(uri, token))
+        {
+            return await client.Controls.Fans.SetPercentageAsync(
+                HomeAssistantTarget.ForEntity(entityId),
+                35,
+                cancellationToken);
+        }
+    }
+
+    public static HomeAssistantMobileAppWebhookClient CreateCompanionWebhook(
+        HomeAssistantClient client,
+        HomeAssistantMobileAppRegistration registration,
+        IHomeAssistantMobileAppPayloadProtector protector)
+    {
+        return client.MobileApp.CreateWebhookClient(registration, protector);
     }
 }
 '@ | Set-Content -LiteralPath $sourcePath -Encoding UTF8

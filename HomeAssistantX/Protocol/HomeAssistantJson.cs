@@ -244,7 +244,8 @@ internal static class HomeAssistantJson
                 throw new JsonException("The serialized value was not a JSON object.");
             }
 
-            var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+            var result = new Dictionary<string, object?>(
+                new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
             foreach (var property in document.RootElement.EnumerateObject())
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -309,8 +310,27 @@ internal static class HomeAssistantJson
             .ConfigureAwait(false)
             .GetAwaiter()
             .GetResult();
+        return CopyMemoryStream(stream, cancellationToken);
+    }
+
+    internal static byte[] CopyMemoryStream(
+        MemoryStream stream,
+        CancellationToken cancellationToken)
+    {
+        if (stream is null) throw new ArgumentNullException(nameof(stream));
         cancellationToken.ThrowIfCancellationRequested();
-        return stream.ToArray();
+        var length = checked((int)stream.Length);
+        var result = new byte[length];
+        if (!stream.TryGetBuffer(out var source))
+            throw new InvalidOperationException("The serialized JSON buffer could not be accessed.");
+        for (var offset = 0; offset < length; offset += 8192)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = Math.Min(8192, length - offset);
+            Buffer.BlockCopy(source.Array!, source.Offset + offset, result, offset, count);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     internal static bool HasDuplicateProperties(

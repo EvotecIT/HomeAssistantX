@@ -26,6 +26,7 @@ $expectedCommands = @(
     'Disconnect-HomeAssistant',
     'Export-HomeAssistantCameraSnapshot',
     'Export-HomeAssistantDiagnostic',
+    'Find-HomeAssistant',
     'Get-HomeAssistantAction',
     'Get-HomeAssistantApp',
     'Get-HomeAssistantArea',
@@ -61,6 +62,7 @@ $expectedCommands = @(
     'Invoke-HomeAssistantAutomation',
     'Invoke-HomeAssistantRecorderMaintenance',
     'Invoke-HomeAssistantRemote',
+    'Invoke-HomeAssistantRoutine',
     'New-HomeAssistantBackup',
     'Receive-HomeAssistantCalendarEvent',
     'Receive-HomeAssistantEvent',
@@ -75,6 +77,7 @@ $expectedCommands = @(
     'Remove-HomeAssistantStatistic',
     'Restart-HomeAssistant',
     'Send-HomeAssistantNotification',
+    'Set-HomeAssistantAlarm',
     'Set-HomeAssistantAutomation',
     'Set-HomeAssistantCalendarEvent',
     'Set-HomeAssistantCamera',
@@ -83,12 +86,20 @@ $expectedCommands = @(
     'Set-HomeAssistantCover',
     'Set-HomeAssistantDashboard',
     'Set-HomeAssistantEnergy',
+    'Set-HomeAssistantFan',
+    'Set-HomeAssistantHelper',
+    'Set-HomeAssistantHumidifier',
     'Set-HomeAssistantLabel',
+    'Set-HomeAssistantLawnMower',
     'Set-HomeAssistantLight',
     'Set-HomeAssistantLock',
     'Set-HomeAssistantMediaPlayer',
+    'Set-HomeAssistantSiren',
     'Set-HomeAssistantStatistic',
     'Set-HomeAssistantSwitch',
+    'Set-HomeAssistantVacuum',
+    'Set-HomeAssistantValve',
+    'Set-HomeAssistantWaterHeater',
     'Test-HomeAssistantConfiguration',
     'Test-HomeAssistantStatistic'
 )
@@ -127,6 +138,16 @@ $parameterSetContracts = @{
     'Set-HomeAssistantLock'       = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
     'Set-HomeAssistantMediaPlayer' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
     'Set-HomeAssistantSwitch'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Invoke-HomeAssistantRoutine' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantAlarm'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantFan'        = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantHelper'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantHumidifier' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantLawnMower'  = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantSiren'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantVacuum'     = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantValve'      = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
+    'Set-HomeAssistantWaterHeater' = @('Area', 'Device', 'Entity', 'Floor', 'InputObject', 'Label')
 }
 foreach ($entry in $parameterSetContracts.GetEnumerator()) {
     $sets = @((Get-Command -Name $entry.Key).ParameterSets.Name | Sort-Object)
@@ -194,7 +215,7 @@ foreach ($name in 'Action', 'Activity', 'Command', 'RemoteDevice', 'RepeatCount'
     }
 }
 
-foreach ($name in 'Export-HomeAssistantCameraSnapshot', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantAutomation', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'New-HomeAssistantBackup', 'Remove-HomeAssistantAutomation', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantDashboard', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantAutomation', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCamera', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantDashboard', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch') {
+foreach ($name in 'Export-HomeAssistantCameraSnapshot', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantAutomation', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'Invoke-HomeAssistantRoutine', 'New-HomeAssistantBackup', 'Remove-HomeAssistantAutomation', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantDashboard', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantAlarm', 'Set-HomeAssistantAutomation', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCamera', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantDashboard', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantFan', 'Set-HomeAssistantHelper', 'Set-HomeAssistantHumidifier', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLawnMower', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSiren', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch', 'Set-HomeAssistantVacuum', 'Set-HomeAssistantValve', 'Set-HomeAssistantWaterHeater') {
     if (-not (Get-Command -Name $name).Parameters.ContainsKey('WhatIf')) {
         throw "$name must support ShouldProcess/WhatIf."
     }
@@ -669,6 +690,35 @@ try {
     $null = Remove-HomeAssistantAutomation morning-routine -WhatIf
     $null = Remove-HomeAssistantDashboard -Configuration -UrlPath house-main -WhatIf
 
+    $privatePreview = @(
+        Set-HomeAssistantCamera camera.private_front -PreloadStream $true -WhatIf 6>&1
+        Set-HomeAssistantDashboard -New -UrlPath private-house-main -Title 'Private House' -WhatIf 6>&1
+        Set-HomeAssistantAutomation private-morning-routine '{"alias":"Private Morning","triggers":[],"actions":[]}' -WhatIf 6>&1
+        Remove-HomeAssistantAutomation private-morning-routine -WhatIf 6>&1
+        Remove-HomeAssistantDashboard -Configuration -UrlPath private-house-main -WhatIf 6>&1
+        Set-HomeAssistantLight -Entity light.kitchen -Power On -WhatIf 6>&1
+        Invoke-HomeAssistantAction -Domain private_domain -Action private_action -EntityId light.kitchen -WhatIf 6>&1
+    ) | Out-String
+    foreach ($privateValue in 'camera.private_front', 'private-house-main', 'private-morning-routine', 'Private House', 'Private Morning', 'light.kitchen', 'Kitchen light', 'private_domain', 'private_action') {
+        if ($privatePreview.Contains($privateValue)) {
+            throw "WhatIf output exposed private Home Assistant data: $privateValue"
+        }
+    }
+    $confirmationTargetMethod = [HomeAssistantX.PowerShell.HomeAssistantCmdlet].GetMethod(
+        'ConfirmationTarget',
+        [Reflection.BindingFlags]'NonPublic, Static')
+    $confirmationConnection = $connection.PSObject.BaseObject
+    $targetFingerprints = @(
+        $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'light.kitchen'))
+        $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'lock.front_door'))
+        $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'app private_app'))
+        $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'C:\private\diagnostic.zip'))
+    )
+    if (($targetFingerprints | Sort-Object -Unique).Count -ne 4 -or
+        ($targetFingerprints | Where-Object { $_ -notmatch '^Home Assistant target \[[0-9A-F]{8}\] on ' }).Count -ne 0) {
+        throw 'WhatIf output did not preserve distinct privacy-safe operation targets.'
+    }
+
     $null = Set-HomeAssistantStatistic -StatisticId ' sensor.grid_energy ' -UnitOfMeasurement MWh -Confirm:$false
     $server.StandardInput.WriteLine('GET_LAST_RECORDER_METADATA_UPDATE')
     $server.StandardInput.Flush()
@@ -692,7 +742,7 @@ try {
     $importMetadata.HasSum = $true
     $importMetadata.MeanType = [HomeAssistantX.Recorder.HomeAssistantStatisticMeanType]::None
     $importMetadata.UnitClass = 'energy'
-    $importMetadata.UnitOfMeasurement = 'kWh'
+    $importMetadata.UnitOfMeasurement = ' kWh '
     $importRows = 1, 2 | ForEach-Object {
         $row = [HomeAssistantX.Recorder.HomeAssistantStatisticImportRow]::new()
         $row.Start = [DateTimeOffset]::Parse("2026-08-26T0$($_):00:00Z")
@@ -703,7 +753,7 @@ try {
     $server.StandardInput.WriteLine('GET_LAST_RECORDER_IMPORT')
     $server.StandardInput.Flush()
     $importCommand = $server.StandardOutput.ReadLine() | ConvertFrom-Json
-    if ($importCommand.stats.Count -ne 2 -or $importCommand.metadata.has_mean -ne $false -or $importCommand.metadata.statistic_id -ne 'external:daily_energy' -or $importCommand.metadata.source -ne 'external') {
+    if ($importCommand.stats.Count -ne 2 -or $importCommand.metadata.has_mean -ne $false -or $importCommand.metadata.statistic_id -ne 'external:daily_energy' -or $importCommand.metadata.source -ne 'external' -or $importCommand.metadata.unit_class -ne 'energy' -or $importCommand.metadata.unit_of_measurement -ne 'kWh') {
         throw 'Piped statistics rows were not imported as one complete batch.'
     }
 
@@ -783,7 +833,11 @@ try {
         { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.missing -UnitClass energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -UnitOfMeasurement kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -OldUnit kWh -NewUnit kWh -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ClearOldUnit -ClearNewUnit -WhatIf -ErrorAction Stop },
         { Remove-HomeAssistantStatistic ' ' -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantStatistic sensor.Grid_Energy -WhatIf -ErrorAction Stop },
+        { Remove-HomeAssistantStatistic external:Daily_Energy -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.Kitchen -WhatIf -ErrorAction Stop }
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -Domain SENSOR -WhatIf -ErrorAction Stop }
@@ -791,6 +845,8 @@ try {
         { Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityId sensor.kitchen -KeepDays -1 -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantCamera camera.front -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantCamera camera.Front -PreloadStream $true -WhatIf -ErrorAction Stop }
+        { Export-HomeAssistantCameraSnapshot ' ' (Join-Path ([IO.Path]::GetTempPath()) 'invalid-camera.jpg') -WhatIf -ErrorAction Stop }
+        { Export-HomeAssistantCameraSnapshot camera.Front (Join-Path ([IO.Path]::GetTempPath()) 'invalid-camera.jpg') -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ConfigurationJson '[]' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ConfigurationJson '{"views":[],"views":[{}]}' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -New -UrlPath house -Title House -WhatIf -ErrorAction Stop }
@@ -801,6 +857,9 @@ try {
         { Set-HomeAssistantDashboard -DashboardId house-main -Icon home -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -NewResource -ResourceUrl ' ' -ResourceType Module -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ResourceId ' ' -ResourceUrl /local/card.js -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantFan -Entity fan.office -Action TurnOn -PresetMode ' ' -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantStatistic sensor.Bad -ChangeUnit -OldUnit Wh -NewUnit kWh -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantStatistic source:Bad -AdjustSum 1 -StartTime (Get-Date) -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard -ResourceId ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard ([string]::new([char]'d', 256)) -WhatIf -ErrorAction Stop }
@@ -813,6 +872,8 @@ try {
         try { $null = & $invalidPlatformData } catch { $rejected = $true }
         if (-not $rejected) { throw "Invalid platform-data input was accepted under WhatIf: $invalidPlatformData" }
     }
+
+    $null = Invoke-HomeAssistantRecorderMaintenance -PurgeEntities -EntityGlob '*', 'sensor*', ' ', '' -WhatIf -ErrorAction Stop
 
     $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
@@ -827,11 +888,24 @@ try {
     $createServiceCall = $serviceCallType.GetMethod('Create', [Reflection.BindingFlags]'Public, Static')
     $standardAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('light', 'turn_on'))))
     $customAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('private_domain', 'private_action'))))
+    $standardVacuumAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('vacuum', 'start'))))
+    $standardSirenAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('siren', 'turn_on'))))
+    $standardValveAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('valve', 'open_valve'))))
+    $standardFanIncreaseAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('fan', 'increase_speed'))))
+    $standardFanDecreaseAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('fan', 'decrease_speed'))))
+    $standardFanOscillateAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('fan', 'oscillate'))))
+    $standardMediaSourceAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('media_player', 'select_source'))))
+    $standardNotificationAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('notify', 'send_message'))))
     if (-not $standardAction.Contains('light.turn_on')) {
         throw 'WhatIf output did not identify a validated standard Home Assistant action.'
     }
     if ($customAction.Contains('private_domain') -or $customAction.Contains('private_action')) {
         throw 'WhatIf output exposed a custom Home Assistant service name.'
+    }
+    foreach ($standardDescriptor in $standardVacuumAction, $standardSirenAction, $standardValveAction, $standardFanIncreaseAction, $standardFanDecreaseAction, $standardFanOscillateAction, $standardMediaSourceAction, $standardNotificationAction) {
+        if ($standardDescriptor -like '*Home Assistant target*') {
+            throw 'A HomeAssistantX-owned standard action was reduced to an opaque confirmation fingerprint.'
+        }
     }
     $null = $connection | Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId light.kitchen -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
@@ -856,8 +930,23 @@ try {
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
         throw 'Could not reset the typed-control action baseline.'
     }
+    $server.StandardInput.WriteLine('SET_STABLE_CONTROL_STATES')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'STABLE_CONTROL_STATES_SET') {
+        throw 'Could not load the extended typed-control state fixture.'
+    }
     $null = Set-HomeAssistantLight -Area Kitchen -Power On -BrightnessPercent 45 -WhatIf
     $null = Set-HomeAssistantLight -Label Security -Power On -WhatIf
+    $null = Invoke-HomeAssistantRoutine -Entity scene.evening -Action ActivateScene -WhatIf
+    $null = Set-HomeAssistantFan -Entity fan.office -Percentage 35 -WhatIf
+    $null = Set-HomeAssistantValve -Entity valve.water -PositionPercent 25 -WhatIf
+    $null = Set-HomeAssistantVacuum -Entity vacuum.downstairs -Action ReturnToBase -WhatIf
+    $null = Set-HomeAssistantLawnMower -Entity lawn_mower.garden -Action Dock -WhatIf -Confirm:$false
+    $null = Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action Disarm -WhatIf -Confirm:$false
+    $null = Set-HomeAssistantSiren -Entity siren.house -Action TurnOff -WhatIf -Confirm:$false
+    $null = Set-HomeAssistantHumidifier -Entity humidifier.bedroom -HumidityPercent 50 -WhatIf
+    $null = Set-HomeAssistantWaterHeater -Entity water_heater.tank -Temperature 52 -WhatIf
+    $null = Set-HomeAssistantHelper -Entity input_number.volume -Domain InputNumber -Number 15 -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
@@ -905,6 +994,27 @@ try {
         if ($_.Exception.Message -notlike "*no 'remote' entities*") { throw }
     }
 
+    $cyclicMediaExtra = @{}
+    $cyclicMediaExtra.self = $cyclicMediaExtra
+    $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
+        throw 'Could not reset the media preflight action baseline.'
+    }
+    $cyclicMediaRejected = $false
+    try {
+        $null = Set-HomeAssistantMediaPlayer -Entity media_player.kitchen -VolumePercent 30 -MediaContentId test -MediaContentType music -MediaExtra $cyclicMediaExtra -Confirm:$false -ErrorAction Stop
+    } catch {
+        $cyclicMediaRejected = $true
+    }
+    if (-not $cyclicMediaRejected) {
+        throw 'The media-player cmdlet accepted cyclic MediaExtra.'
+    }
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') {
+        throw 'The media-player cmdlet dispatched a settings mutation before rejecting cyclic MediaExtra.'
+    }
     foreach ($invalidMedia in @(
         { Set-HomeAssistantMediaPlayer -Area Kitchen -MediaContentId test -MediaContentType music -Enqueue Add -Announce -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -VolumePercent 30 -VolumeStep Up -WhatIf -ErrorAction Stop },
@@ -936,7 +1046,11 @@ try {
         { Invoke-HomeAssistantRemote -Area Kitchen -Action SendCommand -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -TimeoutSeconds 1e-10 -WhatIf -ErrorAction Stop },
         { Invoke-HomeAssistantRemote -Area Kitchen -Action DeleteCommand -Command Power -TimeoutSeconds 10 -WhatIf -ErrorAction Stop },
-        { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -TimeoutSeconds 30 -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -Command Power -TimeoutSeconds 30 -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action TurnOn -Activity ' ' -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action SendCommand -Command Power -RemoteDevice ' ' -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action LearnCommand -RemoteDevice ' ' -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRemote -Area Kitchen -Action DeleteCommand -Command Power -RemoteDevice ' ' -WhatIf -ErrorAction Stop }
     )) {
         $invalidRemoteShapeRejected = $false
         try {
@@ -958,6 +1072,7 @@ try {
     foreach ($invalidControl in @(
         { Set-HomeAssistantLight -Area Kitchen -ColorTemperatureKelvin 3000 -RgbColor 10, 20, 30 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLock -Area Kitchen -Action Unlock -Code ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCover -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop },
@@ -966,6 +1081,21 @@ try {
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Source ' ' -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -SoundMode ' ' -VolumeStep Up -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Enqueue 99 -MediaContentId test -MediaContentType music -WhatIf -ErrorAction Stop },
+        { Invoke-HomeAssistantRoutine -Entity scene.evening -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantFan -Entity fan.office -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLight -Entity light.kitchen -Power On -Effect ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantValve -Entity valve.water -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantVacuum -Entity vacuum.downstairs -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantVacuum -Entity vacuum.downstairs -CleaningAreaId kitchen, ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantLawnMower -Entity lawn_mower.garden -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantAlarm -Entity alarm_control_panel.home -Action Disarm -Code ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantSiren -Entity siren.house -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantSiren -Entity siren.house -Action TurnOn -Tone ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantHumidifier -Entity humidifier.bedroom -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantHumidifier -Entity humidifier.bedroom -Mode ' ' -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantWaterHeater -Entity water_heater.tank -Action 99 -WhatIf -ErrorAction Stop },
+        { Set-HomeAssistantWaterHeater -Entity water_heater.tank -Temperature 52 -OperationMode ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantClimate -Area Kitchen -Temperature 21 -HvacMode ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantClimate -Area Kitchen -FanMode ' ' -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantStatistic -StatisticId sensor.grid_energy -ChangeUnit -OldUnit ' ' -NewUnit MWh -WhatIf -ErrorAction Stop },
@@ -1030,6 +1160,62 @@ try {
     $pipelineLightCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
     if (@($pipelineLightCall.target.entity_id)[0] -ne 'light.kitchen' -or $pipelineLightCall.service -ne 'turn_off') {
         throw 'The typed light cmdlet did not accept joined entity pipeline input.'
+    }
+
+    $null = Set-HomeAssistantFan -Entity fan.office -Percentage 35 -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedFanCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedFanCall.domain -ne 'fan' -or $typedFanCall.service -ne 'set_percentage' -or $typedFanCall.service_data.percentage -ne 35) {
+        throw 'The typed fan cmdlet produced the wrong action payload.'
+    }
+
+    $null = Set-HomeAssistantFan -Entity fan.office -PresetMode ' Breeze ' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedFanPresetCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedFanPresetCall.service -ne 'set_preset_mode' -or $typedFanPresetCall.service_data.preset_mode -cne ' Breeze ') {
+        throw 'The typed fan cmdlet did not preserve integration-defined preset text.'
+    }
+
+    $null = Set-HomeAssistantSiren -Entity siren.house -Action TurnOn -Tone ' Alert 2 ' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedSirenToneCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedSirenToneCall.service -ne 'turn_on' -or $typedSirenToneCall.service_data.tone -cne ' Alert 2 ') {
+        throw 'The typed siren cmdlet did not preserve integration-defined tone text.'
+    }
+
+    $null = Set-HomeAssistantLight -Entity light.kitchen -Power On -Effect ' Aurora + ' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedLightEffectCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedLightEffectCall.service -ne 'turn_on' -or $typedLightEffectCall.service_data.effect -cne ' Aurora + ') {
+        throw 'The typed light cmdlet did not preserve integration-defined effect text.'
+    }
+
+    $null = Set-HomeAssistantHelper -Entity input_number.volume -Domain InputNumber -Number 15 -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedHelperCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedHelperCall.domain -ne 'input_number' -or $typedHelperCall.service -ne 'set_value' -or $typedHelperCall.service_data.value -ne 15) {
+        throw 'The typed helper cmdlet produced the wrong action payload.'
+    }
+
+    $null = Set-HomeAssistantHelper -Entity select.house_mode -Domain Select -Option ' Away ' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedSelectCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if ($typedSelectCall.service_data.option -cne ' Away ') {
+        throw 'The typed helper cmdlet did not preserve select-option whitespace.'
+    }
+
+    $null = Set-HomeAssistantHelper -Entity input_select.house_mode -Domain InputSelect -Options ' Home ', 'Away' -Confirm:$false
+    $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
+    $server.StandardInput.Flush()
+    $typedSelectOptionsCall = $server.StandardOutput.ReadLine() | ConvertFrom-Json
+    if (@($typedSelectOptionsCall.service_data.options)[0] -cne ' Home ' -or @($typedSelectOptionsCall.service_data.options)[1] -cne 'Away') {
+        throw 'The typed helper cmdlet did not preserve input-select option whitespace.'
     }
 
     $server.StandardInput.WriteLine('CLEAR_LAST_SUPERVISOR_COMMAND')

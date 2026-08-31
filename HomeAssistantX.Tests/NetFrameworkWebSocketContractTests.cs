@@ -1,7 +1,10 @@
 ﻿#if NET472
+using System.Net;
+using System.Net.Http;
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.MobileApp;
 using HomeAssistantX.Models;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
@@ -12,6 +15,18 @@ namespace HomeAssistantX.Tests;
 
 public sealed class NetFrameworkWebSocketContractTests
 {
+    [Fact]
+    public void WebhookClientEscapesLongIdentifiersAcrossFrameworks()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration
+            {
+                WebhookId = "webhook-" + new string('a', 40_000)
+            });
+    }
+
     [Fact]
     public async Task NetFrameworkAuthenticatesSubscribesAndReconcilesAfterReconnect()
     {
@@ -117,11 +132,77 @@ public sealed class NetFrameworkWebSocketContractTests
         await server.SendCommandAsync("WAIT_FOR_UNSUBSCRIBE", "UNSUBSCRIBED");
     }
 
+    [Fact]
+    public async Task NetFrameworkWebhookCancelsStalledResponseStreamAcquisition()
+    {
+        var content = new StallingStreamContent();
+        var options = new HomeAssistantClientOptions(
+            new Uri("https://home.example.invalid/"),
+            new StaticAccessTokenProvider("unused"))
+        {
+            RequestTimeout = TimeSpan.FromSeconds(5)
+        };
+        using var client = new HomeAssistantClient(options);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration { WebhookId = "stalling-stream" },
+            protector: null,
+            () => new StaticResponseHandler(content));
+        using var cancellation = new CancellationTokenSource();
+
+        var operation = webhook.GetConfigurationAsync(cancellation.Token);
+        await WithTimeoutAsync(content.Started.Task);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        content.Complete(new MemoryStream(Array.Empty<byte>()));
+    }
+
     private static async Task<T> WithTimeoutAsync<T>(Task<T> task)
     {
         var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(10)));
         Assert.Same(task, completed);
         return await task;
+    }
+
+    private sealed class StaticResponseHandler : HttpMessageHandler
+    {
+        private readonly HttpContent _content;
+
+        internal StaticResponseHandler(HttpContent content)
+        {
+            _content = content;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = _content });
+    }
+
+    private sealed class StallingStreamContent : HttpContent
+    {
+        private readonly TaskCompletionSource<Stream> _stream =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal TaskCompletionSource<bool> Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal void Complete(Stream stream) => _stream.TrySetResult(stream);
+
+        protected override Task<Stream> CreateContentReadStreamAsync()
+        {
+            Started.TrySetResult(true);
+            return _stream.Task;
+        }
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
+            => throw new NotSupportedException();
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
     }
 }
 #endif

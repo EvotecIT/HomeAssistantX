@@ -111,35 +111,26 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             ? null
             : HomeAssistantMediaPlayerClient.NormalizeEntityIds(JoinMember, nameof(JoinMember), CancelToken);
         var mediaExtra = ConvertExtra(MediaExtra, CancelToken);
+        var mediaContentId = MediaContentId is null
+            ? null
+            : ControlValidation.RequiredUnchanged(MediaContentId, nameof(MediaContentId), CancelToken);
+        var mediaContentType = MediaContentType is null
+            ? null
+            : ControlValidation.RequiredUnchanged(MediaContentType, nameof(MediaContentType), CancelToken);
+        var source = Source is null
+            ? null
+            : ControlValidation.RequiredUnchanged(Source, nameof(Source), CancelToken);
+        var soundMode = SoundMode is null
+            ? null
+            : ControlValidation.RequiredUnchanged(SoundMode, nameof(SoundMode), CancelToken);
 
-        if (MediaContentId is not null && string.IsNullOrWhiteSpace(MediaContentId))
-        {
-            throw new ArgumentException("A supplied MediaContentId cannot be empty.", nameof(MediaContentId));
-        }
-
-        if (MediaContentType is not null && string.IsNullOrWhiteSpace(MediaContentType))
-        {
-            throw new ArgumentException("A supplied MediaContentType cannot be empty.", nameof(MediaContentType));
-        }
-
-        if (Source is not null && string.IsNullOrWhiteSpace(Source))
-        {
-            throw new ArgumentException("A supplied Source cannot be empty.", nameof(Source));
-        }
-
-        if (SoundMode is not null && string.IsNullOrWhiteSpace(SoundMode))
-        {
-            throw new ArgumentException("A supplied SoundMode cannot be empty.", nameof(SoundMode));
-        }
-
-        var hasContent = !string.IsNullOrWhiteSpace(MediaContentId)
-            || !string.IsNullOrWhiteSpace(MediaContentType);
-        if (!HasAnyOperation(hasContent))
+        var hasContent = mediaContentId is not null || mediaContentType is not null;
+        if (!HasAnyOperation(hasContent, source, soundMode))
         {
             throw new ArgumentException("Specify at least one media-player value or action.");
         }
 
-        if (string.IsNullOrWhiteSpace(MediaContentId) != string.IsNullOrWhiteSpace(MediaContentType))
+        if ((mediaContentId is null) != (mediaContentType is null))
         {
             throw new ArgumentException("MediaContentId and MediaContentType must be supplied together.");
         }
@@ -173,8 +164,8 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             || VolumePercent.HasValue
             || VolumeStep.HasValue
             || Muted.HasValue
-            || !string.IsNullOrWhiteSpace(Source)
-            || !string.IsNullOrWhiteSpace(SoundMode)
+            || source is not null
+            || soundMode is not null
             || Shuffle.HasValue
             || Repeat.HasValue
             || SeekSeconds.HasValue
@@ -193,14 +184,14 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             return;
         }
 
-        var settings = HasSettings()
+        var settings = HasSettings(source, soundMode)
             ? new HomeAssistantMediaPlayerOptions
             {
                 Power = Power,
                 VolumePercent = VolumePercent,
                 Muted = Muted,
-                Source = Source,
-                SoundMode = SoundMode,
+                Source = source,
+                SoundMode = soundMode,
                 Shuffle = Shuffle,
                 Repeat = Repeat
             }
@@ -212,8 +203,8 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             ClearPlaylist.IsPresent,
             joinMembers,
             Unjoin.IsPresent,
-            hasContent ? MediaContentId : null,
-            hasContent ? MediaContentType : null,
+            hasContent ? mediaContentId : null,
+            hasContent ? mediaContentType : null,
             hasContent
                 ? new HomeAssistantPlayMediaOptions
                 {
@@ -229,15 +220,15 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         WriteObject(results, true);
     }
 
-    private bool HasAnyOperation(bool hasContent)
+    private bool HasAnyOperation(bool hasContent, string? source, string? soundMode)
     {
         return Power.HasValue
             || Playback.HasValue
             || VolumePercent.HasValue
             || VolumeStep.HasValue
             || Muted.HasValue
-            || !string.IsNullOrWhiteSpace(Source)
-            || !string.IsNullOrWhiteSpace(SoundMode)
+            || source is not null
+            || soundMode is not null
             || Shuffle.HasValue
             || Repeat.HasValue
             || SeekSeconds.HasValue
@@ -250,13 +241,13 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
             || MediaExtra is not null;
     }
 
-    private bool HasSettings()
+    private bool HasSettings(string? source, string? soundMode)
     {
         return Power.HasValue
             || VolumePercent.HasValue
             || Muted.HasValue
-            || !string.IsNullOrWhiteSpace(Source)
-            || !string.IsNullOrWhiteSpace(SoundMode)
+            || source is not null
+            || soundMode is not null
             || Shuffle.HasValue
             || Repeat.HasValue;
     }
@@ -273,12 +264,14 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
         foreach (DictionaryEntry entry in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (entry.Key is not string key || string.IsNullOrWhiteSpace(key))
+            if (entry.Key is not string key)
             {
                 throw new ArgumentException("MediaExtra keys must be non-empty strings.", nameof(MediaExtra));
             }
 
-            result.Add(key, entry.Value);
+            result.Add(
+                ControlValidation.RequiredUnchanged(key, nameof(MediaExtra), cancellationToken),
+                entry.Value);
         }
 
         cancellationToken.ThrowIfCancellationRequested();

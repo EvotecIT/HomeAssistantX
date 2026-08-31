@@ -119,9 +119,11 @@ public sealed class HomeAssistantInventoryClient
             (left, right) =>
             {
                 var byName = CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken);
-                return byName != 0
-                    ? byName
-                    : CancellationAwareString.CompareOrdinalIgnoreCase(left.EntityId, right.EntityId, cancellationToken);
+                if (byName != 0) return byName;
+                var byEntityId = CancellationAwareString.CompareOrdinalIgnoreCase(left.EntityId, right.EntityId, cancellationToken);
+                return byEntityId != 0
+                    ? byEntityId
+                    : CancellationAwareString.CompareOrdinal(left.EntityId, right.EntityId, cancellationToken);
             },
             cancellationToken);
 
@@ -161,7 +163,18 @@ public sealed class HomeAssistantInventoryClient
                 Raw = device
             });
         }
-        Sort(devices, (left, right) => CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken), cancellationToken);
+        Sort(
+            devices,
+            (left, right) =>
+            {
+                var byName = CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken);
+                if (byName != 0) return byName;
+                var byDeviceId = CancellationAwareString.CompareOrdinalIgnoreCase(left.DeviceId, right.DeviceId, cancellationToken);
+                return byDeviceId != 0
+                    ? byDeviceId
+                    : CancellationAwareString.CompareOrdinal(left.DeviceId, right.DeviceId, cancellationToken);
+            },
+            cancellationToken);
 
         var areas = new List<HomeAssistantAreaInfo>(registries.Areas.Count);
         foreach (var area in registries.Areas)
@@ -192,7 +205,18 @@ public sealed class HomeAssistantInventoryClient
                 Raw = area
             });
         }
-        Sort(areas, (left, right) => CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken), cancellationToken);
+        Sort(
+            areas,
+            (left, right) =>
+            {
+                var byName = CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken);
+                if (byName != 0) return byName;
+                var byAreaId = CancellationAwareString.CompareOrdinalIgnoreCase(left.AreaId, right.AreaId, cancellationToken);
+                return byAreaId != 0
+                    ? byAreaId
+                    : CancellationAwareString.CompareOrdinal(left.AreaId, right.AreaId, cancellationToken);
+            },
+            cancellationToken);
 
         var floors = new List<HomeAssistantFloorInfo>(registries.Floors.Count);
         foreach (var floor in registries.Floors)
@@ -215,9 +239,13 @@ public sealed class HomeAssistantInventoryClient
             (left, right) =>
             {
                 var byLevel = (left.Level ?? int.MaxValue).CompareTo(right.Level ?? int.MaxValue);
-                return byLevel != 0
-                    ? byLevel
-                    : CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken);
+                if (byLevel != 0) return byLevel;
+                var byName = CancellationAwareString.CompareOrdinalIgnoreCase(left.Name, right.Name, cancellationToken);
+                if (byName != 0) return byName;
+                var byFloorId = CancellationAwareString.CompareOrdinalIgnoreCase(left.FloorId, right.FloorId, cancellationToken);
+                return byFloorId != 0
+                    ? byFloorId
+                    : CancellationAwareString.CompareOrdinal(left.FloorId, right.FloorId, cancellationToken);
             },
             cancellationToken);
 

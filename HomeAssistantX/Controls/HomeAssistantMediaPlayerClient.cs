@@ -90,7 +90,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
 
         cancellationToken.ThrowIfCancellationRequested();
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
-            .NormalizeForDomain(Domain, cancellationToken);
+            .NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
         var frozenOptions = options.Snapshot(cancellationToken);
         var power = frozenOptions.Power;
         var playback = frozenOptions.Playback;
@@ -370,7 +370,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
     {
         cancellationToken.ThrowIfCancellationRequested();
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
-            .NormalizeForDomain(Domain, cancellationToken);
+            .NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
         mediaContentId = ControlValidation.RequiredUnchanged(
             mediaContentId,
             nameof(mediaContentId),
@@ -434,7 +434,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         cancellationToken.ThrowIfCancellationRequested();
         var context = CaptureContext(cancellationToken);
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
-            .NormalizeForDomain(Domain, cancellationToken);
+            .NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
         var frozenPlayMediaOptions = playMediaOptions?.Snapshot(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (settings is not null)
@@ -556,10 +556,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         return HomeAssistantJson.FreezeObject(extra, parameterName, "MediaExtra", cancellationToken);
     }
 
-    private static string? NormalizeOptional(
-        string? value,
-        string name,
-        CancellationToken cancellationToken)
+    private static string? NormalizeOptional(string? value, string name, CancellationToken cancellationToken)
         => value is null ? null : ControlValidation.Required(value, name, cancellationToken);
 
     private static string? PreserveOptional(

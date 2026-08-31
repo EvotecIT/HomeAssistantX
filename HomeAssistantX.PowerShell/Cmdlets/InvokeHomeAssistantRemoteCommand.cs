@@ -87,15 +87,19 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
             throw new ArgumentOutOfRangeException(nameof(CommandType), CommandType.Value, "Unsupported remote command type.");
         }
 
-        CancelToken.ThrowIfCancellationRequested();
-        var commands = Command?.ToArray();
-        CancelToken.ThrowIfCancellationRequested();
+        var commands = Command is null
+            ? null
+            : ControlValidation.RequiredValuesUnchanged(Command, nameof(Command), CancelToken);
         ValidateFiniteDuration(DelaySeconds, nameof(DelaySeconds), allowZero: true);
         ValidateFiniteDuration(HoldSeconds, nameof(HoldSeconds), allowZero: true);
         ValidateFiniteDuration(TimeoutSeconds, nameof(TimeoutSeconds), allowZero: false);
-        var activity = Activity is null ? null : RequireSelector(Activity, nameof(Activity), CancelToken);
-        var remoteDevice = RemoteDevice is null ? null : RequireSelector(RemoteDevice, nameof(RemoteDevice), CancelToken);
-        ValidateShape(commands, CancelToken);
+        var activity = Activity is null
+            ? null
+            : ControlValidation.RequiredUnchanged(Activity, nameof(Activity), CancelToken);
+        var remoteDevice = RemoteDevice is null
+            ? null
+            : ControlValidation.RequiredUnchanged(RemoteDevice, nameof(RemoteDevice), CancelToken);
+        ValidateShape(commands, activity, remoteDevice, CancelToken);
         var target = await ResolveTargetAsync("remote").ConfigureAwait(false);
         var learningTimeout = ToDuration(TimeoutSeconds);
         var learningResponseMargin = TimeSpan.FromSeconds(1);
@@ -162,19 +166,10 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
         WriteObject(result);
     }
 
-    private static string RequireSelector(
-        string value,
-        string parameterName,
-        CancellationToken cancellationToken)
-    {
-        if (CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
-            throw new ArgumentException("A non-empty selector is required.", parameterName);
-        cancellationToken.ThrowIfCancellationRequested();
-        return value;
-    }
-
     private void ValidateShape(
         IReadOnlyList<string>? commands,
+        string? activity,
+        string? remoteDevice,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -188,25 +183,17 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
             foreach (var command in commands!)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (CancellationAwareString.IsNullOrWhiteSpace(command, cancellationToken))
-                {
-                    throw new ArgumentException("Command must contain at least one non-empty value.", nameof(Command));
-                }
+                _ = ControlValidation.RequiredUnchanged(command, nameof(Command), cancellationToken);
             }
         }
-
         var hasSendValues = RepeatCount.HasValue || DelaySeconds.HasValue || HoldSeconds.HasValue;
         var hasLearnValues = CommandType.HasValue || Alternative.HasValue || TimeoutSeconds.HasValue;
-        var hasActivity = Activity is not null
-            && !CancellationAwareString.IsNullOrWhiteSpace(Activity, cancellationToken);
-        var hasRemoteDevice = RemoteDevice is not null
-            && !CancellationAwareString.IsNullOrWhiteSpace(RemoteDevice, cancellationToken);
         switch (Action)
         {
             case HomeAssistantRemoteAction.TurnOn:
             case HomeAssistantRemoteAction.TurnOff:
             case HomeAssistantRemoteAction.Toggle:
-                if (hasCommands || hasRemoteDevice || hasSendValues || hasLearnValues)
+                if (hasCommands || remoteDevice is not null || hasSendValues || hasLearnValues)
                 {
                     throw new ArgumentException("Power actions accept only the optional Activity value.");
                 }
@@ -218,14 +205,14 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
                     throw new ArgumentException("SendCommand requires Command.", nameof(Command));
                 }
 
-                if (hasActivity || hasLearnValues)
+                if (activity is not null || hasLearnValues)
                 {
                     throw new ArgumentException("SendCommand does not accept Activity or learning options.");
                 }
 
                 break;
             case HomeAssistantRemoteAction.LearnCommand:
-                if (hasActivity || hasSendValues)
+                if (activity is not null || hasSendValues)
                 {
                     throw new ArgumentException("LearnCommand does not accept Activity or send timing options.");
                 }
@@ -237,7 +224,7 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
                     throw new ArgumentException("DeleteCommand requires Command.", nameof(Command));
                 }
 
-                if (hasActivity || hasSendValues || hasLearnValues)
+                if (activity is not null || hasSendValues || hasLearnValues)
                 {
                     throw new ArgumentException("DeleteCommand accepts only Command and RemoteDevice.");
                 }

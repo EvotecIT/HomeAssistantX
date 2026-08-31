@@ -246,7 +246,7 @@ public sealed class InventoryAndControlsContractTests
 
         await client.Controls.Climate.SetAsync(
             HomeAssistantTarget.ForEntity("climate.kitchen"),
-            new HomeAssistantClimateOptions { Temperature = 21.5, HvacMode = "heat" });
+            new HomeAssistantClimateOptions { Temperature = 21.5, HvacMode = " heat " });
         using (var climate = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody)))
         {
             Assert.Equal("set_temperature", climate.RootElement.GetProperty("service").GetString());
@@ -274,6 +274,14 @@ public sealed class InventoryAndControlsContractTests
         using var lockCall = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
         Assert.Equal("unlock", lockCall.RootElement.GetProperty("service").GetString());
         Assert.Equal(" 1234 ", lockCall.RootElement.GetProperty("service_data").GetProperty("code").GetString());
+
+        await client.Controls.Alarms.ActAsync(
+            HomeAssistantTarget.ForEntity("alarm_control_panel.home"),
+            HomeAssistantAlarmAction.ArmNight,
+            " 5678 ");
+        using var alarmCall = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
+        Assert.Equal("alarm_arm_night", alarmCall.RootElement.GetProperty("service").GetString());
+        Assert.Equal(" 5678 ", alarmCall.RootElement.GetProperty("service_data").GetProperty("code").GetString());
     }
 
     [Fact]
@@ -355,6 +363,22 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task TypedControlFamiliesRejectEmptyTargetsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var empty = HomeAssistantTarget.Create();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Alarms.ActAsync(empty, HomeAssistantAlarmAction.ArmHome));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(empty, new HomeAssistantClimateOptions { Temperature = 21 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.MediaPlayers.SetAsync(empty, new HomeAssistantMediaPlayerOptions { VolumePercent = 25 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Helpers.SetBooleanAsync(empty, true));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Routines.ActivateSceneAsync(empty));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task ClimateShapeValidationFailsBeforeAnyServiceCall()
     {
         using var server = new TestHomeAssistantServer();
@@ -373,6 +397,12 @@ public sealed class InventoryAndControlsContractTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.Climate.SetAsync(
             target,
             new HomeAssistantClimateOptions { Temperature = double.NaN }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { Temperature = 21, HvacMode = " " }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Climate.SetAsync(
+            target,
+            new HomeAssistantClimateOptions { FanMode = "\t" }));
 
         Assert.Null(server.LastServiceCallBody);
     }
@@ -401,6 +431,85 @@ public sealed class InventoryAndControlsContractTests
         Assert.Equal("auto", snapshot.FanMode);
         Assert.Equal("comfort", snapshot.PresetMode);
         Assert.Equal(45, snapshot.Humidity);
+    }
+
+    [Fact]
+    public async Task CompoundClimateOperationSnapshotsTargetAndOptionsBeforeItsFirstDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var pause = server.PauseNextServiceCall();
+        var target = HomeAssistantTarget.ForEntity("climate.kitchen");
+        var options = new HomeAssistantClimateOptions
+        {
+            Temperature = 21,
+            HvacMode = "heat",
+            FanMode = "low",
+            PresetMode = "home",
+            Humidity = 45
+        };
+
+        var operation = client.Controls.Climate.SetAsync(target, options);
+        await pause.Received.WaitAsync(TimeSpan.FromSeconds(2));
+        target.EntityIds = new[] { "climate.mutated" };
+        options.FanMode = "high";
+        options.PresetMode = "away";
+        options.Humidity = 70;
+        pause.Release();
+        await operation;
+
+        Assert.Equal(4, server.ServiceCallBodies.Count);
+        foreach (var body in server.ServiceCallBodies)
+        {
+            using var call = JsonDocument.Parse(body);
+            Assert.Equal("climate.kitchen", call.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+        }
+
+        using var fan = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_fan_mode"));
+        Assert.Equal("low", fan.RootElement.GetProperty("service_data").GetProperty("fan_mode").GetString());
+        using var preset = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_preset_mode"));
+        Assert.Equal("home", preset.RootElement.GetProperty("service_data").GetProperty("preset_mode").GetString());
+        using var humidity = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_humidity"));
+        Assert.Equal(45, humidity.RootElement.GetProperty("service_data").GetProperty("humidity").GetDouble());
+    }
+
+    [Fact]
+    public async Task ClimateAndMediaIntegrationOptionsPreserveExactText()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Controls.Climate.SetAsync(
+            HomeAssistantTarget.ForEntity("climate.kitchen"),
+            new HomeAssistantClimateOptions { FanMode = " Silent ", PresetMode = " Away " });
+        using (var fan = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_fan_mode")))
+        {
+            Assert.Equal(" Silent ", fan.RootElement.GetProperty("service_data").GetProperty("fan_mode").GetString());
+        }
+        using (var preset = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "set_preset_mode")))
+        {
+            Assert.Equal(" Away ", preset.RootElement.GetProperty("service_data").GetProperty("preset_mode").GetString());
+        }
+
+        server.ClearLastServiceCall();
+        await client.Controls.MediaPlayers.SetAsync(
+            HomeAssistantTarget.ForEntity("media_player.kitchen"),
+            new HomeAssistantMediaPlayerOptions { Source = " HDMI 2 ", SoundMode = " Night " });
+        using (var source = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "select_source")))
+        {
+            Assert.Equal(" HDMI 2 ", source.RootElement.GetProperty("service_data").GetProperty("source").GetString());
+        }
+        using var sound = JsonDocument.Parse(FindServiceCall(server.ServiceCallBodies, "select_sound_mode"));
+        Assert.Equal(" Night ", sound.RootElement.GetProperty("service_data").GetProperty("sound_mode").GetString());
+    }
+
+    private static string FindServiceCall(IEnumerable<string> bodies, string service)
+    {
+        return bodies.Single(body =>
+        {
+        using var document = JsonDocument.Parse(body);
+            return document.RootElement.GetProperty("service").GetString() == service;
+        });
     }
 
     [Fact]

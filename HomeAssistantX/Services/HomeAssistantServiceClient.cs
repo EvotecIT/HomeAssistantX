@@ -76,6 +76,7 @@ public sealed class HomeAssistantServiceClient
         HomeAssistantServiceCall call,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var requestTimeout = _options.RequestTimeout;
         return await CallAsync(call, requestTimeout, cancellationToken).ConfigureAwait(false);
     }
@@ -85,6 +86,7 @@ public sealed class HomeAssistantServiceClient
         TimeSpan requestTimeout,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (call is null)
         {
             throw new ArgumentNullException(nameof(call));

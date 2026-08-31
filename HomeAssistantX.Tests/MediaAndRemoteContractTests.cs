@@ -819,7 +819,9 @@ public sealed class MediaAndRemoteContractTests
             Announce = false
         };
 
-        var operation = client.Controls.MediaPlayers.SetAsync(target, options);
+        var operation = client.Controls.MediaPlayers.SetAsync(
+            target,
+            options);
         await pause.Received.WaitAsync(TimeSpan.FromSeconds(2));
         target.EntityIds = new[] { "media_player.mutated" };
         options.Announce = true;

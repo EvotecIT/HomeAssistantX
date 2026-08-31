@@ -123,6 +123,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? LastRequestPath { get; private set; }
 
+    public Uri? WebhookRedirectUri { get; set; }
     public int OAuthTokenRequestCount { get; private set; }
 
     public string? LastRevokedRefreshToken { get; private set; }
@@ -229,7 +230,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string? ExactStateResponseJson { get; set; }
     public string StateMutationResponseJson { get; set; } =
         "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}";
-
     public string WeatherForecastResponseJson { get; set; } =
         "{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T00:00:00+00:00\",\"condition\":\"sunny\",\"temperature\":24.5,\"templow\":15.0,\"precipitation_probability\":10,\"future_field\":\"kept\"}]}}";
 
@@ -256,6 +256,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string EnergyInfoResponseJson { get; set; } =
         "{\"cost_sensors\":{\"sensor.grid_energy\":\"sensor.grid_cost\"},\"solar_forecast_domains\":[\"forecast_solar\"]}";
+
+    public string? MobileRegistrationResponseJson { get; set; }
 
     public string MediaBrowseResponseJson { get; set; } =
         "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"media-source://media_source\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":true,\"children\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"future_media_field\":true}]}";
@@ -293,7 +295,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string FrontendPanelsResponseJson { get; set; } =
         "{\"lovelace\":{\"title\":\"Overview\",\"component_name\":\"lovelace\",\"default_visible\":true,\"show_in_sidebar\":true,\"require_admin\":false,\"future_panel\":true}}";
-
     public string LovelaceConfigurationResponseJson { get; set; } =
         "{\"title\":\"Home\",\"views\":[{\"title\":\"Kitchen\"}],\"future_config\":true}";
 
@@ -1345,6 +1346,28 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         await stream.FlushAsync().ConfigureAwait(false);
     }
 
+    private static async Task WriteRedirectResponseAsync(NetworkStream stream, Uri location)
+    {
+        var header = Encoding.ASCII.GetBytes(
+            "HTTP/1.1 307 Temporary Redirect\r\n"
+            + "Location: " + location.AbsoluteUri + "\r\n"
+            + "Content-Length: 0\r\n"
+            + "Connection: close\r\n\r\n");
+        await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
+        await stream.FlushAsync().ConfigureAwait(false);
+    }
+
+    private static async Task WriteTruncatedResponseAsync(NetworkStream stream)
+    {
+        var header = Encoding.ASCII.GetBytes(
+            "HTTP/1.1 200 OK\r\n"
+            + "Content-Type: application/json\r\n"
+            + "Content-Length: 100\r\n"
+            + "Connection: close\r\n\r\n{");
+        await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
+        await stream.FlushAsync().ConfigureAwait(false);
+    }
+
     private async Task WriteHeadersAndStallAsync(NetworkStream stream, int contentLength)
     {
         var header = Encoding.ASCII.GetBytes(
@@ -1418,6 +1441,21 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public const string LivingRoomRemoteStateJson =
         "{\"entity_id\":\"remote.living_room\",\"state\":\"on\",\"attributes\":{\"friendly_name\":\"Living room remote\"}}";
+
+    public const string StableControlStatesJson =
+        "{\"entity_id\":\"scene.evening\",\"state\":\"scening\",\"attributes\":{\"friendly_name\":\"Evening\"}},"
+        + "{\"entity_id\":\"fan.office\",\"state\":\"off\",\"attributes\":{\"friendly_name\":\"Office fan\"}},"
+        + "{\"entity_id\":\"valve.water\",\"state\":\"closed\",\"attributes\":{\"friendly_name\":\"Water valve\"}},"
+        + "{\"entity_id\":\"vacuum.downstairs\",\"state\":\"docked\",\"attributes\":{\"friendly_name\":\"Downstairs vacuum\"}},"
+        + "{\"entity_id\":\"lawn_mower.garden\",\"state\":\"docked\",\"attributes\":{\"friendly_name\":\"Garden mower\"}},"
+        + "{\"entity_id\":\"alarm_control_panel.home\",\"state\":\"disarmed\",\"attributes\":{\"friendly_name\":\"Home alarm\"}},"
+        + "{\"entity_id\":\"siren.house\",\"state\":\"off\",\"attributes\":{\"friendly_name\":\"House siren\"}},"
+        + "{\"entity_id\":\"humidifier.bedroom\",\"state\":\"off\",\"attributes\":{\"friendly_name\":\"Bedroom humidifier\"}},"
+        + "{\"entity_id\":\"water_heater.tank\",\"state\":\"eco\",\"attributes\":{\"friendly_name\":\"Water tank\"}},"
+        + "{\"entity_id\":\"media_player.kitchen\",\"state\":\"idle\",\"attributes\":{\"friendly_name\":\"Kitchen speaker\"}},"
+        + "{\"entity_id\":\"input_number.volume\",\"state\":\"10\",\"attributes\":{\"friendly_name\":\"Volume helper\"}},"
+        + "{\"entity_id\":\"select.house_mode\",\"state\":\" Home \",\"attributes\":{\"friendly_name\":\"House mode\"}},"
+        + "{\"entity_id\":\"input_select.house_mode\",\"state\":\" Home \",\"attributes\":{\"friendly_name\":\"Input house mode\"}}";
 
     public const string DefaultStatesJson = "[" + KitchenTemperatureStateJson + "," + KitchenLightOffStateJson + "]";
 

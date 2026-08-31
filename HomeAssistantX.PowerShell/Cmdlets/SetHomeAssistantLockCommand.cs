@@ -29,10 +29,11 @@ public sealed class SetHomeAssistantLockCommand : HomeAssistantTargetCmdlet
             throw new ArgumentOutOfRangeException(nameof(Action), Action, "Unsupported lock action.");
         }
 
+        var code = Code is null ? null : ControlValidation.RequiredUnchanged(Code, nameof(Code), CancelToken);
         var target = await ResolveTargetAsync("lock").ConfigureAwait(false);
         if (ShouldProcess(target.Description, Action.ToString()))
         {
-            WriteObject(await Client.Controls.Locks.ActAsync(target.Target, Action, Code, CancelToken).ConfigureAwait(false));
+            WriteObject(await Client.Controls.Locks.ActAsync(target.Target, Action, code, CancelToken).ConfigureAwait(false));
         }
     }
 }

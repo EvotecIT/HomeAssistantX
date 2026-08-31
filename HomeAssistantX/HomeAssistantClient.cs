@@ -11,6 +11,7 @@ using HomeAssistantX.Energy;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Inventory;
 using HomeAssistantX.Media;
+using HomeAssistantX.MobileApp;
 using HomeAssistantX.Registries;
 using HomeAssistantX.Notifications;
 using HomeAssistantX.Recorder;
@@ -48,6 +49,7 @@ public sealed class HomeAssistantClient : IDisposable
         System = new HomeAssistantSystemClient(WebSocket);
         Cameras = new HomeAssistantCameraClient(Rest, States, WebSocket, System);
         Media = new HomeAssistantMediaBrowserClient(WebSocket);
+        MobileApp = new HomeAssistantMobileAppClient(Rest, options);
         Dashboards = new HomeAssistantDashboardClient(WebSocket);
         Automations = new HomeAssistantAutomationClient(States, Rest, Services);
         Operations = new HomeAssistantOperationsClient(Rest, WebSocket, States, Services);
@@ -88,6 +90,9 @@ public sealed class HomeAssistantClient : IDisposable
 
     /// <summary>Provides Home Assistant-native media-source and media-player browsing, search, and resolution.</summary>
     public HomeAssistantMediaBrowserClient Media { get; }
+
+    /// <summary>Registers companion applications and creates scoped mobile-app webhook clients.</summary>
+    public HomeAssistantMobileAppClient MobileApp { get; }
 
     /// <summary>Provides typed frontend panel and Lovelace dashboard, configuration, and resource access.</summary>
     public HomeAssistantDashboardClient Dashboards { get; }

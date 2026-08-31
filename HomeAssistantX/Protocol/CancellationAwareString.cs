@@ -184,6 +184,12 @@ internal static class CancellationAwareString
     internal static int GetOrdinalHashCode(
         string value,
         CancellationToken cancellationToken)
+        => GetOrdinalHashCode(value, cancellationToken, traversalObserver: null);
+
+    internal static int GetOrdinalHashCode(
+        string value,
+        CancellationToken cancellationToken,
+        Action<int>? traversalObserver)
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
         cancellationToken.ThrowIfCancellationRequested();
@@ -192,7 +198,11 @@ internal static class CancellationAwareString
             var hash = 17;
             for (var index = 0; index < value.Length; index++)
             {
-                if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((index & 63) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    traversalObserver?.Invoke(index);
+                }
                 hash = (hash * 31) + value[index];
             }
             cancellationToken.ThrowIfCancellationRequested();

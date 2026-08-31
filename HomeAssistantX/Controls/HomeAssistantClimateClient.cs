@@ -19,7 +19,7 @@ public sealed class HomeAssistantClimateClient : HomeAssistantControlClientBase
 
         cancellationToken.ThrowIfCancellationRequested();
         var frozenOptions = options.Snapshot(cancellationToken);
-        frozenOptions.Validate();
+        frozenOptions.Validate(cancellationToken);
         var temperature = frozenOptions.Temperature;
         var targetTemperatureLow = frozenOptions.TargetTemperatureLow;
         var targetTemperatureHigh = frozenOptions.TargetTemperatureHigh;
@@ -39,7 +39,7 @@ public sealed class HomeAssistantClimateClient : HomeAssistantControlClientBase
 
         var context = CaptureContext(cancellationToken);
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
-            .NormalizeForDomain(Domain, cancellationToken);
+            .NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (hasTemperature)
         {

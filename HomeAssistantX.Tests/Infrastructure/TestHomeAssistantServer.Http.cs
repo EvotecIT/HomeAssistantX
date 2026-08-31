@@ -16,6 +16,10 @@ internal sealed partial class TestHomeAssistantServer
         var pathWithoutQuery = path.Split('?')[0];
         LastRequestBody = body;
         LastRequestPath = path;
+        var currentAuthorization = headers.TryGetValue("Authorization", out var authorization)
+            ? authorization
+            : null;
+        LastAuthorization = currentAuthorization;
 
         if (method == "POST" && pathWithoutQuery == "/auth/token")
         {
@@ -54,10 +58,128 @@ internal sealed partial class TestHomeAssistantServer
             return;
         }
 
-        var currentAuthorization = headers.TryGetValue("Authorization", out var authorization)
-            ? authorization
-            : null;
-        LastAuthorization = currentAuthorization;
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/test-webhook")
+        {
+            using var webhookDocument = System.Text.Json.JsonDocument.Parse(body);
+            var root = webhookDocument.RootElement;
+            if (root.TryGetProperty("encrypted", out var encrypted) && encrypted.ValueKind == System.Text.Json.JsonValueKind.True)
+            {
+                if (!root.TryGetProperty("type", out var encryptedType)
+                    || encryptedType.ValueKind != System.Text.Json.JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(encryptedType.GetString()))
+                {
+                    await WriteHttpResponseAsync(stream, 400, "{\"error\":\"missing_type\"}").ConfigureAwait(false);
+                    return;
+                }
+                var encryptedRequest = root.GetProperty("encrypted_data").GetString();
+                using var decryptedDocument = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(encryptedRequest!));
+                var decrypted = decryptedDocument.RootElement;
+                if (encryptedType.GetString() == "update_registration"
+                    && (decrypted.ValueKind != System.Text.Json.JsonValueKind.Object
+                        || !decrypted.TryGetProperty("os_version", out var osVersion)
+                        || osVersion.GetString() != "12.0"
+                        || decrypted.TryGetProperty("type", out _)
+                        || decrypted.TryGetProperty("data", out _)))
+                {
+                    await WriteHttpResponseAsync(stream, 400, "{\"error\":\"invalid_encrypted_data\"}").ConfigureAwait(false);
+                    return;
+                }
+                var encryptedResponse = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"version\":\"2026.8.3\"}"));
+                await WriteHttpResponseAsync(stream, 200, "{\"encrypted\":true,\"encrypted_data\":\"" + encryptedResponse + "\"}").ConfigureAwait(false);
+            }
+            else
+            {
+                await WriteHttpResponseAsync(stream, 200, "{\"version\":\"2026.8.3\"}").ConfigureAwait(false);
+            }
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/plaintext-encrypted")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"version\":\"forged\"}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/invalid-encrypted")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"encrypted\":true,\"encrypted_data\":\"\"}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/invalid-camera-response")
+        {
+            await WriteHttpResponseAsync(stream, 200, "[]").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/incomplete-camera-response")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/failed-camera-response")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"success\":false}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/hls-only-camera-response")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"hls_path\":\"/api/hls/front/master_playlist.m3u8\"}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/mjpeg-only-camera-response")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"mjpeg_path\":\"/api/camera_proxy_stream/camera.front\",\"hls_path\":null}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/invalid-mjpeg-camera-path")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"mjpeg_path\":\"https://other.invalid/camera/front\"}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/invalid-hls-camera-path")
+        {
+            await WriteHttpResponseAsync(stream, 200, "{\"hls_path\":\"//other.invalid/camera/front\"}").ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/redirect")
+        {
+            if (WebhookRedirectUri is null)
+            {
+                await WriteHttpResponseAsync(stream, 400, "{\"message\":\"Missing redirect target\"}").ConfigureAwait(false);
+            }
+            else
+            {
+                await WriteRedirectResponseAsync(stream, WebhookRedirectUri).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/truncated")
+        {
+            await WriteTruncatedResponseAsync(stream).ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/stall")
+        {
+            await WriteHeadersAndStallAsync(stream, 10).ConfigureAwait(false);
+            return;
+        }
+
+        if (method == "POST" && pathWithoutQuery == "/api/webhook/oversize")
+        {
+            await WriteHeadersAndStallAsync(stream, 100_000_000).ConfigureAwait(false);
+            return;
+        }
+
         if (!string.Equals(currentAuthorization, "Bearer " + RequiredAccessToken, StringComparison.Ordinal))
         {
             Interlocked.Increment(ref _unauthorizedRequestCount);
@@ -211,6 +333,12 @@ internal sealed partial class TestHomeAssistantServer
                 break;
             case "POST /api/conversation/process":
                 await WriteHttpResponseAsync(stream, 200, "{\"conversation_id\":\"conversation-1\",\"continue_conversation\":false}").ConfigureAwait(false);
+                break;
+            case "POST /api/mobile_app/registrations":
+                await WriteHttpResponseAsync(stream, 201, MobileRegistrationResponseJson
+                    ?? (body.Contains("\"supports_encryption\":true", StringComparison.Ordinal)
+                        ? "{\"webhook_id\":\"test-webhook\",\"secret\":\"test-secret\",\"cloudhook_url\":null,\"remote_ui_url\":null,\"future_field\":\"preserved\"}"
+                        : "{\"webhook_id\":\"test-webhook\",\"secret\":null,\"cloudhook_url\":null,\"remote_ui_url\":null,\"future_field\":\"preserved\"}")).ConfigureAwait(false);
                 break;
             case "GET /api/test/oversize":
                 await WriteHeadersAndStallAsync(stream, 100_000_000).ConfigureAwait(false);

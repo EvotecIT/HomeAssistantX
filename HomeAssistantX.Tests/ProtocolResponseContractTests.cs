@@ -25,6 +25,8 @@ public sealed class ProtocolResponseContractTests
         Assert.False(HomeAssistantEntityId.TryNormalizeDomain("li__ght", out _));
         Assert.False(HomeAssistantEntityId.TryNormalizeDomain("1sensor", out _));
         Assert.False(HomeAssistantEntityId.TryNormalize("1sensor.room", out _));
+        Assert.True(HomeAssistantEntityId.TryNormalizeDomain(new string('a', 64), out _));
+        Assert.False(HomeAssistantEntityId.TryNormalizeDomain(new string('a', 65), out _));
         Assert.True(HomeAssistantEntityId.TryNormalize("sensor." + new string('a', 248), out _));
         Assert.False(HomeAssistantEntityId.TryNormalize("sensor." + new string('a', 249), out _));
         foreach (var invalid in new[]
@@ -142,6 +144,19 @@ public sealed class ProtocolResponseContractTests
             HomeAssistantJson.SerializeToUtf8Bytes(values, cancellation.Token));
 
         Assert.InRange(values.ReadCount, 1, 16);
+    }
+
+    [Fact]
+    public void TransportSerializationFinalCopyPrioritizesCancellation()
+    {
+        using var stream = new MemoryStream();
+        var payload = new byte[1024 * 1024];
+        stream.Write(payload, 0, payload.Length);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantJson.CopyMemoryStream(stream, cancellation.Token));
     }
 
     [Fact]
@@ -455,6 +470,21 @@ public sealed class ProtocolResponseContractTests
             JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
                 "{\"provider_payload\":[1,2,3]}",
                 options));
+    }
+
+    [Fact]
+    public void OrdinalResponseKeyHashingObservesCancellationDuringTraversal()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var comparer = new CancellationAwareOrdinalStringEqualityComparer(
+            cancellation.Token,
+            index =>
+            {
+                if (index == 64) cancellation.Cancel();
+            });
+        var value = new string('x', 256);
+
+        Assert.ThrowsAny<OperationCanceledException>(() => comparer.GetHashCode(value));
     }
 
     [Theory]
