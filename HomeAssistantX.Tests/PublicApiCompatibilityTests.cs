@@ -258,6 +258,16 @@ public sealed class PublicApiCompatibilityTests
         Assert.Contains("windows10.0", PlatformContract(constructor), StringComparison.Ordinal);
         Assert.Contains("SupportedOSPlatformGuard", PlatformContract(guard), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void PropertyFormatterPreservesPlatformAnnotationOwnership()
+    {
+        var property = typeof(PlatformAccessorFixture).GetProperty(nameof(PlatformAccessorFixture.Value))!;
+        var contract = FormatProperty(property);
+
+        Assert.Contains("get-platform(SupportedOSPlatform:\"windows10.0\")", contract, StringComparison.Ordinal);
+        Assert.Contains("set-platform(UnsupportedOSPlatform:\"browser\")", contract, StringComparison.Ordinal);
+    }
 #endif
 
     [Fact]
@@ -1025,7 +1035,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + AsyncMethodBuilderContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + JsonNumberHandlingContract(type) + JsonObjectCreationHandlingContract(type) + JsonPolymorphismContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + AsyncMethodBuilderContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + JsonNumberHandlingContract(type) + JsonObjectCreationHandlingContract(type) + JsonUnmappedMemberHandlingContract(type) + JsonPolymorphismContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -1480,7 +1490,8 @@ public sealed class PublicApiCompatibilityTests
         var getter = IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
         var setter = IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
         return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(property) + ObsoleteContract(property)
-            + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
+            + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property)
+            + NamedPlatformContract("get", getter) + NamedPlatformContract("set", setter) + RequiresCodeContract(property, getter, setter)
             + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
             + JsonPropertyNameContract(property)
             + JsonPropertyOrderContract(property)
@@ -1605,6 +1616,15 @@ public sealed class PublicApiCompatibilityTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void FormatterPreservesJsonUnmappedMemberHandlingContracts()
+    {
+        Assert.Contains(
+            "Disallow",
+            JsonUnmappedMemberHandlingContract(typeof(JsonUnmappedMemberHandlingFixture)),
+            StringComparison.Ordinal);
+    }
+
     private static string JsonPropertyNameContract(MemberInfo member)
     {
         var attribute = member.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
@@ -1692,6 +1712,17 @@ public sealed class PublicApiCompatibilityTests
             StringComparison.Ordinal));
         return attribute?.ConstructorArguments.Count == 1
             ? "json-object-creation-handling(" + FormatAttributeArgument(attribute.ConstructorArguments[0]) + ") "
+            : string.Empty;
+    }
+
+    private static string JsonUnmappedMemberHandlingContract(Type type)
+    {
+        var attribute = type.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            typeof(JsonUnmappedMemberHandlingAttribute).FullName,
+            StringComparison.Ordinal));
+        return attribute?.ConstructorArguments.Count == 1
+            ? "json-unmapped-member-handling(" + FormatAttributeArgument(attribute.ConstructorArguments[0]) + ") "
             : string.Empty;
     }
 
@@ -1800,6 +1831,9 @@ public sealed class PublicApiCompatibilityTests
         [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
         public List<int> Field = new();
     }
+
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    private sealed class JsonUnmappedMemberHandlingFixture;
 
     [JsonPolymorphic(
         TypeDiscriminatorPropertyName = "$kind",
@@ -2026,6 +2060,17 @@ public sealed class PublicApiCompatibilityTests
 
         [System.Runtime.Versioning.SupportedOSPlatformGuard("windows")]
         public static bool IsWindows => true;
+    }
+
+    private sealed class PlatformAccessorFixture
+    {
+        public string Value
+        {
+            [System.Runtime.Versioning.SupportedOSPlatform("windows10.0")]
+            get => string.Empty;
+            [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
+            set { }
+        }
     }
 #endif
 
@@ -2865,6 +2910,12 @@ public sealed class PublicApiCompatibilityTests
             }
         }
         return contracts.Count == 0 ? string.Empty : string.Join(" ", contracts) + " ";
+    }
+
+    private static string NamedPlatformContract(string name, ICustomAttributeProvider? provider)
+    {
+        var contract = PlatformContract(provider);
+        return contract.Length == 0 ? string.Empty : name + "-" + contract;
     }
 
     private static string ObsoleteContract(params ICustomAttributeProvider?[] providers)

@@ -2010,6 +2010,25 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task ListControlPayloadsCaptureCallerOwnedCountOnce()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var areaIds = new SingleCountReadOnlyList<string>(new[] { "kitchen", "hall" });
+        var options = new SingleCountReadOnlyList<string>(new[] { "Home", "Away" });
+
+        await client.Controls.Vacuums.CleanAreaAsync(
+            HomeAssistantTarget.ForEntity("vacuum.house"),
+            areaIds);
+        await client.Controls.Helpers.SetSelectOptionsAsync(
+            HomeAssistantTarget.ForEntity("input_select.mode"),
+            options);
+
+        Assert.Equal(1, areaIds.CountReads);
+        Assert.Equal(1, options.CountReads);
+    }
+
+    [Fact]
     public async Task IntegrationDefinedControlValuesObserveCancellationDuringValidation()
     {
         using var server = new TestHomeAssistantServer();
@@ -2707,6 +2726,37 @@ public sealed class StableControlAndAdapterContractTests
                 yield return new string('x', 4096);
             }
         }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class SingleCountReadOnlyList<T> : IReadOnlyList<T>
+    {
+        private readonly IReadOnlyList<T> _values;
+
+        internal SingleCountReadOnlyList(IReadOnlyList<T> values)
+        {
+            _values = values;
+        }
+
+        internal int CountReads { get; private set; }
+
+        public int Count
+        {
+            get
+            {
+                CountReads++;
+                if (CountReads > 1)
+                {
+                    throw new InvalidOperationException("The caller-owned count was read more than once.");
+                }
+                return _values.Count;
+            }
+        }
+
+        public T this[int index] => _values[index];
+
+        public IEnumerator<T> GetEnumerator() => _values.GetEnumerator();
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }

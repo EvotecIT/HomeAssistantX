@@ -324,13 +324,19 @@ internal static class ControlValidation
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (values is null || values.Count == 0)
+        if (values is null)
         {
             throw new ArgumentException("At least one non-empty value is required.", name);
         }
 
-        var normalized = new string[values.Count];
-        for (var index = 0; index < values.Count; index++)
+        var count = values.Count;
+        if (count == 0)
+        {
+            throw new ArgumentException("At least one non-empty value is required.", name);
+        }
+
+        var normalized = new string[count];
+        for (var index = 0; index < count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             normalized[index] = preserveWhitespace
