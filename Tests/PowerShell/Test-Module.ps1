@@ -662,6 +662,9 @@ try {
     $null = Invoke-HomeAssistantRecorderMaintenance -RefreshStatisticsIssues -Confirm:$false
     $null = Set-HomeAssistantCamera camera.front -PreloadStream $false -WhatIf
     $null = Set-HomeAssistantDashboard -ConfigurationJson '{"views":[]}' -WhatIf
+    $null = Set-HomeAssistantDashboard -New -UrlPath House_main-main -Title House -WhatIf
+    $null = Set-HomeAssistantDashboard -ConfigurationJson '{"views":[]}' -UrlPath House_main -WhatIf
+    $null = Remove-HomeAssistantDashboard -Configuration -UrlPath house--main -WhatIf
     $null = Set-HomeAssistantAutomation morning-routine '{"alias":"Morning","triggers":[],"actions":[]}' -WhatIf
     $null = Remove-HomeAssistantAutomation morning-routine -WhatIf
     $null = Remove-HomeAssistantDashboard -Configuration -UrlPath house-main -WhatIf
