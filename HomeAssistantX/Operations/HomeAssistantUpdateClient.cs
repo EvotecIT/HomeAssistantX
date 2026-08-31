@@ -95,10 +95,9 @@ public sealed class HomeAssistantUpdateClient
 
     private static string RequireVersion(string value, CancellationToken cancellationToken)
     {
-        HomeAssistantX.Protocol.HomeAssistantJson.ThrowIfStringTraversalCanceled(value, cancellationToken);
-        return string.IsNullOrWhiteSpace(value)
+        return CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)
             ? throw new ArgumentException("A supplied update version cannot be empty.", nameof(value))
-            : value.Trim();
+            : CancellationAwareString.Trim(value, cancellationToken);
     }
 
     private static string NormalizeEntityId(string entityId, CancellationToken cancellationToken)

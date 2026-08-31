@@ -280,6 +280,34 @@ public sealed class OperationsContractTests
     }
 
     [Fact]
+    public async Task UpdateVersionNormalizationStopsWhenCancellationArrivesDuringTraversal()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        using var started = new ManualResetEventSlim();
+        var version = new string(' ', 20_000_000) + "2026.8.4" + new string(' ', 20_000_000);
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.Set();
+                await client.Operations.Updates.InstallAsync(
+                    "update.core",
+                    version,
+                    cancellationToken: cancellation.Token).ConfigureAwait(false);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
     public async Task UpdateBulkReadRejectsMalformedServerEntityIds()
     {
         using var server = new TestHomeAssistantServer();
