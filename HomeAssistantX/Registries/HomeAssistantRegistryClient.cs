@@ -91,6 +91,8 @@ public sealed class HomeAssistantRegistryClient
             "created label",
             cancellationToken);
         ValidateLabel(created, cancellationToken);
+        if (!CancellationAwareString.EqualsOrdinal(created.Name, label.Name, cancellationToken))
+            throw new HomeAssistantProtocolException("The created Home Assistant label did not match the requested name.");
         return created;
     }
 
@@ -157,6 +159,8 @@ public sealed class HomeAssistantRegistryClient
             "created category",
             cancellationToken);
         ValidateCategory(created, cancellationToken);
+        if (!CancellationAwareString.EqualsOrdinal(created.Name, category.Name, cancellationToken))
+            throw new HomeAssistantProtocolException("The created Home Assistant category did not match the requested name.");
         return created;
     }
 

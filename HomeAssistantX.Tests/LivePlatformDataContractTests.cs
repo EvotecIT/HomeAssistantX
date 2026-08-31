@@ -842,6 +842,22 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task RegistryCreatesCorrelateReturnedNames()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            LabelMutationResponseJson = "{\"label_id\":\"security\",\"name\":\"Other\"}",
+            CategoryMutationResponseJson = "{\"category_id\":\"comfort\",\"name\":\"Other\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.CreateLabelAsync(new HomeAssistantLabelCreate("Security")));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.CreateCategoryAsync("automation", new HomeAssistantCategoryCreate("Comfort")));
+    }
+
+    [Fact]
     public async Task RegistryIdentifiersAreNormalizedBeforeDispatchAndCorrelation()
     {
         using var server = new TestHomeAssistantServer();
