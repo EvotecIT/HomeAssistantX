@@ -290,6 +290,12 @@ internal static class HomeAssistantJson
             () => HasDuplicatePropertiesCore(value, cancellationToken),
             cancellationToken);
 
+    /// <summary>Checks a value inside an already isolated response traversal.</summary>
+    internal static bool HasDuplicatePropertiesInline(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
+        => HasDuplicatePropertiesCore(value, cancellationToken);
+
     private static bool HasDuplicatePropertiesCore(
         JsonElement value,
         CancellationToken cancellationToken)
@@ -323,6 +329,12 @@ internal static class HomeAssistantJson
         => RunCancellationIsolated(
             () => HasDuplicateObjectPropertiesCore(value, cancellationToken),
             cancellationToken);
+
+    /// <summary>Checks one object inside an already isolated response traversal.</summary>
+    internal static bool HasDuplicateObjectPropertiesInline(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
+        => HasDuplicateObjectPropertiesCore(value, cancellationToken);
 
     private static bool HasDuplicateObjectPropertiesCore(
         JsonElement value,
