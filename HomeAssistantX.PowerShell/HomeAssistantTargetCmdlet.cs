@@ -81,7 +81,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         {
             ValidateDomains(InputObject, expectedDomain, CancelToken);
             BindInputConnection(InputObject, CancelToken);
-            var ids = SelectDistinct(InputObject, x => x.EntityId, StringComparer.OrdinalIgnoreCase, CancelToken);
+            var ids = SelectDistinct(InputObject, x => x.EntityId, new HomeAssistantX.Protocol.CancellationAwareStringEqualityComparer(CancelToken), CancelToken);
             return new ResolvedHomeAssistantTarget(HomeAssistantTarget.ForEntity(ids), ids.Length + " " + expectedDomain + " entities (" + string.Join(", ", ids) + ")", ids.Length);
         }
 
@@ -95,7 +95,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
             {
                 var entities = Select(Entity, value => Client.Inventory.ResolveEntity(snapshot, value, CancelToken), CancelToken);
                 ValidateDomains(entities, expectedDomain, CancelToken);
-                var ids = SelectDistinct(entities, x => x.EntityId, StringComparer.OrdinalIgnoreCase, CancelToken);
+                var ids = SelectDistinct(entities, x => x.EntityId, new HomeAssistantX.Protocol.CancellationAwareStringEqualityComparer(CancelToken), CancelToken);
                 return new ResolvedHomeAssistantTarget(HomeAssistantTarget.ForEntity(ids), Describe("entities", Select(entities, x => x.Name, CancelToken), ids.Length), ids.Length);
             }
             case AreaParameterSet:
@@ -124,11 +124,11 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
                     ? Select(selectors, value => ResolveLabel(labels, value, CancelToken), CancelToken)
                     : Array.Empty<Registries.HomeAssistantLabel>();
                 var labelIds = snapshot.Registries.IsLabelRegistryAvailable
-                    ? SelectDistinct(resolved, x => x.LabelId, StringComparer.Ordinal, CancelToken)
-                    : SelectDistinct(selectors, value => ResolveAssignedLabelId(snapshot, value, CancelToken), StringComparer.Ordinal, CancelToken);
+                    ? SelectDistinct(resolved, x => x.LabelId, new HomeAssistantX.Protocol.CancellationAwareOrdinalStringEqualityComparer(CancelToken), CancelToken)
+                    : SelectDistinct(selectors, value => ResolveAssignedLabelId(snapshot, value, CancelToken), new HomeAssistantX.Protocol.CancellationAwareOrdinalStringEqualityComparer(CancelToken), CancelToken);
                 var selection = IndexLabelSelection(snapshot, labelIds, CancelToken);
                 var matching = Count(snapshot.Entities, entity => IsSelectedByLabel(entity, selection, CancelToken)
-                    && string.Equals(entity.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase), CancelToken);
+                    && HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(entity.Domain, expectedDomain, CancelToken), CancelToken);
                 if (matching == 0)
                 {
                     throw new HomeAssistantLookupException("The selected labels contain no '" + expectedDomain + "' entities.");
@@ -193,7 +193,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         foreach (var entity in entities)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!string.Equals(entity.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase)) mismatches.Add(entity);
+            if (!HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(entity.Domain, expectedDomain, cancellationToken)) mismatches.Add(entity);
         }
         if (mismatches.Count > 0)
         {
@@ -203,7 +203,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
 
     private static int CountEntities(IEnumerable<HomeAssistantEntityInfo> entities, string expectedDomain, CancellationToken cancellationToken)
     {
-        var count = Count(entities, x => string.Equals(x.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase), cancellationToken);
+        var count = Count(entities, x => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(x.Domain, expectedDomain, cancellationToken), cancellationToken);
         if (count == 0)
         {
             throw new HomeAssistantLookupException("The selected target contains no '" + expectedDomain + "' entities.");
@@ -218,13 +218,13 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         CancellationToken cancellationToken)
     {
         var materialized = Select(labels, label => label, cancellationToken);
-        var exactNativeMatch = FirstOrDefault(materialized, label => string.Equals(label.LabelId, value, StringComparison.Ordinal), cancellationToken);
+        var exactNativeMatch = FirstOrDefault(materialized, label => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(label.LabelId, value, cancellationToken), cancellationToken);
         if (exactNativeMatch is not null)
         {
             return exactNativeMatch;
         }
 
-        var nativeMatches = Where(materialized, label => string.Equals(label.LabelId, value, StringComparison.OrdinalIgnoreCase), cancellationToken);
+        var nativeMatches = Where(materialized, label => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(label.LabelId, value, cancellationToken), cancellationToken);
         if (nativeMatches.Length == 1)
         {
             return nativeMatches[0];
@@ -235,7 +235,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
             throw new HomeAssistantLookupException("More than one Home Assistant label has the native ID '" + value + "'.");
         }
 
-        var nameMatches = Where(materialized, label => string.Equals(label.Name, value, StringComparison.OrdinalIgnoreCase), cancellationToken);
+        var nameMatches = Where(materialized, label => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(label.Name, value, cancellationToken), cancellationToken);
         return nameMatches.Length switch
         {
             1 => nameMatches[0],
@@ -251,15 +251,15 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
                 .Concat(SelectMany(snapshot.Devices, device => device.Raw.Labels, cancellationToken))
                 .Concat(SelectMany(snapshot.Areas, area => area.Raw.Labels, cancellationToken)),
             labelId => labelId,
-            StringComparer.Ordinal,
+            new HomeAssistantX.Protocol.CancellationAwareOrdinalStringEqualityComparer(cancellationToken),
             cancellationToken);
-        var exactMatch = FirstOrDefault(assigned, labelId => string.Equals(labelId, value, StringComparison.Ordinal), cancellationToken);
+        var exactMatch = FirstOrDefault(assigned, labelId => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(labelId, value, cancellationToken), cancellationToken);
         if (exactMatch is not null)
         {
             return exactMatch;
         }
 
-        var matches = Where(assigned, labelId => string.Equals(labelId, value, StringComparison.OrdinalIgnoreCase), cancellationToken);
+        var matches = Where(assigned, labelId => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(labelId, value, cancellationToken), cancellationToken);
         return matches.Length switch
         {
             1 => matches[0],
@@ -455,7 +455,7 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         foreach (var item in source)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.Equals(item, value, StringComparison.Ordinal)) return true;
+            if (HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(item, value, cancellationToken)) return true;
         }
         cancellationToken.ThrowIfCancellationRequested();
         return false;

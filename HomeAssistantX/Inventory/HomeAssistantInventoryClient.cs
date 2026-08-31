@@ -418,7 +418,7 @@ public sealed class HomeAssistantInventoryClient
 
         if (query.Entity is { Count: > 0 })
         {
-            var selectedEntityIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var selectedEntityIds = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
             foreach (var value in query.Entity)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -431,7 +431,7 @@ public sealed class HomeAssistantInventoryClient
                     "entity",
                     cancellationToken).EntityId);
             }
-            entities = entities.Where(x => { cancellationToken.ThrowIfCancellationRequested(); return selectedEntityIds.Contains(x.EntityId); });
+            entities = entities.Where(x => selectedEntityIds.Contains(x.EntityId));
         }
 
         if (query.Name is not null)
@@ -441,25 +441,26 @@ public sealed class HomeAssistantInventoryClient
 
         if (query.Domain is not null)
         {
-            entities = entities.Where(x => { cancellationToken.ThrowIfCancellationRequested(); return Matches(x.Domain, query.Domain.Trim()); });
+            var domain = CancellationAwareString.Trim(query.Domain, cancellationToken);
+            entities = entities.Where(x => Matches(x.Domain, domain, cancellationToken));
         }
 
         if (query.Device is not null)
         {
             var device = ResolveUnique(snapshot.Devices, query.Device!, x => x.DeviceId, x => x.Name, null, "device", cancellationToken);
-            entities = entities.Where(x => { cancellationToken.ThrowIfCancellationRequested(); return Matches(x.DeviceId, device.DeviceId); });
+            entities = entities.Where(x => Matches(x.DeviceId, device.DeviceId, cancellationToken));
         }
 
         if (query.Area is not null)
         {
             var area = ResolveUnique(snapshot.Areas, query.Area!, x => x.AreaId, x => x.Name, x => x.Aliases, "area", cancellationToken);
-            entities = entities.Where(x => { cancellationToken.ThrowIfCancellationRequested(); return Matches(x.AreaId, area.AreaId); });
+            entities = entities.Where(x => Matches(x.AreaId, area.AreaId, cancellationToken));
         }
 
         if (query.Floor is not null)
         {
             var floor = ResolveUnique(snapshot.Floors, query.Floor!, x => x.FloorId, x => x.Name, x => x.Aliases, "floor", cancellationToken);
-            entities = entities.Where(x => { cancellationToken.ThrowIfCancellationRequested(); return Matches(x.FloorId, floor.FloorId); });
+            entities = entities.Where(x => Matches(x.FloorId, floor.FloorId, cancellationToken));
         }
 
         if (query.AvailableOnly)
@@ -515,19 +516,19 @@ public sealed class HomeAssistantInventoryClient
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(idOrName))
+        if (CancellationAwareString.IsNullOrWhiteSpace(idOrName, cancellationToken))
         {
             throw new ArgumentException("A non-empty identifier or name is required.", nameof(idOrName));
         }
 
-        var normalized = idOrName.Trim();
-        var exactIds = FindMatches(values, x => Matches(id(x), normalized), cancellationToken);
+        var normalized = CancellationAwareString.Trim(idOrName, cancellationToken);
+        var exactIds = FindMatches(values, x => Matches(id(x), normalized, cancellationToken), cancellationToken);
         if (exactIds.Length == 1)
         {
             return exactIds[0];
         }
 
-        var exactNames = FindMatches(values, x => Matches(name(x), normalized), cancellationToken);
+        var exactNames = FindMatches(values, x => Matches(name(x), normalized, cancellationToken), cancellationToken);
         if (exactNames.Length == 1)
         {
             return exactNames[0];
@@ -576,7 +577,7 @@ public sealed class HomeAssistantInventoryClient
         foreach (var alias in aliases)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (Matches(alias, normalized)) return true;
+            if (Matches(alias, normalized, cancellationToken)) return true;
         }
         cancellationToken.ThrowIfCancellationRequested();
         return false;
@@ -640,9 +641,9 @@ public sealed class HomeAssistantInventoryClient
         return separator > 0 ? entityId.Substring(0, separator) : string.Empty;
     }
 
-    private static bool Matches(string? left, string right)
+    private static bool Matches(string? left, string right, CancellationToken cancellationToken)
     {
-        return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        return CancellationAwareString.EqualsOrdinalIgnoreCase(left, right, cancellationToken);
     }
 
     private static string FirstNonEmpty(CancellationToken cancellationToken, params string?[] values)
