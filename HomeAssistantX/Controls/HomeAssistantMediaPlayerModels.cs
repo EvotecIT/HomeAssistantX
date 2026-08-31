@@ -555,9 +555,33 @@ public sealed class HomeAssistantMediaPlayerStatus
     internal static IReadOnlyList<string> GetGroupMembers(
         IReadOnlyDictionary<string, JsonElement> attributes,
         CancellationToken cancellationToken)
-        => RunGroupMemberDecode(
-            () => GetGroupMembersCore(attributes, cancellationToken),
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!HomeAssistantAttributeReader.TryGetValue(
+                attributes,
+                "group_members",
+                out var value,
+                cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Array.Empty<string>();
+        }
+
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant media-player group members were malformed.");
+        }
+
+        if (value.GetArrayLength() == 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Array.Empty<string>();
+        }
+
+        return RunGroupMemberDecode(
+            () => GetGroupMembersCore(value, cancellationToken),
             cancellationToken);
+    }
 
     private static IReadOnlyList<string> RunGroupMemberDecode(
         Func<IReadOnlyList<string>> operation,
@@ -593,25 +617,10 @@ public sealed class HomeAssistantMediaPlayerStatus
     }
 
     private static IReadOnlyList<string> GetGroupMembersCore(
-        IReadOnlyDictionary<string, JsonElement> attributes,
+        JsonElement value,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!HomeAssistantAttributeReader.TryGetValue(
-                attributes,
-                "group_members",
-                out var value,
-                cancellationToken))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Array.Empty<string>();
-        }
-
-        if (value.ValueKind != JsonValueKind.Array)
-        {
-            throw new HomeAssistantProtocolException("The Home Assistant media-player group members were malformed.");
-        }
-
         var members = new List<string>();
         var unique = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in value.EnumerateArray())
