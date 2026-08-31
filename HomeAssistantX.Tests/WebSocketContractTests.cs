@@ -913,6 +913,21 @@ public sealed class WebSocketContractTests
         Assert.Null(server.GetLastWebSocketCommand("auth/sign_path"));
     }
 
+    [Fact]
+    public async Task SignPathObservesCancellationBeforeScanningTheRequestedRoute()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.System.SignPathAsync(
+            "/api/camera_proxy/camera.front?value=" + new string('a', 1_000_000),
+            cancellationToken: cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("auth/sign_path"));
+    }
+
     [Theory]
     [InlineData("/api/other?authSig=signed")]
     [InlineData("/api/camera_proxy/camera.front-stale?authSig=signed")]

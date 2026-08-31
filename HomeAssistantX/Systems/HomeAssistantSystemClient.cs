@@ -164,7 +164,9 @@ public sealed class HomeAssistantSystemClient
         TimeSpan? expiration = null,
         CancellationToken cancellationToken = default)
     {
-        if (!HomeAssistantRootRelativePath.IsValid(path) || ContainsSignatureQueryParameter(path))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!HomeAssistantRootRelativePath.IsValid(path, cancellationToken)
+            || ContainsSignatureQueryParameter(path, cancellationToken))
         {
             throw new ArgumentException("A root-relative Home Assistant path is required.", nameof(path));
         }
@@ -190,15 +192,16 @@ public sealed class HomeAssistantSystemClient
         }
 
         var signed = signedPath.GetString()!;
-        var expectedSeparator = path.IndexOf('?') >= 0 ? '&' : '?';
+        cancellationToken.ThrowIfCancellationRequested();
+        var expectedSeparator = FindCharacter(path, '?', 0, cancellationToken) >= 0 ? '&' : '?';
         var suffix = signed.Length > path.Length + 1
             ? signed.Substring(path.Length + 1)
             : string.Empty;
-        if (!HomeAssistantRootRelativePath.IsValid(signed)
+        if (!HomeAssistantRootRelativePath.IsValid(signed, cancellationToken)
             || !signed.StartsWith(path, StringComparison.Ordinal)
             || signed.Length <= path.Length
             || signed[path.Length] != expectedSeparator
-            || !HasValidSignatureSuffix(suffix))
+            || !HasValidSignatureSuffix(suffix, cancellationToken))
         {
             throw new HomeAssistantProtocolException("Home Assistant returned a signed path for a different route.");
         }
@@ -206,16 +209,20 @@ public sealed class HomeAssistantSystemClient
         return signed;
     }
 
-    private static bool HasValidSignatureSuffix(string suffix)
+    private static bool HasValidSignatureSuffix(string suffix, CancellationToken cancellationToken)
     {
-        if (suffix.IndexOf('&') >= 0 || !suffix.StartsWith("authSig=", StringComparison.Ordinal))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (FindCharacter(suffix, '&', 0, cancellationToken) >= 0
+            || !suffix.StartsWith("authSig=", StringComparison.Ordinal))
         {
             return false;
         }
 
         try
         {
-            return !string.IsNullOrWhiteSpace(Uri.UnescapeDataString(suffix.Substring("authSig=".Length)));
+            var signature = Uri.UnescapeDataString(suffix.Substring("authSig=".Length));
+            cancellationToken.ThrowIfCancellationRequested();
+            return !string.IsNullOrWhiteSpace(signature);
         }
         catch (UriFormatException)
         {
@@ -223,14 +230,20 @@ public sealed class HomeAssistantSystemClient
         }
     }
 
-    private static bool ContainsSignatureQueryParameter(string path)
+    private static bool ContainsSignatureQueryParameter(string path, CancellationToken cancellationToken)
     {
-        var queryStart = path.IndexOf('?');
+        cancellationToken.ThrowIfCancellationRequested();
+        var queryStart = FindCharacter(path, '?', 0, cancellationToken);
         if (queryStart < 0) return false;
-        foreach (var pair in path.Substring(queryStart + 1).Split('&'))
+        var pairStart = queryStart + 1;
+        while (pairStart <= path.Length)
         {
-            var separator = pair.IndexOf('=');
-            var encodedName = separator < 0 ? pair : pair.Substring(0, separator);
+            cancellationToken.ThrowIfCancellationRequested();
+            var pairEnd = FindCharacter(path, '&', pairStart, cancellationToken);
+            if (pairEnd < 0) pairEnd = path.Length;
+            var separator = FindCharacter(path, '=', pairStart, cancellationToken, pairEnd);
+            var nameEnd = separator < 0 ? pairEnd : separator;
+            var encodedName = path.Substring(pairStart, nameEnd - pairStart);
             try
             {
                 if (string.Equals(Uri.UnescapeDataString(encodedName), "authSig", StringComparison.Ordinal))
@@ -242,9 +255,30 @@ public sealed class HomeAssistantSystemClient
             {
                 return true;
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (pairEnd == path.Length) break;
+            pairStart = pairEnd + 1;
         }
 
         return false;
+    }
+
+    private static int FindCharacter(
+        string value,
+        char character,
+        int start,
+        CancellationToken cancellationToken,
+        int? end = null)
+    {
+        var limit = end ?? value.Length;
+        for (var index = start; index < limit; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] == character) return index;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return -1;
     }
 
     /// <summary>Creates a long-lived access token for the current user. Persist the returned secret immediately.</summary>
