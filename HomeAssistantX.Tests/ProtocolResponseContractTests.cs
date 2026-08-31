@@ -460,25 +460,18 @@ public sealed class ProtocolResponseContractTests
     }
 
     [Fact]
-    public async Task OrdinalResponseKeyHashingObservesCancellationDuringTraversal()
+    public void OrdinalResponseKeyHashingObservesCancellationDuringTraversal()
     {
         using var cancellation = new CancellationTokenSource();
-        var comparer = new CancellationAwareOrdinalStringEqualityComparer(cancellation.Token);
-        var value = new string('x', 16_000_000);
-        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var operation = Task.Factory.StartNew(
-            () =>
+        var comparer = new CancellationAwareOrdinalStringEqualityComparer(
+            cancellation.Token,
+            index =>
             {
-                started.TrySetResult(true);
-                return comparer.GetHashCode(value);
-            },
-            CancellationToken.None,
-            TaskCreationOptions.LongRunning,
-            TaskScheduler.Default);
+                if (index == 64) cancellation.Cancel();
+            });
+        var value = new string('x', 256);
 
-        await started.Task;
-        cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        Assert.ThrowsAny<OperationCanceledException>(() => comparer.GetHashCode(value));
     }
 
     [Theory]
