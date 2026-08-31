@@ -555,9 +555,42 @@ public sealed class HomeAssistantMediaPlayerStatus
     internal static IReadOnlyList<string> GetGroupMembers(
         IReadOnlyDictionary<string, JsonElement> attributes,
         CancellationToken cancellationToken)
-        => HomeAssistantJson.RunCancellationIsolated(
+        => RunGroupMemberDecode(
             () => GetGroupMembersCore(attributes, cancellationToken),
             cancellationToken);
+
+    private static IReadOnlyList<string> RunGroupMemberDecode(
+        Func<IReadOnlyList<string>> operation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!cancellationToken.CanBeCanceled)
+        {
+            return operation();
+        }
+
+        var operationTask = Task.Factory.StartNew(
+            operation,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        var completed = Task.WhenAny(operationTask, canceled.Task).ConfigureAwait(false).GetAwaiter().GetResult();
+        if (!ReferenceEquals(completed, operationTask))
+        {
+            _ = operationTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var result = operationTask.ConfigureAwait(false).GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
 
     private static IReadOnlyList<string> GetGroupMembersCore(
         IReadOnlyDictionary<string, JsonElement> attributes,
@@ -584,9 +617,7 @@ public sealed class HomeAssistantMediaPlayerStatus
         foreach (var item in value.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var rawMember = item.ValueKind == JsonValueKind.String
-                ? HomeAssistantJson.GetString(item, cancellationToken)
-                : null;
+            var rawMember = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
             if (item.ValueKind != JsonValueKind.String
                 || !HomeAssistantEntityId.TryNormalizeForDomain(rawMember, "media_player", cancellationToken, out var member)
                 || !CancellationAwareString.EqualsOrdinal(rawMember, member, cancellationToken)
