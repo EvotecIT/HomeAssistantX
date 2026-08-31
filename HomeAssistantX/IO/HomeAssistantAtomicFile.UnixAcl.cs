@@ -262,7 +262,7 @@ internal static partial class HomeAssistantAtomicFile
             if (AclDeleteFileDescriptor(destinationHandle, MacExtendedAcl) != 0)
             {
                 var error = Marshal.GetLastWin32Error();
-                if (error != UnixNoEntry)
+                if (error != UnixNoEntry && error != MacOperationNotSupported)
                 {
                     throw new IOException(
                         "The temporary macOS access ACL could not be cleared.",

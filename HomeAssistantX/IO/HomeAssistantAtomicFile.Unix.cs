@@ -21,6 +21,7 @@ internal static partial class HomeAssistantAtomicFile
     private const int LinuxNoData = 61;
     private const int LinuxOperationNotSupported = 95;
     private const int MacExtendedAcl = 0x00000100;
+    private const int MacOperationNotSupported = 45;
     private const uint OwnerReadWriteMode = 0x180;
     private const int LinuxWriteOnly = 0x0001;
     private const int LinuxReadOnly = 0x0000;
