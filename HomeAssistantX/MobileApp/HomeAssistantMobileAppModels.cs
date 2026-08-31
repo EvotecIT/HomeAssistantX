@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.MobileApp;
 
@@ -7,7 +8,7 @@ namespace HomeAssistantX.MobileApp;
 public sealed class HomeAssistantMobileAppRegistrationRequest
 {
     private readonly object _sync = new();
-    private static readonly HashSet<string> KnownPropertyNames = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly string[] KnownPropertyNames =
     {
         "app_id", "app_name", "app_version", "device_name", "manufacturer", "model",
         "device_id", "os_name", "os_version", "supports_encryption", "app_data"
@@ -106,7 +107,8 @@ public sealed class HomeAssistantMobileAppRegistrationRequest
             if (!HasNonWhitespace(property.Key, cancellationToken))
                 throw new ArgumentException("Additional registration field names cannot be blank.", nameof(AdditionalData));
             ObserveString(property.Key, cancellationToken);
-            if (KnownPropertyNames.Contains(property.Key))
+            if (KnownPropertyNames.Any(name =>
+                    CancellationAwareString.EqualsOrdinalIgnoreCase(name, property.Key, cancellationToken)))
                 throw new ArgumentException(
                     "Additional registration fields cannot replace a modeled registration field.",
                     nameof(AdditionalData));
@@ -125,13 +127,14 @@ public sealed class HomeAssistantMobileAppRegistrationRequest
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value is null) return false;
+        var hasNonWhitespace = false;
         for (var index = 0; index < value.Length; index++)
         {
             if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (!char.IsWhiteSpace(value[index])) return true;
+            if (!char.IsWhiteSpace(value[index])) hasNonWhitespace = true;
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return false;
+        return hasNonWhitespace;
     }
 
     private static void ObserveString(string value, CancellationToken cancellationToken)

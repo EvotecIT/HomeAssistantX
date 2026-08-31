@@ -23,6 +23,9 @@ public sealed class HomeAssistantMobileAppClient
         if (request is null) throw new ArgumentNullException(nameof(request));
         cancellationToken.ThrowIfCancellationRequested();
         var requestSnapshot = request.Snapshot(cancellationToken);
+        requestSnapshot.AdditionalData = SnapshotAdditionalEntries(
+            requestSnapshot.AdditionalData,
+            cancellationToken);
         requestSnapshot.Validate(cancellationToken);
         var frozenAppData = HomeAssistantJson.FreezeObject(
             requestSnapshot.AppData,
@@ -82,6 +85,23 @@ public sealed class HomeAssistantMobileAppClient
 
         cancellationToken.ThrowIfCancellationRequested();
         return registration;
+    }
+
+    private static Dictionary<string, object?> SnapshotAdditionalEntries(
+        IReadOnlyDictionary<string, object?>? additionalData,
+        CancellationToken cancellationToken)
+    {
+        if (additionalData is null) throw new ArgumentNullException(nameof(HomeAssistantMobileAppRegistrationRequest.AdditionalData));
+        var snapshot = new Dictionary<string, object?>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
+        foreach (var pair in additionalData)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            HomeAssistantJson.ThrowIfStringTraversalCanceled(pair.Key, cancellationToken);
+            snapshot.Add(pair.Key, pair.Value);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return snapshot;
     }
 
     /// <summary>Creates an unauthenticated webhook client with an isolated, credential-free HTTP transport.</summary>

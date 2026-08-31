@@ -1036,7 +1036,7 @@ public sealed class PublicApiCompatibilityTests
             }
 
             foreach (var constructor in type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                         .Where(IsExternallyAccessibleConstructor)
+                         .Where(ShouldIncludeConstructor)
                          .OrderBy(FormatMethod, StringComparer.Ordinal))
                 lines.Add("  " + FormatConstructor(constructor));
             foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
@@ -1483,6 +1483,7 @@ public sealed class PublicApiCompatibilityTests
             + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property, getter, setter) + RequiresCodeContract(property, getter, setter)
             + ClsComplianceContract(property, getter, setter) + ComVisibilityContract(property, getter, setter) + DispIdContract(property)
             + JsonPropertyNameContract(property)
+            + JsonPropertyOrderContract(property)
             + JsonExtensionDataContract(property)
             + JsonIncludeContract(property)
             + JsonIgnoreContract(property)
@@ -1504,6 +1505,32 @@ public sealed class PublicApiCompatibilityTests
             .GetProperty(nameof(HomeAssistantX.MobileApp.HomeAssistantMobileAppRegistrationUpdate.AppVersion))!;
 
         Assert.Contains("json-name(\"app_version\")", FormatProperty(property), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatterPreservesJsonPropertyOrderContracts()
+    {
+        Assert.Contains(
+            "json-order(7)",
+            FormatProperty(typeof(JsonPropertyOrderFixture).GetProperty(nameof(JsonPropertyOrderFixture.Value))!),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "json-order(-3)",
+            FormatField(typeof(JsonPropertyOrderFixture).GetField(nameof(JsonPropertyOrderFixture.Field))!),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NonPublicJsonConstructorsRemainInTheWireContract()
+    {
+        var constructor = typeof(NonPublicJsonConstructorFixture)
+            .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+            .Single();
+
+        Assert.True(ShouldIncludeConstructor(constructor));
+        var contract = FormatConstructor(constructor);
+        Assert.Contains("C private ", contract, StringComparison.Ordinal);
+        Assert.Contains("json-constructor ", contract, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1587,6 +1614,18 @@ public sealed class PublicApiCompatibilityTests
         return attribute?.ConstructorArguments.Count == 1
             && attribute.ConstructorArguments[0].Value is string name
                 ? "json-name(" + FormatDefault(name) + ") "
+                : string.Empty;
+    }
+
+    private static string JsonPropertyOrderContract(MemberInfo member)
+    {
+        var attribute = member.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
+            value.AttributeType.FullName,
+            "System.Text.Json.Serialization.JsonPropertyOrderAttribute",
+            StringComparison.Ordinal));
+        return attribute?.ConstructorArguments.Count == 1
+            && attribute.ConstructorArguments[0].Value is int order
+                ? "json-order(" + order.ToString(CultureInfo.InvariantCulture) + ") "
                 : string.Empty;
     }
 
@@ -1714,6 +1753,26 @@ public sealed class PublicApiCompatibilityTests
 
         [DerivedJsonConverter]
         public string Converted = string.Empty;
+    }
+
+    private sealed class JsonPropertyOrderFixture
+    {
+        [JsonPropertyOrder(7)]
+        public string Value { get; set; } = string.Empty;
+
+        [JsonPropertyOrder(-3)]
+        public string Field = string.Empty;
+    }
+
+    private sealed class NonPublicJsonConstructorFixture
+    {
+        [JsonConstructor]
+        private NonPublicJsonConstructorFixture(string value)
+        {
+            Value = value;
+        }
+
+        public string Value { get; }
     }
 
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class | AttributeTargets.Struct)]
@@ -2658,7 +2717,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonPropertyNameContract(field) + JsonExtensionDataContract(field) + JsonIncludeContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + JsonObjectCreationHandlingContract(field) + JsonRequiredContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + RequiredCustomModifierContract(field.GetRequiredCustomModifiers(), "System.Runtime.CompilerServices.IsVolatile", "System.Runtime.CompilerServices.IsReadOnlyAttribute") + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonPropertyNameContract(field) + JsonPropertyOrderContract(field) + JsonExtensionDataContract(field) + JsonIncludeContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + JsonObjectCreationHandlingContract(field) + JsonRequiredContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + RequiredCustomModifierContract(field.GetRequiredCustomModifiers(), "System.Runtime.CompilerServices.IsVolatile", "System.Runtime.CompilerServices.IsReadOnlyAttribute") + FormatFieldType(field) + " " + field.Name + value;
     }
 
     private static string FormatEnumField(Type type, string name)
@@ -2977,8 +3036,17 @@ public sealed class PublicApiCompatibilityTests
     private static bool IsExternallyAccessibleConstructor(ConstructorInfo constructor)
         => constructor.IsPublic || constructor.IsFamily || constructor.IsFamilyOrAssembly;
 
+    private static bool ShouldIncludeConstructor(ConstructorInfo constructor)
+        => IsExternallyAccessibleConstructor(constructor)
+            || constructor.IsDefined(typeof(JsonConstructorAttribute), inherit: false);
+
     private static string ConstructorAccess(ConstructorInfo constructor)
-        => constructor.IsPublic ? string.Empty : constructor.IsFamilyOrAssembly ? "protected internal " : "protected ";
+        => constructor.IsPublic ? string.Empty
+            : constructor.IsFamilyOrAssembly ? "protected internal "
+            : constructor.IsFamilyAndAssembly ? "private protected "
+            : constructor.IsFamily ? "protected "
+            : constructor.IsAssembly ? "internal "
+            : "private ";
 
     private static bool IsExternallyAccessibleMethod(MethodBase? method)
         => method is not null && (method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly);

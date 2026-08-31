@@ -1637,6 +1637,48 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task MobileAppRegistrationSnapshotsExtensionEntriesBeforeAppDataGettersRun()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var request = RegistrationRequest(false);
+        request.AdditionalData["future"] = "original";
+        request.AppData = new Dictionary<string, object?>
+        {
+            ["probe"] = new RegistrationMutationProbe(
+                () => request.AdditionalData["app_id"] = "replacement")
+        };
+
+        _ = await client.MobileApp.RegisterAsync(request);
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.Equal("com.example.app", body.RootElement.GetProperty("app_id").GetString());
+        Assert.Equal("original", body.RootElement.GetProperty("future").GetString());
+        Assert.Equal(1, body.RootElement.EnumerateObject().Count(property => property.NameEquals("app_id")));
+    }
+
+    [Fact]
+    public async Task MobileRegistrationTraversesCompleteRequiredStringsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = RegistrationRequest(false);
+        request.AppId = "x" + new string('a', 16_000_000);
+        var operation = Task.Run(async () =>
+        {
+            started.TrySetResult(true);
+            await client.MobileApp.RegisterAsync(request, cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
     public async Task MobileAppRegistrationAllowsHomeAssistantsOptionalOperatingSystemVersion()
     {
         using var server = new TestHomeAssistantServer();
