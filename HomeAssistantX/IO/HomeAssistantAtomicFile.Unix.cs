@@ -98,8 +98,7 @@ internal static partial class HomeAssistantAtomicFile
 
                     var displaced = ReadUnixFileMetadata(
                         displacedHandle,
-                        includeAccessAcl: true,
-                        fallbackPath: temporaryPath);
+                        includeAccessAcl: true);
                     RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
                     ApplyUnixDestinationMetadata(replacementHandle, displaced);
                     RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
@@ -178,7 +177,6 @@ internal static partial class HomeAssistantAtomicFile
         var metadata = ReadUnixFileMetadata(
             sourceHandle,
             includeAccessAcl: true,
-            fallbackPath: destinationPath,
             allowProcDescriptorPath: useManagedApis);
         RequireUnixPathIdentity(destinationPath, pinnedSource);
 
@@ -263,6 +261,11 @@ internal static partial class HomeAssistantAtomicFile
         {
             descriptor = EnsureUsableUnixDescriptor(
                 Open(path, LinuxReadOnly | LinuxNoFollow | LinuxCloseOnExec | LinuxNonBlocking, 0));
+            if (descriptor < 0)
+            {
+                descriptor = EnsureUsableUnixDescriptor(
+                    Open(path, LinuxWriteOnly | LinuxNoFollow | LinuxCloseOnExec | LinuxNonBlocking, 0));
+            }
             if (descriptor < 0)
             {
                 descriptor = EnsureUsableUnixDescriptor(
@@ -382,7 +385,6 @@ internal static partial class HomeAssistantAtomicFile
     private static UnixFileMetadata ReadUnixFileMetadata(
         SafeFileHandle handle,
         bool includeAccessAcl,
-        string? fallbackPath = null,
         bool allowProcDescriptorPath = true)
     {
         var offsets = UnixMetadataOffsets();
@@ -407,12 +409,12 @@ internal static partial class HomeAssistantAtomicFile
             var linuxAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 && isRegularFile
-                    ? ReadLinuxAccessAcl(handle, fallbackPath, allowProcDescriptorPath)
+                    ? ReadLinuxAccessAcl(handle, allowProcDescriptorPath)
                     : null;
             var linuxSecurityContext = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 && isRegularFile
-                    ? ReadLinuxSecurityContext(handle, fallbackPath, allowProcDescriptorPath)
+                    ? ReadLinuxSecurityContext(handle, allowProcDescriptorPath)
                     : null;
             var macAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)

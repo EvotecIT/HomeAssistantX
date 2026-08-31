@@ -15,11 +15,9 @@ internal static partial class HomeAssistantAtomicFile
 
     private static byte[]? ReadLinuxAccessAcl(
         SafeFileHandle sourceHandle,
-        string? fallbackPath,
         bool allowProcDescriptorPath)
         => ReadLinuxExtendedAttribute(
             sourceHandle,
-            fallbackPath,
             LinuxAccessAclAttribute,
             "The pinned Unix access ACL could not be read.",
             allowProcDescriptorPath);
@@ -32,11 +30,9 @@ internal static partial class HomeAssistantAtomicFile
 
     private static byte[]? ReadLinuxSecurityContext(
         SafeFileHandle sourceHandle,
-        string? fallbackPath,
         bool allowProcDescriptorPath)
         => ReadLinuxExtendedAttribute(
             sourceHandle,
-            fallbackPath,
             LinuxSecurityContextAttribute,
             "The pinned SELinux context could not be read.",
             allowProcDescriptorPath);
@@ -51,7 +47,6 @@ internal static partial class HomeAssistantAtomicFile
 
     private static byte[]? ReadLinuxExtendedAttribute(
         SafeFileHandle sourceHandle,
-        string? fallbackPath,
         string attributeName,
         string failureMessage,
         bool allowProcDescriptorPath)
@@ -76,8 +71,9 @@ internal static partial class HomeAssistantAtomicFile
                 }
                 catch (IOException procException) when (CanFallBackFromProcDescriptor(procException))
                 {
-                    // Hardened containers and chroots may omit procfs. The caller
-                    // brackets this direct-path fallback with pinned inode checks.
+                    // Hardened containers and chroots may omit procfs. Never fall
+                    // back to the mutable pathname: metadata must remain bound to
+                    // the descriptor that pinned the destination inode.
                 }
                 finally
                 {
@@ -85,8 +81,7 @@ internal static partial class HomeAssistantAtomicFile
                 }
             }
 
-            if (fallbackPath is null) throw;
-            return ReadLinuxExtendedAttribute(fallbackPath, attributeName, failureMessage);
+            throw;
         }
     }
 
