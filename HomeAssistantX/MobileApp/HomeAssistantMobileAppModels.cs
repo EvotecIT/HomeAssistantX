@@ -222,6 +222,10 @@ internal sealed class HomeAssistantMobileAppWebhookConnection
 
 public sealed class HomeAssistantMobileAppRegistrationUpdate
 {
+    private readonly object _sync = new();
+    private string? _operatingSystemVersion;
+    private IReadOnlyDictionary<string, object?>? _appData;
+
     public HomeAssistantMobileAppRegistrationUpdate(
         string appVersion,
         string deviceName,
@@ -258,19 +262,38 @@ public sealed class HomeAssistantMobileAppRegistrationUpdate
 
     [JsonPropertyName("os_version")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? OperatingSystemVersion { get; set; }
+    public string? OperatingSystemVersion
+    {
+        get { lock (_sync) return _operatingSystemVersion; }
+        set { lock (_sync) _operatingSystemVersion = value; }
+    }
 
     [JsonPropertyName("app_data")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyDictionary<string, object?>? AppData { get; set; }
+    public IReadOnlyDictionary<string, object?>? AppData
+    {
+        get { lock (_sync) return _appData; }
+        set { lock (_sync) _appData = value; }
+    }
 
-    internal string? CaptureValidatedOperatingSystemVersion(CancellationToken cancellationToken)
+    internal HomeAssistantMobileAppRegistrationUpdate Snapshot(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var value = OperatingSystemVersion;
-        Optional(value, nameof(OperatingSystemVersion), cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        return value;
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Optional(_operatingSystemVersion, nameof(OperatingSystemVersion), cancellationToken);
+            return new HomeAssistantMobileAppRegistrationUpdate(
+                AppVersion,
+                DeviceName,
+                Manufacturer,
+                Model,
+                cancellationToken)
+            {
+                OperatingSystemVersion = _operatingSystemVersion,
+                AppData = _appData
+            };
+        }
     }
 
     private static string Required(string value, string name, CancellationToken cancellationToken)

@@ -1672,6 +1672,37 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public async Task MobileAppRegistrationUpdateSnapshotsMutableFieldsBeforeFreezingAppData()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(
+            new HomeAssistantMobileAppRegistration { WebhookId = "test-webhook" });
+        var update = new HomeAssistantMobileAppRegistrationUpdate(
+            "1.0", "CasaRay", "Evotec", "Windows")
+        {
+            OperatingSystemVersion = "11.0"
+        };
+        var originalAppData = new Dictionary<string, object?>();
+        originalAppData["probe"] = new RegistrationMutationProbe(() =>
+        {
+            update.OperatingSystemVersion = "12.0";
+            update.AppData = new Dictionary<string, object?> { ["replacement"] = true };
+        });
+        update.AppData = originalAppData;
+
+        await webhook.UpdateRegistrationAsync(update);
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        var data = body.RootElement.GetProperty("data");
+        Assert.Equal("11.0", data.GetProperty("os_version").GetString());
+        Assert.Equal("preserved", data.GetProperty("app_data").GetProperty("probe").GetProperty("Value").GetString());
+        Assert.False(data.GetProperty("app_data").TryGetProperty("replacement", out _));
+        Assert.Equal("12.0", update.OperatingSystemVersion);
+        Assert.True(update.AppData!.ContainsKey("replacement"));
+    }
+
+    [Fact]
     public async Task MobileAppRegistrationRejectsNullAppDataBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();

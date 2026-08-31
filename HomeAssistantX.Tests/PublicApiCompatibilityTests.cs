@@ -270,6 +270,16 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void EventFormatterPreservesPlatformAnnotationOwnership()
+    {
+        var eventInfo = typeof(PlatformAccessorFixture).GetEvent(nameof(PlatformAccessorFixture.Changed))!;
+        var contract = FormatEvent(eventInfo);
+
+        Assert.Contains("add-platform(SupportedOSPlatform:\"windows10.0\")", contract, StringComparison.Ordinal);
+        Assert.Contains("remove-platform(UnsupportedOSPlatform:\"browser\")", contract, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SurfacePreservesNonPublicJsonAccessorOwnershipAndMetadata()
     {
         var property = typeof(NonPublicJsonIncludeFixture).GetProperty(
@@ -1096,8 +1106,7 @@ public sealed class PublicApiCompatibilityTests
                          .Where(IsExternallyAccessibleEvent)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
-                var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)!;
-                lines.Add("  E " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(eventInfo) + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + PlatformContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod) + DispIdContract(eventInfo) + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name + " {" + FormatEventAccessors(eventInfo) + "}");
+                lines.Add("  " + FormatEvent(eventInfo));
             }
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          .Where(ShouldIncludeMethod).OrderBy(FormatMethod, StringComparer.Ordinal))
@@ -2125,12 +2134,22 @@ public sealed class PublicApiCompatibilityTests
 
     private sealed class PlatformAccessorFixture
     {
+        private EventHandler? _changed;
+
         public string Value
         {
             [System.Runtime.Versioning.SupportedOSPlatform("windows10.0")]
             get => string.Empty;
             [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
             set { }
+        }
+
+        public event EventHandler Changed
+        {
+            [System.Runtime.Versioning.SupportedOSPlatform("windows10.0")]
+            add => _changed += value;
+            [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
+            remove => _changed -= value;
         }
     }
 #endif
@@ -3127,6 +3146,26 @@ public sealed class PublicApiCompatibilityTests
         return FormatAccessor(eventInfo.AddMethod, eventAccess, eventScope, "add;")
             + FormatAccessor(eventInfo.RemoveMethod, eventAccess, eventScope, "remove;")
             + FormatAccessor(eventInfo.RaiseMethod, eventAccess, eventScope, "raise;");
+    }
+
+    private static string FormatEvent(EventInfo eventInfo)
+    {
+        var accessor = MostAccessible(eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)!;
+        return "E " + MemberAccess(accessor) + MemberScope(accessor) + " "
+            + SpecialNameContract(eventInfo)
+            + ObsoleteContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + ExperimentalContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + PreviewFeatureContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + PlatformContract(eventInfo)
+            + NamedPlatformContract("add", eventInfo.AddMethod)
+            + NamedPlatformContract("remove", eventInfo.RemoveMethod)
+            + NamedPlatformContract("raise", eventInfo.RaiseMethod)
+            + RequiresCodeContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + ClsComplianceContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + ComVisibilityContract(eventInfo, eventInfo.AddMethod, eventInfo.RemoveMethod, eventInfo.RaiseMethod)
+            + DispIdContract(eventInfo)
+            + FormatAnnotatedType(eventInfo.EventHandlerType!, eventInfo) + " " + eventInfo.Name
+            + " {" + FormatEventAccessors(eventInfo) + "}";
     }
 
     private static string RequiredMember(MemberInfo member)

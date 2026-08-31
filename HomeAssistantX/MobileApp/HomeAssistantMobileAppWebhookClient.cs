@@ -90,17 +90,12 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     {
         if (update is null) throw new ArgumentNullException(nameof(update));
         cancellationToken.ThrowIfCancellationRequested();
-        var operatingSystemVersion = update.CaptureValidatedOperatingSystemVersion(cancellationToken);
-        var snapshot = new HomeAssistantMobileAppRegistrationUpdate(
-            update.AppVersion,
-            update.DeviceName,
-            update.Manufacturer,
-            update.Model,
-            cancellationToken)
-        {
-            OperatingSystemVersion = operatingSystemVersion,
-            AppData = HomeAssistantJson.FreezeObject(update.AppData, nameof(update.AppData), "AppData", cancellationToken)
-        };
+        var snapshot = update.Snapshot(cancellationToken);
+        snapshot.AppData = HomeAssistantJson.FreezeObject(
+            snapshot.AppData,
+            nameof(update.AppData),
+            "AppData",
+            cancellationToken);
         return SendAsync("update_registration", snapshot, cancellationToken);
     }
 
