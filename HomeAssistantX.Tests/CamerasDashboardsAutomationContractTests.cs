@@ -1892,6 +1892,18 @@ public sealed class CamerasDashboardsAutomationContractTests
             method.GetParameters().Select(parameter => parameter.ParameterType));
     }
 
+    [Fact]
+    public void MacAclDeleteMatchesTheNativeArgumentOrder()
+    {
+        var method = typeof(HomeAssistantAtomicFile).GetMethod(
+            "AclDeleteFileDescriptor",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+
+        Assert.Equal(
+            new[] { typeof(Microsoft.Win32.SafeHandles.SafeFileHandle), typeof(int) },
+            method.GetParameters().Select(parameter => parameter.ParameterType));
+    }
+
     private static string RunUnixCommand(string fileName, params string[] arguments)
     {
         var startInfo = new System.Diagnostics.ProcessStartInfo

@@ -190,9 +190,11 @@ internal static partial class HomeAssistantAtomicFile
         var acl = AclGetFile(sourcePath, MacExtendedAcl);
         if (acl == IntPtr.Zero)
         {
+            var error = Marshal.GetLastWin32Error();
+            if (error == UnixNoEntry) return string.Empty;
             throw new IOException(
                 "The destination macOS access ACL could not be read.",
-                new Win32Exception(Marshal.GetLastWin32Error()));
+                new Win32Exception(error));
         }
         try
         {
@@ -223,9 +225,11 @@ internal static partial class HomeAssistantAtomicFile
         var acl = AclGetFileDescriptor(sourceHandle, MacExtendedAcl);
         if (acl == IntPtr.Zero)
         {
+            var error = Marshal.GetLastWin32Error();
+            if (error == UnixNoEntry) return string.Empty;
             throw new IOException(
                 "The pinned macOS access ACL could not be read.",
-                new Win32Exception(Marshal.GetLastWin32Error()));
+                new Win32Exception(error));
         }
         try
         {
@@ -253,6 +257,21 @@ internal static partial class HomeAssistantAtomicFile
 
     private static void ApplyMacAccessAcl(SafeFileHandle destinationHandle, string accessAcl)
     {
+        if (accessAcl.Length == 0)
+        {
+            if (AclDeleteFileDescriptor(destinationHandle, MacExtendedAcl) != 0)
+            {
+                var error = Marshal.GetLastWin32Error();
+                if (error != UnixNoEntry)
+                {
+                    throw new IOException(
+                        "The temporary macOS access ACL could not be cleared.",
+                        new Win32Exception(error));
+                }
+            }
+            return;
+        }
+
         var acl = AclFromText(accessAcl);
         if (acl == IntPtr.Zero)
         {
@@ -308,6 +327,9 @@ internal static partial class HomeAssistantAtomicFile
 
     [DllImport("libc", EntryPoint = "acl_set_fd_np", SetLastError = true)]
     private static extern int AclSetFileDescriptor(SafeFileHandle handle, IntPtr acl, int type);
+
+    [DllImport("libc", EntryPoint = "acl_delete_fd_np", SetLastError = true)]
+    private static extern int AclDeleteFileDescriptor(SafeFileHandle handle, int type);
 
     [DllImport("libc", EntryPoint = "acl_to_text", SetLastError = true)]
     private static extern IntPtr AclToText(IntPtr acl, out IntPtr length);
