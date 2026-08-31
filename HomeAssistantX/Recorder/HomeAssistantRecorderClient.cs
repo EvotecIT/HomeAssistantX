@@ -336,11 +336,12 @@ public sealed class HomeAssistantRecorderClient
     {
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException(failureMessage);
+        if (HomeAssistantJson.HasDuplicatePropertiesInline(value, cancellationToken))
+            throw new HomeAssistantProtocolException(failureMessage);
         foreach (var item in value.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind != JsonValueKind.Object
-                || HomeAssistantJson.HasDuplicateProperties(item, cancellationToken)
                 || !item.TryGetProperty("statistic_id", out var statisticId)
                 || statisticId.ValueKind != JsonValueKind.String
                 || HomeAssistantJson.GetString(statisticId, cancellationToken) is not string statisticIdValue
@@ -435,6 +436,8 @@ public sealed class HomeAssistantRecorderClient
     {
         if (value.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("A Recorder statistics series could not be decoded.");
+        if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+            throw new HomeAssistantProtocolException("A Recorder statistics series contained duplicate JSON properties.");
         long? previousStart = null;
         long? previousEnd = null;
         foreach (var row in value.EnumerateArray())
@@ -444,7 +447,6 @@ public sealed class HomeAssistantRecorderClient
                 && row.TryGetProperty("last_reset", out var lastResetValue)
                 && lastResetValue.ValueKind != JsonValueKind.Null;
             if (row.ValueKind != JsonValueKind.Object
-                || HomeAssistantJson.HasDuplicateProperties(row, cancellationToken)
                 || !TryGetUnixMilliseconds(row, "start", required: true, out var start)
                 || !TryGetUnixMilliseconds(row, "end", required: true, out var end)
                 || !TryGetUnixMilliseconds(row, "last_reset", required: false, out var lastReset)

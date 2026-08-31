@@ -109,9 +109,18 @@ public sealed class HomeAssistantWeatherClient
         CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("weather/convertible_units", null, cancellationToken).ConfigureAwait(false);
+        return HomeAssistantJson.RunCancellationIsolated(
+            () => ParseConvertibleUnitsResponse(value, cancellationToken),
+            cancellationToken);
+    }
+
+    private static HomeAssistantWeatherConvertibleUnitsResponse ParseConvertibleUnitsResponse(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("units", out var units) || units.ValueKind != JsonValueKind.Object)
             throw new HomeAssistantProtocolException("The weather convertible-unit response had an unexpected shape.");
-        if (HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+        if (HomeAssistantJson.HasDuplicatePropertiesInline(value, cancellationToken))
             throw new HomeAssistantProtocolException("The weather convertible-unit response contained duplicate JSON properties.");
         var additionalData = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
@@ -124,7 +133,7 @@ public sealed class HomeAssistantWeatherClient
         cancellationToken.ThrowIfCancellationRequested();
         return new HomeAssistantWeatherConvertibleUnitsResponse
         {
-            Units = ParseConvertibleUnits(units, cancellationToken),
+            Units = ParseConvertibleUnitsCore(units, cancellationToken),
             AdditionalData = additionalData,
             Raw = value
         };
@@ -133,7 +142,16 @@ public sealed class HomeAssistantWeatherClient
     internal static IReadOnlyDictionary<string, IReadOnlyList<string>> ParseConvertibleUnits(
         JsonElement units,
         CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => ParseConvertibleUnitsCore(units, cancellationToken),
+            cancellationToken);
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> ParseConvertibleUnitsCore(
+        JsonElement units,
+        CancellationToken cancellationToken)
     {
+        var seenCategories = new HashSet<string>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in units.EnumerateObject())
         {
@@ -141,7 +159,7 @@ public sealed class HomeAssistantWeatherClient
             HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
             if (!HomeAssistantEntityId.TryNormalizeDomain(property.Name, cancellationToken, out var normalizedCategory)
                 || !string.Equals(property.Name, normalizedCategory, StringComparison.Ordinal)
-                || result.ContainsKey(property.Name))
+                || !seenCategories.Add(property.Name))
                 throw new HomeAssistantProtocolException("The weather convertible-unit response contained a noncanonical or duplicate unit category.");
             if (property.Value.ValueKind != JsonValueKind.Array)
                 throw new HomeAssistantProtocolException("A weather convertible-unit list was not an array.");
@@ -444,11 +462,12 @@ public sealed class HomeAssistantWeatherClient
         }
         if (forecast.ValueKind != JsonValueKind.Array)
             throw new HomeAssistantProtocolException("The weather forecast was not an array.");
+        if (HomeAssistantJson.HasDuplicateProperties(forecast, cancellationToken))
+            throw new HomeAssistantProtocolException("The weather forecast contained duplicate JSON properties.");
         foreach (var value in forecast.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (value.ValueKind != JsonValueKind.Object
-                || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken)
                 || !value.TryGetProperty("datetime", out var timestamp)
                 || timestamp.ValueKind != JsonValueKind.String
                 || !HasValidTimestamp(timestamp.GetString(), cancellationToken)

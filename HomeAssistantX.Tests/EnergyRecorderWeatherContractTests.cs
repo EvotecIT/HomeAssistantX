@@ -1183,6 +1183,23 @@ public sealed class EnergyRecorderWeatherContractTests
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetSolarForecastAsync());
     }
 
+    [Fact]
+    public async Task SolarForecastRejectsNestedDuplicateFieldsAndReturnsAStableDictionary()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SolarForecastResponseJson = "{\"entry-a\":{\"watts\":1,\"watts\":2}}"
+        };
+        using var client = TestClientFactory.Create(server);
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Energy.GetSolarForecastAsync());
+
+        server.SolarForecastResponseJson = "{\"entry-a\":{\"watts\":1}}";
+        using var cancellation = new CancellationTokenSource();
+        var forecast = await client.Energy.GetSolarForecastAsync(cancellation.Token);
+        cancellation.Cancel();
+        Assert.True(forecast.ContainsKey("ENTRY-A"));
+    }
+
     [Theory]
     [InlineData("{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T11:00:00Z\"},{\"datetime\":\"2026-08-27T10:00:00Z\"}]}}")]
     [InlineData("{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T10:00:00Z\"},{\"datetime\":\"2026-08-27T12:00:00+02:00\"}]}}")]
@@ -1235,6 +1252,20 @@ public sealed class EnergyRecorderWeatherContractTests
         using var client = TestClientFactory.Create(server);
 
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Weather.GetConvertibleUnitsAsync());
+    }
+
+    [Fact]
+    public async Task WeatherConvertibleUnitsReturnAStableDictionaryAfterCancellation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+
+        var units = await client.Weather.GetConvertibleUnitsAsync(cancellation.Token);
+        cancellation.Cancel();
+
+        Assert.True(units.ContainsKey("TEMPERATURE_UNIT"));
+        Assert.Contains("°C", units["temperature_unit"]);
     }
 
     [Fact]

@@ -62,6 +62,10 @@ public sealed class HomeAssistantEnergyPreferencesUpdate
         {
             throw new ArgumentException($"The {name} preference must be a JSON array.", name);
         }
+        if (HomeAssistantJson.HasDuplicateProperties(snapshot, cancellationToken))
+        {
+            throw new ArgumentException($"Every {name} preference entry must use each JSON property name only once.", name);
+        }
 
         foreach (var item in snapshot.EnumerateArray())
         {
@@ -69,11 +73,6 @@ public sealed class HomeAssistantEnergyPreferencesUpdate
             if (item.ValueKind != JsonValueKind.Object)
             {
                 throw new ArgumentException($"Every {name} preference entry must be a JSON object.", name);
-            }
-
-            if (HomeAssistantJson.HasDuplicateProperties(item, cancellationToken))
-            {
-                throw new ArgumentException($"Every {name} preference entry must use each JSON property name only once.", name);
             }
 
             if (!HasRequiredIdentity(item, name, cancellationToken))

@@ -78,13 +78,27 @@ public sealed class HomeAssistantEnergyClient
     public async Task<IReadOnlyDictionary<string, JsonElement>> GetSolarForecastAsync(CancellationToken cancellationToken = default)
     {
         var value = await _webSocket.RequestAsync("energy/solar_forecast", null, cancellationToken).ConfigureAwait(false);
+        return HomeAssistantJson.RunCancellationIsolated(
+            () => ParseSolarForecast(value, cancellationToken),
+            cancellationToken);
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> ParseSolarForecast(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
         if (value.ValueKind != JsonValueKind.Object)
         {
             throw new HomeAssistantProtocolException("The Home Assistant solar forecast was not an object.");
         }
 
-        var result = new Dictionary<string, JsonElement>(
-            new CancellationAwareStringEqualityComparer(cancellationToken));
+        if (HomeAssistantJson.HasDuplicatePropertiesInline(value, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained duplicate JSON properties.");
+        }
+
+        var seen = new HashSet<string>(new CancellationAwareStringEqualityComparer(cancellationToken));
+        var result = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -96,7 +110,7 @@ public sealed class HomeAssistantEnergyClient
                 throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained an invalid entry.");
             }
 
-            if (result.ContainsKey(property.Name))
+            if (!seen.Add(property.Name))
             {
                 throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained a duplicate configuration-entry identifier.");
             }
@@ -107,6 +121,7 @@ public sealed class HomeAssistantEnergyClient
                 cancellationToken: cancellationToken));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return result;
     }
 
