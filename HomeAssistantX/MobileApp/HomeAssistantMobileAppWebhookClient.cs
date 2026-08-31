@@ -184,7 +184,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
             {
                 var protectedPayload = root.TryGetProperty("encrypted_data", out var encryptedData)
                     && encryptedData.ValueKind == JsonValueKind.String
-                    ? encryptedData.GetString()
+                    ? await HomeAssistantJson.GetStringAsync(encryptedData, operationToken).ConfigureAwait(false)
                     : null;
                 if (_secret is null
                     || _protector is null

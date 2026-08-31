@@ -984,6 +984,16 @@ public sealed class PublicApiCompatibilityTests
             "cls-compliant(false) ",
             ClsComplianceContract(typeof(InteropMetadataFixture).GetMethod(nameof(InteropMetadataFixture.Invoke))!));
     }
+
+    [Fact]
+    public void FormatterPreservesJsonPolymorphismContracts()
+    {
+        var contract = JsonPolymorphismContract(typeof(JsonPolymorphicFixture));
+
+        Assert.Contains("json-polymorphic(discriminator=\"$kind\",ignore-unrecognized=true,unknown=FallBackToBaseType)", contract, StringComparison.Ordinal);
+        Assert.Contains("json-derived(type=HomeAssistantX.Tests.PublicApiCompatibilityTests+JsonPolymorphicStringFixture,discriminator=\"string\")", contract, StringComparison.Ordinal);
+        Assert.Contains("json-derived(type=HomeAssistantX.Tests.PublicApiCompatibilityTests+JsonPolymorphicIntegerFixture,discriminator=7)", contract, StringComparison.Ordinal);
+    }
 #endif
 
     private static string BuildSurface(Assembly assembly)
@@ -1002,7 +1012,7 @@ public sealed class PublicApiCompatibilityTests
                 contracts.AddRange(FormatInheritanceContracts(type));
             }
             var typeConstraints = FormatGenericConstraints(type.GetGenericArguments());
-            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + AsyncMethodBuilderContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + JsonNumberHandlingContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
+            lines.Add("T " + TypeAccess(type) + ObsoleteContract(type) + ExperimentalContract(type) + PreviewFeatureContract(type) + PlatformContract(type) + RequiresCodeContract(type) + ClsComplianceContract(type) + ConditionalContract(type) + AttributeUsageContract(type) + DefaultMemberContract(type) + CollectionBuilderContract(type) + InlineArrayContract(type) + AsyncMethodBuilderContract(type) + UnmanagedFunctionPointerContract(type) + SerializableContract(type) + JsonConverterContract(type) + JsonNumberHandlingContract(type) + JsonPolymorphismContract(type) + TypeInitializationContract(type) + TypeInteropContract(type) + StructLayoutContract(type) + kind + " " + FormatTypeDeclarationName(type) + (contracts.Count == 0 ? string.Empty : " : " + string.Join(", ", contracts)) + typeConstraints);
             if (type.IsEnum)
             {
                 foreach (var name in Enum.GetNames(type))
@@ -1597,6 +1607,32 @@ public sealed class PublicApiCompatibilityTests
             : string.Empty;
     }
 
+    private static string JsonPolymorphismContract(Type type)
+    {
+        var polymorphic = type.GetCustomAttribute<JsonPolymorphicAttribute>(inherit: false);
+        var derived = type.GetCustomAttributes<JsonDerivedTypeAttribute>(inherit: false)
+            .OrderBy(attribute => FormatType(attribute.DerivedType), StringComparer.Ordinal)
+            .ThenBy(attribute => FormatJsonDiscriminator(attribute.TypeDiscriminator), StringComparer.Ordinal)
+            .ToArray();
+        if (polymorphic is null && derived.Length == 0) return string.Empty;
+
+        var contracts = new List<string>();
+        if (polymorphic is not null)
+        {
+            contracts.Add(
+                "json-polymorphic(discriminator=" + System.Text.Json.JsonSerializer.Serialize(polymorphic.TypeDiscriminatorPropertyName)
+                + ",ignore-unrecognized=" + polymorphic.IgnoreUnrecognizedTypeDiscriminators.ToString().ToLowerInvariant()
+                + ",unknown=" + polymorphic.UnknownDerivedTypeHandling + ")");
+        }
+        contracts.AddRange(derived.Select(attribute =>
+            "json-derived(type=" + FormatType(attribute.DerivedType)
+            + ",discriminator=" + FormatJsonDiscriminator(attribute.TypeDiscriminator) + ")"));
+        return string.Join(" ", contracts) + " ";
+    }
+
+    private static string FormatJsonDiscriminator(object? value)
+        => value is null ? "null" : System.Text.Json.JsonSerializer.Serialize(value);
+
     private static string JsonRequiredContract(MemberInfo member)
         => member.CustomAttributes.Any(attribute => string.Equals(
             attribute.AttributeType.FullName,
@@ -1634,6 +1670,18 @@ public sealed class PublicApiCompatibilityTests
         [JsonNumberHandling(JsonNumberHandling.Strict)]
         public int Field = 1;
     }
+
+    [JsonPolymorphic(
+        TypeDiscriminatorPropertyName = "$kind",
+        IgnoreUnrecognizedTypeDiscriminators = true,
+        UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType)]
+    [JsonDerivedType(typeof(JsonPolymorphicStringFixture), "string")]
+    [JsonDerivedType(typeof(JsonPolymorphicIntegerFixture), 7)]
+    private abstract class JsonPolymorphicFixture;
+
+    private sealed class JsonPolymorphicStringFixture : JsonPolymorphicFixture;
+
+    private sealed class JsonPolymorphicIntegerFixture : JsonPolymorphicFixture;
 
     private static void ParameterDirectionFixture(ref int byReference, out int output, in int input)
     {
