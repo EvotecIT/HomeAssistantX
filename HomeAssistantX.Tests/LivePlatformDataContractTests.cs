@@ -759,6 +759,39 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task RegistryResponsesPreserveNestedProviderDuplicateProperties()
+    {
+        const string duplicateProviderObject = "{\"key\":1,\"key\":2}";
+        using var server = new TestHomeAssistantServer
+        {
+            LabelRegistryResponseJson =
+                "[{\"label_id\":\"security\",\"name\":\"Security\",\"provider\":" + duplicateProviderObject + "}]",
+            LabelMutationResponseJson =
+                "{\"label_id\":\"security\",\"name\":\"Security\",\"provider\":" + duplicateProviderObject + "}",
+            ExtendedEntityRegistryResponseJson =
+                "{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"provider\":" + duplicateProviderObject + "}}",
+            ConfigEntriesResponseJson =
+                "{\"entries\":[{\"entry_id\":\"entry-test\",\"domain\":\"test\",\"provider\":" + duplicateProviderObject + "}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var label = Assert.Single(await client.Registries.GetLabelsAsync());
+        var created = await client.Registries.CreateLabelAsync(new HomeAssistantLabelCreate("Security"));
+        var snapshot = await client.Registries.GetSnapshotAsync();
+
+        Assert.Equal(2, label.AdditionalData["provider"].EnumerateObject().Count());
+        Assert.Equal(2, created.AdditionalData["provider"].EnumerateObject().Count());
+        Assert.Equal(
+            2,
+            Assert.Single(snapshot.Entities, value => value.EntityId == "sensor.kitchen_temperature")
+                .AdditionalData["provider"].EnumerateObject().Count());
+        Assert.Equal(
+            2,
+            Assert.Single(snapshot.ConfigEntries, value => value.EntryId == "entry-test")
+                .AdditionalData["provider"].EnumerateObject().Count());
+    }
+
+    [Fact]
     public async Task RestEventTypeValidationHonorsPreCanceledCallers()
     {
         using var server = new TestHomeAssistantServer();

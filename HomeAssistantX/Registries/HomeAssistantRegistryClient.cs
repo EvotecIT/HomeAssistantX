@@ -233,7 +233,7 @@ public sealed class HomeAssistantRegistryClient
         CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Object
-            || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+            || HasDuplicateRegistryMapProperties(value, cancellationToken))
         {
             throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response had an unexpected shape.");
         }
@@ -303,7 +303,7 @@ public sealed class HomeAssistantRegistryClient
         CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Array
-            || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+            || HasDuplicateRegistryArrayProperties(value, cancellationToken))
         {
             throw new HomeAssistantProtocolException(
                 "The Home Assistant " + name + " response contained duplicate properties or was not an array.");
@@ -417,7 +417,7 @@ public sealed class HomeAssistantRegistryClient
         CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Object
-            || HomeAssistantJson.HasDuplicateProperties(value, cancellationToken))
+            || HomeAssistantJson.HasDuplicateObjectProperties(value, cancellationToken))
         {
             throw new HomeAssistantProtocolException(
                 "The Home Assistant " + name + " response contained duplicate properties or was not an object.");
@@ -561,13 +561,44 @@ public sealed class HomeAssistantRegistryClient
         }
 
         if (value.ValueKind == JsonValueKind.Object
-            && !HomeAssistantJson.HasDuplicateProperties(value, cancellationToken)
+            && !HomeAssistantJson.HasDuplicateObjectProperties(value, cancellationToken)
             && value.TryGetProperty("entries", out var entries))
         {
             return DeserializeArray<HomeAssistantConfigEntry>(entries, "configuration-entry registry", cancellationToken);
         }
 
         throw new HomeAssistantProtocolException("The Home Assistant configuration-entry registry response had an unexpected shape.");
+    }
+
+    private static bool HasDuplicateRegistryArrayProperties(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in value.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (entry.ValueKind == JsonValueKind.Object
+                && HomeAssistantJson.HasDuplicateObjectProperties(entry, cancellationToken)) return true;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
+    private static bool HasDuplicateRegistryMapProperties(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        if (HomeAssistantJson.HasDuplicateObjectProperties(value, cancellationToken)) return true;
+        foreach (var entry in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (entry.Value.ValueKind == JsonValueKind.Object
+                && HomeAssistantJson.HasDuplicateObjectProperties(entry.Value, cancellationToken)) return true;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
     }
 
     private sealed class ConfigEntryLoadResult
