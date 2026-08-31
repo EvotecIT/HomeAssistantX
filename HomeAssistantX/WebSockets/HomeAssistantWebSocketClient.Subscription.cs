@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using System.Threading.Channels;
+using System.Runtime.ExceptionServices;
 using System.Net.WebSockets;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Subscriptions;
@@ -21,6 +22,7 @@ public sealed partial class HomeAssistantWebSocketClient
         private readonly Task _pump;
         private TaskCompletionSource<bool> _progress = CreateProgressSource();
         private Task? _stopTask;
+        private Exception? _terminalFailure;
         private long _publishedSequence;
         private long _processedSequence;
         private int _stopped;
@@ -115,6 +117,38 @@ public sealed partial class HomeAssistantWebSocketClient
                         {
                             await _handler(message, _source.Token).ConfigureAwait(false);
                         }
+                        catch (Exception) when (_source.IsCancellationRequested)
+                        {
+                            // A terminal upstream failure cancels an already-running handler so it
+                            // cannot keep Completion pending. Discarding buffered events lets the
+                            // reader completion settle while preserving the upstream exception.
+                            while (_channel.Reader.TryRead(out _))
+                            {
+                                Interlocked.Increment(ref _processedSequence);
+                                SignalProgress();
+                            }
+
+                            await _channel.Reader.Completion.ConfigureAwait(false);
+                            RethrowTerminalFailure();
+                            return;
+                        }
+                        catch (HomeAssistantSubscriptionProjectionException ex)
+                        {
+                            _diagnostic(
+                                HomeAssistantDiagnosticLevel.Error,
+                                "subscription.upstream_failed",
+                                "A Home Assistant subscription payload could not be decoded.",
+                                ex.Failure);
+                            await EnsureStopStarted(ex.Failure).ConfigureAwait(false);
+                            ExceptionDispatchInfo.Capture(ex.Failure).Throw();
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            _diagnostic(HomeAssistantDiagnosticLevel.Error, "subscription.handler_failed", "A Home Assistant subscription handler failed.", ex);
+                            await EnsureStopStarted(ex).ConfigureAwait(false);
+                            throw;
+                        }
                         finally
                         {
                             Interlocked.Increment(ref _processedSequence);
@@ -125,13 +159,7 @@ public sealed partial class HomeAssistantWebSocketClient
             }
             catch (OperationCanceledException) when (_source.IsCancellationRequested)
             {
-            }
-            catch (Exception ex)
-            {
-                _diagnostic(HomeAssistantDiagnosticLevel.Error, "subscription.handler_failed", "A Home Assistant subscription handler failed.", ex);
-                await EnsureStopStarted(ex).ConfigureAwait(false);
-
-                throw;
+                RethrowTerminalFailure();
             }
             finally
             {
@@ -209,7 +237,9 @@ public sealed partial class HomeAssistantWebSocketClient
                 }
                 else
                 {
+                    Volatile.Write(ref _terminalFailure, exception);
                     _channel.Writer.TryComplete(exception);
+                    CancelSource();
                 }
 
                 _stopTask = _stop(this, CancellationToken.None);
@@ -242,6 +272,15 @@ public sealed partial class HomeAssistantWebSocketClient
             catch (ObjectDisposedException)
             {
                 // The pump can finish and dispose its token source while an unsubscribe is in flight.
+            }
+        }
+
+        private void RethrowTerminalFailure()
+        {
+            var terminalFailure = Volatile.Read(ref _terminalFailure);
+            if (terminalFailure is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(terminalFailure).Throw();
             }
         }
     }

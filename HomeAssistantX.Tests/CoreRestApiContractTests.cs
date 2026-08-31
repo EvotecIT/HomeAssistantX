@@ -29,8 +29,9 @@ public sealed class CoreRestApiContractTests
         {
             StartTime = start,
             EndTime = end,
-            EntityId = "light.kitchen"
+            EntityId = " light.kitchen "
         });
+        var logbookPath = server.LastRequestPath;
         var errorLog = await client.Rest.GetErrorLogAsync();
         var camera = await client.Rest.GetCameraImageAsync("camera.front");
         var calendars = await client.Rest.GetCalendarsAsync();
@@ -40,6 +41,8 @@ public sealed class CoreRestApiContractTests
         Assert.Equal(5, Assert.Single(events).ListenerCount);
         Assert.Equal("sensor.kitchen_temperature", Assert.Single(Assert.Single(history)).EntityId);
         Assert.Equal("turned on", Assert.Single(logbook).Message);
+        Assert.Contains("entity=light.kitchen", logbookPath);
+        Assert.DoesNotContain("%20", logbookPath);
         Assert.Equal("test integration warning", errorLog);
         Assert.Equal("test-image-bytes", Encoding.UTF8.GetString(camera));
         Assert.Equal("calendar.home", Assert.Single(calendars).EntityId);
@@ -80,6 +83,19 @@ public sealed class CoreRestApiContractTests
     }
 
     [Fact]
+    public async Task RestRouteEscapingPrioritizesAPreCanceledToken()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Rest.FireEventAsync(new string('a', 1_000_000), cancellationToken: cancellation.Token));
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Fact]
     public async Task HistoryQueryEscapesTimestampsAndUsesPresenceFlags()
     {
         using var server = new TestHomeAssistantServer();
@@ -96,5 +112,78 @@ public sealed class CoreRestApiContractTests
         Assert.Contains("minimal_response", server.LastRequestPath);
         Assert.Contains("no_attributes", server.LastRequestPath);
         Assert.DoesNotContain("minimal_response=", server.LastRequestPath);
+    }
+
+    [Fact]
+    public async Task RestConversationRejectsExplicitBlankSelectorsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.ProcessConversationAsync("hello", language: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.ProcessConversationAsync("hello", agentId: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.ProcessConversationAsync("hello", conversationId: " "));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task RestConversationPreservesNonblankTextExactly()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        const string text = "  keep exact spacing\n";
+
+        await client.Rest.ProcessConversationAsync(text);
+
+        using var payload = JsonDocument.Parse(Assert.IsType<string>(server.LastRequestBody));
+        Assert.Equal(text, payload.RootElement.GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public async Task RestEntityIdentifiersAreTrimmedAtSharedPathAndHistoryBoundaries()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.States.GetAsync(" sensor.kitchen_temperature ");
+        Assert.Equal("/api/states/sensor.kitchen_temperature", server.LastRequestPath);
+        await client.Rest.GetHistoryAsync(new HomeAssistantHistoryQuery(" sensor.kitchen_temperature ")
+        {
+            StartTime = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero)
+        });
+
+        Assert.Contains("filter_entity_id=sensor.kitchen_temperature", server.LastRequestPath);
+        Assert.DoesNotContain("%20", server.LastRequestPath);
+    }
+
+    [Theory]
+    [InlineData("sensor.front")]
+    [InlineData("CAMERA.front")]
+    [InlineData("camera.Front")]
+    public async Task CameraImageRejectsIdentifiersOutsideTheCanonicalCameraDomain(string entityId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.GetCameraImageAsync(entityId));
+
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Theory]
+    [InlineData("sensor.home")]
+    [InlineData("CALENDAR.home")]
+    [InlineData("calendar.Home")]
+    public async Task CalendarEventsRejectIdentifiersOutsideTheCanonicalCalendarDomain(string entityId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Rest.GetCalendarEventsAsync(entityId, start, start.AddDays(1)));
+
+        Assert.Null(server.LastRequestPath);
     }
 }

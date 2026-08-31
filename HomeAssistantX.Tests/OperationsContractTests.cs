@@ -1,5 +1,9 @@
 ﻿using System.Text;
 using System.Text.Json;
+using System.Collections.Concurrent;
+using System.Net.Http;
+using HomeAssistantX.Diagnostics;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Supervisor;
 using HomeAssistantX.Tests.Infrastructure;
@@ -8,6 +12,56 @@ namespace HomeAssistantX.Tests;
 
 public sealed class OperationsContractTests
 {
+    [Fact]
+    public async Task TypedDomainListingsRejectDuplicateEntityIdentities()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("["
+            + "{\"entity_id\":\"update.home_assistant_core_update\",\"state\":\"on\",\"attributes\":{}},"
+            + "{\"entity_id\":\"update.home_assistant_core_update\",\"state\":\"off\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Operations.Updates.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task OptionalOperationalSelectorsRejectExplicitBlanksBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Integrations.GetAllAsync(" "));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.Operations.Traces.GetContextsAsync(" "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Traces.GetContextsAsync(itemId: " "));
+
+        Assert.Null(server.GetLastWebSocketCommand("config_entries/get"));
+        Assert.Null(server.GetLastWebSocketCommand("trace/contexts"));
+    }
+
+#if !NET472
+    [Fact]
+    public async Task TraceDomainsAreCanonicalizedBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Operations.Traces.GetAllAsync(" AUTOMATION ", "night");
+        using (var list = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("trace/list"))))
+        {
+            Assert.Equal("automation", list.RootElement.GetProperty("domain").GetString());
+        }
+
+        await client.Operations.Traces.GetAsync("SCRIPT", "night", "run-1");
+        using (var get = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("trace/get"))))
+        {
+            Assert.Equal("script", get.RootElement.GetProperty("domain").GetString());
+        }
+
+        await client.Operations.Traces.GetContextsAsync("AUTOMATION", "night");
+        using var contexts = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("trace/contexts")));
+        Assert.Equal("automation", contexts.RootElement.GetProperty("domain").GetString());
+    }
+#endif
 #if !NET472
     [Fact]
     public async Task OperationalReadsUseTheActualWebSocketAndRestContracts()
@@ -74,6 +128,19 @@ public sealed class OperationsContractTests
     }
 
     [Fact]
+    public async Task SystemHealthClassifiesMalformedProjectionAsUpstreamFailure()
+    {
+        using var server = new TestHomeAssistantServer { SystemHealthInitialEventJson = "{\"type\":\"initial\"}" };
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Operations.Health.GetAsync());
+
+        Assert.Contains(diagnostics.Events, item => item.Name == "subscription.upstream_failed");
+        Assert.DoesNotContain(diagnostics.Events, item => item.Name == "subscription.handler_failed");
+    }
+
+    [Fact]
     public async Task CapabilityReportExplainsTheInstallationWithoutMutation()
     {
         using var server = new TestHomeAssistantServer();
@@ -100,7 +167,7 @@ public sealed class OperationsContractTests
         using var client = TestClientFactory.Create(server);
 
         var updates = await client.Operations.Updates.GetAllAsync(availableOnly: true);
-        var notes = await client.Operations.Updates.GetReleaseNotesAsync(updates[0].EntityId);
+        var notes = await client.Operations.Updates.GetReleaseNotesAsync(" " + updates[0].EntityId + " ");
         await client.Operations.Updates.InstallAsync(updates[0].EntityId, backup: true);
 
         Assert.Single(updates);
@@ -111,6 +178,58 @@ public sealed class OperationsContractTests
         Assert.Equal("install", command.RootElement.GetProperty("service").GetString());
         Assert.Equal("update.home_assistant_core_update", command.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
         Assert.True(command.RootElement.GetProperty("service_data").GetProperty("backup").GetBoolean());
+        using var notesCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("update/release_notes")));
+        Assert.Equal("update.home_assistant_core_update", notesCommand.RootElement.GetProperty("entity_id").GetString());
+    }
+
+    [Fact]
+    public async Task UpdateOperationsRejectMalformedOrWrongDomainEntityIdsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.GetReleaseNotesAsync("light.kitchen"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update."));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.core.extra"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.Kitchen"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Operations.Updates.InstallAsync("update.core", " "));
+
+        Assert.Null(server.GetLastWebSocketCommand("update/release_notes"));
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task UpdateBulkReadRejectsMalformedServerEntityIds()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"update.core.extra\",\"state\":\"on\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Operations.Updates.GetAllAsync());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\" update.core\"")]
+    public async Task UpdateBulkReadValidatesBeforeInspectingTheDomain(string entityIdJson)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":" + entityIdJson + ",\"state\":\"on\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Operations.Updates.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task UpdateReleaseNotesClassifyUnexpectedServerShapes()
+    {
+        using var server = new TestHomeAssistantServer { ReturnInvalidUpdateReleaseNotes = true };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantX.Exceptions.HomeAssistantProtocolException>(
+            () => client.Operations.Updates.GetReleaseNotesAsync("update.home_assistant_core_update"));
     }
 
     [Fact]
@@ -139,7 +258,17 @@ public sealed class OperationsContractTests
             Background = true,
             ExcludeDatabase = true
         });
-        await client.Supervisor.InvokeAppAsync("test_app", HomeAssistantAppOperation.Restart);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Supervisor.InstallUpdateAsync(HomeAssistantSupervisorUpdateTarget.App, ".."));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Supervisor.InstallUpdateAsync(HomeAssistantSupervisorUpdateTarget.Core, version: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Supervisor.InvokeAppAsync("test/app", HomeAssistantAppOperation.Restart));
+        server.ClearLastWebSocketCommand("supervisor/api");
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            client.Supervisor.InvokeAppAsync("test_app", (HomeAssistantAppOperation)99));
+        Assert.Null(server.GetLastWebSocketCommand("supervisor/api"));
+        await client.Supervisor.InvokeAppAsync(" TEST_APP ", HomeAssistantAppOperation.Restart);
 
         Assert.Equal("2026.08.0", info.Version);
         Assert.True(info.Healthy);
@@ -154,7 +283,7 @@ public sealed class OperationsContractTests
         Assert.Contains("test log line", log);
         Assert.Equal("job-new", backup.GetProperty("job_id").GetString());
         using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("supervisor/api")));
-        Assert.Equal("/addons/test_app/restart", command.RootElement.GetProperty("endpoint").GetString());
+        Assert.Equal("/addons/TEST_APP/restart", command.RootElement.GetProperty("endpoint").GetString());
         Assert.Equal("post", command.RootElement.GetProperty("method").GetString());
     }
 #endif
@@ -174,6 +303,7 @@ public sealed class OperationsContractTests
         var apps = await supervisor.GetAppsAsync();
         var backups = await supervisor.GetBackupsAsync();
         var log = await supervisor.GetLogAsync(HomeAssistantSupervisorLogTarget.Core, 10);
+        await supervisor.InvokeAppAsync(" TEST_APP ", HomeAssistantAppOperation.Restart);
 
         Assert.Equal("2026.08.0", info.Version);
         Assert.Equal("2026.8.3", overview.CoreVersion);
@@ -181,7 +311,37 @@ public sealed class OperationsContractTests
         Assert.Single(apps);
         Assert.Single(backups);
         Assert.Contains("direct supervisor log line", log);
+        Assert.Equal("/addons/TEST_APP/restart", server.LastRequestPath);
         Assert.Equal("Bearer " + TestHomeAssistantServer.AccessToken, server.LastAuthorization);
+    }
+
+    [Fact]
+    public async Task SupervisorRoutesPrioritizeAPreCanceledTokenBeforeSelectorsAndEscaping()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var supervisor = HomeAssistantSupervisorClient.Create(server.BaseUri, TestHomeAssistantServer.AccessToken);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var longValue = new string('a', 1_000_000);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.GetJobAsync(longValue, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.GetLogAsync((HomeAssistantSupervisorLogTarget)int.MaxValue, cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.RestartAsync((HomeAssistantSupervisorRestartTarget)int.MaxValue, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.InstallUpdateAsync(
+                (HomeAssistantSupervisorUpdateTarget)int.MaxValue,
+                app: longValue,
+                version: longValue,
+                cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.InvokeAppAsync(longValue, (HomeAssistantAppOperation)int.MaxValue, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            supervisor.SendAsync(HttpMethod.Get, "/" + longValue, cancellationToken: cancellation.Token));
+
+        Assert.Null(server.LastRequestPath);
     }
 
     [Fact]
@@ -200,5 +360,14 @@ public sealed class OperationsContractTests
             () => supervisor.SendAsync(System.Net.Http.HttpMethod.Get, "/core/%2e%2e/host/info"));
         await Assert.ThrowsAsync<ArgumentException>(
             () => supervisor.SendAsync(System.Net.Http.HttpMethod.Get, "/core\\..\\host\\info"));
+    }
+
+    private sealed class RecordingDiagnosticsSink : IHomeAssistantDiagnosticsSink
+    {
+        private readonly ConcurrentQueue<HomeAssistantDiagnosticEvent> _events = new();
+
+        internal IReadOnlyList<HomeAssistantDiagnosticEvent> Events => _events.ToArray();
+
+        public void Write(HomeAssistantDiagnosticEvent diagnosticEvent) => _events.Enqueue(diagnosticEvent);
     }
 }

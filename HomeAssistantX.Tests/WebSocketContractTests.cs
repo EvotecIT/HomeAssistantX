@@ -1,14 +1,563 @@
 ﻿#if NET10_0
 using System.Collections.Concurrent;
+using System.Reflection;
 using System.Text.Json;
+using HomeAssistantX.Authentication;
+using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Services;
 using HomeAssistantX.Tests.Infrastructure;
+using HomeAssistantX.WebSockets;
 
 namespace HomeAssistantX.Tests;
 
 public sealed class WebSocketContractTests
 {
+    [Fact]
+    public void ConnectFailureClassificationPreservesCallerCancellationAndTimeouts()
+    {
+        using var caller = new CancellationTokenSource();
+        using var disposal = new CancellationTokenSource();
+        using var deadline = new CancellationTokenSource();
+        caller.Cancel();
+        var disposed = new ObjectDisposedException("socket");
+
+        var callerFailure = HomeAssistantX.WebSockets.HomeAssistantWebSocketClient.ClassifyConnectFailure(
+            disposed, caller.Token, disposal.Token, deadline.Token);
+
+        Assert.IsType<OperationCanceledException>(callerFailure);
+        using var timeoutCaller = new CancellationTokenSource();
+        using var timeoutDeadline = new CancellationTokenSource();
+        timeoutDeadline.Cancel();
+        var timeoutFailure = HomeAssistantX.WebSockets.HomeAssistantWebSocketClient.ClassifyConnectFailure(
+            disposed, timeoutCaller.Token, disposal.Token, timeoutDeadline.Token);
+        Assert.IsType<HomeAssistantConnectionException>(timeoutFailure);
+    }
+
+    [Fact]
+    public async Task RequestDeadlineIncludesWaitingForTheSharedSendGate()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, requestTimeout: TimeSpan.FromMilliseconds(150));
+        await client.WebSocket.ConnectAsync();
+        var field = typeof(HomeAssistantX.WebSockets.HomeAssistantWebSocketClient)
+            .GetField("_sendGate", BindingFlags.Instance | BindingFlags.NonPublic);
+        var gate = Assert.IsType<SemaphoreSlim>(field!.GetValue(client.WebSocket));
+        await gate.WaitAsync();
+        try
+        {
+            var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+                () => client.WebSocket.PingAsync());
+            Assert.IsType<TimeoutException>(exception.InnerException);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectNegotiatesCoalescingAsFirstCommandAndRoutesBatchedMessages()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var result = await client.WebSocket.RequestAsync("test/coalesced");
+
+        Assert.Equal("coalesced", result.GetProperty("value").GetString());
+        using var featureCommand = JsonDocument.Parse(
+            Assert.IsType<string>(server.GetLastWebSocketCommand("supported_features")));
+        Assert.Equal(1, featureCommand.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal(
+            1,
+            featureCommand.RootElement
+                .GetProperty("features")
+                .GetProperty("coalesce_messages")
+                .GetInt32());
+    }
+
+    [Fact]
+    public async Task ConnectAcceptsACoalescedFeatureNegotiationAcknowledgement()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            CoalesceSupportedFeaturesAcknowledgement = true
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await client.WebSocket.ConnectAsync();
+
+        Assert.Equal(HomeAssistantConnectionState.Connected, client.WebSocket.State);
+    }
+
+    [Theory]
+    [InlineData("omit")]
+    [InlineData("null")]
+    [InlineData("\"true\"")]
+    public async Task FeatureNegotiationRequiresAnExplicitBooleanSuccess(string successJson)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SupportedFeaturesSuccessJson = successJson
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.WebSocket.ConnectAsync());
+
+        Assert.Contains("Boolean success", exception.Message);
+    }
+
+    [Fact]
+    public async Task FeatureNegotiationRequiresAResultPayloadOnSuccess()
+    {
+        using var server = new TestHomeAssistantServer { OmitSupportedFeaturesResult = true };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.WebSocket.ConnectAsync());
+
+        Assert.Contains("result payload", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnsupportedFeatureNegotiationFallsBackToOrdinaryMessages()
+    {
+        using var server = new TestHomeAssistantServer { RejectSupportedFeatures = true };
+        using var client = TestClientFactory.Create(server);
+
+        var pong = await client.WebSocket.PingAsync();
+
+        Assert.Equal(JsonValueKind.Null, pong.ValueKind);
+        Assert.NotNull(server.GetLastWebSocketCommand("supported_features"));
+    }
+
+    [Fact]
+    public async Task UnsupportedFeatureFallbackRequiresACompleteErrorEnvelope()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SupportedFeaturesErrorCode = "unknown_command",
+            OmitSupportedFeaturesErrorMessage = true
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.WebSocket.ConnectAsync());
+
+        Assert.Contains("error code or message", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MalformedFeatureNegotiationIsAProtocolFailure()
+    {
+        using var server = new TestHomeAssistantServer { ReturnMalformedSupportedFeatures = true };
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.WebSocket.ConnectAsync());
+
+        Assert.IsAssignableFrom<JsonException>(exception.InnerException);
+        Assert.Contains("supported-features", exception.Message);
+    }
+
+    [Fact]
+    public async Task CommandIdentifiersRemainMonotonicAcrossConnections()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.WebSocket.PingAsync();
+        using var first = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("ping")));
+        var firstId = first.RootElement.GetProperty("id").GetInt32();
+        await client.WebSocket.DisconnectAsync();
+        await client.WebSocket.PingAsync();
+        using var second = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("ping")));
+
+        Assert.True(second.RootElement.GetProperty("id").GetInt32() > firstId);
+    }
+
+    [Fact]
+    public async Task CoalescedBatchCountIsBoundedIndependentlyFromFrameBytes()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(
+            server,
+            maximumCoalescedWebSocketMessages: 1);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/coalesced"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("message-count limit", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task CoalescedBatchRejectsValuesThatAreNotMessages()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/malformed_coalesced"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("non-message value", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task CoalescedBatchRejectsAnEmptyFrameImmediately()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/empty_coalesced"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("no messages", protocolFailure.Message);
+    }
+
+    [Theory]
+    [InlineData("test/coalesced_blank_type")]
+    [InlineData("test/standalone_blank_type")]
+    public async Task WebSocketMessagesRejectBlankRequiredTypes(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("empty required property 'type'", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task CoalescedBatchRejectsRoutedMessagesWithoutAnIntegerIdentifierBeforeRoutingAnyItem()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/coalesced_invalid_id"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("command identifier", protocolFailure.Message);
+    }
+
+    [Theory]
+    [InlineData("test/coalesced_zero_id")]
+    [InlineData("test/coalesced_negative_id")]
+    public async Task CoalescedBatchRejectsNonPositiveCommandIdentifiersBeforeRoutingAnyItem(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("command identifier", protocolFailure.Message);
+    }
+
+    [Theory]
+    [InlineData("test/coalesced_missing_success")]
+    [InlineData("test/coalesced_null_success")]
+    [InlineData("test/coalesced_string_success")]
+    [InlineData("test/standalone_missing_success")]
+    [InlineData("test/standalone_null_success")]
+    [InlineData("test/standalone_string_success")]
+    public async Task ResultMessagesRequireABooleanSuccessFlag(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("Boolean success", protocolFailure.Message);
+    }
+
+    [Theory]
+    [InlineData("test/coalesced_missing_error")]
+    [InlineData("test/coalesced_malformed_error")]
+    [InlineData("test/standalone_missing_error")]
+    [InlineData("test/standalone_malformed_error")]
+    public async Task FailedResultMessagesRequireAStringErrorCodeAndMessage(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("error code or message", protocolFailure.Message);
+    }
+
+    [Theory]
+    [InlineData("test/standalone_zero_id")]
+    [InlineData("test/standalone_negative_id")]
+    public async Task StandaloneRoutedMessagesRejectNonPositiveCommandIdentifiers(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("command identifier", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task CoalescedBatchRequiresSuccessfulFeatureNegotiation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, enableWebSocketMessageCoalescing: false);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/forced_coalesced"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("without negotiating", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task CoalescedBatchRejectsDuplicateTerminalIdentifiersBeforeRoutingAnyItem()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync("test/coalesced_duplicate_terminal_id"));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("duplicate terminal", protocolFailure.Message);
+    }
+
+    [Theory]
+    [InlineData("test/coalesced_missing_event")]
+    [InlineData("test/coalesced_null_event")]
+    [InlineData("test/missing_event")]
+    public async Task EventMessagesRequirePayloadBeforeRouting(string command)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var exception = await Assert.ThrowsAsync<HomeAssistantConnectionException>(
+            () => client.WebSocket.RequestAsync(command));
+
+        var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
+        Assert.Contains("event payload", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task RejectedOAuthTokenRefreshesBeforeOpeningAFreshWebSocketSession()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            RequiredAccessToken = "refreshed-access-token"
+        };
+        using var oauth = new HomeAssistantOAuthClient(server.BaseUri);
+        using var provider = new RefreshingAccessTokenProvider(
+            oauth,
+            new Uri("https://app.example.net/"),
+            new HomeAssistantOAuthTokens
+            {
+                AccessToken = "locally-unexpired-but-rejected",
+                RefreshToken = "oauth-refresh-token",
+                ExpiresInSeconds = 1800,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(20)
+            });
+        using var client = TestClientFactory.Create(server, accessTokenProvider: provider);
+
+        var result = await client.WebSocket.PingAsync();
+
+        Assert.Equal(JsonValueKind.Null, result.ValueKind);
+        Assert.Equal(1, server.OAuthTokenRequestCount);
+        Assert.Equal(2, server.WebSocketConnectionCount);
+    }
+
+    [Fact]
+    public async Task PermanentReconnectAuthenticationFailureStopsTheReconnectEpisode()
+    {
+        using var server = new TestHomeAssistantServer();
+        var provider = new NonRecoveringTokenProvider(TestHomeAssistantServer.AccessToken);
+        using var client = TestClientFactory.Create(server, accessTokenProvider: provider);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+        var faulted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WebSocket.ConnectionStateChanged += (_, args) =>
+        {
+            if (args.CurrentState == HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted)
+            {
+                faulted.TrySetResult(true);
+            }
+        };
+
+        await Task.Delay(100);
+        server.RequiredAccessToken = "replacement-token";
+        await server.DropWebSocketsAsync();
+        await WithTimeoutAsync(faulted.Task);
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        var stoppedAt = server.WebSocketConnectionCount;
+        await Task.Delay(250);
+
+        Assert.Equal(1, provider.RecoveryCount);
+        Assert.Equal(stoppedAt, server.WebSocketConnectionCount);
+        Assert.Equal(HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted, client.WebSocket.State);
+    }
+
+    [Fact]
+    public async Task TerminalReconnectFailureCancelsRunningHandlerAndPreservesUpstreamDiagnostics()
+    {
+        using var server = new TestHomeAssistantServer();
+        var diagnostics = new RecordingDiagnosticsSink();
+        var provider = new NonRecoveringTokenProvider(TestHomeAssistantServer.AccessToken);
+        using var client = TestClientFactory.Create(server, accessTokenProvider: provider, diagnostics: diagnostics);
+        var handlerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", async (_, token) =>
+        {
+            handlerStarted.TrySetResult(true);
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new ObjectDisposedException("canceled-handler-resource");
+            }
+        });
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            TestHomeAssistantServer.KitchenLightOnStateJson);
+        await WithTimeoutAsync(handlerStarted.Task);
+        for (var index = 0; index < 8; index++)
+        {
+            await server.PublishStateChangeAsync(
+                "light.buffered_" + index,
+                TestHomeAssistantServer.KitchenLightOffStateJson,
+                TestHomeAssistantServer.KitchenLightOnStateJson);
+        }
+
+        await Task.Delay(100);
+        server.RequiredAccessToken = "replacement-token";
+        await server.DropWebSocketsAsync();
+
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.DoesNotContain(diagnostics.Events, value => value.Name == "subscription.handler_failed");
+        Assert.Contains(diagnostics.Events, value => value.Name == "websocket.reconnect_authentication_failed");
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, "invalid_format")]
+    public async Task PermanentReconnectNegotiationFailureStopsTheReconnectEpisode(
+        bool malformedResponse,
+        string? commandErrorCode)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+        var faulted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.WebSocket.ConnectionStateChanged += (_, args) =>
+        {
+            if (args.CurrentState == HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted
+                && (args.Exception is HomeAssistantProtocolException || args.Exception is HomeAssistantCommandException))
+            {
+                faulted.TrySetResult(true);
+            }
+        };
+
+        server.ReturnMalformedSupportedFeatures = malformedResponse;
+        server.SupportedFeaturesErrorCode = commandErrorCode;
+        await server.DropWebSocketsAsync();
+        await WithTimeoutAsync(faulted.Task);
+        if (malformedResponse)
+        {
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+                async () => await WithTimeoutAsync(subscription.Completion));
+        }
+        else
+        {
+            await Assert.ThrowsAsync<HomeAssistantCommandException>(
+                async () => await WithTimeoutAsync(subscription.Completion));
+        }
+        var stoppedAt = server.WebSocketConnectionCount;
+        await Task.Delay(250);
+
+        Assert.Equal(stoppedAt, server.WebSocketConnectionCount);
+        Assert.Equal(HomeAssistantX.WebSockets.HomeAssistantConnectionState.Faulted, client.WebSocket.State);
+    }
+
+    [Fact]
+    public async Task PermanentReconnectDiagnosticsDoNotExposeServerControlledCommandDetails()
+    {
+        const string privateMarker = "private-installation-name";
+        using var server = new TestHomeAssistantServer();
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+
+        server.SupportedFeaturesErrorCode = "invalid_format";
+        server.SupportedFeaturesErrorMessage = privateMarker;
+        await server.DropWebSocketsAsync();
+
+        var upstream = await Assert.ThrowsAsync<HomeAssistantCommandException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(privateMarker, upstream.Message);
+        var diagnostic = Assert.Single(
+            diagnostics.Events,
+            value => value.Name == "websocket.reconnect_permanent_failure");
+        Assert.DoesNotContain(privateMarker, diagnostic.Exception?.Message ?? string.Empty);
+        Assert.Equal("invalid_format", Assert.IsType<HomeAssistantCommandException>(diagnostic.Exception).Code);
+    }
+
+    [Fact]
+    public async Task EventSubscriptionRejectsNullRequiredDataDictionary()
+    {
+        using var server = new TestHomeAssistantServer { PublishNullStateEventData = true };
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            TestHomeAssistantServer.KitchenLightOnStateJson);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(diagnostics.Events, value => value.Name == "subscription.upstream_failed");
+        Assert.DoesNotContain(diagnostics.Events, value => value.Name == "subscription.handler_failed");
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"data\":{}}")]
+    [InlineData("{\"event_type\":\"state_changed\"}")]
+    [InlineData("{\"event_type\":\"   \",\"data\":{}}")]
+    public async Task EventSubscriptionRejectsOmittedOrBlankRequiredEnvelopeFields(string eventJson)
+    {
+        using var server = new TestHomeAssistantServer();
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.Events.SubscribeAsync("state_changed", (_, _) => Task.CompletedTask);
+
+        await server.PublishRawStateEventAsync(eventJson);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(diagnostics.Events, value => value.Name == "subscription.upstream_failed");
+        Assert.DoesNotContain(diagnostics.Events, value => value.Name == "subscription.handler_failed");
+    }
+
     [Fact]
     public async Task AuthenticatesPingsAndReassemblesFragmentedResponses()
     {
@@ -282,6 +831,26 @@ public sealed class WebSocketContractTests
     }
 
     [Fact]
+    public async Task MutableTargetsAreRevalidatedAndNormalizedBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = new HomeAssistantTarget { EntityIds = new[] { " light.kitchen " } };
+
+        await client.Services.CallAsync(HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target));
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
+        Assert.Equal("light.kitchen", body.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+        target.EntityIds = new[] { " " };
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => client.Services.CallAsync(HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target)));
+        target.EntityIds = new[] { "_light.kitchen" };
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => client.Services.CallAsync(HomeAssistantServiceCall.Create("light", "turn_on").ForTarget(target)));
+        Assert.Throws<ArgumentException>(() => HomeAssistantTarget.ForEntity("LIGHT.kitchen"));
+    }
+
+    [Fact]
     public async Task DefaultServiceCallOmitsOptionalWebSocketFields()
     {
         using var server = new TestHomeAssistantServer();
@@ -300,7 +869,7 @@ public sealed class WebSocketContractTests
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
-        var target = HomeAssistantTarget.ForEntity("light.kitchen");
+        var target = new HomeAssistantTarget { EntityIds = new[] { " light.kitchen " } };
 
         var configuration = await client.System.GetConfigurationAsync();
         var services = await client.Services.GetCatalogWebSocketAsync();
@@ -312,7 +881,8 @@ public sealed class WebSocketContractTests
         var targetServices = await client.System.GetServicesForTargetAsync(target);
         var displayRegistry = await client.System.GetEntityRegistryForDisplayAsync();
         var exposures = await client.System.GetExposedEntitiesAsync();
-        var changedExposure = await client.System.SetEntityExposureAsync("light.kitchen", "cloud", true);
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.SetEntityExposureAsync("light.Kitchen", "cloud", true));
+        var changedExposure = await client.System.SetEntityExposureAsync(" light.kitchen ", " cloud ", true);
         var signedPath = await client.System.SignPathAsync("/api/camera_proxy/camera.front", TimeSpan.FromMinutes(1));
         var longLivedToken = await client.System.CreateLongLivedAccessTokenAsync("Contract test", 30);
         var conversation = await client.System.ProcessConversationAsync("Turn on the kitchen light");
@@ -348,6 +918,149 @@ public sealed class WebSocketContractTests
         using var validationCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("validate_config")));
         Assert.True(validationCommand.RootElement.TryGetProperty("action", out _));
         Assert.False(validationCommand.RootElement.TryGetProperty("trigger", out _));
+        target.EntityIds = new[] { " " };
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.ExtractFromTargetAsync(target));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.GetTriggersForTargetAsync(target));
+    }
+
+    [Fact]
+    public async Task SignPathRejectsExpiryValuesOutsideTheWireIntegerRange()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => client.System.SignPathAsync("/api/camera_proxy/camera.front", TimeSpan.MaxValue));
+        var signed = await client.System.SignPathAsync(
+            "/api/camera_proxy/camera.front",
+            TimeSpan.FromSeconds(int.MaxValue - 0.25));
+
+        Assert.Contains("authSig=", signed);
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("auth/sign_path")));
+        Assert.Equal(int.MaxValue, command.RootElement.GetProperty("expires").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("//other.example/api/camera_proxy/camera.front")]
+    [InlineData("/api\\camera_proxy\\camera.front")]
+    [InlineData(" /api/camera_proxy/camera.front")]
+    [InlineData("/api/camera_proxy/camera.front ")]
+    [InlineData("/api/camera_proxy/camera.front#fragment")]
+    [InlineData("/api/one/../camera_proxy/camera.front")]
+    [InlineData("/api/%2e%2e/camera_proxy/camera.front")]
+    public async Task SignPathRejectsNoncanonicalRequestedRoutesBeforeDispatch(string path)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.SignPathAsync(path));
+
+        Assert.Null(server.GetLastWebSocketCommand("auth/sign_path"));
+    }
+
+    [Fact]
+    public async Task SignPathObservesCancellationBeforeScanningTheRequestedRoute()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.System.SignPathAsync(
+            "/api/camera_proxy/camera.front?value=" + new string('a', 1_000_000),
+            cancellationToken: cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("auth/sign_path"));
+    }
+
+    [Theory]
+    [InlineData("/api/other?authSig=signed")]
+    [InlineData("/api/camera_proxy/camera.front-stale?authSig=signed")]
+    [InlineData("/api/camera_proxy/camera.front&other?authSig=signed")]
+    [InlineData("/api/camera_proxy/camera.front")]
+    [InlineData("//other.example/api/camera_proxy/camera.front?authSig=signed")]
+    [InlineData("/api\\camera_proxy\\camera.front?authSig=signed")]
+    [InlineData(" /api/camera_proxy/camera.front?authSig=signed")]
+    [InlineData("/api/camera_proxy/camera.front?authSig=signed ")]
+    [InlineData("/api/camera_proxy/camera.front?authSig=signed#fragment")]
+    [InlineData("/api/camera_proxy/../camera_proxy/camera.front?authSig=signed")]
+    [InlineData("/api/%2e%2e/api/camera_proxy/camera.front?authSig=signed")]
+    public async Task SignPathRejectsResponsesForDifferentRoutes(string returnedPath)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SignedPathResponseJson = JsonSerializer.Serialize(new { path = returnedPath })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.System.SignPathAsync("/api/camera_proxy/camera.front"));
+    }
+
+    [Fact]
+    public async Task SignPathUsesAnAmpersandForARequestedRouteWithAQuery()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var signed = await client.System.SignPathAsync("/api/camera_proxy/camera.front?width=640");
+
+        Assert.Contains("?width=640&authSig=signed", signed);
+    }
+
+    [Theory]
+    [InlineData("/api/camera_proxy/camera.front?authSig=old")]
+    [InlineData("/api/camera_proxy/camera.front?%61uthSig=old")]
+    public async Task SignPathRejectsRequestedRoutesThatAlreadyContainASignature(string path)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.SignPathAsync(path));
+
+        Assert.Null(server.GetLastWebSocketCommand("auth/sign_path"));
+    }
+
+    [Theory]
+    [InlineData("/api/camera_proxy/camera.front?other=value")]
+    [InlineData("/api/camera_proxy/camera.front?authSig=")]
+    [InlineData("/api/camera_proxy/camera.front?authSig=signed&other=value")]
+    public async Task SignPathRequiresExactlyOneNonemptySignatureParameter(string returnedPath)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SignedPathResponseJson = JsonSerializer.Serialize(new { path = returnedPath })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.System.SignPathAsync("/api/camera_proxy/camera.front"));
+    }
+
+    [Fact]
+    public async Task WebSocketConversationRejectsExplicitBlankSelectorsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.ProcessConversationAsync("hello", language: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.ProcessConversationAsync("hello", agentId: " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.System.ProcessConversationAsync("hello", conversationId: " "));
+
+        Assert.Null(server.GetLastWebSocketCommand("conversation/process"));
+    }
+
+    [Fact]
+    public async Task WebSocketConversationPreservesNonblankTextExactly()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        const string text = "  keep exact spacing\n";
+
+        await client.System.ProcessConversationAsync(text);
+
+        using var payload = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("conversation/process")));
+        Assert.Equal(text, payload.RootElement.GetProperty("text").GetString());
     }
 
     private static async Task<T> WithTimeoutAsync<T>(Task<T> task)
@@ -362,6 +1075,36 @@ public sealed class WebSocketContractTests
         var winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(3)));
         Assert.Same(task, winner);
         await task;
+    }
+
+    private sealed class NonRecoveringTokenProvider : IHomeAssistantAccessTokenProvider, IHomeAssistantAccessTokenRecovery
+    {
+        private readonly string _token;
+
+        internal NonRecoveringTokenProvider(string token)
+        {
+            _token = token;
+        }
+
+        internal int RecoveryCount { get; private set; }
+
+        public Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(_token);
+
+        public Task RecoverAccessTokenAsync(string rejectedAccessToken, CancellationToken cancellationToken = default)
+        {
+            RecoveryCount++;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingDiagnosticsSink : IHomeAssistantDiagnosticsSink
+    {
+        private readonly ConcurrentQueue<HomeAssistantDiagnosticEvent> _events = new();
+
+        internal IReadOnlyList<HomeAssistantDiagnosticEvent> Events => _events.ToArray();
+
+        public void Write(HomeAssistantDiagnosticEvent diagnosticEvent) => _events.Enqueue(diagnosticEvent);
     }
 }
 #endif

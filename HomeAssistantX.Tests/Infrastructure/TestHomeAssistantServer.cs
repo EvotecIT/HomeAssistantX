@@ -27,7 +27,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _failNextSubscription;
     private TaskCompletionSource<bool>? _pausedSubscriptionReceived;
     private TaskCompletionSource<bool>? _pausedSubscriptionRelease;
-    private TaskCompletionSource<bool>? _pausedSubscriptionActivated;
+    private TaskCompletionSource<bool>? _pausedServiceCallReceived;
+    private TaskCompletionSource<bool>? _pausedServiceCallRelease;
+    private TaskCompletionSource<bool>? _pausedGetStatesReceived;
+    private TaskCompletionSource<bool>? _pausedGetStatesRelease;
     private readonly TaskCompletionSource<bool> _unsubscribeReceived =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource<bool> _systemHealthEventsSent =
@@ -36,6 +39,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _invalidUnsubscribeCommandCount;
     private int _lastSubscriptionSessionId;
     private int _lastUnsubscribeSessionId;
+    private int _authenticatedRequestCount;
+    private int _unauthorizedRequestCount;
+    private string _requiredAccessToken = AccessToken;
     private int _disposed;
 
     public TestHomeAssistantServer()
@@ -53,11 +59,57 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public int WebSocketConnectionCount => Volatile.Read(ref _connectionCount);
 
+    public int AuthenticatedRequestCount => Volatile.Read(ref _authenticatedRequestCount);
+
+    public int UnauthorizedRequestCount => Volatile.Read(ref _unauthorizedRequestCount);
+
+    public string RequiredAccessToken
+    {
+        get => Volatile.Read(ref _requiredAccessToken);
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new ArgumentException("A required access token is required.", nameof(value));
+            }
+
+            Volatile.Write(ref _requiredAccessToken, value);
+        }
+    }
+
     public string? LastAuthorization { get; private set; }
 
     public string? LastServiceCallBody { get; private set; }
 
     public IReadOnlyList<string> ServiceCallBodies => _serviceCallBodies.ToArray();
+
+    public (Task Received, Action Release) PauseNextServiceCall()
+    {
+        lock (_stateGate)
+        {
+            if (_pausedServiceCallReceived is not null)
+                throw new InvalidOperationException("A service call is already paused.");
+            var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pausedServiceCallReceived = received;
+            _pausedServiceCallRelease = release;
+            return (received.Task, () => release.TrySetResult(true));
+        }
+    }
+
+    public (Task Received, Action Release) PauseNextGetStates()
+    {
+        lock (_stateGate)
+        {
+            if (_pausedGetStatesReceived is not null)
+                throw new InvalidOperationException("A get_states request is already paused.");
+            var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pausedGetStatesReceived = received;
+            _pausedGetStatesRelease = release;
+            return (received.Task, () => release.TrySetResult(true));
+        }
+    }
 
     public void ClearLastServiceCall()
     {
@@ -70,6 +122,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string? LastRequestBody { get; private set; }
 
     public string? LastRequestPath { get; private set; }
+
+    public string? ExactStateResponseJson { get; set; }
+    public string StateMutationResponseJson { get; set; } =
+        "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}";
 
     public int OAuthTokenRequestCount { get; private set; }
 
@@ -98,8 +154,41 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string? ConfigEntriesErrorCode { get; set; }
 
     public bool OmitSystemHealthFinish { get; set; }
+    public string SystemHealthInitialEventJson { get; set; } =
+        "{\"type\":\"initial\",\"data\":{\"homeassistant\":{\"info\":{\"version\":\"2026.8.3\",\"installation_type\":\"Home Assistant OS\",\"hassio\":true}}}}";
 
     public bool IgnoreUnsubscribeAcknowledgement { get; set; }
+
+    public bool RejectSupportedFeatures { get; set; }
+
+    public string? SupportedFeaturesErrorCode { get; set; }
+
+    public string SupportedFeaturesErrorMessage { get; set; } = "Feature negotiation was rejected.";
+
+    public bool OmitSupportedFeaturesErrorMessage { get; set; }
+
+    public bool ReturnMalformedSupportedFeatures { get; set; }
+
+    public bool CoalesceSupportedFeaturesAcknowledgement { get; set; }
+
+    public string? SupportedFeaturesSuccessJson { get; set; }
+    public bool OmitSupportedFeaturesResult { get; set; }
+
+    public bool ReturnInvalidUpdateReleaseNotes { get; set; }
+
+    public string HistoryResponseJson { get; set; } = "[[" + KitchenTemperatureStateJson + "]]";
+
+    public string ActionCatalogResponseJson { get; set; } =
+        "{\"light\":{\"turn_on\":{\"name\":\"Turn on\",\"description\":\"Turns on a light.\",\"fields\":{\"brightness_pct\":{\"name\":\"Brightness\",\"description\":\"Brightness percentage.\",\"required\":false,\"example\":45,\"selector\":{\"number\":{\"min\":0,\"max\":100}}}},\"target\":{\"entity\":[{\"domain\":\"light\"}]}},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}},\"switch\":{\"turn_on\":{\"name\":\"Turn on\"},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}}}";
+
+    public string ConfigurationResponseJson { get; set; } =
+        "{\"location_name\":\"Test Home\",\"Location_Name\":\"Case-distinct extension\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}";
+
+    public string? ExtendedEntityRegistryResponseJson { get; set; }
+
+    public bool PublishNullStateEventData { get; set; }
+
+    public string? SignedPathResponseJson { get; set; }
 
     public Task WaitForSystemHealthEventsAsync()
     {
@@ -129,7 +218,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         _pausedSubscriptionReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pausedSubscriptionRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pausedSubscriptionActivated = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     public Task WaitForPausedSubscriptionAsync()
@@ -142,12 +230,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         (_pausedSubscriptionRelease
             ?? throw new InvalidOperationException("No subscription pause is configured.")).TrySetResult(true);
-    }
-
-    public Task WaitForPausedSubscriptionActivationAsync()
-    {
-        return (_pausedSubscriptionActivated
-            ?? throw new InvalidOperationException("No subscription activation is configured.")).Task;
     }
 
     public Task WaitForUnsubscribeAsync()
@@ -180,7 +262,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ["event"] = new Dictionary<string, object?>
                     {
                         ["event_type"] = "state_changed",
-                        ["data"] = data,
+                        ["data"] = PublishNullStateEventData ? null : data,
                         ["origin"] = "LOCAL",
                         ["time_fired"] = DateTimeOffset.UtcNow,
                         ["context"] = new Dictionary<string, object?>
@@ -192,6 +274,26 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     }
                 }, cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        return recipients;
+    }
+
+    public async Task<int> PublishRawStateEventAsync(
+        string eventJson,
+        CancellationToken cancellationToken = default)
+    {
+        using var document = JsonDocument.Parse(eventJson);
+        var payload = document.RootElement.Clone();
+        var recipients = 0;
+        foreach (var session in _sessions.Values)
+        {
+            if (session.StateSubscriptionId is not int subscriptionId) continue;
+            recipients++;
+            await session.SendSubscriptionEventAsync(
+                subscriptionId,
+                payload,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return recipients;
@@ -219,6 +321,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 return;
             }
             catch (SocketException) when (_source.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (InvalidOperationException) when (_source.IsCancellationRequested)
             {
                 return;
             }
@@ -330,7 +436,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 var valid = root.TryGetProperty("type", out var type)
                     && type.GetString() == "auth"
                     && root.TryGetProperty("access_token", out var token)
-                    && token.GetString() == AccessToken;
+                    && token.GetString() == RequiredAccessToken;
                 if (!valid)
                 {
                     await session.SendAsync(new Dictionary<string, object?>
@@ -385,11 +491,89 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         _lastWebSocketCommands[type] = command.GetRawText();
         switch (type)
         {
+            case "supported_features":
+                if (ReturnMalformedSupportedFeatures)
+                {
+                    await session.SendTextAsync("{not-json", _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
+                if (RejectSupportedFeatures)
+                {
+                    await session.SendErrorAsync(id, "unknown_command", "Unknown command.", "unknown_command", _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
+                if (SupportedFeaturesErrorCode is string supportedFeaturesErrorCode
+                    && !string.IsNullOrWhiteSpace(supportedFeaturesErrorCode))
+                {
+                    if (OmitSupportedFeaturesErrorMessage)
+                    {
+                        await session.SendAsync(
+                            new Dictionary<string, object?>
+                            {
+                                ["id"] = id,
+                                ["type"] = "result",
+                                ["success"] = false,
+                                ["error"] = new Dictionary<string, object?> { ["code"] = supportedFeaturesErrorCode }
+                            },
+                            _source.Token).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await session.SendErrorAsync(id, supportedFeaturesErrorCode, SupportedFeaturesErrorMessage, supportedFeaturesErrorCode, _source.Token).ConfigureAwait(false);
+                    }
+                    return;
+                }
+
+                session.MessageCoalescingEnabled = command.TryGetProperty("features", out var features)
+                    && features.ValueKind == JsonValueKind.Object
+                    && features.TryGetProperty("coalesce_messages", out var coalesce)
+                    && coalesce.TryGetInt32(out var coalesceVersion)
+                    && coalesceVersion == 1;
+                var acknowledgement = new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["type"] = "result"
+                };
+                if (!OmitSupportedFeaturesResult) acknowledgement["result"] = null;
+                if (!string.Equals(SupportedFeaturesSuccessJson, "omit", StringComparison.Ordinal))
+                {
+                    acknowledgement["success"] = SupportedFeaturesSuccessJson is null
+                        ? true
+                        : ParseJson(SupportedFeaturesSuccessJson);
+                }
+
+                if (CoalesceSupportedFeaturesAcknowledgement)
+                {
+                    await session.SendCoalescedAsync(new object[] { acknowledgement }, _source.Token)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await session.SendAsync(acknowledgement, _source.Token).ConfigureAwait(false);
+                }
+                return;
             case "ping":
                 await session.SendAsync(new Dictionary<string, object?> { ["id"] = id, ["type"] = "pong" }, _source.Token)
                     .ConfigureAwait(false);
                 return;
             case "get_states":
+                TaskCompletionSource<bool>? pausedGetStatesReceived;
+                TaskCompletionSource<bool>? pausedGetStatesRelease;
+                lock (_stateGate)
+                {
+                    pausedGetStatesReceived = _pausedGetStatesReceived;
+                    pausedGetStatesRelease = _pausedGetStatesRelease;
+                    _pausedGetStatesReceived = null;
+                    _pausedGetStatesRelease = null;
+                }
+                if (pausedGetStatesReceived is not null && pausedGetStatesRelease is not null)
+                {
+                    pausedGetStatesReceived.TrySetResult(true);
+                    await pausedGetStatesRelease.Task.ConfigureAwait(false);
+                }
+
                 if (SendStateChangeBeforeSnapshot && session.StateSubscriptionId is int subscriptionId)
                 {
                     await session.SendStateChangeAsync(subscriptionId, _source.Token).ConfigureAwait(false);
@@ -401,7 +585,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("{\"location_name\":\"Test Home\",\"version\":\"2026.8.3\",\"components\":[\"api\"]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "get_services":
-                await session.SendResultAsync(id, ParseJson("{\"light\":{\"turn_on\":{\"name\":\"Turn on\",\"description\":\"Turns on a light.\",\"fields\":{\"brightness_pct\":{\"name\":\"Brightness\",\"description\":\"Brightness percentage.\",\"required\":false,\"example\":45,\"selector\":{\"number\":{\"min\":0,\"max\":100}}}},\"target\":{\"entity\":[{\"domain\":\"light\"}]}},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}},\"switch\":{\"turn_on\":{\"name\":\"Turn on\"},\"turn_off\":{\"name\":\"Turn off\"},\"toggle\":{\"name\":\"Toggle\"}}}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(ActionCatalogResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "get_panels":
                 await session.SendResultAsync(id, ParseJson("{\"lovelace\":{\"title\":\"Overview\"}}"), false, _source.Token).ConfigureAwait(false);
@@ -427,7 +611,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "auth/sign_path":
-                await session.SendResultAsync(id, ParseJson("{\"path\":\"/api/camera_proxy/camera.front?authSig=signed\"}"), false, _source.Token).ConfigureAwait(false);
+                var requestedPath = command.GetProperty("path").GetString()!;
+                var signedPathResponse = SignedPathResponseJson
+                    ?? JsonSerializer.Serialize(new { path = requestedPath + (requestedPath.IndexOf('?') >= 0 ? "&" : "?") + "authSig=signed" });
+                await session.SendResultAsync(id, ParseJson(signedPathResponse), false, _source.Token).ConfigureAwait(false);
                 return;
             case "auth/long_lived_access_token":
                 await session.SendResultAsync(id, "fake-long-lived-token", false, _source.Token).ConfigureAwait(false);
@@ -467,7 +654,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ? id
                     : session.StateSubscriptionId;
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
-                _pausedSubscriptionActivated?.TrySetResult(true);
                 return;
             case "unsubscribe_events":
                 var unsubscribeSubscriptionId = command.GetProperty("subscription").GetInt32();
@@ -497,6 +683,25 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             case "call_service":
                 LastServiceCallBody = command.GetRawText();
                 _serviceCallBodies.Enqueue(LastServiceCallBody);
+                TaskCompletionSource<bool>? pausedReceived;
+                TaskCompletionSource<bool>? pausedRelease;
+                lock (_stateGate)
+                {
+                    pausedReceived = _pausedServiceCallReceived;
+                    pausedRelease = _pausedServiceCallRelease;
+                    _pausedServiceCallReceived = null;
+                    _pausedServiceCallRelease = null;
+                }
+                if (pausedReceived is not null && pausedRelease is not null)
+                {
+                    pausedReceived.TrySetResult(true);
+                    var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    using (_source.Token.Register(() => canceled.TrySetCanceled()))
+                    {
+                        var completed = await Task.WhenAny(pausedRelease.Task, canceled.Task).ConfigureAwait(false);
+                        await completed.ConfigureAwait(false);
+                    }
+                }
                 await session.SendResultAsync(id, new Dictionary<string, object?>
                 {
                     ["context"] = new Dictionary<string, object?> { ["id"] = "service-context" },
@@ -519,6 +724,215 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, new Dictionary<string, object?> { ["value"] = "fast" }, false, _source.Token)
                     .ConfigureAwait(false);
                 return;
+            case "test/coalesced":
+                if (!session.MessageCoalescingEnabled)
+                {
+                    await session.SendErrorAsync(
+                        id,
+                        "not_supported",
+                        "Message coalescing was not enabled.",
+                        "not_supported",
+                        _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["type"] = "test_notice",
+                            ["value"] = "before-result"
+                        },
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = id,
+                            ["type"] = "result",
+                            ["success"] = true,
+                            ["result"] = new Dictionary<string, object?> { ["value"] = "coalesced" }
+                        }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/malformed_coalesced":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = id,
+                            ["type"] = "result",
+                            ["success"] = true,
+                            ["result"] = null
+                        },
+                        42
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/empty_coalesced":
+                await session.SendCoalescedAsync(Array.Empty<object>(), _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_blank_type":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["type"] = "   " },
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_invalid_id":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["type"] = "event", ["event"] = new Dictionary<string, object?>() },
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_zero_id":
+            case "test/coalesced_negative_id":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = string.Equals(type, "test/coalesced_zero_id", StringComparison.Ordinal) ? 0 : -1,
+                            ["type"] = "result",
+                            ["success"] = true,
+                            ["result"] = null
+                        }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_missing_success":
+            case "test/coalesced_null_success":
+            case "test/coalesced_string_success":
+                var malformedCoalescedResult = new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["type"] = "result",
+                    ["result"] = null
+                };
+                if (!string.Equals(type, "test/coalesced_missing_success", StringComparison.Ordinal))
+                {
+                    malformedCoalescedResult["success"] = string.Equals(type, "test/coalesced_null_success", StringComparison.Ordinal)
+                        ? null
+                        : "true";
+                }
+                await session.SendCoalescedAsync(new object[] { malformedCoalescedResult }, _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_missing_error":
+            case "test/coalesced_malformed_error":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = id,
+                            ["type"] = "result",
+                            ["success"] = false,
+                            ["error"] = string.Equals(type, "test/coalesced_missing_error", StringComparison.Ordinal)
+                                ? null
+                                : new Dictionary<string, object?> { ["code"] = 1, ["message"] = "failed" }
+                        }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/standalone_missing_success":
+            case "test/standalone_null_success":
+            case "test/standalone_string_success":
+                var malformedStandaloneResult = new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["type"] = "result",
+                    ["result"] = null
+                };
+                if (!string.Equals(type, "test/standalone_missing_success", StringComparison.Ordinal))
+                {
+                    malformedStandaloneResult["success"] = string.Equals(type, "test/standalone_null_success", StringComparison.Ordinal)
+                        ? null
+                        : "true";
+                }
+                await session.SendAsync(malformedStandaloneResult, _source.Token).ConfigureAwait(false);
+                return;
+            case "test/standalone_missing_error":
+            case "test/standalone_malformed_error":
+                await session.SendAsync(
+                    new Dictionary<string, object?>
+                    {
+                        ["id"] = id,
+                        ["type"] = "result",
+                        ["success"] = false,
+                        ["error"] = string.Equals(type, "test/standalone_missing_error", StringComparison.Ordinal)
+                            ? null
+                            : new Dictionary<string, object?> { ["code"] = "failed", ["message"] = 1 }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/standalone_zero_id":
+            case "test/standalone_negative_id":
+                await session.SendAsync(
+                    new Dictionary<string, object?>
+                    {
+                        ["id"] = string.Equals(type, "test/standalone_zero_id", StringComparison.Ordinal) ? 0 : -1,
+                        ["type"] = "result",
+                        ["success"] = true,
+                        ["result"] = null
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/standalone_blank_type":
+                await session.SendAsync(
+                    new Dictionary<string, object?> { ["type"] = string.Empty },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_missing_event":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "event" },
+                        new Dictionary<string, object?>
+                        {
+                            ["id"] = id,
+                            ["type"] = "result",
+                            ["success"] = true,
+                            ["result"] = new Dictionary<string, object?> { ["value"] = "must-not-route" }
+                        }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_null_event":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "event", ["event"] = null },
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/coalesced_duplicate_terminal_id":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null },
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "pong" }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/forced_coalesced":
+                await session.SendCoalescedAsync(
+                    new object[]
+                    {
+                        new Dictionary<string, object?> { ["id"] = id, ["type"] = "result", ["success"] = true, ["result"] = null }
+                    },
+                    _source.Token).ConfigureAwait(false);
+                return;
+            case "test/missing_event":
+                await session.SendAsync(
+                    new Dictionary<string, object?> { ["id"] = id, ["type"] = "event" },
+                    _source.Token).ConfigureAwait(false);
+                return;
             case "config/area_registry/list":
                 await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\"}]"), false, _source.Token).ConfigureAwait(false);
                 return;
@@ -532,7 +946,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"list_only\":{\"source\":\"partial\"}},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"},{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\"}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/entity_registry/get_entries":
-                await session.SendResultAsync(id, ParseJson("{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true,\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"light.kitchen\":{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"aliases\":[null,\"Island fixture\"],\"capabilities\":{},\"extended_only\":true},\"sensor.disabled_temperature\":{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"sensor.legacy_disabled\":{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}}}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(ExtendedEntityRegistryResponseJson
+                    ?? "{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true,\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"light.kitchen\":{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"aliases\":[null,\"Island fixture\"],\"capabilities\":{},\"extended_only\":true},\"sensor.disabled_temperature\":{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}},\"sensor.legacy_disabled\":{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\",\"aliases\":[null],\"device_class\":\"temperature\",\"capabilities\":{}}}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get":
                 if (!string.IsNullOrWhiteSpace(ConfigEntriesErrorCode))
@@ -572,12 +987,16 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("{\"domain\":\"automation\",\"item_id\":\"night\",\"run_id\":\"run-1\",\"state\":\"stopped\",\"trace\":{\"action/0\":[{\"path\":\"action/0\",\"error\":\"Test failure\"}]}}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "update/release_notes":
-                await session.SendResultAsync(id, "Test release notes", false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(
+                    id,
+                    ReturnInvalidUpdateReleaseNotes ? 42 : "Test release notes",
+                    false,
+                    _source.Token).ConfigureAwait(false);
                 return;
             case "system_health/info":
                 session.SubscriptionIds.Add(id);
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
-                await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"initial\",\"data\":{\"homeassistant\":{\"info\":{\"version\":\"2026.8.3\",\"installation_type\":\"Home Assistant OS\",\"hassio\":true}}}}"), _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson(SystemHealthInitialEventJson), _source.Token).ConfigureAwait(false);
                 await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"update\",\"success\":true,\"domain\":\"homeassistant\",\"key\":\"python_version\",\"data\":\"3.14.1\"}"), _source.Token).ConfigureAwait(false);
                 await session.SendSubscriptionEventAsync(id, ParseJson("{\"type\":\"update\",\"success\":false,\"domain\":\"test\",\"key\":\"api\",\"error\":{\"msg\":\"Unavailable\"}}"), _source.Token).ConfigureAwait(false);
                 _systemHealthEventsSent.TrySetResult(true);
@@ -738,6 +1157,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
         public int? StateSubscriptionId { get; set; }
 
+        public bool MessageCoalescingEnabled { get; set; }
+
         public HashSet<int> SubscriptionIds { get; } = new();
 
         public async Task<string> ReceiveAsync(CancellationToken cancellationToken)
@@ -830,6 +1251,29 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
         public Task SendAsync(object payload, CancellationToken cancellationToken)
         {
             return SendAsync(payload, cancellationToken, false);
+        }
+
+        public Task SendCoalescedAsync(object[] payloads, CancellationToken cancellationToken)
+        {
+            return SendAsync(payloads, cancellationToken, false);
+        }
+
+        public async Task SendTextAsync(string payload, CancellationToken cancellationToken)
+        {
+            var bytes = Encoding.UTF8.GetBytes(payload);
+            await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _socket.SendAsync(
+                    new ArraySegment<byte>(bytes),
+                    WebSocketMessageType.Text,
+                    true,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _sendGate.Release();
+            }
         }
 
         private async Task SendAsync(object payload, CancellationToken cancellationToken, bool fragmented)

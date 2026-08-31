@@ -32,7 +32,11 @@ public sealed class HomeAssistantSystemHealthClient
                 null,
                 (message, _) =>
                 {
-                    ProcessMessage(message, domains, completion);
+                    HomeAssistantSubscriptionProjectionException.Capture(() =>
+                    {
+                        ProcessMessage(message, domains, completion);
+                        return true;
+                    });
                     return Task.CompletedTask;
                 },
                 cancellationToken).ConfigureAwait(false);
@@ -81,9 +85,8 @@ public sealed class HomeAssistantSystemHealthClient
             || !message.TryGetProperty("type", out var typeProperty)
             || typeProperty.ValueKind != JsonValueKind.String)
         {
-            completion.TrySetException(new HomeAssistantProtocolException(
-                "The Home Assistant system-health stream returned an invalid event."));
-            return;
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant system-health stream returned an invalid event.");
         }
 
         var type = typeProperty.GetString();
@@ -91,9 +94,8 @@ public sealed class HomeAssistantSystemHealthClient
         {
             if (!message.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
             {
-                completion.TrySetException(new HomeAssistantProtocolException(
-                    "The Home Assistant system-health stream omitted its initial data."));
-                return;
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant system-health stream omitted its initial data.");
             }
 
             domains.Clear();
@@ -115,9 +117,8 @@ public sealed class HomeAssistantSystemHealthClient
             || !TryGetRequiredString(message, "domain", out var domainName)
             || !TryGetRequiredString(message, "key", out var key))
         {
-            completion.TrySetException(new HomeAssistantProtocolException(
-                "The Home Assistant system-health stream returned an invalid update."));
-            return;
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant system-health stream returned an invalid update.");
         }
 
         JsonElement value;

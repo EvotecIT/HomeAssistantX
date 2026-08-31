@@ -9,6 +9,21 @@ namespace HomeAssistantX.Tests;
 public sealed class OAuthContractTests
 {
     [Fact]
+    public void AuthorizationUriEscapesLongStateAcrossTargetFrameworks()
+    {
+        using var oauth = new HomeAssistantOAuthClient(new Uri("https://ha.example.net/"));
+        var state = "state-" + new string('a', 40_000);
+
+        var authorization = oauth.BuildAuthorizationUri(
+            new Uri("https://client.example.net/"),
+            new Uri("casaray://auth/callback"),
+            state);
+
+        Assert.Contains("state=state-", authorization.Query, StringComparison.Ordinal);
+        Assert.True(authorization.Query.Length > state.Length);
+    }
+
+    [Fact]
     public async Task AuthorizationExchangeRefreshAndRevokeFollowHomeAssistantOAuthContract()
     {
         using var server = new TestHomeAssistantServer();

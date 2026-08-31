@@ -82,7 +82,7 @@ internal sealed class DirectSupervisorTransport : IHomeAssistantSupervisorTransp
         object? data,
         CancellationToken cancellationToken)
     {
-        return _rest.SendAsync<JsonElement>(method, endpoint.TrimStart('/'), data, cancellationToken);
+        return _rest.SendHomeAssistantAsync<JsonElement>(method, endpoint.TrimStart('/'), data, cancellationToken);
     }
 
     public Task<string> SendTextAsync(

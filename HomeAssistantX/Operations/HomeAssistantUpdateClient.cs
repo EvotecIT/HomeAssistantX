@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
@@ -28,8 +29,7 @@ public sealed class HomeAssistantUpdateClient
         CancellationToken cancellationToken = default)
     {
         var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        var updates = states
-            .Where(state => string.Equals(state.Domain, "update", StringComparison.OrdinalIgnoreCase))
+        var updates = HomeAssistantEntityId.RequireResponseDomainStates(states, "update")
             .Select(ToUpdate)
             .Where(update => !availableOnly || update.IsAvailable)
             .ToArray();
@@ -40,16 +40,22 @@ public sealed class HomeAssistantUpdateClient
         string entityId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(entityId))
-        {
-            throw new ArgumentException("An update entity identifier is required.", nameof(entityId));
-        }
-
+        var normalizedEntityId = NormalizeEntityId(entityId);
         var result = await _webSocket.RequestAsync(
             "update/release_notes",
-            new Dictionary<string, object?> { ["entity_id"] = entityId },
+            new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId },
             cancellationToken).ConfigureAwait(false);
-        return result.ValueKind == JsonValueKind.Null ? null : result.GetString();
+        if (result.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (result.ValueKind != JsonValueKind.String)
+        {
+            throw new HomeAssistantProtocolException("The Home Assistant update release-notes response was not a string.");
+        }
+
+        return result.GetString();
     }
 
     public Task<HomeAssistantServiceCallResult> InstallAsync(
@@ -58,10 +64,10 @@ public sealed class HomeAssistantUpdateClient
         bool? backup = null,
         CancellationToken cancellationToken = default)
     {
-        var call = HomeAssistantServiceCall.Create("update", "install").ForEntity(entityId);
-        if (!string.IsNullOrWhiteSpace(version))
+        var call = HomeAssistantServiceCall.Create("update", "install").ForEntity(NormalizeEntityId(entityId));
+        if (version is not null)
         {
-            call.WithData("version", version);
+            call.WithData("version", RequireVersion(version));
         }
 
         if (backup.HasValue)
@@ -70,6 +76,21 @@ public sealed class HomeAssistantUpdateClient
         }
 
         return _services.CallAsync(call, cancellationToken);
+    }
+
+    private static string RequireVersion(string value)
+        => string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A supplied update version cannot be empty.", nameof(value))
+            : value.Trim();
+
+    private static string NormalizeEntityId(string entityId)
+    {
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "update", out var normalized))
+        {
+            throw new ArgumentException("An update entity identifier is required.", nameof(entityId));
+        }
+
+        return normalized;
     }
 
     private static HomeAssistantUpdate ToUpdate(HomeAssistantState state)

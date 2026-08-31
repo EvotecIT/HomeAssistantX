@@ -107,7 +107,7 @@ public sealed class InvokeHomeAssistantActionCommand : HomeAssistantCmdlet
 
         call.WithResponse(ReturnResponse);
         var target = DescribeTarget();
-        if (ShouldProcess(target, Domain + "." + Action))
+        if (ShouldProcess(target, DescribeAction(call)))
         {
             WriteObject(await Client.Services.CallAsync(call, CancelToken).ConfigureAwait(false));
         }
@@ -122,7 +122,15 @@ public sealed class InvokeHomeAssistantActionCommand : HomeAssistantCmdlet
             AreaParameterSet => "areas " + string.Join(", ", AreaId),
             FloorParameterSet => "floors " + string.Join(", ", FloorId),
             LabelParameterSet => "labels " + string.Join(", ", LabelId),
-            _ => ActiveConnection.ToString()
+            _ => ConnectionDisplayName
         };
+    }
+
+    private string DescribeAction(HomeAssistantServiceCall call)
+    {
+        var service = call.Domain + "." + call.Service;
+        return HomeAssistantStandardActionCatalog.IsKnown(call.Domain, call.Service)
+            ? "Invoke Home Assistant action " + service
+            : "Invoke Home Assistant action " + ConfirmationAction("service " + service);
     }
 }

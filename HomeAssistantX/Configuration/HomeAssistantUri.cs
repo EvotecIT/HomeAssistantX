@@ -1,7 +1,10 @@
 ﻿namespace HomeAssistantX.Configuration;
 
+using System.Text;
+
 internal static class HomeAssistantUri
 {
+    private const int EscapeChunkLength = 16000;
     public static Uri NormalizeBaseUri(Uri baseUri)
     {
         if (baseUri is null)
@@ -31,5 +34,31 @@ internal static class HomeAssistantUri
             Scheme = endpoint.Scheme == Uri.UriSchemeHttps ? "wss" : "ws"
         };
         return builder.Uri;
+    }
+
+    internal static string EscapeDataString(string value, CancellationToken cancellationToken)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.Length <= EscapeChunkLength)
+            return Uri.EscapeDataString(value);
+
+        var escaped = new StringBuilder(value.Length);
+        for (var offset = 0; offset < value.Length;)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var length = Math.Min(EscapeChunkLength, value.Length - offset);
+            if (offset + length < value.Length
+                && char.IsHighSurrogate(value[offset + length - 1])
+                && char.IsLowSurrogate(value[offset + length]))
+            {
+                length--;
+            }
+
+            escaped.Append(Uri.EscapeDataString(value.Substring(offset, length)));
+            offset += length;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return escaped.ToString();
     }
 }

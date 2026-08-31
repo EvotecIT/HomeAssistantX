@@ -35,6 +35,7 @@ public sealed class HomeAssistantState
     {
         get
         {
+            if (string.IsNullOrEmpty(EntityId)) return string.Empty;
             var separator = EntityId.IndexOf('.');
             return separator <= 0 ? string.Empty : EntityId.Substring(0, separator);
         }
@@ -46,7 +47,7 @@ public sealed class HomeAssistantState
         {
             try
             {
-                value = raw.Deserialize<T>(Protocol.HomeAssistantJson.SerializerOptions);
+                value = raw.Deserialize<T>(Protocol.HomeAssistantJson.RawSerializerOptions);
                 return true;
             }
             catch (JsonException)

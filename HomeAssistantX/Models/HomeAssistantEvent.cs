@@ -7,9 +7,11 @@ namespace HomeAssistantX.Models;
 public sealed class HomeAssistantEvent
 {
     [JsonPropertyName("event_type")]
+    [JsonRequired]
     public string EventType { get; set; } = string.Empty;
 
     [JsonPropertyName("data")]
+    [JsonRequired]
     public Dictionary<string, JsonElement> Data { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     [JsonPropertyName("origin")]

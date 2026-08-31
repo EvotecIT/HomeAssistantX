@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using HomeAssistantX.Models;
 using HomeAssistantX.Supervisor;
 
 namespace HomeAssistantX.PowerShell;
@@ -55,15 +56,17 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
+        var version = NormalizeOptionalVersion(Version);
         object? result;
         if (ParameterSetName == EntityParameterSet)
         {
-            if (!ShouldProcess(EntityId, "Install Home Assistant update"))
+            var entityId = NormalizeUpdateEntityId(EntityId);
+            if (!ShouldProcess(entityId, "Install Home Assistant update"))
             {
                 return;
             }
 
-            result = await Client.Operations.Updates.InstallAsync(EntityId, Version, Backup, CancelToken).ConfigureAwait(false);
+            result = await Client.Operations.Updates.InstallAsync(entityId, version, Backup, CancelToken).ConfigureAwait(false);
         }
         else
         {
@@ -75,18 +78,54 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
                 AppParameterSet => HomeAssistantSupervisorUpdateTarget.App,
                 _ => throw new InvalidOperationException("Unexpected update parameter set.")
             };
-            var description = target == HomeAssistantSupervisorUpdateTarget.App ? "app " + App : target.ToString();
+            var app = target == HomeAssistantSupervisorUpdateTarget.App ? NormalizeSupervisorApp(App) : App;
+            var description = target == HomeAssistantSupervisorUpdateTarget.App ? "app " + app : target.ToString();
             if (!ShouldProcess(description, "Install Home Assistant update"))
             {
                 return;
             }
 
-            result = await Client.Supervisor.InstallUpdateAsync(target, App, Version, Backup, CancelToken).ConfigureAwait(false);
+            result = await Client.Supervisor.InstallUpdateAsync(target, app, version, Backup, CancelToken).ConfigureAwait(false);
         }
 
         if (PassThru)
         {
             WriteObject(result);
         }
+    }
+
+    private static string NormalizeUpdateEntityId(string value)
+    {
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(value, "update", out var normalized))
+        {
+            throw new ArgumentException("An update entity identifier is required.", nameof(EntityId));
+        }
+
+        return normalized;
+    }
+
+    private static string? NormalizeOptionalVersion(string? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("A supplied update version cannot be empty.", nameof(Version));
+        }
+
+        return value.Trim();
+    }
+
+    private static string NormalizeSupervisorApp(string value)
+    {
+        if (!HomeAssistantSupervisorIdentifier.TryNormalizeAppSlug(value, out var normalized))
+        {
+            throw new ArgumentException("A valid Supervisor app/add-on slug is required.", nameof(App));
+        }
+
+        return normalized;
     }
 }

@@ -11,6 +11,55 @@ namespace HomeAssistantX.Tests;
 public sealed class InventoryAndControlsContractTests
 {
     [Fact]
+    public async Task InventoryRejectsExplicitEmptySelectorsBeforeDiscovery()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var invalid = new HomeAssistantEntityQuery?[]
+        {
+            new() { Entity = Array.Empty<string>() },
+            new() { Entity = new[] { " " } },
+            new() { Name = " " },
+            new() { Domain = " " },
+            new() { Device = " " },
+            new() { Area = " " },
+            new() { Floor = " " }
+        };
+
+        foreach (var query in invalid)
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => client.Inventory.GetEntitiesAsync(query));
+        }
+
+        Assert.Null(server.GetLastWebSocketCommand("config/floor_registry/list"));
+    }
+    [Theory]
+    [InlineData("{\"light\":null}")]
+    [InlineData("{\"light\":{\"turn_on\":null}}")]
+    public async Task TypedActionCatalogRejectsMalformedDomainAndActionDefinitions(string catalogJson)
+    {
+        using var server = new TestHomeAssistantServer { ActionCatalogResponseJson = catalogJson };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Services.GetActionsAsync());
+    }
+
+    [Fact]
+    public async Task ExtendedEntityRegistryKeepsDocumentedNullFallbackEntries()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExtendedEntityRegistryResponseJson = "{\"sensor.kitchen_temperature\":null}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var snapshot = await client.Inventory.GetSnapshotAsync();
+        var temperature = Assert.Single(snapshot.Entities, item => item.EntityId == "sensor.kitchen_temperature");
+
+        Assert.NotNull(temperature.RegistryEntry);
+    }
+
+    [Fact]
     public async Task InventoryJoinsInheritedAreaFloorDeviceStateAndActions()
     {
         using var server = new TestHomeAssistantServer();
@@ -106,6 +155,33 @@ public sealed class InventoryAndControlsContractTests
         }));
     }
 
+    [Theory]
+    [InlineData("camera.FRONT")]
+    [InlineData("CAMERA.front")]
+    [InlineData("camera.front.extra")]
+    public async Task InventoryRejectsNoncanonicalStateEntityIds(string entityId)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"" + entityId + "\",\"state\":\"idle\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Inventory.GetSnapshotAsync());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\" camera.front\"")]
+    public async Task InventoryClassifiesNullAndWhitespacePrefixedStateIds(string entityIdJson)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":" + entityIdJson + ",\"state\":\"idle\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            () => client.Inventory.GetSnapshotAsync());
+    }
+
     [Fact]
     public async Task TypedLightControlProducesTheNativeValidatedPayload()
     {
@@ -163,10 +239,10 @@ public sealed class InventoryAndControlsContractTests
             Assert.False(media.RootElement.GetProperty("service_data").GetProperty("is_volume_muted").GetBoolean());
         }
 
-        await client.Controls.Locks.ActAsync(HomeAssistantTarget.ForEntity("lock.front_door"), HomeAssistantLockAction.Unlock, "1234");
+        await client.Controls.Locks.ActAsync(HomeAssistantTarget.ForEntity("lock.front_door"), HomeAssistantLockAction.Unlock, " 1234 ");
         using var lockCall = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
         Assert.Equal("unlock", lockCall.RootElement.GetProperty("service").GetString());
-        Assert.Equal("1234", lockCall.RootElement.GetProperty("service_data").GetProperty("code").GetString());
+        Assert.Equal(" 1234 ", lockCall.RootElement.GetProperty("service_data").GetProperty("code").GetString());
     }
 
     [Fact]
@@ -205,7 +281,10 @@ public sealed class InventoryAndControlsContractTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Controls.MediaPlayers.SetAsync(
             HomeAssistantTarget.ForEntity("media_player.kitchen"),
             new HomeAssistantMediaPlayerOptions { Playback = (HomeAssistantMediaPlaybackAction)99 }));
-
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Controls.Locks.ActAsync(
+            target,
+            HomeAssistantLockAction.Unlock,
+            " "));
         Assert.Null(server.LastServiceCallBody);
     }
 

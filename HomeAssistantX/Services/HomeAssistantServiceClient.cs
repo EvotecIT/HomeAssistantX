@@ -44,14 +44,16 @@ public sealed class HomeAssistantServiceClient
         {
             if (domain.Value.ValueKind != JsonValueKind.Object)
             {
-                continue;
+                throw new Exceptions.HomeAssistantProtocolException(
+                    "The Home Assistant action catalog contained a non-object domain definition.");
             }
 
             foreach (var action in domain.Value.EnumerateObject())
             {
                 if (action.Value.ValueKind != JsonValueKind.Object)
                 {
-                    continue;
+                    throw new Exceptions.HomeAssistantProtocolException(
+                        "The Home Assistant action catalog contained a non-object action definition.");
                 }
 
                 actions.Add(ParseAction(domain.Name, action.Name, action.Value));
@@ -83,14 +85,21 @@ public sealed class HomeAssistantServiceClient
 
         if (result.TryGetProperty("context", out var context))
         {
-            response.Context = context.Deserialize<HomeAssistantContext>(HomeAssistantJson.SerializerOptions);
+            response.Context = HomeAssistantJson.DeserializeResponse<HomeAssistantContext>(
+                context,
+                "The Home Assistant service-call context could not be decoded.",
+                cancellationToken: cancellationToken);
         }
 
         if (result.TryGetProperty("response", out var serviceResponse))
         {
-            response.Response = serviceResponse.Clone();
+            response.Response = await HomeAssistantJson.SnapshotResponseAsync(
+                serviceResponse,
+                "The Home Assistant service response could not be snapshotted.",
+                cancellationToken).ConfigureAwait(false);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return response;
     }
 

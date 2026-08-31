@@ -32,9 +32,9 @@ public sealed class HomeAssistantOAuthClient : IDisposable
             throw new ArgumentException("A non-empty OAuth state is required.", nameof(state));
         }
 
-        var query = "client_id=" + Uri.EscapeDataString(clientId.AbsoluteUri)
-            + "&redirect_uri=" + Uri.EscapeDataString(redirectUri.AbsoluteUri)
-            + "&state=" + Uri.EscapeDataString(state);
+        var query = "client_id=" + HomeAssistantUri.EscapeDataString(clientId.AbsoluteUri, CancellationToken.None)
+            + "&redirect_uri=" + HomeAssistantUri.EscapeDataString(redirectUri.AbsoluteUri, CancellationToken.None)
+            + "&state=" + HomeAssistantUri.EscapeDataString(state, CancellationToken.None);
         return new Uri(_baseUri, "auth/authorize?" + query);
     }
 

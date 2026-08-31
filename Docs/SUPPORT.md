@@ -17,10 +17,11 @@ This matrix was checked against the official Home Assistant developer documentat
 | OAuth authorization URL and code exchange | First class | `HomeAssistantOAuthClient` |
 | OAuth refresh and refresh-token revocation | First class | `HomeAssistantOAuthClient` |
 | Serialized proactive refresh and host-owned persistence | First class | `RefreshingAccessTokenProvider` |
+| Rejected-token recovery | First class | Refresh-capable providers retry REST once after HTTP 401; WebSocket recovery opens a fresh session after `auth_invalid` |
 | Temporary signed paths | First class | `HomeAssistantSystemClient.SignPathAsync` |
 | Create a long-lived token | First class | `CreateLongLivedAccessTokenAsync`; sensitive and never used by live tests |
 | Secure credential storage | Host-owned | Keychain, Credential Manager, or another platform store implements the provider/persistence callback |
-| Automatic retry after an unexpected HTTP 401 | Not supported | Authentication failure is surfaced; the host decides whether to refresh or reauthorize |
+| Custom recovery policy | Extensible | A custom token provider implements `IHomeAssistantAccessTokenRecovery`; static long-lived tokens remain fail-closed |
 
 OAuth tokens are never logged or persisted by HomeAssistantX. A native application still needs an approved redirect URI advertised by its web client identifier.
 
@@ -49,6 +50,7 @@ All endpoints currently listed in the official REST API reference have named met
 | Capability | Status | Notes |
 | --- | --- | --- |
 | Authentication and standard message frames | First class | Concurrent commands are correlated by identifier; fragmented frames are reassembled |
+| Supported-features negotiation | First class | `supported_features` is command ID 1 and enables `coalesce_messages` version 1 by default |
 | Ping/pong | First class | `PingAsync` |
 | Subscribe/unsubscribe to events | First class | Bounded consumer queue and explicit completion |
 | Subscribe to triggers | First class | Open trigger definitions; no polling |
@@ -62,7 +64,7 @@ All endpoints currently listed in the official REST API reference have named met
 | Signed paths and long-lived token creation | First class | Authentication commands with explicit secret boundary |
 | Conversation processing | Extensible | REST and WebSocket entry points |
 | Other/custom commands | Raw | `RequestAsync` and `SubscribeAsync` |
-| Coalesced message feature | Not supported | Do not enable `coalesce_messages`; array-frame decoding and negotiation are still required |
+| Coalesced message batches | First class | Object and array frames are decoded; byte and message-count limits reject oversized batches |
 
 ## Operations and troubleshooting
 
@@ -143,6 +145,6 @@ The following boundaries are intentional:
 
 ## Evidence
 
-The normal contract suite runs against a real loopback HTTP/WebSocket peer, including authentication, fragmented frames, out-of-order responses, bounded bodies, OAuth refresh concurrency, subscription failure, reconnect, and missed-state reconciliation. It runs on .NET Framework 4.7.2 and .NET 10.
+The normal contract suite runs against a real loopback HTTP/WebSocket peer, including rejected-token recovery, exactly-once retry, fragmented and coalesced frames, malformed and oversized batch rejection, out-of-order responses, bounded bodies, OAuth refresh concurrency, cancellation, subscription failure, reconnect, and missed-state reconciliation. It runs on .NET Framework 4.7.2 and .NET 10.
 
 The optional live suite is read-only. It validates the configured real instance's API status, configuration, components, event and service catalogs, state REST/WebSocket parity, panels, registries, signed paths, subscription setup, recent history when the recorder is loaded, operational capability discovery, system logs, Repairs, diagnostics handlers, configuration entries, update discovery, and accessible Supervisor inventory. It does not call services, fire events, create tokens, install updates, restart components, create backups, expose entities, or otherwise mutate the home.

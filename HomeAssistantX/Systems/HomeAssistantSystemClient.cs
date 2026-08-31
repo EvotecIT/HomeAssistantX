@@ -21,8 +21,10 @@ public sealed class HomeAssistantSystemClient
     public async Task<HomeAssistantConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
     {
         var result = await _webSocket.RequestAsync("get_config", null, cancellationToken).ConfigureAwait(false);
-        return result.Deserialize<HomeAssistantConfiguration>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant configuration could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantConfiguration>(
+            result,
+            "The Home Assistant configuration could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Gets registered frontend panels.</summary>
@@ -77,7 +79,7 @@ public sealed class HomeAssistantSystemClient
             "extract_from_target",
             new Dictionary<string, object?>
             {
-                ["target"] = target,
+                ["target"] = target.Normalize(),
                 ["expand_group"] = expandGroup
             },
             cancellationToken);
@@ -143,7 +145,7 @@ public sealed class HomeAssistantSystemClient
         bool shouldExpose,
         CancellationToken cancellationToken = default)
     {
-        var validatedEntityIds = ValidateIdentifiers(entityIds, nameof(entityIds));
+        var validatedEntityIds = ValidateEntityIds(entityIds, nameof(entityIds));
         var validatedAssistants = ValidateIdentifiers(assistants, nameof(assistants));
         return _webSocket.RequestAsync(
             "homeassistant/expose_entity",
@@ -162,7 +164,9 @@ public sealed class HomeAssistantSystemClient
         TimeSpan? expiration = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith("/", StringComparison.Ordinal))
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!HomeAssistantRootRelativePath.IsValid(path, cancellationToken)
+            || ContainsSignatureQueryParameter(path, cancellationToken))
         {
             throw new ArgumentException("A root-relative Home Assistant path is required.", nameof(path));
         }
@@ -170,12 +174,13 @@ public sealed class HomeAssistantSystemClient
         var payload = new Dictionary<string, object?> { ["path"] = path };
         if (expiration.HasValue)
         {
-            if (expiration <= TimeSpan.Zero)
+            var totalSeconds = expiration.Value.TotalSeconds;
+            if (totalSeconds <= 0 || totalSeconds > int.MaxValue)
             {
                 throw new ArgumentOutOfRangeException(nameof(expiration));
             }
 
-            payload["expires"] = (int)Math.Ceiling(expiration.Value.TotalSeconds);
+            payload["expires"] = checked((int)Math.Ceiling(totalSeconds));
         }
 
         var result = await _webSocket.RequestAsync("auth/sign_path", payload, cancellationToken).ConfigureAwait(false);
@@ -186,7 +191,94 @@ public sealed class HomeAssistantSystemClient
             throw new HomeAssistantProtocolException("Home Assistant did not return a signed path.");
         }
 
-        return signedPath.GetString()!;
+        var signed = signedPath.GetString()!;
+        cancellationToken.ThrowIfCancellationRequested();
+        var expectedSeparator = FindCharacter(path, '?', 0, cancellationToken) >= 0 ? '&' : '?';
+        var suffix = signed.Length > path.Length + 1
+            ? signed.Substring(path.Length + 1)
+            : string.Empty;
+        if (!HomeAssistantRootRelativePath.IsValid(signed, cancellationToken)
+            || !signed.StartsWith(path, StringComparison.Ordinal)
+            || signed.Length <= path.Length
+            || signed[path.Length] != expectedSeparator
+            || !HasValidSignatureSuffix(suffix, cancellationToken))
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned a signed path for a different route.");
+        }
+
+        return signed;
+    }
+
+    private static bool HasValidSignatureSuffix(string suffix, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (FindCharacter(suffix, '&', 0, cancellationToken) >= 0
+            || !suffix.StartsWith("authSig=", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            var signature = Uri.UnescapeDataString(suffix.Substring("authSig=".Length));
+            cancellationToken.ThrowIfCancellationRequested();
+            return !string.IsNullOrWhiteSpace(signature);
+        }
+        catch (UriFormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ContainsSignatureQueryParameter(string path, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var queryStart = FindCharacter(path, '?', 0, cancellationToken);
+        if (queryStart < 0) return false;
+        var pairStart = queryStart + 1;
+        while (pairStart <= path.Length)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var pairEnd = FindCharacter(path, '&', pairStart, cancellationToken);
+            if (pairEnd < 0) pairEnd = path.Length;
+            var separator = FindCharacter(path, '=', pairStart, cancellationToken, pairEnd);
+            var nameEnd = separator < 0 ? pairEnd : separator;
+            var encodedName = path.Substring(pairStart, nameEnd - pairStart);
+            try
+            {
+                if (string.Equals(Uri.UnescapeDataString(encodedName), "authSig", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            catch (UriFormatException)
+            {
+                return true;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (pairEnd == path.Length) break;
+            pairStart = pairEnd + 1;
+        }
+
+        return false;
+    }
+
+    private static int FindCharacter(
+        string value,
+        char character,
+        int start,
+        CancellationToken cancellationToken,
+        int? end = null)
+    {
+        var limit = end ?? value.Length;
+        for (var index = start; index < limit; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] == character) return index;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return -1;
     }
 
     /// <summary>Creates a long-lived access token for the current user. Persist the returned secret immediately.</summary>
@@ -235,23 +327,28 @@ public sealed class HomeAssistantSystemClient
         }
 
         var payload = new Dictionary<string, object?> { ["text"] = text };
-        if (!string.IsNullOrWhiteSpace(language))
+        if (language is not null)
         {
-            payload["language"] = language;
+            payload["language"] = RequireConversationSelector(language, nameof(language));
         }
 
-        if (!string.IsNullOrWhiteSpace(agentId))
+        if (agentId is not null)
         {
-            payload["agent_id"] = agentId;
+            payload["agent_id"] = RequireConversationSelector(agentId, nameof(agentId));
         }
 
-        if (!string.IsNullOrWhiteSpace(conversationId))
+        if (conversationId is not null)
         {
-            payload["conversation_id"] = conversationId;
+            payload["conversation_id"] = RequireConversationSelector(conversationId, nameof(conversationId));
         }
 
         return _webSocket.RequestAsync("conversation/process", payload, cancellationToken);
     }
+
+    private static string RequireConversationSelector(string value, string parameterName)
+        => string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A supplied conversation selector cannot be empty.", parameterName)
+            : value.Trim();
 
     private Task<JsonElement> GetForTargetAsync(
         string command,
@@ -268,7 +365,7 @@ public sealed class HomeAssistantSystemClient
             command,
             new Dictionary<string, object?>
             {
-                ["target"] = target,
+                ["target"] = target.Normalize(),
                 ["expand_group"] = expandGroup
             },
             cancellationToken);
@@ -281,6 +378,25 @@ public sealed class HomeAssistantSystemClient
             throw new ArgumentException("At least one non-empty identifier is required.", parameterName);
         }
 
-        return values.ToArray();
+        return values.Select(value => value.Trim()).ToArray();
+    }
+
+    private static string[] ValidateEntityIds(IReadOnlyList<string> values, string parameterName)
+    {
+        if (values is null || values.Count == 0)
+        {
+            throw new ArgumentException("At least one entity identifier is required.", parameterName);
+        }
+
+        var normalized = new string[values.Count];
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (!HomeAssistantEntityId.TryNormalize(values[index], out normalized[index]))
+            {
+                throw new ArgumentException("Entity identifiers must use the native Home Assistant format.", parameterName);
+            }
+        }
+
+        return normalized;
     }
 }

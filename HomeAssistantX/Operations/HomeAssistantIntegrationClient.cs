@@ -24,11 +24,11 @@ public sealed class HomeAssistantIntegrationClient
         string? domain = null,
         CancellationToken cancellationToken = default)
     {
-        var payload = string.IsNullOrWhiteSpace(domain)
+        var payload = domain is null
             ? null
-            : new Dictionary<string, object?> { ["domain"] = domain };
+            : new Dictionary<string, object?> { ["domain"] = Required(domain, nameof(domain)).Trim() };
         var result = await _webSocket.RequestAsync("config_entries/get", payload, cancellationToken).ConfigureAwait(false);
-        return DecodeEntries(result);
+        return DecodeEntries(result, cancellationToken);
     }
 
     public async Task<HomeAssistantConfigEntry> GetAsync(
@@ -42,8 +42,10 @@ public sealed class HomeAssistantIntegrationClient
         if (result.ValueKind == JsonValueKind.Object
             && result.TryGetProperty("config_entry", out var entry))
         {
-            return entry.Deserialize<HomeAssistantConfigEntry>(HomeAssistantJson.SerializerOptions)
-                ?? throw new HomeAssistantProtocolException("The Home Assistant configuration entry could not be decoded.");
+            return HomeAssistantJson.DeserializeResponse<HomeAssistantConfigEntry>(
+                entry,
+                "The Home Assistant configuration entry could not be decoded.",
+                cancellationToken: cancellationToken);
         }
 
         throw new HomeAssistantProtocolException("The Home Assistant configuration-entry response had an unexpected shape.");
@@ -53,7 +55,7 @@ public sealed class HomeAssistantIntegrationClient
         string entryId,
         CancellationToken cancellationToken = default)
     {
-        return _rest.SendAsync<HomeAssistantIntegrationOperationResult>(
+        return _rest.SendHomeAssistantAsync<HomeAssistantIntegrationOperationResult>(
             HttpMethod.Post,
             "api/config/config_entries/entry/" + Escape(entryId, nameof(entryId)) + "/reload",
             null,
@@ -73,8 +75,10 @@ public sealed class HomeAssistantIntegrationClient
                 ["disabled_by"] = enabled ? null : "user"
             },
             cancellationToken).ConfigureAwait(false);
-        return result.Deserialize<HomeAssistantIntegrationOperationResult>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant configuration-entry operation could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantIntegrationOperationResult>(
+            result,
+            "The Home Assistant configuration-entry operation could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Starts Home Assistant's user-initiated reconfiguration flow for an existing entry.</summary>
@@ -83,7 +87,7 @@ public sealed class HomeAssistantIntegrationClient
         string entryId,
         CancellationToken cancellationToken = default)
     {
-        return _rest.SendAsync<JsonElement>(
+        return _rest.SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
             "api/config/config_entries/flow",
             new Dictionary<string, object?>
@@ -104,14 +108,16 @@ public sealed class HomeAssistantIntegrationClient
             throw new ArgumentNullException(nameof(input));
         }
 
-        return _rest.SendAsync<JsonElement>(
+        return _rest.SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
             "api/config/config_entries/flow/" + Escape(flowId, nameof(flowId)),
             input,
             cancellationToken);
     }
 
-    private static IReadOnlyList<HomeAssistantConfigEntry> DecodeEntries(JsonElement value)
+    private static IReadOnlyList<HomeAssistantConfigEntry> DecodeEntries(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
         var entries = value;
         if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("entries", out var nested))
@@ -119,8 +125,10 @@ public sealed class HomeAssistantIntegrationClient
             entries = nested;
         }
 
-        return entries.Deserialize<HomeAssistantConfigEntry[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant configuration entries could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<HomeAssistantConfigEntry[]>(
+            entries,
+            "The Home Assistant configuration entries could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
     private static string Required(string value, string parameterName)

@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
@@ -33,28 +34,34 @@ public sealed partial class HomeAssistantRestClient : IDisposable
 
     public Task<HomeAssistantApiStatus> CheckApiAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync<HomeAssistantApiStatus>(HttpMethod.Get, "api/", null, cancellationToken);
+        return SendHomeAssistantAsync<HomeAssistantApiStatus>(HttpMethod.Get, "api/", null, cancellationToken);
     }
 
     public Task<HomeAssistantConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync<HomeAssistantConfiguration>(HttpMethod.Get, "api/config", null, cancellationToken);
+        return SendHomeAssistantAsync<HomeAssistantConfiguration>(HttpMethod.Get, "api/config", null, cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantState>> GetStatesAsync(CancellationToken cancellationToken = default)
     {
-        var result = await SendAsync<HomeAssistantState[]>(HttpMethod.Get, "api/states", null, cancellationToken).ConfigureAwait(false);
+        var result = await SendHomeAssistantAsync<HomeAssistantState[]>(HttpMethod.Get, "api/states", null, cancellationToken).ConfigureAwait(false);
         return result;
     }
 
-    public Task<HomeAssistantState> GetStateAsync(string entityId, CancellationToken cancellationToken = default)
+    public async Task<HomeAssistantState> GetStateAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        return SendAsync<HomeAssistantState>(HttpMethod.Get, "api/states/" + EscapePath(entityId), null, cancellationToken);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
+        var state = await SendHomeAssistantAsync<HomeAssistantState>(
+            HttpMethod.Get,
+            "api/states/" + EscapePath(normalizedEntityId, cancellationToken),
+            null,
+            cancellationToken).ConfigureAwait(false);
+        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
     }
 
     public Task<JsonElement> GetServicesAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync<JsonElement>(HttpMethod.Get, "api/services", null, cancellationToken);
+        return SendHomeAssistantAsync<JsonElement>(HttpMethod.Get, "api/services", null, cancellationToken);
     }
 
     public async Task<HomeAssistantServiceCallResult> CallServiceAsync(
@@ -66,16 +73,18 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             throw new ArgumentNullException(nameof(call));
         }
 
-        var path = "api/services/" + EscapePath(call.Domain) + "/" + EscapePath(call.Service)
+        var path = "api/services/" + EscapePath(call.Domain, cancellationToken) + "/" + EscapePath(call.Service, cancellationToken)
             + (call.ReturnResponse ? "?return_response" : string.Empty);
-        var result = await SendAsync<JsonElement>(HttpMethod.Post, path, call.ToRestPayload(), cancellationToken).ConfigureAwait(false);
+        var result = await SendHomeAssistantAsync<JsonElement>(HttpMethod.Post, path, call.ToRestPayload(), cancellationToken).ConfigureAwait(false);
 
         if (result.ValueKind == JsonValueKind.Array)
         {
             return new HomeAssistantServiceCallResult
             {
-                ChangedStates = result.Deserialize<HomeAssistantState[]>(HomeAssistantJson.SerializerOptions)
-                    ?? Array.Empty<HomeAssistantState>()
+                ChangedStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(
+                    result,
+                    "The Home Assistant changed-state response could not be decoded.",
+                    cancellationToken: cancellationToken)
             };
         }
 
@@ -84,15 +93,21 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             var response = new HomeAssistantServiceCallResult();
             if (result.TryGetProperty("changed_states", out var changedStates))
             {
-                response.ChangedStates = changedStates.Deserialize<HomeAssistantState[]>(HomeAssistantJson.SerializerOptions)
-                    ?? Array.Empty<HomeAssistantState>();
+                response.ChangedStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(
+                    changedStates,
+                    "The Home Assistant changed-state response could not be decoded.",
+                    cancellationToken: cancellationToken);
             }
 
             if (result.TryGetProperty("service_response", out var serviceResponse))
             {
-                response.Response = serviceResponse.Clone();
+                response.Response = await HomeAssistantJson.SnapshotResponseAsync(
+                    serviceResponse,
+                    "The Home Assistant service response could not be snapshotted.",
+                    cancellationToken).ConfigureAwait(false);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             return response;
         }
 
@@ -104,9 +119,11 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         return await ExecuteWithTimeoutAsync(
             async operationToken =>
             {
-                using var request = await CreateRequestAsync(HttpMethod.Get, pathOrAbsoluteUri, null, operationToken)
-                    .ConfigureAwait(false);
-                using var response = await SendCoreAsync(request, operationToken).ConfigureAwait(false);
+                using var response = await SendWithAuthenticationRecoveryAsync(
+                    HttpMethod.Get,
+                    pathOrAbsoluteUri,
+                    null,
+                    operationToken).ConfigureAwait(false);
                 return await ReadBoundedContentAsync(
                     response.Content,
                     _options.MaximumRestResponseBytes,
@@ -121,7 +138,28 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         object? body = null,
         CancellationToken cancellationToken = default)
     {
-        return SendTypedAsync<T>(method, pathOrAbsoluteUri, body, cancellationToken);
+        return SendTypedAsync<T>(
+            method,
+            pathOrAbsoluteUri,
+            body,
+            HomeAssistantJson.RawSerializerOptions,
+            validateHomeAssistantResponse: false,
+            cancellationToken);
+    }
+
+    internal Task<T> SendHomeAssistantAsync<T>(
+        HttpMethod method,
+        string pathOrAbsoluteUri,
+        object? body = null,
+        CancellationToken cancellationToken = default)
+    {
+        return SendTypedAsync<T>(
+            method,
+            pathOrAbsoluteUri,
+            body,
+            HomeAssistantJson.SerializerOptions,
+            validateHomeAssistantResponse: true,
+            cancellationToken);
     }
 
     /// <summary>Sends an authenticated request and returns its bounded response body as text.</summary>
@@ -138,20 +176,36 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         HttpMethod method,
         string pathOrAbsoluteUri,
         object? body,
+        JsonSerializerOptions serializerOptions,
+        bool validateHomeAssistantResponse,
         CancellationToken cancellationToken)
     {
         return await ExecuteWithTimeoutAsync(
             async operationToken =>
             {
-                using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, body, operationToken)
-                    .ConfigureAwait(false);
-                using var response = await SendCoreAsync(request, operationToken).ConfigureAwait(false);
+                using var response = await SendWithAuthenticationRecoveryAsync(
+                    method,
+                    pathOrAbsoluteUri,
+                    body,
+                    operationToken).ConfigureAwait(false);
                 var bytes = await ReadBoundedContentAsync(
                     response.Content,
                     _options.MaximumRestResponseBytes,
                     operationToken).ConfigureAwait(false);
-                var value = JsonSerializer.Deserialize<T>(bytes, HomeAssistantJson.SerializerOptions);
-                return value ?? throw new HomeAssistantProtocolException("Home Assistant returned an empty JSON response.");
+                operationToken.ThrowIfCancellationRequested();
+                using var stream = new MemoryStream(bytes, writable: false);
+                var value = await JsonSerializer.DeserializeAsync<T>(
+                    stream,
+                    serializerOptions,
+                    operationToken).ConfigureAwait(false);
+                operationToken.ThrowIfCancellationRequested();
+                var result = value ?? throw new HomeAssistantProtocolException("Home Assistant returned an empty JSON response.");
+                return validateHomeAssistantResponse
+                    ? HomeAssistantJson.RequireNoNullCollectionEntries(
+                        result,
+                        "The Home Assistant response contained a null collection entry.",
+                        cancellationToken: operationToken)
+                    : result;
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -165,9 +219,11 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         return await ExecuteWithTimeoutAsync(
             async operationToken =>
             {
-                using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, body, operationToken)
-                    .ConfigureAwait(false);
-                using var response = await SendCoreAsync(request, operationToken).ConfigureAwait(false);
+                using var response = await SendWithAuthenticationRecoveryAsync(
+                    method,
+                    pathOrAbsoluteUri,
+                    body,
+                    operationToken).ConfigureAwait(false);
                 var bytes = await ReadBoundedContentAsync(
                     response.Content,
                     _options.MaximumRestResponseBytes,
@@ -180,7 +236,7 @@ public sealed partial class HomeAssistantRestClient : IDisposable
     private async Task<HttpRequestMessage> CreateRequestAsync(
         HttpMethod method,
         string pathOrAbsoluteUri,
-        object? body,
+        byte[]? serializedBody,
         CancellationToken cancellationToken)
     {
         if (method is null)
@@ -212,13 +268,50 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         var request = new HttpRequestMessage(method, requestUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        if (body is not null)
+        if (serializedBody is not null)
         {
-            var json = JsonSerializer.Serialize(body, HomeAssistantJson.SerializerOptions);
-            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            request.Content = new ByteArrayContent(serializedBody);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
+            {
+                CharSet = "utf-8"
+            };
         }
 
         return request;
+    }
+
+    private async Task<HttpResponseMessage> SendWithAuthenticationRecoveryAsync(
+        HttpMethod method,
+        string pathOrAbsoluteUri,
+        object? body,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var serializedBody = body is null
+            ? null
+            : HomeAssistantJson.SerializeToUtf8Bytes(body, cancellationToken);
+        for (var attempt = 0; ; attempt++)
+        {
+            using var request = await CreateRequestAsync(method, pathOrAbsoluteUri, serializedBody, cancellationToken)
+                .ConfigureAwait(false);
+            var rejectedAccessToken = request.Headers.Authorization?.Parameter;
+            try
+            {
+                return await SendCoreAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HomeAssistantAuthenticationException) when (
+                attempt == 0
+                && !string.IsNullOrWhiteSpace(rejectedAccessToken)
+                && _options.AccessTokenProvider is IHomeAssistantAccessTokenRecovery)
+            {
+                var recovery = (IHomeAssistantAccessTokenRecovery)_options.AccessTokenProvider;
+                await recovery.RecoverAccessTokenAsync(rejectedAccessToken!, cancellationToken).ConfigureAwait(false);
+                WriteDiagnostic(
+                    HomeAssistantDiagnosticLevel.Information,
+                    "rest.authentication_recovered",
+                    "Recovered a Home Assistant REST access token after an unauthorized response.");
+            }
+        }
     }
 
     private async Task<HttpResponseMessage> SendCoreAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -374,14 +467,57 @@ public sealed partial class HomeAssistantRestClient : IDisposable
         }
     }
 
-    private static string EscapePath(string value)
+    private static string EscapePath(string value, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        cancellationToken.ThrowIfCancellationRequested();
+        var start = 0;
+        while (start < value.Length && char.IsWhiteSpace(value[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+        var end = value.Length - 1;
+        while (end >= start && char.IsWhiteSpace(value[end]))
+        {
+            if (((value.Length - 1 - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+        if (end < start)
         {
             throw new ArgumentException("A non-empty path identifier is required.", nameof(value));
         }
 
-        return Uri.EscapeDataString(value);
+        var normalized = start == 0 && end == value.Length - 1
+            ? value
+            : value.Substring(start, end - start + 1);
+        return HomeAssistantUri.EscapeDataString(
+            normalized,
+            cancellationToken);
+    }
+
+    private static string NormalizeEntityId(string entityId, CancellationToken cancellationToken)
+    {
+        if (!HomeAssistantEntityId.TryNormalize(entityId, cancellationToken, out var normalized))
+        {
+            throw new ArgumentException("A Home Assistant entity identifier is required.", nameof(entityId));
+        }
+
+        return normalized;
+    }
+
+    private void WriteDiagnostic(
+        HomeAssistantDiagnosticLevel level,
+        string name,
+        string message,
+        Exception? exception = null)
+    {
+        try
+        {
+            _options.Diagnostics.Write(new HomeAssistantDiagnosticEvent(level, name, message, exception));
+        }
+        catch
+        {
+        }
     }
 
     public void Dispose()

@@ -127,6 +127,17 @@ try {
 
         $defaultLights = @($connection | Get-HomeAssistantEntity -Area Kitchen -Domain light)
         $secondaryLights = @($secondaryConnection | Get-HomeAssistantEntity -Area Kitchen -Domain light)
+        $confirmationTargetMethod = [HomeAssistantX.PowerShell.HomeAssistantCmdlet].GetMethod(
+            'ConfirmationTarget',
+            [Reflection.BindingFlags]'NonPublic, Static')
+        $confirmationConnection = $secondaryConnection.PSObject.BaseObject
+        $confirmationOutput = $confirmationTargetMethod.Invoke($null, @($confirmationConnection, 'light.kitchen'))
+        $null = $secondaryLights | Set-HomeAssistantLight -Power On -WhatIf
+        if ($confirmationOutput -match [regex]::Escape($secondaryConnection.Name) -or
+            $confirmationOutput -match [regex]::Escape($secondaryConnection.Uri.GetLeftPart([UriPartial]::Authority)) -or
+            $confirmationOutput -notmatch '^Home Assistant target \[[0-9A-F]{8}\] on Home Assistant connection \[[0-9A-F]{8}\]$') {
+            throw 'WhatIf confirmation exposed an explicit connection name or failed to provide a privacy-safe connection tag.'
+        }
         $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
         $server.StandardInput.Flush()
         if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_CLEARED') {
@@ -252,6 +263,19 @@ try {
         throw "Could not establish the action-call baseline. Received: $serviceBaseline"
     }
 
+    $actionCmdlet = [HomeAssistantX.PowerShell.InvokeHomeAssistantActionCommand]::new()
+    $actionCmdlet.Connection = $connection.PSObject.BaseObject
+    $describeAction = $actionCmdlet.GetType().GetMethod('DescribeAction', [Reflection.BindingFlags]'NonPublic, Instance')
+    $serviceCallType = $describeAction.GetParameters()[0].ParameterType
+    $createServiceCall = $serviceCallType.GetMethod('Create', [Reflection.BindingFlags]'Public, Static')
+    $standardAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('light', 'turn_on'))))
+    $customAction = $describeAction.Invoke($actionCmdlet, @($createServiceCall.Invoke($null, @('private_domain', 'private_action'))))
+    if (-not $standardAction.Contains('light.turn_on')) {
+        throw 'WhatIf output did not identify a validated standard Home Assistant action.'
+    }
+    if ($customAction.Contains('private_domain') -or $customAction.Contains('private_action')) {
+        throw 'WhatIf output exposed a custom Home Assistant service name.'
+    }
     $null = $connection | Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId light.kitchen -WhatIf
     $server.StandardInput.WriteLine('GET_LAST_SERVICE_CALL')
     $server.StandardInput.Flush()
@@ -317,7 +341,18 @@ try {
         { Set-HomeAssistantLock -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantCover -Area Kitchen -Action 99 -WhatIf -ErrorAction Stop },
         { Set-HomeAssistantMediaPlayer -Area Kitchen -Power 99 -WhatIf -ErrorAction Stop },
-        { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop }
+        { Set-HomeAssistantMediaPlayer -Area Kitchen -Playback 99 -WhatIf -ErrorAction Stop },
+        { Install-HomeAssistantUpdate -EntityId light.kitchen -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -EntityId update.home_assistant_core_update -Version ' ' -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -Core -Version ' ' -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -EntityId update.Kitchen -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -EntityId UPDATE.kitchen -WhatIf -ErrorAction Stop }
+        { Install-HomeAssistantUpdate -App '..' -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantApp -App '../bad' -Action Restart -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantApp -App test_app -Action 99 -WhatIf -ErrorAction Stop }
+        { Restart-HomeAssistant -App '../bad' -WhatIf -ErrorAction Stop }
+        { Invoke-HomeAssistantAction -Domain light -Action turn_on -EntityId _light.kitchen -WhatIf -ErrorAction Stop }
+        { Receive-HomeAssistantEvent -EntityId LIGHT.kitchen -Count 1 -TimeoutSeconds 1 -ErrorAction Stop }
     )) {
         $invalidEnumRejected = $false
         try {
@@ -326,7 +361,7 @@ try {
             $invalidEnumRejected = $true
         }
         if (-not $invalidEnumRejected) {
-            throw 'A typed-control cmdlet accepted an undefined enum value under WhatIf.'
+            throw 'A typed operation accepted invalid input under WhatIf.'
         }
     }
 

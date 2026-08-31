@@ -54,10 +54,24 @@ internal sealed partial class TestHomeAssistantServer
             return;
         }
 
-        LastAuthorization = headers.TryGetValue("Authorization", out var authorization) ? authorization : null;
-        if (!string.Equals(LastAuthorization, "Bearer " + AccessToken, StringComparison.Ordinal))
+        var currentAuthorization = headers.TryGetValue("Authorization", out var authorization)
+            ? authorization
+            : null;
+        LastAuthorization = currentAuthorization;
+        if (!string.Equals(currentAuthorization, "Bearer " + RequiredAccessToken, StringComparison.Ordinal))
         {
+            Interlocked.Increment(ref _unauthorizedRequestCount);
             await WriteHttpResponseAsync(stream, 401, "{\"message\":\"Unauthorized\"}").ConfigureAwait(false);
+            return;
+        }
+
+        Interlocked.Increment(ref _authenticatedRequestCount);
+
+        if (method == "GET"
+            && pathWithoutQuery.StartsWith("/api/states/", StringComparison.Ordinal)
+            && ExactStateResponseJson is not null)
+        {
+            await WriteHttpResponseAsync(stream, 200, ExactStateResponseJson).ConfigureAwait(false);
             return;
         }
 
@@ -86,13 +100,17 @@ internal sealed partial class TestHomeAssistantServer
             case "GET /core/logs":
                 await WriteHttpResponseAsync(stream, 200, "2026-08-25 direct supervisor log line").ConfigureAwait(false);
                 break;
+            case "POST /addons/TEST_APP/restart":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\",\"data\":{}}").ConfigureAwait(false);
+                break;
             case "GET /api/":
                 await WriteHttpResponseAsync(stream, 200, "{\"message\":\"API running.\",\"custom_api_field\":true}").ConfigureAwait(false);
                 break;
             case "GET /api/config":
-                await WriteHttpResponseAsync(stream, 200,
-                    "{\"location_name\":\"Test Home\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}")
-                    .ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, ConfigurationResponseJson).ConfigureAwait(false);
+                break;
+            case "GET /api/test/raw-dto":
+                await WriteHttpResponseAsync(stream, 200, "{\"value\":1}").ConfigureAwait(false);
                 break;
             case "GET /api/components":
                 await WriteHttpResponseAsync(stream, 200, "[\"api\",\"websocket_api\",\"recorder\"]").ConfigureAwait(false);
@@ -106,7 +124,7 @@ internal sealed partial class TestHomeAssistantServer
                     .ConfigureAwait(false);
                 break;
             case "GET /api/history/period/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
-                await WriteHttpResponseAsync(stream, 200, "[[" + KitchenTemperatureStateJson + "]]").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, HistoryResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/logbook/2026-08-24T00%3A00%3A00.0000000%2B00%3A00":
                 await WriteHttpResponseAsync(stream, 200,
@@ -120,8 +138,7 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, KitchenTemperatureStateJson).ConfigureAwait(false);
                 break;
             case "POST /api/states/sensor.virtual":
-                await WriteHttpResponseAsync(stream, 200,
-                    "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, StateMutationResponseJson).ConfigureAwait(false);
                 break;
             case "DELETE /api/states/sensor.virtual":
                 await WriteHttpResponseAsync(stream, 200, "{\"message\":\"Entity removed.\"}").ConfigureAwait(false);

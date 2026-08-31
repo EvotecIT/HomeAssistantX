@@ -1,4 +1,6 @@
 using HomeAssistantX.Authentication;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -9,9 +11,13 @@ public sealed class HomeAssistantConnection : IDisposable
 
     internal HomeAssistantConnection(string? name, HomeAssistantClient client)
     {
-        Name = string.IsNullOrWhiteSpace(name) ? client.Options.BaseUri.Host : name!;
+        var hasExplicitName = !string.IsNullOrWhiteSpace(name);
+        Name = hasExplicitName ? name!.Trim() : client.Options.BaseUri.Host;
+        ConfirmationName = CreateConfirmationName(hasExplicitName);
         Client = client;
     }
+
+    internal string ConfirmationName { get; }
 
     public string Name { get; }
 
@@ -48,5 +54,31 @@ public sealed class HomeAssistantConnection : IDisposable
     public override string ToString()
     {
         return Name + " (" + Uri.GetLeftPart(UriPartial.Authority) + ")";
+    }
+
+    private static string CreateConfirmationName(bool hasExplicitName)
+    {
+        if (!hasExplicitName)
+        {
+            return "Home Assistant";
+        }
+
+        // Operator-assigned names are useful in ordinary output but can contain private
+        // installation URLs or other identifying text. Confirmations and transcripts use
+        // a per-connection random tag so multiple explicit homes remain distinguishable
+        // without echoing the supplied name.
+        var bytes = new byte[4];
+        using (var random = RandomNumberGenerator.Create())
+        {
+            random.GetBytes(bytes);
+        }
+
+        var fingerprint = new StringBuilder(8);
+        for (var index = 0; index < bytes.Length; index++)
+        {
+            fingerprint.Append(bytes[index].ToString("X2", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return "Home Assistant connection [" + fingerprint + "]";
     }
 }

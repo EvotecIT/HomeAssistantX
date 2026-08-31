@@ -4,8 +4,6 @@ HomeAssistantX should remain one dependency-light package. New packages are just
 
 ## Before the first stable release
 
-- [ ] Add WebSocket `supported_features` negotiation and bounded decoding for coalesced message arrays.
-- [ ] Decide and document the authentication recovery policy for an unexpected HTTP 401 or WebSocket `auth_invalid`; avoid hidden infinite retries.
 - [ ] Add API compatibility baselines once version 0.1.0 becomes the published contract.
 - [ ] Run the read-only live suite against representative current and older supported Home Assistant releases before defining a minimum server version.
 

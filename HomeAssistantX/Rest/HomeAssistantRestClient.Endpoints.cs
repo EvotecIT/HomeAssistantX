@@ -11,13 +11,13 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets the loaded Home Assistant components.</summary>
     public async Task<IReadOnlyList<string>> GetComponentsAsync(CancellationToken cancellationToken = default)
     {
-        return await SendAsync<string[]>(HttpMethod.Get, "api/components", null, cancellationToken).ConfigureAwait(false);
+        return await SendHomeAssistantAsync<string[]>(HttpMethod.Get, "api/components", null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Gets the event types and current listener counts.</summary>
     public async Task<IReadOnlyList<HomeAssistantEventType>> GetEventTypesAsync(CancellationToken cancellationToken = default)
     {
-        return await SendAsync<HomeAssistantEventType[]>(HttpMethod.Get, "api/events", null, cancellationToken)
+        return await SendHomeAssistantAsync<HomeAssistantEventType[]>(HttpMethod.Get, "api/events", null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -46,7 +46,7 @@ public sealed partial class HomeAssistantRestClient
         AddFlag(parameters, "no_attributes", query.NoAttributes);
         AddFlag(parameters, "significant_changes_only", query.SignificantChangesOnly);
 
-        var response = await SendAsync<HomeAssistantState[][]>(
+        var response = await SendHomeAssistantAsync<HomeAssistantState[][]>(
             HttpMethod.Get,
             AppendQuery(path, parameters),
             null,
@@ -70,10 +70,10 @@ public sealed partial class HomeAssistantRestClient
         AddTimestamp(parameters, "end_time", query.EndTime);
         if (!string.IsNullOrWhiteSpace(query.EntityId))
         {
-            parameters.Add(new KeyValuePair<string, string?>("entity", query.EntityId));
+            parameters.Add(new KeyValuePair<string, string?>("entity", NormalizeEntityId(query.EntityId!, cancellationToken)));
         }
 
-        return await SendAsync<HomeAssistantLogbookEntry[]>(
+        return await SendHomeAssistantAsync<HomeAssistantLogbookEntry[]>(
             HttpMethod.Get,
             AppendQuery(path, parameters),
             null,
@@ -89,13 +89,15 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets an image from a camera entity.</summary>
     public Task<byte[]> GetCameraImageAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        return GetBytesAsync("api/camera_proxy/" + EscapePath(entityId), cancellationToken);
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", cancellationToken, out var normalizedEntityId))
+            throw new ArgumentException("A camera entity identifier is required.", nameof(entityId));
+        return GetBytesAsync("api/camera_proxy/" + EscapePath(normalizedEntityId, cancellationToken), cancellationToken);
     }
 
     /// <summary>Gets all calendar entities.</summary>
     public async Task<IReadOnlyList<HomeAssistantCalendar>> GetCalendarsAsync(CancellationToken cancellationToken = default)
     {
-        return await SendAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
+        return await SendHomeAssistantAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -106,24 +108,26 @@ public sealed partial class HomeAssistantRestClient
         DateTimeOffset end,
         CancellationToken cancellationToken = default)
     {
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", cancellationToken, out var normalizedEntityId))
+            throw new ArgumentException("A calendar entity identifier is required.", nameof(entityId));
         if (end <= start)
         {
             throw new ArgumentOutOfRangeException(nameof(end), "The calendar end must be after its start.");
         }
 
         var path = AppendQuery(
-            "api/calendars/" + EscapePath(entityId),
+            "api/calendars/" + EscapePath(normalizedEntityId, cancellationToken),
             new[]
             {
                 new KeyValuePair<string, string?>("start", FormatTimestamp(start)),
                 new KeyValuePair<string, string?>("end", FormatTimestamp(end))
             });
-        return await SendAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
+        return await SendHomeAssistantAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
             .ConfigureAwait(false);
     }
 
     /// <summary>Creates or updates a state representation without controlling the underlying device.</summary>
-    public Task<HomeAssistantState> SetStateAsync(
+    public async Task<HomeAssistantState> SetStateAsync(
         string entityId,
         HomeAssistantStateUpdate update,
         CancellationToken cancellationToken = default)
@@ -133,19 +137,21 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentNullException(nameof(update));
         }
 
-        return SendAsync<HomeAssistantState>(
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
+        var state = await SendHomeAssistantAsync<HomeAssistantState>(
             HttpMethod.Post,
-            "api/states/" + EscapePath(entityId),
+            "api/states/" + EscapePath(normalizedEntityId, cancellationToken),
             update,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        return HomeAssistantEntityId.RequireResponseEntity(state, normalizedEntityId);
     }
 
     /// <summary>Deletes a state representation from Home Assistant.</summary>
     public Task<JsonElement> DeleteStateAsync(string entityId, CancellationToken cancellationToken = default)
     {
-        return SendAsync<JsonElement>(
+        return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Delete,
-            "api/states/" + EscapePath(entityId),
+            "api/states/" + EscapePath(NormalizeEntityId(entityId, cancellationToken), cancellationToken),
             null,
             cancellationToken);
     }
@@ -156,9 +162,9 @@ public sealed partial class HomeAssistantRestClient
         IReadOnlyDictionary<string, object?>? eventData = null,
         CancellationToken cancellationToken = default)
     {
-        return SendAsync<JsonElement>(
+        return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
-            "api/events/" + EscapePath(eventType),
+            "api/events/" + EscapePath(eventType, cancellationToken),
             eventData ?? new Dictionary<string, object?>(),
             cancellationToken);
     }
@@ -186,7 +192,7 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Checks whether the active Home Assistant configuration is valid.</summary>
     public Task<HomeAssistantConfigurationCheck> CheckConfigurationAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync<HomeAssistantConfigurationCheck>(
+        return SendHomeAssistantAsync<HomeAssistantConfigurationCheck>(
             HttpMethod.Post,
             "api/config/core/check_config",
             new Dictionary<string, object?>(),
@@ -203,7 +209,7 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentNullException(nameof(request));
         }
 
-        return SendAsync<JsonElement>(HttpMethod.Post, "api/intent/handle", request, cancellationToken);
+        return SendHomeAssistantAsync<JsonElement>(HttpMethod.Post, "api/intent/handle", request, cancellationToken);
     }
 
     /// <summary>Processes text through the Home Assistant conversation API.</summary>
@@ -219,7 +225,7 @@ public sealed partial class HomeAssistantRestClient
             throw new ArgumentException("Conversation text is required.", nameof(text));
         }
 
-        return SendAsync<JsonElement>(
+        return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
             "api/conversation/process",
             BuildConversationPayload(text, language, agentId, conversationId),
@@ -279,21 +285,26 @@ public sealed partial class HomeAssistantRestClient
         string? conversationId)
     {
         var payload = new Dictionary<string, object?> { ["text"] = text };
-        if (!string.IsNullOrWhiteSpace(language))
+        if (language is not null)
         {
-            payload["language"] = language;
+            payload["language"] = RequireConversationSelector(language, nameof(language));
         }
 
-        if (!string.IsNullOrWhiteSpace(agentId))
+        if (agentId is not null)
         {
-            payload["agent_id"] = agentId;
+            payload["agent_id"] = RequireConversationSelector(agentId, nameof(agentId));
         }
 
-        if (!string.IsNullOrWhiteSpace(conversationId))
+        if (conversationId is not null)
         {
-            payload["conversation_id"] = conversationId;
+            payload["conversation_id"] = RequireConversationSelector(conversationId, nameof(conversationId));
         }
 
         return payload;
     }
+
+    private static string RequireConversationSelector(string value, string parameterName)
+        => string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A supplied conversation selector cannot be empty.", parameterName)
+            : value.Trim();
 }

@@ -2,6 +2,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Exceptions;
@@ -42,7 +43,12 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
 
     public HomeAssistantConnectionState State => _state;
 
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    public Task ConnectAsync(CancellationToken cancellationToken = default)
+        => ConnectAsync(cancellationToken, stopOnPermanentNegotiationFailure: false);
+
+    private async Task ConnectAsync(
+        CancellationToken cancellationToken,
+        bool stopOnPermanentNegotiationFailure)
     {
         ThrowIfDisposed();
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -57,42 +63,74 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             var reconnecting = _state == HomeAssistantConnectionState.Reconnecting;
             SetState(reconnecting ? HomeAssistantConnectionState.Reconnecting : HomeAssistantConnectionState.Connecting);
 
-            var socket = new ClientWebSocket();
-            socket.Options.KeepAliveInterval = _options.KeepAliveInterval;
             var connectionSource = CancellationTokenSource.CreateLinkedTokenSource(_disposeSource.Token);
+            var coalescingEnabled = false;
             using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeSource.Token);
             connectTimeout.CancelAfter(_options.ConnectTimeout);
+            ClientWebSocket? socket = null;
             try
             {
-                await socket.ConnectAsync(HomeAssistantUri.BuildWebSocketUri(_options.BaseUri), connectTimeout.Token)
-                    .ConfigureAwait(false);
-                await AuthenticateAsync(socket, connectTimeout.Token).ConfigureAwait(false);
+                for (var attempt = 0; attempt < 2; attempt++)
+                {
+                    socket = new ClientWebSocket();
+                    socket.Options.KeepAliveInterval = _options.KeepAliveInterval;
+                    await socket.ConnectAsync(HomeAssistantUri.BuildWebSocketUri(_options.BaseUri), connectTimeout.Token)
+                        .ConfigureAwait(false);
+                    var authenticated = await AuthenticateAsync(
+                        socket,
+                        allowRecovery: attempt == 0,
+                        connectTimeout.Token).ConfigureAwait(false);
+                    if (authenticated)
+                    {
+                        coalescingEnabled = await EnableSupportedFeaturesAsync(socket, connectTimeout.Token).ConfigureAwait(false);
+                        break;
+                    }
+
+                    socket.Dispose();
+                    socket = null;
+                }
+
+                if (socket is null)
+                {
+                    throw new HomeAssistantAuthenticationException(
+                        "Home Assistant rejected the recovered WebSocket access token.");
+                }
             }
             catch (Exception ex)
             {
-                socket.Dispose();
+                socket?.Dispose();
                 connectionSource.Dispose();
-                SetState(HomeAssistantConnectionState.Faulted, ex);
-                if (ex is OperationCanceledException
-                    && !cancellationToken.IsCancellationRequested
-                    && !_disposeSource.IsCancellationRequested)
+                var failure = ClassifyConnectFailure(
+                    ex,
+                    cancellationToken,
+                    _disposeSource.Token,
+                    connectTimeout.Token);
+                if (failure is OperationCanceledException
+                    && (cancellationToken.IsCancellationRequested || _disposeSource.IsCancellationRequested))
                 {
-                    throw new HomeAssistantConnectionException(
-                        "The Home Assistant WebSocket connection timed out.",
-                        new TimeoutException());
+                    SetState(HomeAssistantConnectionState.Disconnected);
+                    throw failure;
                 }
 
-                if (ex is HomeAssistantException || ex is OperationCanceledException)
+                SetState(HomeAssistantConnectionState.Faulted, failure);
+
+                if (stopOnPermanentNegotiationFailure
+                    && (failure is HomeAssistantProtocolException || failure is HomeAssistantCommandException))
                 {
-                    throw;
+                    throw new PermanentReconnectNegotiationException((HomeAssistantException)failure);
                 }
 
-                throw new HomeAssistantConnectionException("The Home Assistant WebSocket connection failed.", ex);
+                if (failure is HomeAssistantException || failure is OperationCanceledException)
+                {
+                    throw failure;
+                }
+
+                throw new HomeAssistantConnectionException("The Home Assistant WebSocket connection failed.", failure);
             }
 
             _socket = socket;
             _connectionSource = connectionSource;
-            _receiveTask = ReceiveLoopAsync(socket, connectionSource);
+            _receiveTask = ReceiveLoopAsync(socket, connectionSource, coalescingEnabled);
             _serverSubscriptions.Clear();
             try
             {
@@ -220,8 +258,25 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
 
         try
         {
-            await SendCommandAsync(socket, commandId, commandType, payload, cancellationToken).ConfigureAwait(false);
-            return await AwaitWithTimeoutAsync(completion.Task, _options.RequestTimeout, cancellationToken).ConfigureAwait(false);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(_options.RequestTimeout);
+            try
+            {
+                await SendCommandAsync(socket, commandId, commandType, payload, deadline.Token).ConfigureAwait(false);
+                return await AwaitWithDeadlineAsync(completion.Task, deadline.Token, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException ex) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException("The Home Assistant WebSocket request was canceled.", ex, cancellationToken);
+            }
+            catch (ObjectDisposedException) when (deadline.IsCancellationRequested)
+            {
+                throw CreateRequestTimeoutException();
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+            {
+                throw CreateRequestTimeoutException();
+            }
         }
         finally
         {
@@ -289,10 +344,15 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         return registration.WaitForCheckpointAsync(cancellationToken);
     }
 
-    private async Task AuthenticateAsync(ClientWebSocket socket, CancellationToken cancellationToken)
+    private async Task<bool> AuthenticateAsync(
+        ClientWebSocket socket,
+        bool allowRecovery,
+        CancellationToken cancellationToken)
     {
         var greeting = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
-        using var greetingDocument = JsonDocument.Parse(greeting);
+        using var greetingDocument = HomeAssistantJson.ParseResponse(
+            greeting,
+            "The Home Assistant WebSocket greeting could not be decoded.");
         var greetingType = GetRequiredString(greetingDocument.RootElement, "type");
         if (!string.Equals(greetingType, "auth_required", StringComparison.Ordinal))
         {
@@ -312,19 +372,120 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         }, cancellationToken).ConfigureAwait(false);
 
         var response = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
-        using var responseDocument = JsonDocument.Parse(response);
+        using var responseDocument = HomeAssistantJson.ParseResponse(
+            response,
+            "The Home Assistant WebSocket authentication response could not be decoded.");
         var responseType = GetRequiredString(responseDocument.RootElement, "type");
         if (string.Equals(responseType, "auth_ok", StringComparison.Ordinal))
         {
-            return;
+            return true;
         }
 
         if (string.Equals(responseType, "auth_invalid", StringComparison.Ordinal))
         {
+            if (allowRecovery
+                && _options.AccessTokenProvider is IHomeAssistantAccessTokenRecovery recovery)
+            {
+                await recovery.RecoverAccessTokenAsync(token, cancellationToken).ConfigureAwait(false);
+                WriteDiagnostic(
+                    HomeAssistantDiagnosticLevel.Information,
+                    "websocket.authentication_recovered",
+                    "Recovered a Home Assistant WebSocket access token; opening a fresh session.");
+                return false;
+            }
+
             throw new HomeAssistantAuthenticationException("Home Assistant rejected the WebSocket access token.");
         }
 
         throw new HomeAssistantProtocolException("Unexpected Home Assistant authentication response: " + responseType + ".");
+    }
+
+    private async Task<bool> EnableSupportedFeaturesAsync(
+        ClientWebSocket socket,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.EnableWebSocketMessageCoalescing)
+        {
+            return false;
+        }
+
+        var commandId = NextCommandId();
+        await SendJsonAsync(socket, new Dictionary<string, object?>
+        {
+            ["id"] = commandId,
+            ["type"] = "supported_features",
+            ["features"] = new Dictionary<string, object?>
+            {
+                ["coalesce_messages"] = 1
+            }
+        }, cancellationToken).ConfigureAwait(false);
+
+        var response = await ReceiveTextAsync(socket, cancellationToken).ConfigureAwait(false);
+        using var responseDocument = HomeAssistantJson.ParseResponse(
+            response,
+            "The Home Assistant supported-features response could not be decoded.");
+        var root = GetSupportedFeaturesAcknowledgement(responseDocument.RootElement);
+        if (!root.TryGetProperty("id", out var idProperty)
+            || !idProperty.TryGetInt32(out var responseId)
+            || responseId != commandId
+            || !string.Equals(GetRequiredString(root, "type"), "result", StringComparison.Ordinal))
+        {
+            throw new HomeAssistantProtocolException(
+                "Home Assistant returned an invalid supported-features response.");
+        }
+
+        if (!root.TryGetProperty("success", out var successProperty)
+            || successProperty.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant supported-features response omitted its required Boolean success flag.");
+        }
+
+        RequireRoutedPayload(root, "result");
+
+        var success = successProperty.ValueKind == JsonValueKind.True;
+        if (!success)
+        {
+            var exception = ReadCommandException(root);
+            if (string.Equals(exception.Code, "unknown_command", StringComparison.Ordinal)
+                || string.Equals(exception.Code, "not_supported", StringComparison.Ordinal))
+            {
+                WriteDiagnostic(
+                    HomeAssistantDiagnosticLevel.Information,
+                    "websocket.coalescing_unavailable",
+                    "Home Assistant does not support WebSocket message coalescing; continuing without it.");
+                return false;
+            }
+
+            throw exception;
+        }
+
+        return true;
+    }
+
+    private JsonElement GetSupportedFeaturesAcknowledgement(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            return root;
+        }
+
+        if (root.ValueKind != JsonValueKind.Array
+            || root.GetArrayLength() != 1
+            || root.GetArrayLength() > _options.MaximumCoalescedWebSocketMessages)
+        {
+            throw new HomeAssistantProtocolException(
+                "Home Assistant returned an invalid supported-features response.");
+        }
+
+        var acknowledgement = root[0];
+        if (acknowledgement.ValueKind != JsonValueKind.Object)
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant supported-features batch contained a non-message value.");
+        }
+
+        return acknowledgement;
     }
 
     private async Task ActivateSubscriptionAsync(SubscriptionRegistration registration, CancellationToken cancellationToken)
@@ -358,9 +519,26 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             _pendingRequests[serverId] = completion;
             try
             {
-                await SendCommandAsync(socket, serverId, registration.CommandType, registration.Payload, cancellationToken)
-                    .ConfigureAwait(false);
-                await AwaitWithTimeoutAsync(completion.Task, _options.RequestTimeout, cancellationToken).ConfigureAwait(false);
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                deadline.CancelAfter(_options.RequestTimeout);
+                try
+                {
+                    await SendCommandAsync(socket, serverId, registration.CommandType, registration.Payload, deadline.Token)
+                        .ConfigureAwait(false);
+                    await AwaitWithDeadlineAsync(completion.Task, deadline.Token, cancellationToken).ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException ex) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException("The Home Assistant WebSocket subscription activation was canceled.", ex, cancellationToken);
+                }
+                catch (ObjectDisposedException) when (deadline.IsCancellationRequested)
+                {
+                    throw CreateRequestTimeoutException();
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+                {
+                    throw CreateRequestTimeoutException();
+                }
             }
             catch (HomeAssistantCommandException)
             {
@@ -470,25 +648,55 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
             new WebSocketException(WebSocketError.InvalidState));
     }
 
+    internal static Exception ClassifyConnectFailure(
+        Exception exception,
+        CancellationToken callerToken,
+        CancellationToken disposalToken,
+        CancellationToken deadlineToken)
+    {
+        if (exception is not OperationCanceledException && exception is not ObjectDisposedException) return exception;
+        if (callerToken.IsCancellationRequested)
+            return exception is OperationCanceledException
+                ? exception
+                : new OperationCanceledException("The Home Assistant WebSocket connection was canceled.", exception, callerToken);
+        if (disposalToken.IsCancellationRequested)
+            return exception is OperationCanceledException
+                ? exception
+                : new OperationCanceledException("The Home Assistant WebSocket connection was canceled because the client was disposed.", exception, disposalToken);
+        if (deadlineToken.IsCancellationRequested)
+            return new HomeAssistantConnectionException(
+                "The Home Assistant WebSocket connection timed out.",
+                new TimeoutException());
+        return exception;
+    }
+
     private static Task SendJsonAsync(ClientWebSocket socket, object payload, CancellationToken cancellationToken)
     {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, HomeAssistantJson.SerializerOptions);
+        var bytes = HomeAssistantJson.SerializeToUtf8Bytes(payload, cancellationToken);
         return socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
     }
 
-    private static async Task<T> AwaitWithTimeoutAsync<T>(Task<T> task, TimeSpan timeout, CancellationToken cancellationToken)
+    private static async Task<T> AwaitWithDeadlineAsync<T>(
+        Task<T> task,
+        CancellationToken deadlineToken,
+        CancellationToken callerToken)
     {
-        using var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var delay = Task.Delay(timeout, source.Token);
+        var delay = Task.Delay(Timeout.InfiniteTimeSpan, deadlineToken);
         var completed = await Task.WhenAny(task, delay).ConfigureAwait(false);
         if (completed == task)
         {
-            source.Cancel();
             return await task.ConfigureAwait(false);
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        throw new HomeAssistantConnectionException("The Home Assistant WebSocket command timed out.", new TimeoutException());
+        callerToken.ThrowIfCancellationRequested();
+        throw CreateRequestTimeoutException();
+    }
+
+    private static HomeAssistantConnectionException CreateRequestTimeoutException()
+    {
+        return new HomeAssistantConnectionException(
+            "The Home Assistant WebSocket command timed out.",
+            new TimeoutException());
     }
 
     private static HomeAssistantCommandException ReadCommandException(JsonElement root)
@@ -519,6 +727,18 @@ public sealed partial class HomeAssistantWebSocketClient : IDisposable
         }
 
         return property.GetString() ?? string.Empty;
+    }
+
+    private static string GetRequiredMessageType(JsonElement element)
+    {
+        var type = GetRequiredString(element, "type");
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            throw new HomeAssistantProtocolException(
+                "Home Assistant WebSocket message contained an empty required property 'type'.");
+        }
+
+        return type;
     }
 
     private void FailPendingRequests(Exception exception)

@@ -27,13 +27,23 @@ public sealed class InvokeHomeAssistantAppCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        if (!ShouldProcess("app " + App, Action.ToString()))
+        if (!Enum.IsDefined(typeof(HomeAssistantAppAction), Action))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Action), Action, "Unsupported Supervisor app action.");
+        }
+
+        if (!HomeAssistantSupervisorIdentifier.TryNormalizeAppSlug(App, out var app))
+        {
+            throw new ArgumentException("A valid Supervisor app/add-on slug is required.", nameof(App));
+        }
+
+        if (!ShouldProcess("app " + app, Action.ToString()))
         {
             return;
         }
 
         var operation = (HomeAssistantAppOperation)Action;
-        var result = await Client.Supervisor.InvokeAppAsync(App, operation, CancelToken).ConfigureAwait(false);
+        var result = await Client.Supervisor.InvokeAppAsync(app, operation, CancelToken).ConfigureAwait(false);
         if (PassThru)
         {
             WriteObject(result);

@@ -26,7 +26,8 @@ public sealed class HomeAssistantRegistryClient
 
         var partialEntities = DeserializeArray<HomeAssistantEntityRegistryEntry>(
             await partialEntitiesTask.ConfigureAwait(false),
-            "entity registry");
+            "entity registry",
+            cancellationToken);
         var entities = partialEntities;
         if (partialEntities.Count > 0)
         {
@@ -37,15 +38,15 @@ public sealed class HomeAssistantRegistryClient
                     ["entity_ids"] = partialEntities.Select(entry => entry.EntityId).ToArray()
                 },
                 cancellationToken).ConfigureAwait(false);
-            entities = DeserializeExtendedEntities(extendedEntities, partialEntities);
+            entities = DeserializeExtendedEntities(extendedEntities, partialEntities, cancellationToken);
         }
 
         var configEntries = await configEntriesTask.ConfigureAwait(false);
         return new HomeAssistantRegistrySnapshot
         {
-            Areas = DeserializeArray<HomeAssistantArea>(await areasTask.ConfigureAwait(false), "area registry"),
-            Floors = DeserializeArray<HomeAssistantFloor>(await floorsTask.ConfigureAwait(false), "floor registry"),
-            Devices = DeserializeArray<HomeAssistantDeviceRegistryEntry>(await devicesTask.ConfigureAwait(false), "device registry"),
+            Areas = DeserializeArray<HomeAssistantArea>(await areasTask.ConfigureAwait(false), "area registry", cancellationToken),
+            Floors = DeserializeArray<HomeAssistantFloor>(await floorsTask.ConfigureAwait(false), "floor registry", cancellationToken),
+            Devices = DeserializeArray<HomeAssistantDeviceRegistryEntry>(await devicesTask.ConfigureAwait(false), "device registry", cancellationToken),
             Entities = entities,
             ConfigEntries = configEntries.Entries,
             IsConfigEntryEnrichmentAvailable = configEntries.IsAvailable
@@ -57,7 +58,7 @@ public sealed class HomeAssistantRegistryClient
         try
         {
             var value = await _webSocket.RequestAsync("config_entries/get", null, cancellationToken).ConfigureAwait(false);
-            return new ConfigEntryLoadResult(DeserializeConfigEntries(value), true);
+            return new ConfigEntryLoadResult(DeserializeConfigEntries(value, cancellationToken), true);
         }
         catch (HomeAssistantCommandException exception)
             when (string.Equals(exception.Code, "unauthorized", StringComparison.OrdinalIgnoreCase))
@@ -68,15 +69,19 @@ public sealed class HomeAssistantRegistryClient
 
     private static IReadOnlyList<HomeAssistantEntityRegistryEntry> DeserializeExtendedEntities(
         JsonElement value,
-        IReadOnlyList<HomeAssistantEntityRegistryEntry> partialEntries)
+        IReadOnlyList<HomeAssistantEntityRegistryEntry> partialEntries,
+        CancellationToken cancellationToken)
     {
         if (value.ValueKind != JsonValueKind.Object)
         {
             throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response had an unexpected shape.");
         }
 
-        var extendedEntries = value.Deserialize<Dictionary<string, HomeAssistantEntityRegistryEntry?>>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant extended entity registry response could not be decoded.");
+        var extendedEntries = HomeAssistantJson.DeserializeResponse<Dictionary<string, HomeAssistantEntityRegistryEntry?>>(
+            value,
+            "The Home Assistant extended entity registry response could not be decoded.",
+            allowNullCollectionEntries: true,
+            cancellationToken: cancellationToken);
 
         return partialEntries.Select(partial =>
         {
@@ -97,23 +102,30 @@ public sealed class HomeAssistantRegistryClient
         }).ToArray();
     }
 
-    private static IReadOnlyList<T> DeserializeArray<T>(JsonElement value, string name)
+    private static IReadOnlyList<T> DeserializeArray<T>(
+        JsonElement value,
+        string name,
+        CancellationToken cancellationToken)
     {
-        return value.Deserialize<T[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The Home Assistant " + name + " response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<T[]>(
+            value,
+            "The Home Assistant " + name + " response could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
-    private static IReadOnlyList<HomeAssistantConfigEntry> DeserializeConfigEntries(JsonElement value)
+    private static IReadOnlyList<HomeAssistantConfigEntry> DeserializeConfigEntries(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
         if (value.ValueKind == JsonValueKind.Array)
         {
-            return DeserializeArray<HomeAssistantConfigEntry>(value, "configuration-entry registry");
+            return DeserializeArray<HomeAssistantConfigEntry>(value, "configuration-entry registry", cancellationToken);
         }
 
         if (value.ValueKind == JsonValueKind.Object
             && value.TryGetProperty("entries", out var entries))
         {
-            return DeserializeArray<HomeAssistantConfigEntry>(entries, "configuration-entry registry");
+            return DeserializeArray<HomeAssistantConfigEntry>(entries, "configuration-entry registry", cancellationToken);
         }
 
         throw new HomeAssistantProtocolException("The Home Assistant configuration-entry registry response had an unexpected shape.");

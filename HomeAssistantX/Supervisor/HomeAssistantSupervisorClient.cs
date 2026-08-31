@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 using HomeAssistantX.Authentication;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
@@ -62,7 +63,8 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
     {
         return Decode<HomeAssistantSupervisorInfo>(
             await SendAsync(HttpMethod.Get, "/supervisor/info", null, cancellationToken).ConfigureAwait(false),
-            "Supervisor information");
+            "Supervisor information",
+            cancellationToken);
     }
 
     /// <summary>Gets the combined Supervisor, Core, OS, and host installation overview.</summary>
@@ -71,7 +73,8 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
     {
         return Decode<HomeAssistantSupervisorOverview>(
             await SendAsync(HttpMethod.Get, "/info", null, cancellationToken).ConfigureAwait(false),
-            "Supervisor installation overview");
+            "Supervisor installation overview",
+            cancellationToken);
     }
 
     public Task<JsonElement> GetCoreInfoAsync(CancellationToken cancellationToken = default)
@@ -83,14 +86,14 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         var result = await SendAsync(HttpMethod.Get, "/available_updates", null, cancellationToken).ConfigureAwait(false);
-        return DecodeList<HomeAssistantSupervisorUpdate>(result, "available_updates", "Supervisor updates");
+        return DecodeList<HomeAssistantSupervisorUpdate>(result, "available_updates", "Supervisor updates", cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantApp>> GetAppsAsync(
         CancellationToken cancellationToken = default)
     {
         var result = await SendAsync(HttpMethod.Get, "/addons", null, cancellationToken).ConfigureAwait(false);
-        var apps = DecodeList<HomeAssistantApp>(result, "addons", "Home Assistant apps");
+        var apps = DecodeList<HomeAssistantApp>(result, "addons", "Home Assistant apps", cancellationToken);
         foreach (var app in apps)
         {
             // The /addons endpoint is the installed-app inventory and does not emit an installed flag.
@@ -104,14 +107,14 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         var result = await SendAsync(HttpMethod.Get, "/backups", null, cancellationToken).ConfigureAwait(false);
-        return DecodeList<HomeAssistantBackup>(result, "backups", "Home Assistant backups");
+        return DecodeList<HomeAssistantBackup>(result, "backups", "Home Assistant backups", cancellationToken);
     }
 
     public async Task<IReadOnlyList<HomeAssistantSupervisorJob>> GetJobsAsync(
         CancellationToken cancellationToken = default)
     {
         var result = await SendAsync(HttpMethod.Get, "/jobs/info", null, cancellationToken).ConfigureAwait(false);
-        return DecodeList<HomeAssistantSupervisorJob>(result, "jobs", "Supervisor jobs");
+        return DecodeList<HomeAssistantSupervisorJob>(result, "jobs", "Supervisor jobs", cancellationToken);
     }
 
     public async Task<HomeAssistantSupervisorJob> GetJobAsync(
@@ -121,10 +124,11 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         return Decode<HomeAssistantSupervisorJob>(
             await SendAsync(
                 HttpMethod.Get,
-                "/jobs/" + Escape(jobId, nameof(jobId)),
+                "/jobs/" + Escape(jobId, nameof(jobId), cancellationToken),
                 null,
                 cancellationToken).ConfigureAwait(false),
-            "Supervisor job");
+            "Supervisor job",
+            cancellationToken);
     }
 
     public Task<JsonElement> GetResolutionAsync(CancellationToken cancellationToken = default)
@@ -138,6 +142,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         string? app = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (lines < 1 || lines > 10000)
         {
             throw new ArgumentOutOfRangeException(nameof(lines), "Log line count must be between 1 and 10000.");
@@ -148,7 +153,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             HomeAssistantSupervisorLogTarget.Core => "/core/logs",
             HomeAssistantSupervisorLogTarget.Supervisor => "/supervisor/logs",
             HomeAssistantSupervisorLogTarget.Host => "/host/logs",
-            HomeAssistantSupervisorLogTarget.App => "/addons/" + Escape(app, nameof(app)) + "/logs",
+            HomeAssistantSupervisorLogTarget.App => "/addons/" + EscapeApp(app, nameof(app), cancellationToken) + "/logs",
             _ => throw new ArgumentOutOfRangeException(nameof(target))
         };
         return _transport.SendTextAsync(
@@ -169,6 +174,7 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         HomeAssistantSupervisorRestartTarget target,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var endpoint = target switch
         {
             HomeAssistantSupervisorRestartTarget.Core => "/core/restart",
@@ -186,18 +192,19 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         bool? backup = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var endpoint = target switch
         {
             HomeAssistantSupervisorUpdateTarget.Core => "/core/update",
             HomeAssistantSupervisorUpdateTarget.Supervisor => "/supervisor/update",
             HomeAssistantSupervisorUpdateTarget.OperatingSystem => "/os/update",
-            HomeAssistantSupervisorUpdateTarget.App => "/addons/" + Escape(app, nameof(app)) + "/update",
+            HomeAssistantSupervisorUpdateTarget.App => "/addons/" + EscapeApp(app, nameof(app), cancellationToken) + "/update",
             _ => throw new ArgumentOutOfRangeException(nameof(target))
         };
         var data = new Dictionary<string, object?>();
-        if (!string.IsNullOrWhiteSpace(version))
+        if (version is not null)
         {
-            data["version"] = version;
+            data["version"] = RequireOptionalValue(version, nameof(version), cancellationToken);
         }
 
         if (backup.HasValue)
@@ -208,15 +215,35 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         return SendAsync(HttpMethod.Post, endpoint, data.Count == 0 ? null : data, cancellationToken);
     }
 
+    private static string RequireOptionalValue(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
+    {
+        if (IsNullOrWhiteSpace(value, cancellationToken))
+            throw new ArgumentException("A supplied value cannot be empty.", parameterName);
+        return Trim(value, cancellationToken);
+    }
+
     public Task<JsonElement> InvokeAppAsync(
         string app,
         HomeAssistantAppOperation operation,
         CancellationToken cancellationToken = default)
     {
-        var operationName = operation.ToString().ToLowerInvariant();
+        cancellationToken.ThrowIfCancellationRequested();
+        var operationName = operation switch
+        {
+            HomeAssistantAppOperation.Install => "install",
+            HomeAssistantAppOperation.Update => "update",
+            HomeAssistantAppOperation.Start => "start",
+            HomeAssistantAppOperation.Stop => "stop",
+            HomeAssistantAppOperation.Restart => "restart",
+            HomeAssistantAppOperation.Uninstall => "uninstall",
+            _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "A supported app operation is required.")
+        };
         return SendAsync(
             HttpMethod.Post,
-            "/addons/" + Escape(app, nameof(app)) + "/" + operationName,
+            "/addons/" + EscapeApp(app, nameof(app), cancellationToken) + "/" + operationName,
             null,
             cancellationToken);
     }
@@ -228,7 +255,8 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         object? data = null,
         CancellationToken cancellationToken = default)
     {
-        ValidateEndpoint(endpoint);
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateEndpoint(endpoint, cancellationToken);
         var result = await _transport.SendAsync(method, endpoint, data, cancellationToken).ConfigureAwait(false);
         return Unwrap(result);
     }
@@ -251,13 +279,19 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
         return value.Clone();
     }
 
-    private static T Decode<T>(JsonElement value, string name)
+    private static T Decode<T>(JsonElement value, string name, CancellationToken cancellationToken)
     {
-        return value.Deserialize<T>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The " + name + " response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<T>(
+            value,
+            "The " + name + " response could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
-    private static IReadOnlyList<T> DecodeList<T>(JsonElement value, string propertyName, string name)
+    private static IReadOnlyList<T> DecodeList<T>(
+        JsonElement value,
+        string propertyName,
+        string name,
+        CancellationToken cancellationToken)
     {
         var list = value;
         if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty(propertyName, out var nested))
@@ -265,47 +299,151 @@ public sealed class HomeAssistantSupervisorClient : IDisposable
             list = nested;
         }
 
-        return list.Deserialize<T[]>(HomeAssistantJson.SerializerOptions)
-            ?? throw new HomeAssistantProtocolException("The " + name + " response could not be decoded.");
+        return HomeAssistantJson.DeserializeResponse<T[]>(
+            list,
+            "The " + name + " response could not be decoded.",
+            cancellationToken: cancellationToken);
     }
 
-    private static string Escape(string? value, string parameterName)
+    private static string Escape(
+        string? value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty Supervisor identifier is required.", parameterName);
         }
 
-        return Uri.EscapeDataString(value);
+        return HomeAssistantUri.EscapeDataString(value!, cancellationToken);
     }
 
-    private static void ValidateEndpoint(string endpoint)
+    private static string EscapeApp(
+        string? value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(endpoint)
-            || !endpoint.StartsWith("/", StringComparison.Ordinal)
-            || endpoint.StartsWith("//", StringComparison.Ordinal)
-            || endpoint.IndexOf('\\') >= 0
-            || endpoint.IndexOf('#') >= 0
-            || Uri.TryCreate(endpoint, UriKind.Absolute, out _))
+        if (!HomeAssistantSupervisorIdentifier.TryNormalizeAppSlug(value, cancellationToken, out var normalized))
+        {
+            throw new ArgumentException("A valid Supervisor app/add-on slug is required.", parameterName);
+        }
+
+        return HomeAssistantUri.EscapeDataString(normalized, cancellationToken);
+    }
+
+    private static void ValidateEndpoint(string endpoint, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (endpoint is null
+            || endpoint.Length == 0
+            || endpoint.Length > 16 * 1024
+            || endpoint[0] != '/'
+            || endpoint.Length > 1 && endpoint[1] == '/')
         {
             throw new ArgumentException("A root-relative Supervisor endpoint is required.", nameof(endpoint));
         }
 
+        for (var index = 0; index < endpoint.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (endpoint[index] == '\\'
+                || endpoint[index] == '#'
+                || char.IsWhiteSpace(endpoint[index]) && (index == 0 || index == endpoint.Length - 1))
+            {
+                throw new ArgumentException("A root-relative Supervisor endpoint is required.", nameof(endpoint));
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+
         string decodedPath;
         try
         {
-            var queryIndex = endpoint.IndexOf('?');
-            decodedPath = Uri.UnescapeDataString(queryIndex < 0 ? endpoint : endpoint.Substring(0, queryIndex));
+            var queryIndex = -1;
+            for (var index = 0; index < endpoint.Length; index++)
+            {
+                if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if (endpoint[index] != '?') continue;
+                queryIndex = index;
+                break;
+            }
+            var encodedPath = queryIndex < 0
+                ? endpoint
+                : Slice(endpoint, 0, queryIndex, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            decodedPath = Uri.UnescapeDataString(encodedPath);
+            cancellationToken.ThrowIfCancellationRequested();
         }
         catch (UriFormatException exception)
         {
             throw new ArgumentException("The Supervisor endpoint contains invalid escaping.", nameof(endpoint), exception);
         }
 
-        if (decodedPath.Split('/').Any(segment => segment == "." || segment == ".."))
+        var segmentStart = 0;
+        for (var index = 0; index <= decodedPath.Length; index++)
         {
-            throw new ArgumentException("The Supervisor endpoint cannot contain path traversal segments.", nameof(endpoint));
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (index < decodedPath.Length && decodedPath[index] != '/') continue;
+            var segmentLength = index - segmentStart;
+            if (segmentLength == 1 && decodedPath[segmentStart] == '.'
+                || segmentLength == 2
+                    && decodedPath[segmentStart] == '.'
+                    && decodedPath[segmentStart + 1] == '.')
+            {
+                throw new ArgumentException("The Supervisor endpoint cannot contain path traversal segments.", nameof(endpoint));
+            }
+            segmentStart = index + 1;
         }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static bool IsNullOrWhiteSpace(string? value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value is null) return true;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (!char.IsWhiteSpace(value[index])) return false;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return true;
+    }
+
+    private static string Trim(string value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var start = 0;
+        while (start < value.Length && char.IsWhiteSpace(value[start]))
+        {
+            if ((start & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            start++;
+        }
+        var end = value.Length - 1;
+        while (end >= start && char.IsWhiteSpace(value[end]))
+        {
+            if (((value.Length - end) & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            end--;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return end < start ? string.Empty : Slice(value, start, end - start + 1, cancellationToken);
+    }
+
+    private static string Slice(
+        string value,
+        int start,
+        int length,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (start == 0 && length == value.Length) return value;
+        var builder = new System.Text.StringBuilder(length);
+        for (var index = 0; index < length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            builder.Append(value[start + index]);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return builder.ToString();
     }
 }
 

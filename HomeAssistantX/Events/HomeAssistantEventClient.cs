@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
 using HomeAssistantX.Subscriptions;
@@ -34,8 +35,13 @@ public sealed class HomeAssistantEventClient
             payload,
             async (message, token) =>
             {
-                var value = message.Deserialize<HomeAssistantEvent>(HomeAssistantJson.SerializerOptions)
-                    ?? throw new Exceptions.HomeAssistantProtocolException("A Home Assistant event could not be decoded.");
+                var value = HomeAssistantSubscriptionProjectionException.Capture(() =>
+                    ValidateEvent(
+                        HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(
+                            message,
+                            "A Home Assistant event could not be decoded.",
+                            cancellationToken: token),
+                        token));
                 await handler(value, token).ConfigureAwait(false);
             },
             cancellationToken);
@@ -85,5 +91,20 @@ public sealed class HomeAssistantEventClient
         }
 
         return _webSocket.SubscribeAsync("subscribe_trigger", payload, handler, cancellationToken);
+    }
+    private static HomeAssistantEvent ValidateEvent(
+        HomeAssistantEvent value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(value.EventType)
+            || value.Data is null)
+        {
+            throw new HomeAssistantProtocolException(
+                "A Home Assistant event omitted its required event type or data object.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return value;
     }
 }

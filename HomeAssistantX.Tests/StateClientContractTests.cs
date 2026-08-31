@@ -1,5 +1,6 @@
 ﻿#if NET10_0
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Diagnostics;
 using HomeAssistantX.Models;
 using HomeAssistantX.States;
 using HomeAssistantX.Tests.Infrastructure;
@@ -8,6 +9,14 @@ namespace HomeAssistantX.Tests;
 
 public sealed class StateClientContractTests
 {
+    [Fact]
+    public void EntityFiltersRequireCanonicalNativeIdentifiers()
+    {
+        Assert.Throws<ArgumentException>(() => HomeAssistantStateFilter.ForEntities("LIGHT.kitchen"));
+        Assert.Throws<ArgumentException>(() => HomeAssistantStateFilter.ForEntities("_light.kitchen"));
+        _ = HomeAssistantStateFilter.ForEntities(" light.kitchen ");
+    }
+
     [Fact]
     public async Task BuffersEventsReceivedBetweenSubscriptionAndInitialSnapshot()
     {
@@ -21,13 +30,25 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public async Task InitialSnapshotRejectsDuplicateEntityIdentifiersWithoutPublishingPartialState()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"light.kitchen\",\"state\":\"off\",\"attributes\":{}},{\"entity_id\":\"light.kitchen\",\"state\":\"on\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.States.InitializeAsync());
+
+        Assert.Empty(client.States.Snapshot);
+    }
+
+    [Fact]
     public async Task MaintainsSnapshotAndAppliesEntityRemovalFromPushEvents()
     {
         using var server = new TestHomeAssistantServer();
         using var client = TestClientFactory.Create(server);
         var received = new TaskCompletionSource<HomeAssistantStateChange>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = await client.States.SubscribeAsync(
-            HomeAssistantStateFilter.ForDomains("light"),
+            HomeAssistantStateFilter.ForDomains(" light "),
             (change, _) =>
             {
                 received.TrySetResult(change);
@@ -82,6 +103,73 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public async Task FailedReconnectReconciliationFaultsSubscribersAndAllowsFreshInitialization()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var failedSubscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+        server.SetStates("[{\"entity_id\":\"light.kitchen\",\"state\":\"off\",\"attributes\":{}},{\"entity_id\":\"light.kitchen\",\"state\":\"on\",\"attributes\":{}}]");
+
+        await server.DropWebSocketsAsync();
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(failedSubscription.Completion));
+
+        server.SetStates("[" + TestHomeAssistantServer.KitchenLightOnStateJson + "]");
+        using var replacement = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+
+        Assert.Equal("on", client.States.Snapshot["light.kitchen"].State);
+        Assert.False(replacement.Completion.IsCompleted);
+    }
+
+    [Fact]
+    public async Task StaleReconnectFailureCannotTearDownNewerHealthyReconciliation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+        server.SetStates("[" + TestHomeAssistantServer.KitchenLightOnStateJson + "]");
+        var pausedSnapshot = server.PauseNextGetStates();
+
+        await server.DropWebSocketsAsync();
+        await WithTimeoutAsync(pausedSnapshot.Received);
+        await server.DropWebSocketsAsync();
+        pausedSnapshot.Release();
+
+        await WaitUntilAsync(() =>
+            server.WebSocketConnectionCount >= 3
+            && client.States.Snapshot.TryGetValue("light.kitchen", out var state)
+            && state.State == "on");
+
+        Assert.False(subscription.Completion.IsCompleted);
+    }
+
+    [Fact]
+    public async Task DisposeLetsPausedReconnectObserversExitWithoutFaulting()
+    {
+        using var server = new TestHomeAssistantServer();
+        var client = TestClientFactory.Create(server);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+        var states = client.States;
+        var pausedSnapshot = server.PauseNextGetStates();
+
+        await server.DropWebSocketsAsync();
+        await WithTimeoutAsync(pausedSnapshot.Received);
+        states.Dispose();
+
+        await WithTimeoutAsync(states.WaitForBackgroundTasksAsync());
+        pausedSnapshot.Release();
+    }
+
+    [Fact]
     public async Task BoundedStateSubscriptionFaultsWhenConsumerCannotKeepUp()
     {
         using var server = new TestHomeAssistantServer();
@@ -118,6 +206,143 @@ public sealed class StateClientContractTests
             async () => await WithTimeoutAsync(subscription.Completion));
     }
 
+    [Fact]
+    public async Task SharedServerFailureKeepsItsDiagnosticClassification()
+    {
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var server = new TestHomeAssistantServer { PublishNullStateEventData = true };
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            TestHomeAssistantServer.KitchenLightOnStateJson);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(diagnostics.Events, item => item.Name == "state.server_subscription_failed");
+        Assert.Contains(diagnostics.Events, item => item.Name == "subscription.upstream_failed");
+        Assert.DoesNotContain(diagnostics.Events, item => item.Name == "subscription.handler_failed");
+        Assert.DoesNotContain(diagnostics.Events, item => item.Name == "state.subscription_overflow");
+        Assert.DoesNotContain(diagnostics.Events, item => item.Name == "state.subscription_handler_failed");
+    }
+
+    [Fact]
+    public async Task TerminalReconnectAuthenticationFaultsLocalStateSubscriptions()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+
+        server.RequiredAccessToken = "replacement-token";
+        await server.DropWebSocketsAsync();
+
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+    }
+
+    [Fact]
+    public async Task TerminalReconnectCommandFailureKeepsPrivateDetailsOutOfStateDiagnostics()
+    {
+        const string privateMarker = "private-home-name-and-url";
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.All,
+            (_, _) => Task.CompletedTask);
+
+        server.SupportedFeaturesErrorCode = "invalid_format";
+        server.SupportedFeaturesErrorMessage = privateMarker;
+        await server.DropWebSocketsAsync();
+
+        var failure = await Assert.ThrowsAsync<HomeAssistantCommandException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(privateMarker, failure.Message, StringComparison.Ordinal);
+        var diagnostic = Assert.Single(
+            diagnostics.Events,
+            value => value.Name == "state.server_subscription_failed");
+        Assert.IsType<HomeAssistantCommandException>(diagnostic.Exception);
+        Assert.Equal("invalid_format", ((HomeAssistantCommandException)diagnostic.Exception!).Code);
+        Assert.DoesNotContain(privateMarker, diagnostic.Exception!.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiagnosticEventsSanitizeEveryAttachedServerFailure()
+    {
+        const string privateMarker = "private-installation-detail";
+        var diagnostic = new HomeAssistantDiagnosticEvent(
+            HomeAssistantDiagnosticLevel.Warning,
+            "test.failure",
+            "A Home Assistant operation failed.",
+            new HomeAssistantCommandException("invalid_format", privateMarker));
+
+        var failure = Assert.IsType<HomeAssistantCommandException>(diagnostic.Exception);
+        Assert.Equal("invalid_format", failure.Code);
+        Assert.DoesNotContain(privateMarker, failure.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiagnosticEventsPreserveConnectionFailureClassification()
+    {
+        const string privateMarker = "private-connection-detail";
+        var diagnostic = new HomeAssistantDiagnosticEvent(
+            HomeAssistantDiagnosticLevel.Warning,
+            "test.connection_failure",
+            "A Home Assistant connection failed.",
+            new HomeAssistantConnectionException(privateMarker, new IOException(privateMarker)));
+
+        Assert.IsType<HomeAssistantConnectionException>(diagnostic.Exception);
+        Assert.DoesNotContain(privateMarker, diagnostic.Exception!.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TerminalReconnectFailureCancelsRunningStateHandlerAndPreservesUpstreamFailure()
+    {
+        using var server = new TestHomeAssistantServer();
+        var diagnostics = new RecordingDiagnosticsSink();
+        using var client = TestClientFactory.Create(server, diagnostics: diagnostics);
+        var handlerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.States.SubscribeAsync(HomeAssistantStateFilter.All, async (_, token) =>
+        {
+            handlerStarted.TrySetResult(true);
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new ObjectDisposedException("canceled-state-handler-resource");
+            }
+        });
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            TestHomeAssistantServer.KitchenLightOnStateJson);
+        await WithTimeoutAsync(handlerStarted.Task);
+        for (var index = 0; index < 8; index++)
+        {
+            await server.PublishStateChangeAsync(
+                "light.kitchen",
+                index % 2 == 0 ? TestHomeAssistantServer.KitchenLightOnStateJson : TestHomeAssistantServer.KitchenLightOffStateJson,
+                index % 2 == 0 ? TestHomeAssistantServer.KitchenLightOffStateJson : TestHomeAssistantServer.KitchenLightOnStateJson);
+        }
+
+        server.RequiredAccessToken = "replacement-token";
+        await server.DropWebSocketsAsync();
+
+        await Assert.ThrowsAsync<HomeAssistantAuthenticationException>(
+            async () => await WithTimeoutAsync(subscription.Completion));
+        Assert.Contains(diagnostics.Events, value => value.Name == "state.server_subscription_failed");
+        Assert.DoesNotContain(diagnostics.Events, value => value.Name == "state.subscription_handler_failed");
+    }
+
     private static async Task WaitUntilAsync(Func<bool> predicate)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
@@ -140,6 +365,18 @@ public sealed class StateClientContractTests
         var winner = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
         Assert.Same(task, winner);
         await task;
+    }
+
+    private sealed class RecordingDiagnosticsSink : IHomeAssistantDiagnosticsSink
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<HomeAssistantDiagnosticEvent> _events = new();
+
+        public IReadOnlyCollection<HomeAssistantDiagnosticEvent> Events => _events.ToArray();
+
+        public void Write(HomeAssistantDiagnosticEvent diagnosticEvent)
+        {
+            _events.Enqueue(diagnosticEvent);
+        }
     }
 }
 #endif
