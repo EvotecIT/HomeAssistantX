@@ -32,7 +32,10 @@ public sealed class GetHomeAssistantLabelCommand : HomeAssistantCmdlet
             foreach (var value in labels)
             {
                 CancelToken.ThrowIfCancellationRequested();
-                if (string.Equals(value.LabelId, filter, StringComparison.Ordinal))
+                if (HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinal(
+                        value.LabelId,
+                        filter,
+                        CancelToken))
                 {
                     exactNativeMatch = value;
                     break;
@@ -46,10 +49,16 @@ public sealed class GetHomeAssistantLabelCommand : HomeAssistantCmdlet
                 return;
             }
 
-            var nativeMatches = Filter(labels, value => string.Equals(value.LabelId, filter, StringComparison.OrdinalIgnoreCase));
+            var nativeMatches = Filter(labels, value => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(
+                value.LabelId,
+                filter,
+                CancelToken));
             labels = nativeMatches.Length > 0
                 ? nativeMatches
-                : Filter(labels, value => string.Equals(value.Name, filter, StringComparison.OrdinalIgnoreCase));
+                : Filter(labels, value => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(
+                    value.Name,
+                    filter,
+                    CancelToken));
         }
 
         CancelToken.ThrowIfCancellationRequested();

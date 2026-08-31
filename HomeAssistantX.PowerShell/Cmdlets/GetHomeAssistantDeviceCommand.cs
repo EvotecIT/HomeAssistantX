@@ -32,9 +32,9 @@ public sealed class GetHomeAssistantDeviceCommand : HomeAssistantCmdlet
     {
         var snapshot = await Client.Inventory.GetSnapshotAsync(CancelToken).ConfigureAwait(false);
         IEnumerable<HomeAssistantDeviceInfo> devices = snapshot.Devices;
-        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Device, CancelToken)) { var device = Client.Inventory.ResolveDevice(snapshot, Device!, CancelToken); devices = devices.Where(x => { CancelToken.ThrowIfCancellationRequested(); return string.Equals(x.DeviceId, device.DeviceId, StringComparison.OrdinalIgnoreCase); }); }
-        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Area, CancelToken)) { var area = Client.Inventory.ResolveArea(snapshot, Area!, CancelToken); devices = devices.Where(x => { CancelToken.ThrowIfCancellationRequested(); return string.Equals(x.AreaId, area.AreaId, StringComparison.OrdinalIgnoreCase); }); }
-        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Floor, CancelToken)) { var floor = Client.Inventory.ResolveFloor(snapshot, Floor!, CancelToken); devices = devices.Where(x => { CancelToken.ThrowIfCancellationRequested(); return string.Equals(x.FloorId, floor.FloorId, StringComparison.OrdinalIgnoreCase); }); }
+        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Device, CancelToken)) { var device = Client.Inventory.ResolveDevice(snapshot, Device!, CancelToken); devices = devices.Where(x => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(x.DeviceId, device.DeviceId, CancelToken)); }
+        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Area, CancelToken)) { var area = Client.Inventory.ResolveArea(snapshot, Area!, CancelToken); devices = devices.Where(x => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(x.AreaId, area.AreaId, CancelToken)); }
+        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Floor, CancelToken)) { var floor = Client.Inventory.ResolveFloor(snapshot, Floor!, CancelToken); devices = devices.Where(x => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(x.FloorId, floor.FloorId, CancelToken)); }
         var result = devices.ToArray();
         CancelToken.ThrowIfCancellationRequested();
         WriteObject(result, true);

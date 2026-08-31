@@ -27,8 +27,8 @@ public sealed class GetHomeAssistantAreaCommand : HomeAssistantCmdlet
     {
         var snapshot = await Client.Inventory.GetSnapshotAsync(CancelToken).ConfigureAwait(false);
         IEnumerable<HomeAssistantAreaInfo> areas = snapshot.Areas;
-        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Floor, CancelToken)) { var floor = Client.Inventory.ResolveFloor(snapshot, Floor!, CancelToken); areas = areas.Where(x => { CancelToken.ThrowIfCancellationRequested(); return string.Equals(x.FloorId, floor.FloorId, StringComparison.OrdinalIgnoreCase); }); }
-        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Area, CancelToken)) { var area = Client.Inventory.ResolveArea(snapshot, Area!, CancelToken); areas = areas.Where(x => { CancelToken.ThrowIfCancellationRequested(); return string.Equals(x.AreaId, area.AreaId, StringComparison.OrdinalIgnoreCase); }); }
+        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Floor, CancelToken)) { var floor = Client.Inventory.ResolveFloor(snapshot, Floor!, CancelToken); areas = areas.Where(x => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(x.FloorId, floor.FloorId, CancelToken)); }
+        if (!HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(Area, CancelToken)) { var area = Client.Inventory.ResolveArea(snapshot, Area!, CancelToken); areas = areas.Where(x => HomeAssistantX.Protocol.CancellationAwareString.EqualsOrdinalIgnoreCase(x.AreaId, area.AreaId, CancelToken)); }
         var result = areas.ToArray();
         CancelToken.ThrowIfCancellationRequested();
         WriteObject(result, true);
