@@ -55,6 +55,26 @@ public sealed class CamerasDashboardsAutomationContractTests
             fileFlagOpenReparsePoint | fileFlagBackupSemantics,
             HomeAssistantAtomicFile.WindowsDestinationSecurityOpenFlags
                 & (fileFlagOpenReparsePoint | fileFlagBackupSemantics));
+        Assert.Equal(0u, HomeAssistantAtomicFile.WindowsDestinationSecurityShareMode & 0x00000004u);
+        Assert.Equal(22, HomeAssistantAtomicFile.WindowsAtomicRenameInformationClass);
+        Assert.Equal(0x00000003u, HomeAssistantAtomicFile.WindowsAtomicRenameFlags);
+        Assert.Equal(3, HomeAssistantAtomicFile.GetWindowsRenameInformationClass(overwrite: true, destinationPinned: false));
+        Assert.Equal(0u, HomeAssistantAtomicFile.GetWindowsRenameFlags(overwrite: true, destinationPinned: false));
+        Assert.Equal(22, HomeAssistantAtomicFile.GetWindowsRenameInformationClass(overwrite: true, destinationPinned: true));
+        Assert.Equal(0x00000003u, HomeAssistantAtomicFile.GetWindowsRenameFlags(overwrite: true, destinationPinned: true));
+    }
+
+    [Fact]
+    public async Task DashboardPropertyNameDecodePrioritizesCancellation()
+    {
+        var escapedRoute = string.Concat(Enumerable.Repeat("\\u0061", 100_000));
+        using var document = JsonDocument.Parse("{\"" + escapedRoute + "\":{}}");
+        var property = document.RootElement.EnumerateObject().First();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantJson.GetPropertyNameAsync(property, cancellation.Token));
     }
 
     [Theory]

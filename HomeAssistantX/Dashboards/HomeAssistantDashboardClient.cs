@@ -27,7 +27,8 @@ public sealed class HomeAssistantDashboardClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var route = RequireResponsePanelRoute(property.Name, "A frontend panel contained an invalid route.", cancellationToken);
+            var propertyName = await HomeAssistantJson.GetPropertyNameAsync(property, cancellationToken).ConfigureAwait(false);
+            var route = RequireResponsePanelRoute(propertyName, "A frontend panel contained an invalid route.", cancellationToken);
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
             var embeddedRoute = RequirePanelBooleans(property.Value, cancellationToken);

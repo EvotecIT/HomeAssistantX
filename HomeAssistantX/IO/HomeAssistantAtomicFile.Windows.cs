@@ -33,6 +33,10 @@ internal static partial class HomeAssistantAtomicFile
     private const int WindowsFileExists = 80;
     private const int WindowsAlreadyExists = 183;
     private const int WindowsFileRenameInfo = 3;
+    private const int WindowsFileDispositionInfo = 4;
+    private const int WindowsFileRenameInfoEx = 22;
+    private const uint WindowsFileRenameReplaceIfExists = 0x00000001;
+    private const uint WindowsFileRenamePosixSemantics = 0x00000002;
 
     private static FileStream CreateSecureWindowsTemporaryFileStream(string temporaryPath)
     {
@@ -89,65 +93,79 @@ internal static partial class HomeAssistantAtomicFile
         using var destinationSecurity = overwrite
             ? TryCaptureWindowsDestinationSecurity(destinationPath)
             : null;
-        cancellationToken.ThrowIfCancellationRequested();
-        if (destinationSecurity is not null)
-        {
-            if (!SetKernelObjectSecurity(
-                    temporaryStream.SafeFileHandle,
-                    PreservedWindowsSecurityInformation,
-                    destinationSecurity.Descriptor))
-            {
-                throw new IOException(
-                    "The Windows destination owner or access control list could not be preserved on the pinned replacement.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
-            }
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-
-        var fullDestinationPath = Path.GetFullPath(destinationPath);
-        var fileNameBytes = checked(fullDestinationPath.Length * sizeof(char));
-        var fileNameOffset = checked((int)Marshal.OffsetOf<WindowsFileRenameInformation>(
-            nameof(WindowsFileRenameInformation.FileName)));
-        var bufferSize = checked(fileNameOffset + fileNameBytes + sizeof(char));
-        var buffer = Marshal.AllocHGlobal(bufferSize);
+        var inheritedDestinationSecurity = false;
+        var committed = false;
         try
         {
-            var information = new WindowsFileRenameInformation
+            cancellationToken.ThrowIfCancellationRequested();
+            if (destinationSecurity is not null)
             {
-                ReplaceIfExists = overwrite,
-                RootDirectory = IntPtr.Zero,
-                FileNameLength = checked((uint)fileNameBytes),
-                FileName = '\0'
-            };
-            Marshal.StructureToPtr(information, buffer, fDeleteOld: false);
-            Marshal.Copy(fullDestinationPath.ToCharArray(), 0, IntPtr.Add(buffer, fileNameOffset), fullDestinationPath.Length);
-            Marshal.WriteInt16(buffer, fileNameOffset + fileNameBytes, 0);
-
-            if (SetFileInformationByHandle(
-                    temporaryStream.SafeFileHandle,
-                    WindowsFileRenameInfo,
-                    buffer,
-                    checked((uint)bufferSize)))
-            {
-                return;
+                if (!SetKernelObjectSecurity(
+                        temporaryStream.SafeFileHandle,
+                        PreservedWindowsSecurityInformation,
+                        destinationSecurity.Descriptor))
+                {
+                    throw new IOException(
+                        "The Windows destination owner or access control list could not be preserved on the pinned replacement.",
+                        new Win32Exception(Marshal.GetLastWin32Error()));
+                }
+                inheritedDestinationSecurity = true;
+                cancellationToken.ThrowIfCancellationRequested();
             }
 
-            var error = Marshal.GetLastWin32Error();
-            if (!overwrite
-                && (error == WindowsFileExists || error == WindowsAlreadyExists || File.Exists(destinationPath)))
+            var fullDestinationPath = Path.GetFullPath(destinationPath);
+            var fileNameBytes = checked(fullDestinationPath.Length * sizeof(char));
+            var fileNameOffset = checked((int)Marshal.OffsetOf<WindowsFileRenameInformation>(
+                nameof(WindowsFileRenameInformation.FileName)));
+            var bufferSize = checked(fileNameOffset + fileNameBytes + sizeof(char));
+            var buffer = Marshal.AllocHGlobal(bufferSize);
+            try
             {
+                var information = new WindowsFileRenameInformation
+                {
+                    Flags = GetWindowsRenameFlags(overwrite, destinationSecurity is not null),
+                    RootDirectory = IntPtr.Zero,
+                    FileNameLength = checked((uint)fileNameBytes),
+                    FileName = '\0'
+                };
+                Marshal.StructureToPtr(information, buffer, fDeleteOld: false);
+                Marshal.Copy(fullDestinationPath.ToCharArray(), 0, IntPtr.Add(buffer, fileNameOffset), fullDestinationPath.Length);
+                Marshal.WriteInt16(buffer, fileNameOffset + fileNameBytes, 0);
+
+                if (SetFileInformationByHandle(
+                        temporaryStream.SafeFileHandle,
+                        GetWindowsRenameInformationClass(overwrite, destinationSecurity is not null),
+                        buffer,
+                        checked((uint)bufferSize)))
+                {
+                    committed = true;
+                    return;
+                }
+
+                var error = Marshal.GetLastWin32Error();
+                if (!overwrite
+                    && (error == WindowsFileExists || error == WindowsAlreadyExists || File.Exists(destinationPath)))
+                {
+                    throw new IOException(
+                        "The destination file already exists. Use -Force to overwrite it.",
+                        new Win32Exception(error));
+                }
+
                 throw new IOException(
-                    "The destination file already exists. Use -Force to overwrite it.",
+                    "The pinned Windows temporary file could not be committed atomically.",
                     new Win32Exception(error));
             }
-
-            throw new IOException(
-                "The pinned Windows temporary file could not be committed atomically.",
-                new Win32Exception(error));
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
         }
         finally
         {
-            Marshal.FreeHGlobal(buffer);
+            if (inheritedDestinationSecurity && !committed)
+            {
+                RestrictOrDeleteFailedWindowsReplacement(temporaryStream);
+            }
         }
     }
 
@@ -156,7 +174,7 @@ internal static partial class HomeAssistantAtomicFile
         var handle = CreateFile(
             destinationPath,
             WindowsReadControl,
-            WindowsFileShareRead | WindowsFileShareWrite | WindowsFileShareDelete,
+            WindowsFileShareRead,
             IntPtr.Zero,
             WindowsOpenExisting,
             WindowsDestinationSecurityOpenFlags,
@@ -171,7 +189,7 @@ internal static partial class HomeAssistantAtomicFile
                 new Win32Exception(error));
         }
 
-        using (handle)
+        try
         {
             if (GetKernelObjectSecurity(
                     handle,
@@ -194,7 +212,7 @@ internal static partial class HomeAssistantAtomicFile
                     required,
                     out _))
             {
-                return new WindowsSecurityDescriptor(descriptor);
+                return new WindowsSecurityDescriptor(descriptor, handle);
             }
 
             var error = Marshal.GetLastWin32Error();
@@ -203,16 +221,34 @@ internal static partial class HomeAssistantAtomicFile
                 "The existing Windows destination security descriptor could not be captured.",
                 new Win32Exception(error));
         }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
     }
 
     internal static uint WindowsDestinationSecurityOpenFlags =>
         WindowsFileAttributeNormal | WindowsFileFlagBackupSemantics | WindowsFileFlagOpenReparsePoint;
 
+    internal static uint WindowsDestinationSecurityShareMode =>
+        WindowsFileShareRead;
+
+    internal static int WindowsAtomicRenameInformationClass => WindowsFileRenameInfoEx;
+
+    internal static uint WindowsAtomicRenameFlags =>
+        WindowsFileRenameReplaceIfExists | WindowsFileRenamePosixSemantics;
+
+    internal static int GetWindowsRenameInformationClass(bool overwrite, bool destinationPinned)
+        => overwrite && destinationPinned ? WindowsFileRenameInfoEx : WindowsFileRenameInfo;
+
+    internal static uint GetWindowsRenameFlags(bool overwrite, bool destinationPinned)
+        => overwrite && destinationPinned ? WindowsAtomicRenameFlags : 0;
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WindowsFileRenameInformation
     {
-        [MarshalAs(UnmanagedType.Bool)]
-        internal bool ReplaceIfExists;
+        internal uint Flags;
         internal IntPtr RootDirectory;
         internal uint FileNameLength;
         internal char FileName;
@@ -220,16 +256,68 @@ internal static partial class HomeAssistantAtomicFile
 
     private sealed class WindowsSecurityDescriptor : IDisposable
     {
-        internal WindowsSecurityDescriptor(IntPtr descriptor) => Descriptor = descriptor;
+        private SafeFileHandle? _destinationHandle;
+
+        internal WindowsSecurityDescriptor(IntPtr descriptor, SafeFileHandle destinationHandle)
+        {
+            Descriptor = descriptor;
+            _destinationHandle = destinationHandle;
+        }
 
         internal IntPtr Descriptor { get; private set; }
 
         public void Dispose()
         {
-            if (Descriptor == IntPtr.Zero) return;
-            Marshal.FreeHGlobal(Descriptor);
-            Descriptor = IntPtr.Zero;
+            if (Descriptor != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(Descriptor);
+                Descriptor = IntPtr.Zero;
+            }
+            _destinationHandle?.Dispose();
+            _destinationHandle = null;
         }
+    }
+
+    private static void RestrictOrDeleteFailedWindowsReplacement(FileStream stream)
+    {
+        try
+        {
+            ApplyRestrictiveWindowsDacl(stream);
+            return;
+        }
+        catch (Exception restrictionFailure)
+        {
+            var disposition = new WindowsFileDispositionInformation { DeleteFile = true };
+            var size = Marshal.SizeOf<WindowsFileDispositionInformation>();
+            var buffer = Marshal.AllocHGlobal(size);
+            try
+            {
+                Marshal.StructureToPtr(disposition, buffer, fDeleteOld: false);
+                if (SetFileInformationByHandle(
+                        stream.SafeFileHandle,
+                        WindowsFileDispositionInfo,
+                        buffer,
+                        checked((uint)size)))
+                {
+                    return;
+                }
+
+                throw new IOException(
+                    "The failed Windows replacement could neither be restricted nor deleted by its pinned handle.",
+                    new AggregateException(restrictionFailure, new Win32Exception(Marshal.GetLastWin32Error())));
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowsFileDispositionInformation
+    {
+        [MarshalAs(UnmanagedType.U1)]
+        internal bool DeleteFile;
     }
 
     private static void ApplyRestrictiveWindowsDacl(FileStream stream)
