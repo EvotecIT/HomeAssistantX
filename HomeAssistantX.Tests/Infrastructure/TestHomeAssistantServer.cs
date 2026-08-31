@@ -153,6 +153,22 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? ConfigEntriesErrorCode { get; set; }
 
+    public string? ConfigEntriesResponseJson { get; set; }
+
+    public string? LabelRegistryErrorCode { get; set; }
+
+    public string LabelRegistryResponseJson { get; set; } =
+        "[{\"label_id\":\"security\",\"name\":\"Safety\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300},{\"label_id\":\"security-name\",\"name\":\"Security\",\"color\":null,\"description\":\"Identifier collision fixture\",\"icon\":null,\"created_at\":1787731200,\"modified_at\":1787731300}]";
+
+    public string LabelMutationResponseJson { get; set; } =
+        "{\"label_id\":\"security\",\"name\":\"Security\",\"color\":null,\"description\":\"Safety devices\",\"icon\":\"mdi:shield\"}";
+
+    public string CategoryRegistryResponseJson { get; set; } =
+        "[{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"icon\":\"mdi:sofa\",\"created_at\":1787731200,\"modified_at\":1787731300}]";
+
+    public string CategoryMutationResponseJson { get; set; } =
+        "{\"category_id\":\"comfort\",\"name\":\"Comfort\",\"icon\":null}";
+
     public bool OmitSystemHealthFinish { get; set; }
     public string SystemHealthInitialEventJson { get; set; } =
         "{\"type\":\"initial\",\"data\":{\"homeassistant\":{\"info\":{\"version\":\"2026.8.3\",\"installation_type\":\"Home Assistant OS\",\"hassio\":true}}}}";
@@ -189,6 +205,24 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public bool PublishNullStateEventData { get; set; }
 
     public string? SignedPathResponseJson { get; set; }
+
+    public string PersistentNotificationSubscriptionEventJson { get; set; } =
+        "{\"type\":\"Current\",\"notifications\":{\"notice-1\":{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\"},\"Alert\":{\"notification_id\":\"Alert\",\"message\":\"Upper\"},\"alert\":{\"notification_id\":\"alert\",\"message\":\"Lower\"}}}";
+
+    public string PersistentNotificationResponseJson { get; set; } =
+        "[{\"notification_id\":\"notice-1\",\"message\":\"Door open\",\"title\":\"Security\",\"created_at\":\"2026-08-26T08:00:00Z\",\"source\":\"fixture\"}]";
+
+    public string CalendarSubscriptionEventJson { get; set; } =
+        "[{\"summary\":\"Dinner\",\"start\":\"2026-08-26T18:00:00+02:00\",\"end\":\"2026-08-26T20:00:00+02:00\",\"uid\":\"event-1\",\"rrule\":\"FREQ=WEEKLY\"}]";
+
+    public string CalendarListResponseJson { get; set; } =
+        "[{\"entity_id\":\"calendar.home\",\"name\":\"Home\"}]";
+
+    public string CalendarEventsResponseJson { get; set; } =
+        "[{\"summary\":\"Dinner\",\"start\":{\"dateTime\":\"2026-08-25T18:00:00+02:00\",\"future\":1,\"Future\":2},\"end\":{\"dateTime\":\"2026-08-25T20:00:00+02:00\"},\"location\":\"Home\"}]";
+
+    public string EntityRegistryResponseJson { get; set; } =
+        "[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"list_only\":{\"source\":\"partial\"}},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"},{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\"}]";
 
     public Task WaitForSystemHealthEventsAsync()
     {
@@ -708,6 +742,24 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ["response"] = new Dictionary<string, object?> { ["accepted"] = true }
                 }, false, _source.Token).ConfigureAwait(false);
                 return;
+            case "persistent_notification/get":
+                await session.SendResultAsync(id, ParseJson(PersistentNotificationResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "persistent_notification/subscribe":
+                session.SubscriptionIds.Add(id);
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson(PersistentNotificationSubscriptionEventJson), _source.Token).ConfigureAwait(false);
+                return;
+            case "calendar/event/create":
+            case "calendar/event/update":
+            case "calendar/event/delete":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
+            case "calendar/event/subscribe":
+                session.SubscriptionIds.Add(id);
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                await session.SendSubscriptionEventAsync(id, ParseJson(CalendarSubscriptionEventJson), _source.Token).ConfigureAwait(false);
+                return;
             case "test/error":
                 await session.SendErrorAsync(id, "service_validation_error", "Option is not supported.", "unsupported_option", _source.Token)
                     .ConfigureAwait(false);
@@ -934,7 +986,32 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     _source.Token).ConfigureAwait(false);
                 return;
             case "config/area_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson("[{\"area_id\":\"kitchen\",\"name\":\"Kitchen\",\"aliases\":[\"Cooking\"],\"floor_id\":\"ground\",\"labels\":[\"security\"]}]"), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/label_registry/list":
+                if (LabelRegistryErrorCode is not null)
+                {
+                    await session.SendErrorAsync(id, LabelRegistryErrorCode, "Label registry is unavailable.", LabelRegistryErrorCode, _source.Token).ConfigureAwait(false);
+                    return;
+                }
+                await session.SendResultAsync(id, ParseJson(LabelRegistryResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/label_registry/create":
+            case "config/label_registry/update":
+                await session.SendResultAsync(id, ParseJson(LabelMutationResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/label_registry/delete":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/category_registry/list":
+                await session.SendResultAsync(id, ParseJson(CategoryRegistryResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/category_registry/create":
+            case "config/category_registry/update":
+                await session.SendResultAsync(id, ParseJson(CategoryMutationResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "config/category_registry/delete":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/floor_registry/list":
                 await session.SendResultAsync(id, ParseJson("[{\"floor_id\":\"ground\",\"name\":\"Ground\",\"aliases\":[\"Downstairs\"],\"level\":0}]"), false, _source.Token).ConfigureAwait(false);
@@ -943,7 +1020,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"id\":\"device-1\",\"area_id\":\"kitchen\",\"name\":\"Kitchen Sensor\",\"manufacturer\":\"Evotec\",\"config_entries\":[\"entry-1\"]}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/entity_registry/list":
-                await session.SendResultAsync(id, ParseJson("[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"list_only\":{\"source\":\"partial\"}},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"},{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\"}]"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(EntityRegistryResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config/entity_registry/get_entries":
                 await session.SendResultAsync(id, ParseJson(ExtendedEntityRegistryResponseJson
@@ -957,7 +1034,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     return;
                 }
 
-                await session.SendResultAsync(id, ParseJson("{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(ConfigEntriesResponseJson
+                    ?? "{\"entries\":[{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true,\"supports_reconfigure\":true,\"disabled_by\":null}]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "config_entries/get_single":
                 await session.SendResultAsync(id, ParseJson("{\"config_entry\":{\"entry_id\":\"entry-1\",\"domain\":\"test\",\"title\":\"Test integration\",\"source\":\"user\",\"state\":\"loaded\",\"supports_unload\":true}}"), false, _source.Token).ConfigureAwait(false);

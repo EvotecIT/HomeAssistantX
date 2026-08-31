@@ -63,6 +63,19 @@ public sealed class InventoryAndControlsContractTests
     }
 
     [Fact]
+    public async Task ExtendedEntityRegistryRejectsMismatchedResponseIdentity()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExtendedEntityRegistryResponseJson =
+                "{\"sensor.kitchen_temperature\":{\"entity_id\":\"sensor.ghost\"}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Inventory.GetSnapshotAsync());
+    }
+
+    [Fact]
     public async Task InventoryRejectsNegativeCapabilityMasks()
     {
         using var server = new TestHomeAssistantServer();
@@ -626,6 +639,20 @@ public sealed class InventoryAndControlsContractTests
         }
     }
 
+    [Fact]
+    public void InventoryResolutionObservesCancellationDuringIdentityScans()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var entities = new CancellingEntityList(cancellation);
+        var snapshot = new HomeAssistantInventorySnapshot { Entities = entities };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            client.Inventory.ResolveEntity(snapshot, "missing", cancellation.Token));
+        Assert.InRange(entities.ReadCount, 1, 2);
+    }
+
     private sealed class SingleEnumerationList : IReadOnlyList<string>
     {
         private readonly string[] _values;
@@ -674,6 +701,37 @@ public sealed class InventoryAndControlsContractTests
             ReadCount++;
             _cancellation.Cancel();
             yield return _value;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancellingEntityList : IReadOnlyList<HomeAssistantEntityInfo>
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancellingEntityList(CancellationTokenSource cancellation) => _cancellation = cancellation;
+
+        internal int ReadCount { get; private set; }
+
+        public int Count => 1000;
+
+        public HomeAssistantEntityInfo this[int index] => new()
+        {
+            EntityId = "light.test_" + index,
+            Name = "Test " + index,
+            Domain = "light"
+        };
+
+        public IEnumerator<HomeAssistantEntityInfo> GetEnumerator()
+        {
+            for (var index = 0; index < Count; index++)
+            {
+                ReadCount++;
+                if (ReadCount == 1) _cancellation.Cancel();
+                if (ReadCount > 2) throw new InvalidOperationException("Resolution continued after cancellation.");
+                yield return this[index];
+            }
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();

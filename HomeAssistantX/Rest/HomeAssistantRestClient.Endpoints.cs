@@ -2,7 +2,10 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Calendars;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Rest;
 
@@ -97,8 +100,65 @@ public sealed partial class HomeAssistantRestClient
     /// <summary>Gets all calendar entities.</summary>
     public async Task<IReadOnlyList<HomeAssistantCalendar>> GetCalendarsAsync(CancellationToken cancellationToken = default)
     {
-        return await SendHomeAssistantAsync<HomeAssistantCalendar[]>(HttpMethod.Get, "api/calendars", null, cancellationToken)
+        var rawCalendars = await SendHomeAssistantAsync<JsonElement>(HttpMethod.Get, "api/calendars", null, cancellationToken)
             .ConfigureAwait(false);
+        if (rawCalendars.ValueKind != JsonValueKind.Array)
+        {
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant calendar list contained duplicate properties or was not an array.");
+        }
+        var hasDuplicateCalendarProperties = HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                foreach (var rawCalendar in rawCalendars.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (rawCalendar.ValueKind == JsonValueKind.Object
+                        && HomeAssistantJson.HasDuplicateObjectPropertiesInline(rawCalendar, cancellationToken)) return true;
+                }
+
+                return false;
+            },
+            cancellationToken);
+        if (hasDuplicateCalendarProperties)
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant calendar list contained duplicate properties or was not an array.");
+        foreach (var rawCalendar in rawCalendars.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (rawCalendar.ValueKind != JsonValueKind.Object)
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant calendar list contained duplicate properties or was not an array.");
+            }
+        }
+        var calendars = HomeAssistantJson.DeserializeResponse<HomeAssistantCalendar[]>(
+            rawCalendars,
+            "The Home Assistant calendar list could not be decoded.",
+            cancellationToken: cancellationToken);
+        HomeAssistantJson.RequireNoNullCollectionEntries(
+            calendars,
+            "The Home Assistant calendar list contained a null item.",
+            cancellationToken: cancellationToken);
+        var entityIds = new List<string>();
+        foreach (var calendar in calendars)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!HomeAssistantEntityId.TryNormalizeForDomain(calendar.EntityId, "calendar", cancellationToken, out var normalized)
+                || !CancellationAwareString.EqualsOrdinal(calendar.EntityId, normalized, cancellationToken)
+                || entityIds.Any(value => CancellationAwareString.EqualsOrdinal(value, normalized, cancellationToken)))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an invalid or duplicate entity identifier.");
+            }
+            if (CancellationAwareString.IsNullOrWhiteSpace(calendar.Name, cancellationToken))
+            {
+                throw new HomeAssistantProtocolException("The Home Assistant calendar list contained an incomplete display name.");
+            }
+            entityIds.Add(normalized);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return calendars;
     }
 
     /// <summary>Gets calendar events in an exclusive time range.</summary>
@@ -109,7 +169,10 @@ public sealed partial class HomeAssistantRestClient
         CancellationToken cancellationToken = default)
     {
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "calendar", cancellationToken, out var normalizedEntityId))
+        {
             throw new ArgumentException("A calendar entity identifier is required.", nameof(entityId));
+        }
+
         if (end <= start)
         {
             throw new ArgumentOutOfRangeException(nameof(end), "The calendar end must be after its start.");
@@ -122,8 +185,10 @@ public sealed partial class HomeAssistantRestClient
                 new KeyValuePair<string, string?>("start", FormatTimestamp(start)),
                 new KeyValuePair<string, string?>("end", FormatTimestamp(end))
             });
-        return await SendHomeAssistantAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
+        var events = await SendHomeAssistantAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
             .ConfigureAwait(false);
+        HomeAssistantCalendarClient.ValidateEvents(events, cancellationToken);
+        return events;
     }
 
     /// <summary>Creates or updates a state representation without controlling the underlying device.</summary>
@@ -162,10 +227,16 @@ public sealed partial class HomeAssistantRestClient
         IReadOnlyDictionary<string, object?>? eventData = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (CancellationAwareString.IsNullOrWhiteSpace(eventType, cancellationToken))
+            throw new ArgumentException("An event type is required.", nameof(eventType));
+        var normalizedEventType = CancellationAwareString.Trim(eventType, cancellationToken);
+        var frozenEventData = HomeAssistantJson.FreezeObject(
+            eventData ?? new Dictionary<string, object?>(), nameof(eventData), "EventData", cancellationToken);
         return SendHomeAssistantAsync<JsonElement>(
             HttpMethod.Post,
-            "api/events/" + EscapePath(eventType, cancellationToken),
-            eventData ?? new Dictionary<string, object?>(),
+            "api/events/" + EscapePath(normalizedEventType, cancellationToken),
+            frozenEventData,
             cancellationToken);
     }
 
@@ -183,7 +254,7 @@ public sealed partial class HomeAssistantRestClient
         var payload = new Dictionary<string, object?> { ["template"] = template };
         if (variables is not null)
         {
-            payload["variables"] = variables;
+            payload["variables"] = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables", cancellationToken);
         }
 
         return SendTextAsync(HttpMethod.Post, "api/template", payload, cancellationToken);

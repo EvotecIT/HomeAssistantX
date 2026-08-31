@@ -2,10 +2,12 @@
 using HomeAssistantX.Authentication;
 using HomeAssistantX.Configuration;
 using HomeAssistantX.Controls;
+using HomeAssistantX.Calendars;
 using HomeAssistantX.Events;
 using HomeAssistantX.Operations;
 using HomeAssistantX.Inventory;
 using HomeAssistantX.Registries;
+using HomeAssistantX.Notifications;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
@@ -29,6 +31,8 @@ public sealed class HomeAssistantClient : IDisposable
         Services = new HomeAssistantServiceClient(Rest, WebSocket, options);
         Events = new HomeAssistantEventClient(WebSocket);
         Registries = new HomeAssistantRegistryClient(WebSocket);
+        Calendars = new HomeAssistantCalendarClient(Rest, WebSocket);
+        Notifications = new HomeAssistantNotificationClient(Services, WebSocket);
         Inventory = new HomeAssistantInventoryClient(Registries, States, Services);
         Controls = new HomeAssistantControlsClient(Services, States, options);
         System = new HomeAssistantSystemClient(WebSocket);
@@ -49,6 +53,12 @@ public sealed class HomeAssistantClient : IDisposable
     public HomeAssistantEventClient Events { get; }
 
     public HomeAssistantRegistryClient Registries { get; }
+
+    /// <summary>Provides calendar discovery, event management, and live event-list subscriptions.</summary>
+    public HomeAssistantCalendarClient Calendars { get; }
+
+    /// <summary>Provides persistent and targeted notifications, including live persistent-notification updates.</summary>
+    public HomeAssistantNotificationClient Notifications { get; }
 
     /// <summary>Provides a joined, queryable view of the house and its available actions.</summary>
     public HomeAssistantInventoryClient Inventory { get; }

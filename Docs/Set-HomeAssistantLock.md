@@ -34,6 +34,11 @@ Set-HomeAssistantLock [-Device] <string[]> -Action <HomeAssistantLockAction> [-C
 Set-HomeAssistantLock [-Floor] <string[]> -Action <HomeAssistantLockAction> [-Code <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### Label
+```powershell
+Set-HomeAssistantLock [-Label] <string[]> -Action <HomeAssistantLockAction> [-Code <string>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
 Locks, unlocks, or opens a lock with high-impact confirmation.
 
@@ -52,7 +57,7 @@ Locks, unlocks, or opens the selected locks.
 
 ```yaml
 Type: HomeAssistantLockAction
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values: Lock, Unlock, Open
 
@@ -84,7 +89,7 @@ Optional device code required by some locks.
 
 ```yaml
 Type: String
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -100,7 +105,7 @@ Optional explicit session returned by Connect-HomeAssistant. It also accepts pip
 
 ```yaml
 Type: HomeAssistantConnection
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -172,6 +177,22 @@ Required: True
 Position: named
 Default value: None
 Accept pipeline input: True (ByValue)
+Accept wildcard characters: False
+```
+
+### -Label
+One or more label names or native label IDs.
+
+```yaml
+Type: String[]
+Parameter Sets: Label
+Aliases: LabelId
+Possible values:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 

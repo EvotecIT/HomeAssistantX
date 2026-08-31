@@ -34,6 +34,11 @@ Set-HomeAssistantClimate [-Device] <string[]> [-Temperature <Double>] [-TargetTe
 Set-HomeAssistantClimate [-Floor] <string[]> [-Temperature <Double>] [-TargetTemperatureLow <Double>] [-TargetTemperatureHigh <Double>] [-HvacMode <string>] [-FanMode <string>] [-PresetMode <string>] [-Humidity <Double>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### Label
+```powershell
+Set-HomeAssistantClimate [-Label] <string[]> [-Temperature <Double>] [-TargetTemperatureLow <Double>] [-TargetTemperatureHigh <Double>] [-HvacMode <string>] [-FanMode <string>] [-PresetMode <string>] [-Humidity <Double>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
 Sets common climate values with typed parameters instead of raw action data.
 
@@ -68,7 +73,7 @@ Optional explicit session returned by Connect-HomeAssistant. It also accepts pip
 
 ```yaml
 Type: HomeAssistantConnection
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -116,7 +121,7 @@ Fan mode supported by the target.
 
 ```yaml
 Type: String
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -148,7 +153,7 @@ Target humidity from 0 through 100 percent.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -164,7 +169,7 @@ HVAC mode supported by the target, such as heat, cool, or auto.
 
 ```yaml
 Type: String
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -191,12 +196,28 @@ Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
+### -Label
+One or more label names or native label IDs.
+
+```yaml
+Type: String[]
+Parameter Sets: Label
+Aliases: LabelId
+Possible values:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -PresetMode
 Preset mode supported by the target.
 
 ```yaml
 Type: String
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -212,7 +233,7 @@ Upper target temperature for range-based HVAC modes.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -228,7 +249,7 @@ Lower target temperature for range-based HVAC modes.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -244,7 +265,7 @@ Target temperature in the entity's configured unit.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 

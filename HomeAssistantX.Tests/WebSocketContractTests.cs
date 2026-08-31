@@ -340,7 +340,6 @@ public sealed class WebSocketContractTests
 
     [Theory]
     [InlineData("test/coalesced_missing_event")]
-    [InlineData("test/coalesced_null_event")]
     [InlineData("test/missing_event")]
     public async Task EventMessagesRequirePayloadBeforeRouting(string command)
     {
@@ -352,6 +351,17 @@ public sealed class WebSocketContractTests
 
         var protocolFailure = Assert.IsType<HomeAssistantProtocolException>(exception.InnerException);
         Assert.Contains("event payload", protocolFailure.Message);
+    }
+
+    [Fact]
+    public async Task EventMessagesPermitAnExplicitNullPayload()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        var result = await client.WebSocket.RequestAsync("test/coalesced_null_event");
+
+        Assert.Equal(JsonValueKind.Null, result.ValueKind);
     }
 
     [Fact]
@@ -921,6 +931,25 @@ public sealed class WebSocketContractTests
         target.EntityIds = new[] { " " };
         await Assert.ThrowsAsync<ArgumentException>(() => client.System.ExtractFromTargetAsync(target));
         await Assert.ThrowsAsync<ArgumentException>(() => client.System.GetTriggersForTargetAsync(target));
+    }
+
+    [Fact]
+    public async Task EventSubscriptionAndDispatchUseTheSameNormalizedType()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        using var subscription = await client.Events.SubscribeAsync(
+            " state_changed ",
+            (_, _) => Task.CompletedTask);
+        await client.Events.FireAsync(" state_changed ");
+
+        using var subscribe = JsonDocument.Parse(
+            Assert.IsType<string>(server.GetLastWebSocketCommand("subscribe_events")));
+        using var fire = JsonDocument.Parse(
+            Assert.IsType<string>(server.GetLastWebSocketCommand("fire_event")));
+        Assert.Equal("state_changed", subscribe.RootElement.GetProperty("event_type").GetString());
+        Assert.Equal("state_changed", fire.RootElement.GetProperty("event_type").GetString());
     }
 
     [Fact]

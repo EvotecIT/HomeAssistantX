@@ -24,6 +24,7 @@ public sealed class GetHomeAssistantUpdateCommand : HomeAssistantCmdlet
 
     /// <summary>Returns Supervisor component and app updates.</summary>
     [Parameter(Mandatory = true, ParameterSetName = SupervisorParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Supervisor { get; set; }
 
     /// <summary>Limits entity results to updates that are currently available.</summary>

@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections;
+using System.Buffers;
 using System.Reflection;
 using System.Globalization;
 using HomeAssistantX.Exceptions;
@@ -65,6 +66,89 @@ internal static class HomeAssistantJson
             cancellationToken.ThrowIfCancellationRequested();
         }
         return document;
+    }
+
+    /// <summary>Decodes a JSON string without making cancellation wait for synchronous unescaping.</summary>
+    internal static async Task<string?> GetStringAsync(
+        JsonElement value,
+        CancellationToken cancellationToken,
+        Func<JsonElement, string?>? decoder = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.String)
+            throw new InvalidOperationException("A JSON string value is required.");
+
+        decoder ??= static element => element.GetString();
+        if (!cancellationToken.CanBeCanceled)
+            return decoder(value);
+
+        var decodeTask = Task.Factory.StartNew(
+            () => decoder(value),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        if (await Task.WhenAny(decodeTask, canceled.Task).ConfigureAwait(false) != decodeTask)
+        {
+            _ = decodeTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var result = await decodeTask.ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
+    }
+
+    /// <summary>Decodes a JSON string inside an already cancellation-isolated validation operation.</summary>
+    internal static string? GetString(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.String)
+            throw new InvalidOperationException("A JSON string value is required.");
+
+        var result = value.GetString();
+        ThrowIfStringTraversalCanceled(result, cancellationToken);
+        return result;
+    }
+
+    /// <summary>Runs one synchronous response-validation operation on a dedicated worker while keeping caller cancellation prompt.</summary>
+    internal static T RunCancellationIsolated<T>(
+        Func<T> operation,
+        CancellationToken cancellationToken)
+    {
+        if (operation is null) throw new ArgumentNullException(nameof(operation));
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!cancellationToken.CanBeCanceled)
+            return operation();
+
+        var operationTask = Task.Factory.StartNew(
+            operation,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        var completed = Task.WhenAny(operationTask, canceled.Task).ConfigureAwait(false).GetAwaiter().GetResult();
+        if (!ReferenceEquals(completed, operationTask))
+        {
+            _ = operationTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var result = operationTask.ConfigureAwait(false).GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     /// <summary>Snapshots a response DOM with cancellation checks throughout traversal.</summary>
@@ -199,6 +283,79 @@ internal static class HomeAssistantJson
         return stream.ToArray();
     }
 
+    internal static bool HasDuplicateProperties(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
+        => RunCancellationIsolated(
+            () => HasDuplicatePropertiesCore(value, cancellationToken),
+            cancellationToken);
+
+    /// <summary>Checks a value inside an already isolated response traversal.</summary>
+    internal static bool HasDuplicatePropertiesInline(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
+        => HasDuplicatePropertiesCore(value, cancellationToken);
+
+    private static bool HasDuplicatePropertiesCore(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (HasDuplicatePropertiesCore(item, cancellationToken)) return true;
+            }
+            return false;
+        }
+
+        if (value.ValueKind != JsonValueKind.Object) return false;
+        var names = new HashSet<string>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
+            if (!names.Add(property.Name) || HasDuplicatePropertiesCore(property.Value, cancellationToken)) return true;
+        }
+        return false;
+    }
+
+    internal static bool HasDuplicateObjectProperties(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
+        => RunCancellationIsolated(
+            () => HasDuplicateObjectPropertiesCore(value, cancellationToken),
+            cancellationToken);
+
+    /// <summary>Checks one object inside an already isolated response traversal.</summary>
+    internal static bool HasDuplicateObjectPropertiesInline(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
+        => HasDuplicateObjectPropertiesCore(value, cancellationToken);
+
+    private static bool HasDuplicateObjectPropertiesCore(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (value.ValueKind != JsonValueKind.Object) return false;
+
+        var names = new HashSet<string>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
+            if (!names.Add(property.Name)) return true;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
     private static JsonDocument SerializeSnapshot(object? value, CancellationToken cancellationToken)
     {
         using var stream = new MemoryStream();
@@ -216,11 +373,22 @@ internal static class HomeAssistantJson
             .GetResult();
     }
 
-    private static JsonSerializerOptions CreateCancellationAwareOptions(CancellationToken cancellationToken)
+    internal static JsonSerializerOptions CreateCancellationAwareOptions(CancellationToken cancellationToken)
     {
         var options = new JsonSerializerOptions(SerializerOptions);
         options.Converters.Insert(0, new CancellationAwareJsonDocumentConverter(cancellationToken));
         options.Converters.Insert(0, new CancellationAwareJsonElementConverter(cancellationToken));
+        options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarBoundaryJsonConverter(cancellationToken));
+        return options;
+    }
+
+    internal static JsonSerializerOptions CreateCancellationAwareResponseOptions(CancellationToken cancellationToken)
+    {
+        var options = new JsonSerializerOptions(SerializerOptions);
+        options.Converters.Insert(0, new CancellationAwareJsonElementConverter(cancellationToken));
+        options.Converters.Insert(0, new CancellationAwareStringConverter(cancellationToken));
+        options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarEventJsonConverter(cancellationToken));
+        options.Converters.Insert(0, new HomeAssistantX.Rest.HomeAssistantCalendarBoundaryJsonConverter(cancellationToken));
         return options;
     }
 
@@ -301,10 +469,39 @@ internal static class HomeAssistantJson
         }
 
         public override JsonElement Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            => throw new NotSupportedException();
+            => HomeAssistantX.Rest.HomeAssistantCancellationJsonValueReader.Read(
+                ref reader,
+                _cancellationToken);
 
         public override void Write(Utf8JsonWriter writer, JsonElement value, JsonSerializerOptions options)
             => WriteJsonElement(writer, value, _cancellationToken);
+    }
+
+    private sealed class CancellationAwareStringConverter : JsonConverter<string>
+    {
+        private readonly CancellationToken _cancellationToken;
+
+        internal CancellationAwareStringConverter(CancellationToken cancellationToken)
+        {
+            _cancellationToken = cancellationToken;
+        }
+
+        public override string? Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+            => HomeAssistantX.Rest.HomeAssistantCancellationJsonValueReader.ReadString(
+                ref reader,
+                _cancellationToken);
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            string value,
+            JsonSerializerOptions options)
+        {
+            ThrowIfStringTraversalCanceled(value, _cancellationToken);
+            writer.WriteStringValue(value);
+        }
     }
 
     private sealed class CancellationAwareJsonDocumentConverter : JsonConverter<JsonDocument>
@@ -375,9 +572,10 @@ internal static class HomeAssistantJson
             T result;
             using (HomeAssistantAttributeDictionaryConverter.UseCancellationToken(cancellationToken))
             {
+                var options = CreateCancellationAwareResponseOptions(cancellationToken);
                 result = await JsonSerializer.DeserializeAsync<T>(
                     stream,
-                    SerializerOptions,
+                    options,
                     cancellationToken).ConfigureAwait(false)
                     ?? throw new HomeAssistantProtocolException(failureMessage);
             }
@@ -393,6 +591,20 @@ internal static class HomeAssistantJson
             throw new HomeAssistantProtocolException(failureMessage, ex);
         }
     }
+
+    /// <summary>Decodes a complete DTO graph on one isolated worker when framework-owned member projection cannot poll cancellation.</summary>
+    internal static T DeserializeResponseIsolated<T>(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken,
+        bool allowNullCollectionEntries = false)
+        => RunCancellationIsolated(
+            () => DeserializeResponse<T>(
+                value,
+                failureMessage,
+                allowNullCollectionEntries,
+                CancellationToken.None),
+            cancellationToken);
 
     /// <summary>Rejects null entries in a built-in response collection, including nested collections.</summary>
     public static T RequireNoNullCollectionEntries<T>(

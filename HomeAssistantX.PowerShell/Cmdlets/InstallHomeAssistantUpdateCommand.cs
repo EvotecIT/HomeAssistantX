@@ -1,5 +1,7 @@
 using System.Management.Automation;
 using HomeAssistantX.Models;
+using System.Text.Json;
+using HomeAssistantX.Services;
 using HomeAssistantX.Supervisor;
 
 namespace HomeAssistantX.PowerShell;
@@ -11,6 +13,8 @@ namespace HomeAssistantX.PowerShell;
 ///   <para>Shows the high-impact operation without installing the update.</para>
 /// </example>
 [Cmdlet(VerbsLifecycle.Install, "HomeAssistantUpdate", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.High, DefaultParameterSetName = EntityParameterSet)]
+[OutputType(typeof(HomeAssistantServiceCallResult))]
+[OutputType(typeof(JsonElement))]
 public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
 {
     private const string EntityParameterSet = "Entity";
@@ -26,14 +30,17 @@ public sealed class InstallHomeAssistantUpdateCommand : HomeAssistantCmdlet
 
     /// <summary>Installs a Home Assistant Core update through Supervisor.</summary>
     [Parameter(Mandatory = true, ParameterSetName = CoreParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Core { get; set; }
 
     /// <summary>Installs a Supervisor update.</summary>
     [Parameter(Mandatory = true, ParameterSetName = SupervisorParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Supervisor { get; set; }
 
     /// <summary>Installs a Home Assistant OS update.</summary>
     [Parameter(Mandatory = true, ParameterSetName = OperatingSystemParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter OperatingSystem { get; set; }
 
     /// <summary>Supervisor app/add-on slug to update.</summary>

@@ -34,6 +34,11 @@ Invoke-HomeAssistantRemote [-Device] <string[]> -Action <HomeAssistantRemoteActi
 Invoke-HomeAssistantRemote [-Floor] <string[]> -Action <HomeAssistantRemoteAction> [-Activity <string>] [-Command <string[]>] [-RemoteDevice <string>] [-RepeatCount <Int32>] [-DelaySeconds <Double>] [-HoldSeconds <Double>] [-CommandType <HomeAssistantRemoteCommandType>] [-Alternative <Boolean>] [-TimeoutSeconds <Double>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### Label
+```powershell
+Invoke-HomeAssistantRemote [-Label] <string[]> -Action <HomeAssistantRemoteAction> [-Activity <string>] [-Command <string[]>] [-RemoteDevice <string>] [-RepeatCount <Int32>] [-DelaySeconds <Double>] [-HoldSeconds <Double>] [-CommandType <HomeAssistantRemoteCommandType>] [-Alternative <Boolean>] [-TimeoutSeconds <Double>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
 Controls a Home Assistant remote, including sending, learning, and deleting commands.
 
@@ -58,7 +63,7 @@ Remote operation to perform.
 
 ```yaml
 Type: HomeAssistantRemoteAction
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values: TurnOn, TurnOff, Toggle, SendCommand, LearnCommand, DeleteCommand
 
@@ -74,7 +79,7 @@ Activity passed to a remote power operation.
 
 ```yaml
 Type: String
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -90,7 +95,7 @@ Requests the integration's alternative learning mode.
 
 ```yaml
 Type: Boolean
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -122,7 +127,7 @@ One or more commands to send, learn, or delete.
 
 ```yaml
 Type: String[]
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -138,7 +143,7 @@ IR or RF command type used while learning.
 
 ```yaml
 Type: HomeAssistantRemoteCommandType
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values: Ir, Rf
 
@@ -154,7 +159,7 @@ Optional explicit session returned by Connect-HomeAssistant. It also accepts pip
 
 ```yaml
 Type: HomeAssistantConnection
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -170,7 +175,7 @@ Delay between repeated sent commands, in seconds.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -234,7 +239,7 @@ Duration for which a sent command is held, in seconds.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -261,12 +266,28 @@ Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
+### -Label
+One or more label names or native label IDs.
+
+```yaml
+Type: String[]
+Parameter Sets: Label
+Aliases: LabelId
+Possible values:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -RemoteDevice
 Optional receiver or device known by the remote integration.
 
 ```yaml
 Type: String
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: DeviceName
 Possible values:
 
@@ -282,7 +303,7 @@ Number of times each sent command is repeated.
 
 ```yaml
 Type: Int32
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -298,7 +319,7 @@ Learning timeout in seconds.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 

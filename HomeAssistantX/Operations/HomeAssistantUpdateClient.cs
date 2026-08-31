@@ -49,7 +49,7 @@ public sealed class HomeAssistantUpdateClient
         string entityId,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEntityId = NormalizeEntityId(entityId);
+        var normalizedEntityId = NormalizeEntityId(entityId, cancellationToken);
         var result = await _webSocket.RequestAsync(
             "update/release_notes",
             new Dictionary<string, object?> { ["entity_id"] = normalizedEntityId },
@@ -64,7 +64,11 @@ public sealed class HomeAssistantUpdateClient
             throw new HomeAssistantProtocolException("The Home Assistant update release-notes response was not a string.");
         }
 
-        return result.GetString();
+        var releaseNotes = result.GetString();
+        HomeAssistantX.Protocol.HomeAssistantJson.ThrowIfStringTraversalCanceled(
+            releaseNotes,
+            cancellationToken);
+        return releaseNotes;
     }
 
     public Task<HomeAssistantServiceCallResult> InstallAsync(
@@ -73,10 +77,12 @@ public sealed class HomeAssistantUpdateClient
         bool? backup = null,
         CancellationToken cancellationToken = default)
     {
-        var call = HomeAssistantServiceCall.Create("update", "install").ForEntity(NormalizeEntityId(entityId));
+        cancellationToken.ThrowIfCancellationRequested();
+        var call = HomeAssistantServiceCall.Create("update", "install")
+            .ForEntity(NormalizeEntityId(entityId, cancellationToken));
         if (version is not null)
         {
-            call.WithData("version", RequireVersion(version));
+            call.WithData("version", RequireVersion(version, cancellationToken));
         }
 
         if (backup.HasValue)
@@ -87,14 +93,17 @@ public sealed class HomeAssistantUpdateClient
         return _services.CallAsync(call, cancellationToken);
     }
 
-    private static string RequireVersion(string value)
-        => string.IsNullOrWhiteSpace(value)
-            ? throw new ArgumentException("A supplied update version cannot be empty.", nameof(value))
-            : value.Trim();
-
-    private static string NormalizeEntityId(string entityId)
+    private static string RequireVersion(string value, CancellationToken cancellationToken)
     {
-        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "update", out var normalized))
+        return CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken)
+            ? throw new ArgumentException("A supplied update version cannot be empty.", nameof(value))
+            : CancellationAwareString.Trim(value, cancellationToken);
+    }
+
+    private static string NormalizeEntityId(string entityId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "update", cancellationToken, out var normalized))
         {
             throw new ArgumentException("An update entity identifier is required.", nameof(entityId));
         }

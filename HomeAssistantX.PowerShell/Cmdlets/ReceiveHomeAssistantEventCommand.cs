@@ -30,6 +30,7 @@ public sealed class ReceiveHomeAssistantEventCommand : HomeAssistantCmdlet
 
     /// <summary>Streams all Home Assistant event types until the pipeline is stopped.</summary>
     [Parameter(Mandatory = true, ParameterSetName = AllParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter All { get; set; }
 
     /// <summary>Stops after emitting this many matching events. Omit it to keep streaming.</summary>

@@ -18,6 +18,22 @@ while (await Console.In.ReadLineAsync() is { } command)
             server.SetStates(TestHomeAssistantServer.DefaultStatesJson);
             Console.WriteLine("DEFAULT_STATES_SET");
             break;
+        case "SET_LABEL_REGISTRY_UNAVAILABLE":
+            server.LabelRegistryErrorCode = "unauthorized";
+            Console.WriteLine("LABEL_REGISTRY_UNAVAILABLE");
+            break;
+        case "SET_LABEL_REGISTRY_AVAILABLE":
+            server.LabelRegistryErrorCode = null;
+            Console.WriteLine("LABEL_REGISTRY_AVAILABLE");
+            break;
+        case "SET_CASE_DISTINCT_LABELS":
+            server.LabelRegistryResponseJson = "[{\"label_id\":\"security\",\"name\":\"Lower security\"},{\"label_id\":\"Security\",\"name\":\"Upper security\"}]";
+            Console.WriteLine("CASE_DISTINCT_LABELS_SET");
+            break;
+        case "SET_DEFAULT_LABELS":
+            server.LabelRegistryResponseJson = "[{\"label_id\":\"security\",\"name\":\"Safety\",\"color\":\"red\",\"description\":\"Safety devices\",\"icon\":\"mdi:shield\",\"created_at\":1787731200,\"modified_at\":1787731300},{\"label_id\":\"security-name\",\"name\":\"Security\",\"color\":null,\"description\":\"Identifier collision fixture\",\"icon\":null,\"created_at\":1787731200,\"modified_at\":1787731300}]";
+            Console.WriteLine("DEFAULT_LABELS_SET");
+            break;
         case "DROP":
             await server.DropWebSocketsAsync();
             Console.WriteLine("DROPPED");
@@ -53,6 +69,20 @@ while (await Console.In.ReadLineAsync() is { } command)
             break;
         case "GET_LAST_EVENT_SUBSCRIPTION":
             Console.WriteLine(server.GetLastWebSocketCommand("subscribe_events") ?? "EVENT_SUBSCRIPTION_NONE");
+            break;
+        case "GET_LAST_LABEL_LIST":
+            Console.WriteLine(server.GetLastWebSocketCommand("config/label_registry/list") ?? "LABEL_LIST_NONE");
+            break;
+        case "CLEAR_LAST_LABEL_LIST":
+            server.ClearLastWebSocketCommand("config/label_registry/list");
+            Console.WriteLine("LABEL_LIST_CLEARED");
+            break;
+        case "GET_LAST_CATEGORY_LIST":
+            Console.WriteLine(server.GetLastWebSocketCommand("config/category_registry/list") ?? "CATEGORY_LIST_NONE");
+            break;
+        case "CLEAR_LAST_CATEGORY_LIST":
+            server.ClearLastWebSocketCommand("config/category_registry/list");
+            Console.WriteLine("CATEGORY_LIST_CLEARED");
             break;
         case "GET_UNSUBSCRIBE_COUNT":
             Console.WriteLine(server.UnsubscribeCommandCount);

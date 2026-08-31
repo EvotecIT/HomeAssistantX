@@ -45,6 +45,9 @@ raw access for custom integrations.
 - the documented Home Assistant REST API: state, history, logbook, actions,
   events, templates, calendars, cameras, intents, and conversations
 - WebSocket events and reconnect-safe state notifications without polling
+- persistent and notify-entity messages, plus reconnect-safe persistent-notification updates
+- calendar discovery, timed/all-day event management, and live event-list updates
+- labels and scoped categories, including create/update/delete with explicit nullable-field clearing
 - OAuth authorization, proactive and rejection-triggered refresh, revocation,
   and host-owned token persistence
 - logs, Repairs, system health, diagnostics, traces, integrations, and updates
@@ -70,7 +73,10 @@ set.
 | Inspect available actions and fields | `Get-HomeAssistantAction` | `client.Services.GetActionsAsync` |
 | Control common domains | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Invoke-HomeAssistantRemote`, `Set-HomeAssistantLock` | `client.Controls` |
 | Invoke integration-specific actions | `Invoke-HomeAssistantAction` | `client.Services` |
-| Receive notifications | `Receive-HomeAssistantEvent` | `client.Events`, `client.States` |
+| Send and receive notifications | `Get-HomeAssistantNotification`, `Send-HomeAssistantNotification`, `Receive-HomeAssistantNotification` | `client.Notifications` |
+| Work with calendars | `Get-HomeAssistantCalendar`, `Get-HomeAssistantCalendarEvent`, `Set-HomeAssistantCalendarEvent`, `Receive-HomeAssistantCalendarEvent` | `client.Calendars` |
+| Work with labels and categories | `Get/Set/Remove-HomeAssistantLabel`, `Get/Set/Remove-HomeAssistantCategory` | `client.Registries` |
+| Receive general events | `Receive-HomeAssistantEvent` | `client.Events`, `client.States` |
 | Inspect and troubleshoot | `Get-HomeAssistantInfo`, `Get-HomeAssistantLog`, `Get-HomeAssistantIssue`, `Get-HomeAssistantTrace`, `Export-HomeAssistantDiagnostic` | `client.Operations` |
 | Inspect Supervisor and OS | `Get-HomeAssistantApp`, `Get-HomeAssistantBackup`, `Get-HomeAssistantJob`, `Get-HomeAssistantUpdate` | `client.Supervisor` |
 | Use evolving/custom APIs | `Invoke-HomeAssistantAction -Data` | `client.Rest.SendAsync`, `client.WebSocket.RequestAsync` |
@@ -246,6 +252,12 @@ Invoke-HomeAssistantAction vacuum send_command `
 ### Receive notifications without polling
 
 ```powershell
+Get-HomeAssistantNotification
+Send-HomeAssistantNotification -Persistent -Message 'Garage is open' `
+    -Title Security -NotificationId garage-open
+Send-HomeAssistantNotification -Area Kitchen -Message 'Dinner is ready' -WhatIf
+Receive-HomeAssistantNotification -Count 1 -TimeoutSeconds 30
+
 Receive-HomeAssistantEvent -EventType automation_triggered
 
 $nextChange = Receive-HomeAssistantEvent `
@@ -253,9 +265,33 @@ $nextChange = Receive-HomeAssistantEvent `
     -Count 1 -TimeoutSeconds 30
 ```
 
-The command holds a bounded WebSocket subscription until it is canceled or its
-count/timeout is reached. Reconnect-safe state subscriptions are also available
-through the .NET `client.States` API.
+The receive commands hold bounded WebSocket subscriptions until canceled or
+their count/timeout is reached. Persistent notifications emit an immediate
+current snapshot and then added, updated, or removed changes. Reconnect-safe
+state subscriptions are also available through the .NET `client.States` API.
+
+### Work with calendars, labels, and categories
+
+```powershell
+Get-HomeAssistantCalendar
+Get-HomeAssistantCalendarEvent -EntityId calendar.home `
+    -EndTime (Get-Date).AddDays(7)
+
+Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner `
+    -StartTime '2026-08-27T18:00:00+02:00' `
+    -EndTime '2026-08-27T20:00:00+02:00' -WhatIf
+Receive-HomeAssistantCalendarEvent -EntityId calendar.home -Count 1
+
+Get-HomeAssistantLabel
+Set-HomeAssistantLabel -LabelId security -ClearColor -Description 'Safety devices'
+Get-HomeAssistantCategory -Scope automation
+Set-HomeAssistantCategory -Scope automation -Name Comfort -Icon mdi:sofa
+```
+
+Calendar parameter sets distinguish timed and all-day events, while `-Uid`
+selects update behavior. Label/category setters distinguish create from update;
+`-ClearColor`, `-ClearDescription`, and `-ClearIcon` explicitly send `null`
+instead of silently omitting a field.
 
 ### Troubleshoot and administer
 
@@ -333,7 +369,9 @@ var result = await client.Controls.Lights.TurnOnAsync(
 ```
 
 `client.Controls` exposes focused clients for lights, switches, climate,
-covers, media players, and locks. `client.Services` retains the generic fluent
+covers, media players, remotes, and locks. `client.Notifications`,
+`client.Calendars`, and `client.Registries` own their corresponding live
+platform data. `client.Services` retains the generic fluent
 action builder for every other domain and custom integration.
 
 Typed controls use WebSocket calls by default. Hosts that deliberately keep

@@ -86,7 +86,7 @@ Set-HomeAssistantLock -Entity lock.front_door -Action Unlock -WhatIf
 ```
 
 Each typed command has target parameter sets for entity, device, area, floor,
-and joined entity pipeline input. It validates common values and uses
+label, and joined entity pipeline input. It validates common values and uses
 `ShouldProcess`. Lock operations use high confirmation impact.
 
 Climate target ranges require both low and high values and are mutually
@@ -121,7 +121,10 @@ Invoke-HomeAssistantAction vacuum send_command `
 | Discover and invoke actions | `Get-HomeAssistantAction`, `Invoke-HomeAssistantAction` |
 | Typed everyday controls | `Set-HomeAssistantLight`, `Set-HomeAssistantSwitch`, `Set-HomeAssistantClimate`, `Set-HomeAssistantCover`, `Set-HomeAssistantMediaPlayer`, `Invoke-HomeAssistantRemote`, `Set-HomeAssistantLock` |
 | Read current/history | `Get-HomeAssistantEntity`, `Get-HomeAssistantHistory` |
-| Receive notifications | `Receive-HomeAssistantEvent` |
+| Send/read/stream notifications | `Get-HomeAssistantNotification`, `Send-HomeAssistantNotification`, `Remove-HomeAssistantNotification`, `Receive-HomeAssistantNotification` |
+| Calendars | `Get-HomeAssistantCalendar`, `Get-HomeAssistantCalendarEvent`, `Set-HomeAssistantCalendarEvent`, `Remove-HomeAssistantCalendarEvent`, `Receive-HomeAssistantCalendarEvent` |
+| Labels and scoped categories | `Get/Set/Remove-HomeAssistantLabel`, `Get/Set/Remove-HomeAssistantCategory` |
+| Receive general events | `Receive-HomeAssistantEvent` |
 | Inspect the installation | `Get-HomeAssistantInfo` |
 | Inspect logs and Repairs | `Get-HomeAssistantLog`, `Get-HomeAssistantIssue` |
 | Troubleshoot | `Get-HomeAssistantTrace`, `Export-HomeAssistantDiagnostic`, `Test-HomeAssistantConfiguration`, `Get-HomeAssistantIntegration` |
@@ -147,6 +150,25 @@ $nextDoorChange = Receive-HomeAssistantEvent `
 
 Open-ended streams run until canceled. `-Count` and `-TimeoutSeconds` provide a
 bounded wait. Subscription cleanup remains bounded when a command is stopped.
+
+Persistent notifications and calendar event lists have dedicated live feeds:
+
+```powershell
+Send-HomeAssistantNotification -Persistent -Message 'Garage is open' -Title Security
+Send-HomeAssistantNotification -Area Kitchen -Message 'Dinner is ready' -WhatIf
+Receive-HomeAssistantNotification -Count 1
+
+Get-HomeAssistantCalendarEvent -EntityId calendar.home -EndTime (Get-Date).AddDays(7)
+Set-HomeAssistantCalendarEvent -EntityId calendar.home -Summary Dinner `
+    -StartTime '2026-08-27T18:00:00+02:00' `
+    -EndTime '2026-08-27T20:00:00+02:00' -WhatIf
+Receive-HomeAssistantCalendarEvent -EntityId calendar.home -Count 1
+```
+
+Timed and all-day calendar parameter sets prevent mixed boundary types.
+Supplying `-Uid` selects update behavior. Label/category setters similarly use
+create/update parameter sets, while `-ClearColor`, `-ClearDescription`, and
+`-ClearIcon` intentionally clear nullable registry fields.
 
 ## Safety and Supervisor boundaries
 

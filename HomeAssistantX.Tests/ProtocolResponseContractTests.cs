@@ -2,6 +2,11 @@ using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
+using HomeAssistantX.Calendars;
+using HomeAssistantX.Registries;
+using HomeAssistantX.States;
+using HomeAssistantX.Rest;
+using HomeAssistantX.Notifications;
 
 namespace HomeAssistantX.Tests;
 
@@ -177,7 +182,182 @@ public sealed class ProtocolResponseContractTests
             HomeAssistantJson.SnapshotResponseAsync(
                 document.RootElement,
                 "The response could not be snapshotted.",
-                cancellation.Token));
+            cancellation.Token));
+    }
+
+    [Fact]
+    public async Task JsonStringDecodingCanBeCanceledWhileTheDecoderIsRunning()
+    {
+        using var document = JsonDocument.Parse("\"Current\"");
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var finished = new ManualResetEventSlim();
+        using var cancellation = new CancellationTokenSource();
+        var decoding = HomeAssistantJson.GetStringAsync(
+            document.RootElement,
+            cancellation.Token,
+            element =>
+            {
+                try
+                {
+                    started.Set();
+                    release.Wait();
+                    return element.GetString();
+                }
+                finally
+                {
+                    finished.Set();
+                }
+            });
+
+        try
+        {
+            Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => decoding);
+        }
+        finally
+        {
+            release.Set();
+            Assert.True(finished.Wait(TimeSpan.FromSeconds(2)));
+        }
+    }
+
+    [Fact]
+    public void SynchronousResponseValidationUsesOneCancelableWorkerForTheWholeOperation()
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var finished = new ManualResetEventSlim();
+        using var cancellation = new CancellationTokenSource();
+        var validation = Task.Run(() => HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                try
+                {
+                    started.Set();
+                    release.Wait();
+                    return 42;
+                }
+                finally
+                {
+                    finished.Set();
+                }
+            },
+            cancellation.Token));
+
+        try
+        {
+            Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
+            cancellation.Cancel();
+            Assert.ThrowsAny<OperationCanceledException>(() => validation.GetAwaiter().GetResult());
+        }
+        finally
+        {
+            release.Set();
+            Assert.True(finished.Wait(TimeSpan.FromSeconds(2)));
+        }
+    }
+
+    [Fact]
+    public async Task CalendarEventExtensionProjectionStopsAfterCancellation()
+    {
+        var json = "[{\"summary\":\"Planning\",\"start\":{\"dateTime\":\"2026-08-27T18:00:00Z\"},"
+            + "\"end\":{\"dateTime\":\"2026-08-27T19:00:00Z\"},\"provider_payload\":["
+            + string.Join(",", Enumerable.Repeat("0", 1_000_000))
+            + "]}]";
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new CancelAfterReadStream(
+            System.Text.Encoding.UTF8.GetBytes(json),
+            cancellation,
+            cancelAfterBytes: 1_024);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            JsonSerializer.DeserializeAsync<HomeAssistantCalendarEvent[]>(
+                    stream,
+                    HomeAssistantJson.CreateCancellationAwareResponseOptions(cancellation.Token),
+                    cancellation.Token)
+                .AsTask());
+        Assert.True(stream.CancellationTriggered);
+    }
+
+    [Fact]
+    public async Task CalendarKnownStringProjectionPrioritizesAPreCanceledToken()
+    {
+        var json = JsonSerializer.Serialize(new string('x', 16_000_000));
+        var payload = System.Text.Encoding.UTF8.GetBytes(json);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim(false);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                var reader = new Utf8JsonReader(payload);
+                Assert.True(reader.Read());
+                started.TrySetResult(true);
+                release.Wait();
+                return HomeAssistantCancellationJsonValueReader.ReadString(ref reader, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+        release.Set();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
+    public void CalendarKnownStringsPreserveEscapedJsonText()
+    {
+        const string json = "{\"summary\":\"Planning \\\"A\\\" \\u263A\",\"start\":{\"date\":\"2026-08-27\"},\"end\":{\"date\":\"2026-08-28\"}}";
+
+        var value = JsonSerializer.Deserialize<HomeAssistantCalendarEvent>(
+            json,
+            HomeAssistantJson.CreateCancellationAwareResponseOptions(CancellationToken.None));
+
+        Assert.NotNull(value);
+        Assert.Equal("Planning \"A\" ☺", value.Summary);
+    }
+
+    [Fact]
+    public async Task GenericExtensionProjectionStopsAfterCancellation()
+    {
+        var json = "[{\"notification_id\":\"notice\",\"message\":\"Ready\",\"provider_payload\":["
+            + string.Join(",", Enumerable.Repeat("0", 1_000_000))
+            + "]}]";
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new CancelAfterReadStream(
+            System.Text.Encoding.UTF8.GetBytes(json),
+            cancellation,
+            cancelAfterBytes: 1_024);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            JsonSerializer.DeserializeAsync<HomeAssistantPersistentNotification[]>(
+                    stream,
+                    HomeAssistantJson.CreateCancellationAwareResponseOptions(cancellation.Token),
+                    cancellation.Token)
+                .AsTask());
+        Assert.True(stream.CancellationTriggered);
+    }
+
+    [Fact]
+    public void GenericScalarExtensionProjectionHonorsPreCancellation()
+    {
+        using var document = JsonDocument.Parse(
+            "{\"notification_id\":\"notice\",\"message\":\"Ready\",\"provider_payload\":\""
+            + new string('x', 1_000_000)
+            + "\"}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification>(
+                document.RootElement,
+                "The notification could not be decoded.",
+                cancellationToken: cancellation.Token));
     }
 
     [Fact]
@@ -207,6 +387,33 @@ public sealed class ProtocolResponseContractTests
                 document.RootElement,
                 "State response failed.",
                 cancellationToken: cancellation.Token));
+    }
+
+    [Fact]
+    public void BuiltInResponseSemanticTransformsHonorCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var token = cancellation.Token;
+        using var extendedRegistry = JsonDocument.Parse("{}");
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantStateClient.ValidateSnapshotStates(
+                new[] { new HomeAssistantState { EntityId = "light.kitchen", State = "on" } },
+                token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRegistryClient.DeserializeExtendedEntities(
+                extendedRegistry.RootElement,
+                new[] { new HomeAssistantEntityRegistryEntry { EntityId = "light.kitchen" } },
+                token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCalendarClient.ValidateEvents(
+                new[] { new HomeAssistantCalendarEvent() },
+                token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCalendarClient.ValidateEvents(
+                Array.Empty<HomeAssistantCalendarEvent>(),
+                token));
     }
 
     [Fact]
@@ -259,6 +466,33 @@ public sealed class ProtocolResponseContractTests
 
         Assert.Throws<HomeAssistantProtocolException>(() =>
             HomeAssistantEntityId.RequireResponseDomain(state, "media_player"));
+    }
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("{\"dateTime\":\"not-a-timestamp\"}")]
+    [InlineData("{\"dateTime\":\"2026-08-27\"}")]
+    [InlineData("{\"dateTime\":\"08/27/2026\"}")]
+    [InlineData("{\"date\":42}")]
+    [InlineData("\"\"")]
+    [InlineData("\"2026-08-27T18:00:00\"")]
+    [InlineData("{\"date\":\"not-a-date\"}")]
+    [InlineData("{}")]
+    [InlineData("{\"date\":\"2026-08-27\",\"dateTime\":\"2026-08-27T18:00:00Z\"}")]
+    [InlineData("{\"date\":\"2026-08-26\",\"date\":\"2026-08-27\"}")]
+    [InlineData("{\"dateTime\":\"2026-08-27T18:00:00Z\",\"dateTime\":\"2026-08-28T18:00:00Z\"}")]
+    public void CalendarBoundaryConverterRejectsInvalidTypedShapesWithJsonException(string json)
+    {
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<HomeAssistantCalendarBoundary>(json));
+    }
+
+    [Theory]
+    [InlineData("\"2026-08-27\"")]
+    [InlineData("\"2026-08-27T18:00:00Z\"")]
+    [InlineData("\"2026-08-27T18:00:00+02:00\"")]
+    public void CalendarBoundaryConverterAcceptsUnambiguousStringForms(string json)
+    {
+        Assert.NotNull(JsonSerializer.Deserialize<HomeAssistantCalendarBoundary>(json));
     }
 
     private sealed class CancellationProbeEnumerable : IEnumerable<string>
@@ -315,5 +549,92 @@ public sealed class ProtocolResponseContractTests
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancelAfterReadStream : Stream
+    {
+        private const int MaximumReadSize = 128;
+        private readonly MemoryStream _inner;
+        private readonly CancellationTokenSource _cancellation;
+        private readonly int _cancelAfterBytes;
+        private int _bytesRead;
+        private int _cancellationTriggered;
+
+        internal CancelAfterReadStream(
+            byte[] content,
+            CancellationTokenSource cancellation,
+            int cancelAfterBytes)
+        {
+            _inner = new MemoryStream(content, writable: false);
+            _cancellation = cancellation;
+            _cancelAfterBytes = cancelAfterBytes;
+        }
+
+        internal bool CancellationTriggered => Volatile.Read(ref _cancellationTriggered) != 0;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = _inner.Read(buffer, offset, Math.Min(count, MaximumReadSize));
+            Observe(read);
+            return read;
+        }
+
+        public override async Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var read = await _inner.ReadAsync(
+                buffer,
+                offset,
+                Math.Min(count, MaximumReadSize),
+                cancellationToken).ConfigureAwait(false);
+            Observe(read);
+            return read;
+        }
+
+#if NET10_0
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var read = await _inner.ReadAsync(
+                buffer.Slice(0, Math.Min(buffer.Length, MaximumReadSize)),
+                cancellationToken).ConfigureAwait(false);
+            Observe(read);
+            return read;
+        }
+#endif
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _inner.Dispose();
+            base.Dispose(disposing);
+        }
+
+        private void Observe(int count)
+        {
+            if (count <= 0) return;
+            var total = Interlocked.Add(ref _bytesRead, count);
+            if (total >= _cancelAfterBytes
+                && Interlocked.Exchange(ref _cancellationTriggered, 1) == 0)
+            {
+                _cancellation.Cancel();
+            }
+        }
     }
 }

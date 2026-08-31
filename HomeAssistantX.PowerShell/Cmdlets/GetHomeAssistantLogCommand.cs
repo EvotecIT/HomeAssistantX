@@ -28,19 +28,23 @@ public sealed class GetHomeAssistantLogCommand : HomeAssistantCmdlet
 
     /// <summary>Returns the legacy plaintext Core error log when that endpoint is enabled.</summary>
     [Parameter(Mandatory = true, ParameterSetName = LegacyParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter LegacyErrorLog { get; set; }
 
     /// <summary>Returns bounded Home Assistant Core container logs through Supervisor.</summary>
     [Parameter(Mandatory = true, ParameterSetName = CoreParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Core { get; set; }
 
     /// <summary>Returns bounded Supervisor logs.</summary>
     [Parameter(Mandatory = true, ParameterSetName = SupervisorParameterSet)]
+    [ValidateSwitchPresent]
     public SwitchParameter Supervisor { get; set; }
 
     /// <summary>Returns bounded host-system logs.</summary>
     [Parameter(Mandatory = true, ParameterSetName = HostParameterSet)]
     [Alias("Host")]
+    [ValidateSwitchPresent]
     public SwitchParameter HostSystem { get; set; }
 
     /// <summary>Supervisor app/add-on slug whose logs should be returned.</summary>

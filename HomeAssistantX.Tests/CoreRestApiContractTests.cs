@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Tests.Infrastructure;
@@ -62,6 +63,54 @@ public sealed class CoreRestApiContractTests
         Assert.Equal("Dinner", Assert.Single(calendarEvents).Summary);
     }
 
+    [Theory]
+    [InlineData("[{\"summary\":\" \",\"start\":{\"dateTime\":\"2026-08-25T18:00:00+02:00\"},\"end\":{\"dateTime\":\"2026-08-25T20:00:00+02:00\"}}]")]
+    [InlineData("[{\"summary\":\"Dinner\",\"start\":{\"dateTime\":\"2026-08-25T20:00:00+02:00\"},\"end\":{\"dateTime\":\"2026-08-25T18:00:00+02:00\"}}]")]
+    public async Task DirectCalendarRestEndpointRejectsMalformedEvents(string response)
+    {
+        using var server = new TestHomeAssistantServer { CalendarEventsResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 25, 0, 0, 0, TimeSpan.Zero);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Rest.GetCalendarEventsAsync("calendar.home", start, start.AddDays(1)));
+    }
+
+    [Theory]
+    [InlineData("[null]")]
+    [InlineData("[{\"entity_id\":\"light.kitchen\",\"name\":\"Wrong domain\"}]")]
+    [InlineData("[{\"entity_id\":\" calendar.home \",\"name\":\"Padded\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.Home\",\"name\":\"Noncanonical\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"   \"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"First\"},{\"entity_id\":\"calendar.home\",\"name\":\"Duplicate\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"entity_id\":\"calendar.other\",\"name\":\"Duplicate property\"}]")]
+    [InlineData("[{\"entity_id\":\"calendar.home\",\"name\":\"First\",\"name\":\"Second\"}]")]
+    public async Task DirectCalendarRestDiscoveryRejectsMalformedResponseIdentities(string response)
+    {
+        using var server = new TestHomeAssistantServer { CalendarListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Rest.GetCalendarsAsync());
+    }
+
+    [Fact]
+    public async Task CalendarDiscoveryPreservesOpaqueProviderObjectsWithDuplicateNestedKeys()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            CalendarListResponseJson = "[{\"entity_id\":\"calendar.home\",\"name\":\"Home\","
+                + "\"provider_payload\":{\"key\":1,\"key\":2}}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var calendar = Assert.Single(await client.Rest.GetCalendarsAsync());
+        var providerPayload = calendar.AdditionalData["provider_payload"];
+
+        Assert.Equal(2, providerPayload.EnumerateObject().Count());
+        Assert.Equal(new[] { 1, 2 }, providerPayload.EnumerateObject().Select(value => value.Value.GetInt32()));
+    }
+
     [Fact]
     public async Task DocumentedRestCommandsSerializeAndDecodeTheirContracts()
     {
@@ -78,9 +127,11 @@ public sealed class CoreRestApiContractTests
         var fired = await client.Rest.FireEventAsync(
             "homeassistantx_test",
             new Dictionary<string, object?> { ["source"] = "contract" });
+        const string template = " \n{{ value }}\n ";
         var rendered = await client.Rest.RenderTemplateAsync(
-            "{{ value }}",
+            template,
             new Dictionary<string, object?> { ["value"] = "rendered value" });
+        var templateRequestBody = server.LastRequestBody;
         var config = await client.Rest.CheckConfigurationAsync();
         var intent = await client.Rest.HandleIntentAsync(
             new Dictionary<string, object?> { ["name"] = "HassTurnOn" });
@@ -90,6 +141,10 @@ public sealed class CoreRestApiContractTests
         Assert.Equal("Entity removed.", removed.GetProperty("message").GetString());
         Assert.Contains("fired", fired.GetProperty("message").GetString());
         Assert.Equal("rendered value", rendered);
+        using (var templateRequest = JsonDocument.Parse(Assert.IsType<string>(templateRequestBody)))
+        {
+            Assert.Equal(template, templateRequest.RootElement.GetProperty("template").GetString());
+        }
         Assert.True(config.IsValid);
         Assert.Equal("Done", intent.GetProperty("response").GetProperty("speech").GetProperty("plain").GetProperty("speech").GetString());
         Assert.Equal("conversation-1", conversation.GetProperty("conversation_id").GetString());

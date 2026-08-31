@@ -31,6 +31,15 @@ Lists Home Assistant areas (rooms), optionally within a floor.
 ### [Get-HomeAssistantBackup](Get-HomeAssistantBackup.md)
 Gets backups from a Supervisor-managed Home Assistant installation.
 
+### [Get-HomeAssistantCalendar](Get-HomeAssistantCalendar.md)
+Lists Home Assistant calendar entities.
+
+### [Get-HomeAssistantCalendarEvent](Get-HomeAssistantCalendarEvent.md)
+Gets events from one Home Assistant calendar over an explicit time range.
+
+### [Get-HomeAssistantCategory](Get-HomeAssistantCategory.md)
+Lists Home Assistant categories within an explicit registry scope.
+
 ### [Get-HomeAssistantConnection](Get-HomeAssistantConnection.md)
 Gets the default Home Assistant connection for the current PowerShell runspace.
 
@@ -58,8 +67,14 @@ Gets Core repairs issues or Supervisor resolution issues.
 ### [Get-HomeAssistantJob](Get-HomeAssistantJob.md)
 Gets all Supervisor jobs or one job by identifier.
 
+### [Get-HomeAssistantLabel](Get-HomeAssistantLabel.md)
+Lists Home Assistant labels, optionally selecting one by name or ID.
+
 ### [Get-HomeAssistantLog](Get-HomeAssistantLog.md)
 Gets structured system-log entries or bounded Core, Supervisor, host, and app log lines.
+
+### [Get-HomeAssistantNotification](Get-HomeAssistantNotification.md)
+Gets persistent notifications currently stored by Home Assistant.
 
 ### [Get-HomeAssistantTrace](Get-HomeAssistantTrace.md)
 Gets automation or script trace summaries, or one complete trace run.
@@ -82,17 +97,47 @@ Controls a Home Assistant remote, including sending, learning, and deleting comm
 ### [New-HomeAssistantBackup](New-HomeAssistantBackup.md)
 Creates a full Supervisor backup with optional compression, location, and database exclusion.
 
+### [Receive-HomeAssistantCalendarEvent](Receive-HomeAssistantCalendarEvent.md)
+Streams refreshed event lists for one calendar without polling.
+
 ### [Receive-HomeAssistantEvent](Receive-HomeAssistantEvent.md)
 Streams Home Assistant events without polling until canceled.
 
+### [Receive-HomeAssistantNotification](Receive-HomeAssistantNotification.md)
+Streams persistent-notification changes without polling.
+
+### [Remove-HomeAssistantCalendarEvent](Remove-HomeAssistantCalendarEvent.md)
+Deletes a Home Assistant calendar event or recurring occurrence.
+
+### [Remove-HomeAssistantCategory](Remove-HomeAssistantCategory.md)
+Deletes a Home Assistant category from an explicit scope.
+
+### [Remove-HomeAssistantLabel](Remove-HomeAssistantLabel.md)
+Deletes a Home Assistant label.
+
+### [Remove-HomeAssistantNotification](Remove-HomeAssistantNotification.md)
+Dismisses one or all persistent Home Assistant notifications.
+
 ### [Restart-HomeAssistant](Restart-HomeAssistant.md)
 Restarts Core, Supervisor, host, an app, or reloads one integration.
+
+### [Send-HomeAssistantNotification](Send-HomeAssistantNotification.md)
+Sends a persistent notification or a message to selected notify entities.
+
+### [Set-HomeAssistantCalendarEvent](Set-HomeAssistantCalendarEvent.md)
+Creates or updates a timed or all-day Home Assistant calendar event.
+
+### [Set-HomeAssistantCategory](Set-HomeAssistantCategory.md)
+Creates or updates a Home Assistant category within an explicit scope.
 
 ### [Set-HomeAssistantClimate](Set-HomeAssistantClimate.md)
 Sets common climate values with typed parameters instead of raw action data.
 
 ### [Set-HomeAssistantCover](Set-HomeAssistantCover.md)
 Moves covers with a typed action, position, or tilt position.
+
+### [Set-HomeAssistantLabel](Set-HomeAssistantLabel.md)
+Creates or updates a Home Assistant label while allowing nullable fields to be explicitly cleared.
 
 ### [Set-HomeAssistantLight](Set-HomeAssistantLight.md)
 Controls lights with typed power, brightness, color, effect, and transition parameters.

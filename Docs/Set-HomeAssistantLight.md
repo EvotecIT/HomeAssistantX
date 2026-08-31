@@ -34,6 +34,11 @@ Set-HomeAssistantLight [-Device] <string[]> -Power <HomeAssistantPowerAction> [-
 Set-HomeAssistantLight [-Floor] <string[]> -Power <HomeAssistantPowerAction> [-BrightnessPercent <Double>] [-ColorTemperatureKelvin <Int32>] [-RgbColor <int[]>] [-Effect <string>] [-TransitionSeconds <Double>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### Label
+```powershell
+Set-HomeAssistantLight [-Label] <string[]> -Power <HomeAssistantPowerAction> [-BrightnessPercent <Double>] [-ColorTemperatureKelvin <Int32>] [-RgbColor <int[]>] [-Effect <string>] [-TransitionSeconds <Double>] [-Connection <HomeAssistantConnection>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
 Controls lights with typed power, brightness, color, effect, and transition parameters.
 
@@ -68,7 +73,7 @@ Brightness from 0 through 100 percent.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -84,7 +89,7 @@ Color temperature in kelvin.
 
 ```yaml
 Type: Int32
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -100,7 +105,7 @@ Optional explicit session returned by Connect-HomeAssistant. It also accepts pip
 
 ```yaml
 Type: HomeAssistantConnection
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -132,7 +137,7 @@ Effect name exposed by the selected lights.
 
 ```yaml
 Type: String
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -191,12 +196,28 @@ Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
+### -Label
+One or more label names or native label IDs.
+
+```yaml
+Type: String[]
+Parameter Sets: Label
+Aliases: LabelId
+Possible values:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -Power
 Turns the selected lights on, off, or toggles their current power.
 
 ```yaml
 Type: HomeAssistantPowerAction
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values: On, Off, Toggle
 
@@ -212,7 +233,7 @@ Red, green, and blue values, each from 0 through 255.
 
 ```yaml
 Type: Int32[]
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 
@@ -228,7 +249,7 @@ Transition duration from 0 through 6553 seconds.
 
 ```yaml
 Type: Double
-Parameter Sets: Entity, InputObject, Area, Device, Floor
+Parameter Sets: Entity, InputObject, Area, Device, Floor, Label
 Aliases: None
 Possible values:
 

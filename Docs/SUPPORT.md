@@ -38,7 +38,7 @@ All endpoints currently listed in the official REST API reference have named met
 | Service/action calls | First class / extensible | Fluent entity, device, area, floor, and label targets; optional response data preserved; typed controls can select WebSocket or REST at client configuration time |
 | Fire event | Extensible | Named method with open event-data object |
 | Camera proxy | First class | Bounded binary response |
-| Calendars and calendar events | First class | Timed and all-day boundaries supported |
+| Calendars and calendar events | First class | REST discovery/read plus WebSocket create, update, delete, and reconnect-safe event-list subscriptions; timed and all-day boundaries supported |
 | Error log | First class | Bounded plaintext response; consumers must treat log content as sensitive |
 | Template rendering | First class | Bounded plaintext response and optional variables |
 | Configuration check | First class | Typed valid/invalid result |
@@ -63,6 +63,9 @@ All endpoints currently listed in the official REST API reference have named met
 | List/change voice-assistant exposure | Extensible | Uses documented plural entity and assistant arrays |
 | Signed paths and long-lived token creation | First class | Authentication commands with explicit secret boundary |
 | Conversation processing | Extensible | REST and WebSocket entry points |
+| Persistent notifications | First class | List, create/update by stable ID, dismiss one/all, and reconnect-safe current/added/updated/removed subscriptions |
+| Notify entities | First class | Standard `notify.send_message` with typed entity, device, area, floor, or label targets; integration-specific legacy notify services remain generic actions |
+| Calendar event management | First class | Create, update, delete, recurring-event references, and live range subscriptions |
 | Other/custom commands | Raw | `RequestAsync` and `SubscribeAsync` |
 | Coalesced message batches | First class | Object and array frames are decoded; byte and message-count limits reject oversized batches |
 
@@ -111,13 +114,15 @@ reuses a Core bearer token against another origin.
 The binary module supports Windows PowerShell 5.1 and PowerShell 7. It exposes
 task-level cmdlets over the .NET engine, a runspace-local default plus explicit
 pipeline-capable connections, joined inventory discovery, typed controls,
-target-oriented parameter sets, WebSocket event streaming, and `ShouldProcess`
+target-oriented parameter sets, notification/calendar streaming, and `ShouldProcess`
 for mutations. See [POWERSHELL.md](POWERSHELL.md).
 
 ## Registries and platform boundaries
 
-`Registries.GetSnapshotAsync` provides raw typed area, floor, device, entity, and
-config-entry data. `Inventory.GetSnapshotAsync` joins those registries with live
+`Registries.GetSnapshotAsync` provides raw typed area, floor, device, entity,
+config-entry, and label data. The registry client also manages labels and
+categories within caller-supplied scopes; tri-state updates distinguish omitted
+fields from fields explicitly cleared to `null`. `Inventory.GetSnapshotAsync` joins those registries with live
 states and the runtime action catalog. It applies Home Assistant's entity-area
 fallback, resolves friendly names/aliases or native IDs, rejects ambiguous
 matches, and retains raw objects for forward compatibility.
@@ -134,7 +139,8 @@ remain available for every integration-defined action.
 Most registry commands are frontend-facing Home Assistant commands rather than
 the stable external API documented alongside the Core WebSocket commands. They
 are therefore compatibility-sensitive even though loopback and live tests cover
-them.
+them. Label/category lists are readable to ordinary users; create, update, and
+delete operations require a Home Assistant administrator.
 
 The following boundaries are intentional:
 
