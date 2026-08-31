@@ -13,7 +13,11 @@ internal static partial class HomeAssistantAtomicFile
     private const int UnixRegularFile = 0x8000;
     private const int UnixSymbolicLink = 0xA000;
     private const string LinuxAccessAclAttribute = "system.posix_acl_access";
+    private const string LinuxSecurityContextAttribute = "security.selinux";
+    private const int UnixOperationNotPermitted = 1;
     private const int UnixNoEntry = 2;
+    private const int UnixBadFileDescriptor = 9;
+    private const int UnixPermissionDenied = 13;
     private const int LinuxNoData = 61;
     private const int LinuxOperationNotSupported = 95;
     private const int MacExtendedAcl = 0x00000100;
@@ -92,7 +96,10 @@ internal static partial class HomeAssistantAtomicFile
                             "The displaced Unix destination changed before its metadata could be pinned.");
                     }
 
-                    var displaced = ReadUnixFileMetadata(displacedHandle, includeAccessAcl: true);
+                    var displaced = ReadUnixFileMetadata(
+                        displacedHandle,
+                        includeAccessAcl: true,
+                        fallbackPath: temporaryPath);
                     RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
                     ApplyUnixDestinationMetadata(replacementHandle, displaced);
                     RequireUnixPathIdentity(temporaryPath, pinnedDisplaced);
@@ -154,7 +161,6 @@ internal static partial class HomeAssistantAtomicFile
         string temporaryPath,
         bool useManagedApis)
     {
-        _ = useManagedApis;
         var sourceIdentity = TryReadUnixFileMetadata(destinationPath, includeAccessAcl: false);
         if (!sourceIdentity.HasValue || sourceIdentity.Value.IsSymbolicLink) return;
         RequireRegularUnixFile(
@@ -169,7 +175,11 @@ internal static partial class HomeAssistantAtomicFile
             throw new IOException(
                 "The Unix destination changed before its metadata could be pinned.");
         }
-        var metadata = ReadUnixFileMetadata(sourceHandle, includeAccessAcl: true);
+        var metadata = ReadUnixFileMetadata(
+            sourceHandle,
+            includeAccessAcl: true,
+            fallbackPath: destinationPath,
+            allowProcDescriptorPath: useManagedApis);
         RequireUnixPathIdentity(destinationPath, pinnedSource);
 
         using var temporaryHandle = OpenPinnedUnixFile(temporaryPath);
@@ -201,6 +211,7 @@ internal static partial class HomeAssistantAtomicFile
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             ApplyLinuxAccessAcl(temporaryHandle, metadata.LinuxAccessAcl);
+            ApplyLinuxSecurityContext(temporaryHandle, metadata.LinuxSecurityContext);
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
@@ -242,10 +253,22 @@ internal static partial class HomeAssistantAtomicFile
 
     private static SafeFileHandle OpenPinnedUnixMetadataFile(string path)
     {
-        var flags = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-            ? MacEventOnly | MacNoFollow | MacCloseOnExec | MacNonBlocking
-            : LinuxPathOnly | LinuxNoFollow | LinuxCloseOnExec;
-        var descriptor = EnsureUsableUnixDescriptor(Open(path, flags, 0));
+        int descriptor;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            descriptor = EnsureUsableUnixDescriptor(
+                Open(path, MacEventOnly | MacNoFollow | MacCloseOnExec | MacNonBlocking, 0));
+        }
+        else
+        {
+            descriptor = EnsureUsableUnixDescriptor(
+                Open(path, LinuxReadOnly | LinuxNoFollow | LinuxCloseOnExec | LinuxNonBlocking, 0));
+            if (descriptor < 0)
+            {
+                descriptor = EnsureUsableUnixDescriptor(
+                    Open(path, LinuxPathOnly | LinuxNoFollow | LinuxCloseOnExec, 0));
+            }
+        }
         if (descriptor < 0)
         {
             throw new IOException(
@@ -272,7 +295,11 @@ internal static partial class HomeAssistantAtomicFile
         var handle = new SafeFileHandle(new IntPtr(descriptor), ownsHandle: true);
         try
         {
-            return new FileStream(handle, FileAccess.Write, 81920, isAsync: false);
+            // A SafeFileHandle created by native open is a synchronous handle on
+            // Unix. Keep its managed buffer effectively empty so the shared
+            // bounded writer never accumulates a second, uncancellable payload
+            // in a final flush.
+            return new FileStream(handle, FileAccess.Write, 1, isAsync: false);
         }
         catch
         {
@@ -325,6 +352,11 @@ internal static partial class HomeAssistantAtomicFile
                 && isRegularFile
                 ? ReadLinuxAccessAcl(path)
                 : null;
+            var linuxSecurityContext = includeAccessAcl
+                && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                && isRegularFile
+                ? ReadLinuxSecurityContext(path)
+                : null;
             var macAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
                 && isRegularFile
@@ -338,6 +370,7 @@ internal static partial class HomeAssistantAtomicFile
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)),
                 unchecked((uint)fileType),
                 linuxAccessAcl,
+                linuxSecurityContext,
                 macAccessAcl);
         }
         finally
@@ -348,7 +381,9 @@ internal static partial class HomeAssistantAtomicFile
 
     private static UnixFileMetadata ReadUnixFileMetadata(
         SafeFileHandle handle,
-        bool includeAccessAcl)
+        bool includeAccessAcl,
+        string? fallbackPath = null,
+        bool allowProcDescriptorPath = true)
     {
         var offsets = UnixMetadataOffsets();
         var buffer = Marshal.AllocHGlobal(512);
@@ -372,7 +407,12 @@ internal static partial class HomeAssistantAtomicFile
             var linuxAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 && isRegularFile
-                    ? ReadLinuxAccessAcl(handle)
+                    ? ReadLinuxAccessAcl(handle, fallbackPath, allowProcDescriptorPath)
+                    : null;
+            var linuxSecurityContext = includeAccessAcl
+                && RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                && isRegularFile
+                    ? ReadLinuxSecurityContext(handle, fallbackPath, allowProcDescriptorPath)
                     : null;
             var macAccessAcl = includeAccessAcl
                 && RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
@@ -387,6 +427,7 @@ internal static partial class HomeAssistantAtomicFile
                 unchecked((uint)Marshal.ReadInt32(buffer, offsets.GroupId)),
                 unchecked((uint)fileType),
                 linuxAccessAcl,
+                linuxSecurityContext,
                 macAccessAcl);
         }
         finally
@@ -511,6 +552,7 @@ internal static partial class HomeAssistantAtomicFile
             uint groupId,
             uint fileType,
             byte[]? linuxAccessAcl,
+            byte[]? linuxSecurityContext,
             string? macAccessAcl)
         {
             Device = device;
@@ -520,6 +562,7 @@ internal static partial class HomeAssistantAtomicFile
             GroupId = groupId;
             FileType = fileType;
             LinuxAccessAcl = linuxAccessAcl;
+            LinuxSecurityContext = linuxSecurityContext;
             MacAccessAcl = macAccessAcl;
         }
 
@@ -532,6 +575,7 @@ internal static partial class HomeAssistantAtomicFile
         internal bool IsRegularFile => FileType == UnixRegularFile;
         internal bool IsSymbolicLink => FileType == UnixSymbolicLink;
         internal byte[]? LinuxAccessAcl { get; }
+        internal byte[]? LinuxSecurityContext { get; }
         internal string? MacAccessAcl { get; }
 
         internal static bool SameIdentity(
@@ -557,6 +601,7 @@ internal static partial class HomeAssistantAtomicFile
                 && expected.Value.GroupId == current.Value.GroupId
                 && expected.Value.FileType == current.Value.FileType
                 && EqualBytes(expected.Value.LinuxAccessAcl, current.Value.LinuxAccessAcl)
+                && EqualBytes(expected.Value.LinuxSecurityContext, current.Value.LinuxSecurityContext)
                 && string.Equals(expected.Value.MacAccessAcl, current.Value.MacAccessAcl, StringComparison.Ordinal);
         }
 

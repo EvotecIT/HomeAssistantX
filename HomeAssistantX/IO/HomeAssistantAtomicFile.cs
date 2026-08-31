@@ -4,6 +4,8 @@ namespace HomeAssistantX.IO;
 
 internal static partial class HomeAssistantAtomicFile
 {
+    private const int ExportWriteChunkSize = 64 * 1024;
+
     internal static string CreateTemporaryPath(string directory)
     {
         if (directory is null) throw new ArgumentNullException(nameof(directory));
@@ -104,6 +106,26 @@ internal static partial class HomeAssistantAtomicFile
         }
 
         return CreateSecureWindowsTemporaryFileStream(temporaryPath);
+    }
+
+    internal static async Task WriteAllBytesAsync(
+        Stream stream,
+        byte[] bytes,
+        CancellationToken cancellationToken)
+    {
+        if (stream is null) throw new ArgumentNullException(nameof(stream));
+        if (bytes is null) throw new ArgumentNullException(nameof(bytes));
+        cancellationToken.ThrowIfCancellationRequested();
+        for (var offset = 0; offset < bytes.Length; offset += ExportWriteChunkSize)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = Math.Min(ExportWriteChunkSize, bytes.Length - offset);
+            await stream.WriteAsync(bytes, offset, count, cancellationToken).ConfigureAwait(false);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     internal static void PreserveDestinationPermissions(string destinationPath, string temporaryPath)

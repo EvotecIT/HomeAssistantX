@@ -8,30 +8,112 @@ namespace HomeAssistantX.IO;
 internal static partial class HomeAssistantAtomicFile
 {
     private static byte[]? ReadLinuxAccessAcl(string sourcePath)
+        => ReadLinuxExtendedAttribute(
+            sourcePath,
+            LinuxAccessAclAttribute,
+            "The destination Unix access ACL could not be read.");
+
+    private static byte[]? ReadLinuxAccessAcl(
+        SafeFileHandle sourceHandle,
+        string? fallbackPath,
+        bool allowProcDescriptorPath)
+        => ReadLinuxExtendedAttribute(
+            sourceHandle,
+            fallbackPath,
+            LinuxAccessAclAttribute,
+            "The pinned Unix access ACL could not be read.",
+            allowProcDescriptorPath);
+
+    private static byte[]? ReadLinuxSecurityContext(string sourcePath)
+        => ReadLinuxExtendedAttribute(
+            sourcePath,
+            LinuxSecurityContextAttribute,
+            "The destination SELinux context could not be read.");
+
+    private static byte[]? ReadLinuxSecurityContext(
+        SafeFileHandle sourceHandle,
+        string? fallbackPath,
+        bool allowProcDescriptorPath)
+        => ReadLinuxExtendedAttribute(
+            sourceHandle,
+            fallbackPath,
+            LinuxSecurityContextAttribute,
+            "The pinned SELinux context could not be read.",
+            allowProcDescriptorPath);
+
+    private static byte[]? ReadLinuxExtendedAttribute(
+        string sourcePath,
+        string attributeName,
+        string failureMessage)
+        => ReadLinuxExtendedAttribute(
+            (value, size) => GetExtendedAttribute(sourcePath, attributeName, value, size),
+            failureMessage);
+
+    private static byte[]? ReadLinuxExtendedAttribute(
+        SafeFileHandle sourceHandle,
+        string? fallbackPath,
+        string attributeName,
+        string failureMessage,
+        bool allowProcDescriptorPath)
     {
-        var size = GetExtendedAttribute(sourcePath, LinuxAccessAclAttribute, IntPtr.Zero, UIntPtr.Zero).ToInt64();
+        try
+        {
+            return ReadLinuxExtendedAttribute(
+                (value, size) => FGetExtendedAttribute(sourceHandle, attributeName, value, size),
+                failureMessage);
+        }
+        catch (IOException exception) when (IsNativeError(exception, UnixBadFileDescriptor))
+        {
+            if (allowProcDescriptorPath)
+            {
+                var addedReference = false;
+                try
+                {
+                    sourceHandle.DangerousAddRef(ref addedReference);
+                    var descriptorPath = "/proc/self/fd/"
+                        + sourceHandle.DangerousGetHandle().ToInt64().ToString(CultureInfo.InvariantCulture);
+                    return ReadLinuxExtendedAttribute(descriptorPath, attributeName, failureMessage);
+                }
+                catch (IOException procException) when (CanFallBackFromProcDescriptor(procException))
+                {
+                    // Hardened containers and chroots may omit procfs. The caller
+                    // brackets this direct-path fallback with pinned inode checks.
+                }
+                finally
+                {
+                    if (addedReference) sourceHandle.DangerousRelease();
+                }
+            }
+
+            if (fallbackPath is null) throw;
+            return ReadLinuxExtendedAttribute(fallbackPath, attributeName, failureMessage);
+        }
+    }
+
+    private static byte[]? ReadLinuxExtendedAttribute(
+        Func<IntPtr, UIntPtr, IntPtr> read,
+        string failureMessage)
+    {
+        var size = read(IntPtr.Zero, UIntPtr.Zero).ToInt64();
         if (size < 0)
         {
             var error = Marshal.GetLastWin32Error();
             if (error == LinuxNoData || error == LinuxOperationNotSupported) return null;
-            throw new IOException("The destination Unix access ACL could not be read.", new Win32Exception(error));
+            throw new IOException(failureMessage, new Win32Exception(error));
         }
         if (size == 0) return Array.Empty<byte>();
 
         var buffer = Marshal.AllocHGlobal(checked((int)size));
         try
         {
-            var read = GetExtendedAttribute(
-                sourcePath,
-                LinuxAccessAclAttribute,
-                buffer,
-                new UIntPtr(unchecked((ulong)size))).ToInt64();
-            if (read != size)
+            var actual = read(buffer, new UIntPtr(unchecked((ulong)size))).ToInt64();
+            if (actual != size)
             {
                 throw new IOException(
-                    "The destination Unix access ACL changed while it was being read.",
+                    failureMessage + " The attribute changed while it was being read.",
                     new Win32Exception(Marshal.GetLastWin32Error()));
             }
+
             var result = new byte[checked((int)size)];
             Marshal.Copy(buffer, result, 0, result.Length);
             return result;
@@ -42,61 +124,64 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
-    private static byte[]? ReadLinuxAccessAcl(SafeFileHandle sourceHandle)
-    {
-        // Linux O_PATH descriptors intentionally work for fstat even when the
-        // caller cannot read the file, but fgetxattr rejects them with EBADF.
-        // /proc/self/fd resolves the already-pinned descriptor and therefore
-        // cannot be redirected by replacing the original directory entry.
-        var addedReference = false;
-        try
-        {
-            sourceHandle.DangerousAddRef(ref addedReference);
-            var descriptorPath = "/proc/self/fd/"
-                + sourceHandle.DangerousGetHandle().ToInt64().ToString(CultureInfo.InvariantCulture);
-            return ReadLinuxAccessAcl(descriptorPath);
-        }
-        catch (IOException exception)
-        {
-            throw new IOException("The pinned Unix access ACL could not be read.", exception);
-        }
-        finally
-        {
-            if (addedReference) sourceHandle.DangerousRelease();
-        }
-    }
+    private static bool IsNativeError(IOException exception, int error)
+        => exception.InnerException is Win32Exception native && native.NativeErrorCode == error;
+
+    private static bool CanFallBackFromProcDescriptor(IOException exception)
+        => exception.InnerException is Win32Exception native
+            && native.NativeErrorCode is UnixNoEntry or UnixPermissionDenied or UnixOperationNotPermitted;
 
     private static void ApplyLinuxAccessAcl(SafeFileHandle destinationHandle, byte[]? accessAcl)
+        => ApplyLinuxExtendedAttribute(
+            destinationHandle,
+            LinuxAccessAclAttribute,
+            accessAcl,
+            clearWhenMissing: true,
+            "The temporary Unix access ACL could not be preserved.");
+
+    private static void ApplyLinuxSecurityContext(
+        SafeFileHandle destinationHandle,
+        byte[]? securityContext)
+        => ApplyLinuxExtendedAttribute(
+            destinationHandle,
+            LinuxSecurityContextAttribute,
+            securityContext,
+            clearWhenMissing: false,
+            "The temporary SELinux context could not be preserved.");
+
+    private static void ApplyLinuxExtendedAttribute(
+        SafeFileHandle destinationHandle,
+        string attributeName,
+        byte[]? value,
+        bool clearWhenMissing,
+        string failureMessage)
     {
-        if (accessAcl is null)
+        if (value is null)
         {
-            if (FRemoveExtendedAttribute(destinationHandle, LinuxAccessAclAttribute) != 0)
+            if (!clearWhenMissing) return;
+            if (FRemoveExtendedAttribute(destinationHandle, attributeName) != 0)
             {
                 var error = Marshal.GetLastWin32Error();
                 if (error != LinuxNoData && error != LinuxOperationNotSupported)
                 {
-                    throw new IOException(
-                        "The temporary Unix access ACL could not be cleared.",
-                        new Win32Exception(error));
+                    throw new IOException(failureMessage, new Win32Exception(error));
                 }
             }
             return;
         }
 
-        var buffer = Marshal.AllocHGlobal(accessAcl.Length);
+        var buffer = Marshal.AllocHGlobal(value.Length);
         try
         {
-            if (accessAcl.Length > 0) Marshal.Copy(accessAcl, 0, buffer, accessAcl.Length);
+            if (value.Length > 0) Marshal.Copy(value, 0, buffer, value.Length);
             if (FSetExtendedAttribute(
                     destinationHandle,
-                    LinuxAccessAclAttribute,
+                    attributeName,
                     buffer,
-                    new UIntPtr(unchecked((ulong)accessAcl.Length)),
+                    new UIntPtr(unchecked((ulong)value.Length)),
                     0) != 0)
             {
-                throw new IOException(
-                    "The temporary Unix access ACL could not be preserved.",
-                    new Win32Exception(Marshal.GetLastWin32Error()));
+                throw new IOException(failureMessage, new Win32Exception(Marshal.GetLastWin32Error()));
             }
         }
         finally
@@ -198,6 +283,13 @@ internal static partial class HomeAssistantAtomicFile
     [DllImport("libc", EntryPoint = "getxattr", SetLastError = true)]
     private static extern IntPtr GetExtendedAttribute(
         string path,
+        string name,
+        IntPtr value,
+        UIntPtr size);
+
+    [DllImport("libc", EntryPoint = "fgetxattr", SetLastError = true)]
+    private static extern IntPtr FGetExtendedAttribute(
+        SafeFileHandle handle,
         string name,
         IntPtr value,
         UIntPtr size);

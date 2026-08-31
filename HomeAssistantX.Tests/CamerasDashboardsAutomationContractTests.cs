@@ -565,6 +565,15 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var cancellation = new CancellationTokenSource();
         var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var entityId = new string(' ', 16_000_000) + "automation.front";
+        var canceller = Task.Factory.StartNew(
+            () =>
+            {
+                started.Task.GetAwaiter().GetResult();
+                cancellation.Cancel();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
         var operation = Task.Factory.StartNew(
             async () =>
             {
@@ -574,10 +583,9 @@ public sealed class CamerasDashboardsAutomationContractTests
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default).Unwrap();
-        await started.Task;
-        cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        await canceller;
     }
 
     [Theory]
@@ -1680,6 +1688,48 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void LinuxPermissionPreservationCanBypassProcDescriptorPaths()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-proc-independent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            File.SetUnixFileMode(destination, UnixFileMode.UserWrite);
+
+            HomeAssistantAtomicFile.PreserveDestinationPermissions(
+                destination,
+                temporary,
+                useManagedApis: false);
+
+            Assert.Equal(File.GetUnixFileMode(destination), File.GetUnixFileMode(temporary));
+        }
+        finally
+        {
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AtomicExportWritesObserveCancellationBetweenBoundedChunks()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new CancelAfterFirstWriteStream(cancellation);
+        var bytes = new byte[256 * 1024];
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantAtomicFile.WriteAllBytesAsync(stream, bytes, cancellation.Token));
+
+        Assert.InRange(stream.LargestWrite, 1, 64 * 1024);
+        Assert.False(stream.FlushCalled);
+    }
+
+    [Fact]
     public void WindowsAtomicExportsRetryWhenDestinationAppearsBeforeNoReplaceMove()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -1807,6 +1857,51 @@ public sealed class CamerasDashboardsAutomationContractTests
         if (process.ExitCode != 0)
             throw new InvalidOperationException("The Unix metadata probe failed: " + error.Trim());
         return output.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+    }
+
+    private sealed class CancelAfterFirstWriteStream : Stream
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancelAfterFirstWriteStream(CancellationTokenSource cancellation)
+        {
+            _cancellation = cancellation;
+        }
+
+        internal int LargestWrite { get; private set; }
+
+        internal bool FlushCalled { get; private set; }
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() => FlushCalled = true;
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            FlushCalled = true;
+            return Task.CompletedTask;
+        }
+
+        public override Task WriteAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LargestWrite = Math.Max(LargestWrite, count);
+            _cancellation.Cancel();
+            return Task.CompletedTask;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     [Fact]
