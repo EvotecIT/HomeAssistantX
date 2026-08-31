@@ -24,8 +24,11 @@ public sealed class HomeAssistantRoutineClient
 
     public Task<HomeAssistantServiceCallResult> RunScriptAsync(HomeAssistantTarget target, IReadOnlyDictionary<string, object?>? variables = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
+            .NormalizeRequiredForDomain("script", cancellationToken: cancellationToken);
         var frozenVariables = HomeAssistantJson.FreezeObject(variables, nameof(variables), "Variables", cancellationToken);
-        return CallAsync("script", "turn_on", target, call =>
+        return CallAsync("script", "turn_on", frozenTarget, call =>
         {
             if (frozenVariables is not null)
             {

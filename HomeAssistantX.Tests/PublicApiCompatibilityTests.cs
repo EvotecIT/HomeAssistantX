@@ -789,6 +789,19 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void FieldFormatterPreservesJsonWireNamesAndDerivedConverterAttributes()
+    {
+        var wireName = typeof(JsonFieldFixture).GetField(nameof(JsonFieldFixture.WireName))!;
+        var converted = typeof(JsonFieldFixture).GetField(nameof(JsonFieldFixture.Converted))!;
+
+        Assert.Contains("json-name(\"wire_name\")", FormatField(wireName), StringComparison.Ordinal);
+        Assert.Contains(
+            "json-converter-attribute(" + FormatType(typeof(DerivedJsonConverterAttribute)) + ")",
+            FormatField(converted),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MethodFormatterPreservesUnknownRequiredCustomModifiers()
     {
         var method = CreateRequiredCustomModifierFixture();
@@ -1565,9 +1578,9 @@ public sealed class PublicApiCompatibilityTests
             StringComparison.Ordinal);
     }
 
-    private static string JsonPropertyNameContract(PropertyInfo property)
+    private static string JsonPropertyNameContract(MemberInfo member)
     {
-        var attribute = property.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
+        var attribute = member.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
             value.AttributeType.FullName,
             typeof(JsonPropertyNameAttribute).FullName,
             StringComparison.Ordinal));
@@ -1603,11 +1616,18 @@ public sealed class PublicApiCompatibilityTests
 
     private static string JsonConverterContract(MemberInfo member)
     {
-        var attribute = member.GetCustomAttributesData().FirstOrDefault(value => string.Equals(
-            value.AttributeType.FullName,
-            typeof(JsonConverterAttribute).FullName,
-            StringComparison.Ordinal));
+        var attribute = member.GetCustomAttributesData().FirstOrDefault(value =>
+            typeof(JsonConverterAttribute).IsAssignableFrom(value.AttributeType));
         if (attribute is null) return string.Empty;
+        if (attribute.AttributeType != typeof(JsonConverterAttribute))
+        {
+            var arguments = attribute.ConstructorArguments
+                .Select(FormatAttributeArgument)
+                .Concat(attribute.NamedArguments.Select(value => value.MemberName + "=" + FormatAttributeArgument(value.TypedValue)))
+                .ToArray();
+            return "json-converter-attribute(" + FormatType(attribute.AttributeType)
+                + (arguments.Length == 0 ? string.Empty : "," + string.Join(",", arguments)) + ") ";
+        }
         return attribute.ConstructorArguments.Count == 1
             && attribute.ConstructorArguments[0].Value is Type converterType
                 ? "json-converter(" + FormatType(converterType) + ") "
@@ -1688,6 +1708,18 @@ public sealed class PublicApiCompatibilityTests
 
         [JsonInclude]
         public string IncludedValue = string.Empty;
+
+        [JsonPropertyName("wire_name")]
+        public string WireName = string.Empty;
+
+        [DerivedJsonConverter]
+        public string Converted = string.Empty;
+    }
+
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class | AttributeTargets.Struct)]
+    private sealed class DerivedJsonConverterAttribute : JsonConverterAttribute
+    {
+        public override JsonConverter? CreateConverter(Type typeToConvert) => null;
     }
 
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
@@ -2626,7 +2658,7 @@ public sealed class PublicApiCompatibilityTests
             : (field.IsStatic ? "static" : "instance") + volatileContract + (field.IsInitOnly ? " readonly" : string.Empty);
         var constantValue = field.IsLiteral ? field.GetRawConstantValue() : decimalConstant?.Value;
         var value = isConstant ? " = " + FormatDefault(constantValue) : string.Empty;
-        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonExtensionDataContract(field) + JsonIncludeContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + JsonObjectCreationHandlingContract(field) + JsonRequiredContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + RequiredCustomModifierContract(field.GetRequiredCustomModifiers(), "System.Runtime.CompilerServices.IsVolatile", "System.Runtime.CompilerServices.IsReadOnlyAttribute") + FormatFieldType(field) + " " + field.Name + value;
+        return "F " + FieldAccess(field) + scope + " " + SpecialNameContract(field) + NonSerializedContract(field) + ThreadStaticContract(field) + ObsoleteContract(field) + ExperimentalContract(field) + PreviewFeatureContract(field) + PlatformContract(field) + ClsComplianceContract(field) + ComVisibilityContract(field) + DispIdContract(field) + JsonPropertyNameContract(field) + JsonExtensionDataContract(field) + JsonIncludeContract(field) + JsonIgnoreContract(field) + JsonConverterContract(field) + JsonNumberHandlingContract(field) + JsonObjectCreationHandlingContract(field) + JsonRequiredContract(field) + RequiredMember(field) + MarshalAsContract(field) + FixedBufferContract(field) + NullableFlowContract(field) + DynamicallyAccessedMembersContract(field) + RequiredCustomModifierContract(field.GetRequiredCustomModifiers(), "System.Runtime.CompilerServices.IsVolatile", "System.Runtime.CompilerServices.IsReadOnlyAttribute") + FormatFieldType(field) + " " + field.Name + value;
     }
 
     private static string FormatEnumField(Type type, string name)

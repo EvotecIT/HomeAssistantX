@@ -111,6 +111,10 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
         var frozenData = data is null
             ? HomeAssistantJson.FreezeValue(new Dictionary<string, object?>(), nameof(data), "Data", cancellationToken)
             : HomeAssistantJson.FreezeValue(data, nameof(data), "Data", cancellationToken);
+        if (frozenData.ValueKind != JsonValueKind.Object)
+        {
+            throw new ArgumentException("Mobile webhook command data must be a JSON object.", nameof(data));
+        }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_requestTimeout);
         var operationToken = timeout.Token;

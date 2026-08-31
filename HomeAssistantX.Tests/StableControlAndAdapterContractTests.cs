@@ -1796,6 +1796,41 @@ public sealed class StableControlAndAdapterContractTests
         Assert.Null(server.LastRequestBody);
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("42")]
+    [InlineData("\"text\"")]
+    public async Task RawWebhookPayloadsRequireAJsonObject(string json)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var webhook = client.MobileApp.CreateWebhookClient(new HomeAssistantMobileAppRegistration { WebhookId = "shape" });
+        using var document = JsonDocument.Parse(json);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => webhook.SendAsync("custom", document.RootElement));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task ScriptTargetsAreFrozenBeforeCallerOwnedVariablesAreTraversed()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var target = HomeAssistantTarget.ForEntity("script.evening");
+        var variables = new Dictionary<string, object?>
+        {
+            ["probe"] = new RegistrationMutationProbe(
+                () => target.EntityIds = new[] { "script.mutated" })
+        };
+
+        await client.Controls.Routines.RunScriptAsync(target, variables);
+
+        using var call = JsonDocument.Parse(Assert.IsType<string>(server.LastServiceCallBody));
+        Assert.Equal("script.evening", call.RootElement.GetProperty("target").GetProperty("entity_id")[0].GetString());
+    }
+
     [Fact]
     public async Task CancelledWebhookCommandsDoNotInspectCallerOwnedPayloads()
     {
