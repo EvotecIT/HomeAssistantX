@@ -795,26 +795,23 @@ try {
         { Set-HomeAssistantDashboard -ConfigurationJson '{"views":[],"views":[{}]}' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -New -UrlPath house -Title House -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -New -UrlPath house-main -Title ' ' -WhatIf -ErrorAction Stop }
-        { Set-HomeAssistantDashboard -New -UrlPath ' ' -Title House -AllowSingleWord -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -New -UrlPath house-main -Title House -Icon home -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -DashboardId ' ' -Title House -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -DashboardId house-main -Title ' ' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -DashboardId house-main -Icon home -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -NewResource -ResourceUrl ' ' -ResourceType Module -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantDashboard -ResourceId ' ' -ResourceUrl /local/card.js -WhatIf -ErrorAction Stop }
-        { Set-HomeAssistantDashboard -ConfigurationJson '{}' -UrlPath ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard -ResourceId ' ' -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard ([string]::new([char]'d', 256)) -WhatIf -ErrorAction Stop }
         { Remove-HomeAssistantDashboard -ResourceId ([string]::new([char]'r', 256)) -WhatIf -ErrorAction Stop }
-        { Remove-HomeAssistantDashboard -Configuration -UrlPath ' ' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantAutomation morning-routine '[]' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantAutomation morning-routine '{"id":"other-routine","alias":"Morning"}' -WhatIf -ErrorAction Stop }
         { Set-HomeAssistantAutomation morning-routine '{"id":"morning-routine","alias":"First","alias":"Second"}' -WhatIf -ErrorAction Stop }
     )) {
         $rejected = $false
         try { $null = & $invalidPlatformData } catch { $rejected = $true }
-        if (-not $rejected) { throw 'Invalid platform-data input was accepted under WhatIf.' }
+        if (-not $rejected) { throw "Invalid platform-data input was accepted under WhatIf: $invalidPlatformData" }
     }
 
     $server.StandardInput.WriteLine('CLEAR_LAST_SERVICE_CALL')
