@@ -182,9 +182,12 @@ public sealed class CamerasDashboardsAutomationContractTests
     [Fact]
     public void DashboardVisibilityValidationHonorsCancellation()
     {
-        using var document = JsonDocument.Parse("{\"show_in_sidebar\":true,\"require_admin\":false}");
+        var extensionProperties = string.Join(",", Enumerable.Range(0, 1_000_000)
+            .Select(index => "\"provider_" + index + "\":0"));
+        using var document = JsonDocument.Parse(
+            "{" + extensionProperties + ",\"show_in_sidebar\":true,\"require_admin\":false}");
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
 
         Assert.ThrowsAny<OperationCanceledException>(() =>
             HomeAssistantDashboardClient.RequireDashboardVisibility(

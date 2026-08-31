@@ -461,6 +461,18 @@ public sealed class HomeAssistantDashboardClient
         JsonElement value,
         string failureMessage,
         CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                RequireDashboardVisibilityCore(value, failureMessage, cancellationToken);
+                return true;
+            },
+            cancellationToken);
+
+    private static void RequireDashboardVisibilityCore(
+        JsonElement value,
+        string failureMessage,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object)
