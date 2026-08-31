@@ -750,11 +750,20 @@ public sealed class StableControlAndAdapterContractTests
         wrongRcode[3] = 1;
         var truncated = CreateDiscoveryPacket();
         truncated[2] |= 0x02;
+        var nonAuthoritative = CreateDiscoveryPacket();
+        nonAuthoritative[2] = 0x80;
+        var recursive = CreateDiscoveryPacket();
+        recursive[3] = 0x80;
+        var reserved = CreateDiscoveryPacket();
+        reserved[3] = 0x40;
         var invalid = new DnsDiscoveryAggregate();
         DnsDiscoveryPacket.ReadInto(query, invalid);
         DnsDiscoveryPacket.ReadInto(wrongOpcode, invalid);
         DnsDiscoveryPacket.ReadInto(wrongRcode, invalid);
         DnsDiscoveryPacket.ReadInto(truncated, invalid);
+        DnsDiscoveryPacket.ReadInto(nonAuthoritative, invalid);
+        DnsDiscoveryPacket.ReadInto(recursive, invalid);
+        DnsDiscoveryPacket.ReadInto(reserved, invalid);
         DnsDiscoveryPacket.ReadInto(CreateDiscoveryPacket(recordClass: 2), invalid);
         Assert.Empty(invalid.Build());
     }

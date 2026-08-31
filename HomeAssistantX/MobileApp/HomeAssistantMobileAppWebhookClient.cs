@@ -314,21 +314,7 @@ public sealed class HomeAssistantMobileAppWebhookClient : IDisposable
     }
 
     internal static byte[] CopyMemoryStream(MemoryStream stream, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var length = checked((int)stream.Length);
-        var result = new byte[length];
-        if (!stream.TryGetBuffer(out var source))
-            throw new HomeAssistantProtocolException("The mobile-app response buffer could not be accessed.");
-        for (var offset = 0; offset < length; offset += 8192)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var count = Math.Min(8192, length - offset);
-            Buffer.BlockCopy(source.Array!, source.Offset + offset, result, offset, count);
-        }
-        cancellationToken.ThrowIfCancellationRequested();
-        return result;
-    }
+        => HomeAssistantJson.CopyMemoryStream(stream, cancellationToken);
 
 #if !NET10_0_OR_GREATER
     private static async Task<Stream> ReadContentStreamAsync(
