@@ -82,47 +82,181 @@ public enum HomeAssistantMediaEnqueueMode
 /// <summary>Options supported by Home Assistant's <c>media_player.play_media</c> action.</summary>
 public sealed class HomeAssistantPlayMediaOptions
 {
-    public HomeAssistantMediaEnqueueMode? Enqueue { get; set; }
+    private readonly object _sync = new();
+    private HomeAssistantMediaEnqueueMode? _enqueue;
+    private bool? _announce;
+    private IReadOnlyDictionary<string, object?>? _extra;
 
-    public bool? Announce { get; set; }
+    public HomeAssistantMediaEnqueueMode? Enqueue
+    {
+        get { lock (_sync) return _enqueue; }
+        set { lock (_sync) _enqueue = value; }
+    }
 
-    public IReadOnlyDictionary<string, object?>? Extra { get; set; }
+    public bool? Announce
+    {
+        get { lock (_sync) return _announce; }
+        set { lock (_sync) _announce = value; }
+    }
+
+    public IReadOnlyDictionary<string, object?>? Extra
+    {
+        get { lock (_sync) return _extra; }
+        set { lock (_sync) _extra = value; }
+    }
+
+    internal HomeAssistantPlayMediaOptions Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantPlayMediaOptions
+            {
+                Enqueue = _enqueue,
+                Announce = _announce,
+                Extra = _extra is null
+                    ? null
+                    : HomeAssistantJson.FreezeObject(
+                        _extra,
+                        nameof(Extra),
+                        "MediaExtra",
+                        cancellationToken)
+            };
+        }
+    }
 }
 
 /// <summary>Typed media-player changes that may be applied in one logical operation.</summary>
 public sealed class HomeAssistantMediaPlayerOptions
 {
+    private readonly object _sync = new();
     private double? _volumePercent;
+    private HomeAssistantPowerAction? _power;
+    private HomeAssistantMediaPlaybackAction? _playback;
+    private bool? _muted;
+    private string? _source;
+    private string? _soundMode;
+    private bool? _shuffle;
+    private HomeAssistantMediaRepeatMode? _repeat;
+    private string? _mediaContentId;
+    private string? _mediaContentType;
+    private HomeAssistantMediaEnqueueMode? _enqueue;
+    private bool? _announce;
+    private IReadOnlyDictionary<string, object?>? _mediaExtra;
 
-    public HomeAssistantPowerAction? Power { get; set; }
+    public HomeAssistantPowerAction? Power
+    {
+        get { lock (_sync) return _power; }
+        set { lock (_sync) _power = value; }
+    }
 
-    public HomeAssistantMediaPlaybackAction? Playback { get; set; }
+    public HomeAssistantMediaPlaybackAction? Playback
+    {
+        get { lock (_sync) return _playback; }
+        set { lock (_sync) _playback = value; }
+    }
 
     public double? VolumePercent
     {
-        get => _volumePercent;
-        set => _volumePercent = ControlValidation.Percent(value, nameof(VolumePercent));
+        get { lock (_sync) return _volumePercent; }
+        set
+        {
+            var validated = ControlValidation.Percent(value, nameof(VolumePercent));
+            lock (_sync) _volumePercent = validated;
+        }
     }
 
-    public bool? Muted { get; set; }
+    public bool? Muted
+    {
+        get { lock (_sync) return _muted; }
+        set { lock (_sync) _muted = value; }
+    }
 
-    public string? Source { get; set; }
+    public string? Source
+    {
+        get { lock (_sync) return _source; }
+        set { lock (_sync) _source = value; }
+    }
 
-    public string? SoundMode { get; set; }
+    public string? SoundMode
+    {
+        get { lock (_sync) return _soundMode; }
+        set { lock (_sync) _soundMode = value; }
+    }
 
-    public bool? Shuffle { get; set; }
+    public bool? Shuffle
+    {
+        get { lock (_sync) return _shuffle; }
+        set { lock (_sync) _shuffle = value; }
+    }
 
-    public HomeAssistantMediaRepeatMode? Repeat { get; set; }
+    public HomeAssistantMediaRepeatMode? Repeat
+    {
+        get { lock (_sync) return _repeat; }
+        set { lock (_sync) _repeat = value; }
+    }
 
-    public string? MediaContentId { get; set; }
+    public string? MediaContentId
+    {
+        get { lock (_sync) return _mediaContentId; }
+        set { lock (_sync) _mediaContentId = value; }
+    }
 
-    public string? MediaContentType { get; set; }
+    public string? MediaContentType
+    {
+        get { lock (_sync) return _mediaContentType; }
+        set { lock (_sync) _mediaContentType = value; }
+    }
 
-    public HomeAssistantMediaEnqueueMode? Enqueue { get; set; }
+    public HomeAssistantMediaEnqueueMode? Enqueue
+    {
+        get { lock (_sync) return _enqueue; }
+        set { lock (_sync) _enqueue = value; }
+    }
 
-    public bool? Announce { get; set; }
+    public bool? Announce
+    {
+        get { lock (_sync) return _announce; }
+        set { lock (_sync) _announce = value; }
+    }
 
-    public IReadOnlyDictionary<string, object?>? MediaExtra { get; set; }
+    public IReadOnlyDictionary<string, object?>? MediaExtra
+    {
+        get { lock (_sync) return _mediaExtra; }
+        set { lock (_sync) _mediaExtra = value; }
+    }
+
+    internal HomeAssistantMediaPlayerOptions Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantMediaPlayerOptions
+            {
+                Power = _power,
+                Playback = _playback,
+                VolumePercent = _volumePercent,
+                Muted = _muted,
+                Source = _source,
+                SoundMode = _soundMode,
+                Shuffle = _shuffle,
+                Repeat = _repeat,
+                MediaContentId = _mediaContentId,
+                MediaContentType = _mediaContentType,
+                Enqueue = _enqueue,
+                Announce = _announce,
+                MediaExtra = _mediaExtra is null
+                    ? null
+                    : HomeAssistantJson.FreezeObject(
+                        _mediaExtra,
+                        nameof(MediaExtra),
+                        "MediaExtra",
+                        cancellationToken)
+            };
+        }
+    }
 }
 
 /// <summary>A typed view of one raw Home Assistant media-player state.</summary>

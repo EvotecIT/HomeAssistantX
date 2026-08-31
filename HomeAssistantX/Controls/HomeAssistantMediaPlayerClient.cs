@@ -89,27 +89,28 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        var frozenOptions = options.Snapshot(cancellationToken);
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
             .NormalizeForDomain(Domain, cancellationToken);
-        var power = options.Power;
-        var playback = options.Playback;
-        var volumePercent = options.VolumePercent;
-        var muted = options.Muted;
-        var source = PreserveOptional(options.Source, nameof(options.Source), cancellationToken);
-        var soundMode = PreserveOptional(options.SoundMode, nameof(options.SoundMode), cancellationToken);
-        var shuffle = options.Shuffle;
-        var repeat = options.Repeat;
+        var power = frozenOptions.Power;
+        var playback = frozenOptions.Playback;
+        var volumePercent = frozenOptions.VolumePercent;
+        var muted = frozenOptions.Muted;
+        var source = PreserveOptional(frozenOptions.Source, nameof(options.Source), cancellationToken);
+        var soundMode = PreserveOptional(frozenOptions.SoundMode, nameof(options.SoundMode), cancellationToken);
+        var shuffle = frozenOptions.Shuffle;
+        var repeat = frozenOptions.Repeat;
         var mediaContentId = PreserveOptional(
-            options.MediaContentId,
+            frozenOptions.MediaContentId,
             nameof(options.MediaContentId),
             cancellationToken);
         var mediaContentType = NormalizeOptional(
-            options.MediaContentType,
+            frozenOptions.MediaContentType,
             nameof(options.MediaContentType),
             cancellationToken);
-        var enqueue = options.Enqueue;
-        var announce = options.Announce;
-        var mediaExtra = options.MediaExtra;
+        var enqueue = frozenOptions.Enqueue;
+        var announce = frozenOptions.Announce;
+        var mediaExtra = frozenOptions.MediaExtra;
         var hasSource = source is not null;
         var hasSoundMode = soundMode is not null;
         var hasMediaContentId = mediaContentId is not null;
@@ -153,7 +154,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var playbackAction = playback.HasValue ? PlaybackAction(playback.Value) : null;
         var repeatMode = repeat.HasValue ? RepeatMode(repeat.Value) : null;
         var enqueueMode = enqueue.HasValue ? EnqueueMode(enqueue.Value) : null;
-        var frozenMediaExtra = FreezeMediaExtra(mediaExtra, nameof(options.MediaExtra), cancellationToken);
+        var frozenMediaExtra = mediaExtra;
         if (powerAction is null && playbackAction is null && !hasNonPowerOperation)
         {
             throw new ArgumentException("At least one media-player value or action is required.", nameof(options));
@@ -376,9 +377,10 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
             mediaContentType,
             nameof(mediaContentType),
             cancellationToken);
-        var enqueueOption = options?.Enqueue;
-        var announce = options?.Announce;
-        var extra = options?.Extra;
+        var frozenOptions = options?.Snapshot(cancellationToken);
+        var enqueueOption = frozenOptions?.Enqueue;
+        var announce = frozenOptions?.Announce;
+        var extra = frozenOptions?.Extra;
         if (enqueueOption.HasValue && announce == true)
         {
             throw new ArgumentException("Enqueue and Announce cannot be combined by Home Assistant.", nameof(options));
@@ -387,7 +389,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         var enqueue = enqueueOption.HasValue
             ? EnqueueMode(enqueueOption.Value)
             : null;
-        var frozenExtra = FreezeMediaExtra(extra, nameof(options), cancellationToken);
+        var frozenExtra = extra;
         return CallAsync(
             "play_media",
             target,
@@ -429,6 +431,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
     {
         cancellationToken.ThrowIfCancellationRequested();
         var context = CaptureContext(cancellationToken);
+        var frozenPlayMediaOptions = playMediaOptions?.Snapshot(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (settings is not null)
         {
@@ -477,15 +480,15 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
                 mediaContentType!,
                 nameof(mediaContentType),
                 cancellationToken);
-            var enqueueOption = playMediaOptions?.Enqueue;
-            var announce = playMediaOptions?.Announce;
+            var enqueueOption = frozenPlayMediaOptions?.Enqueue;
+            var announce = frozenPlayMediaOptions?.Announce;
             if (enqueueOption.HasValue && announce == true)
             {
                 throw new ArgumentException("Enqueue and Announce cannot be combined by Home Assistant.", nameof(playMediaOptions));
             }
 
             var enqueue = enqueueOption.HasValue ? EnqueueMode(enqueueOption.Value) : null;
-            var frozenExtra = FreezeMediaExtra(playMediaOptions?.Extra, nameof(playMediaOptions), cancellationToken);
+            var frozenExtra = frozenPlayMediaOptions?.Extra;
             results.Add(await CallAsync(
                 "play_media",
                 target,

@@ -784,6 +784,66 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public void MediaOptionSnapshotIsIndependentFromLaterCallerMutation()
+    {
+        var options = new HomeAssistantMediaPlayerOptions
+        {
+            Power = HomeAssistantPowerAction.On,
+            Playback = null,
+            VolumePercent = 35,
+            Muted = false,
+            Source = "Kitchen",
+            SoundMode = "Stereo",
+            Shuffle = true,
+            Repeat = HomeAssistantMediaRepeatMode.All,
+            MediaContentId = "media-source://radio/original",
+            MediaContentType = "music",
+            Enqueue = HomeAssistantMediaEnqueueMode.Add,
+            Announce = false,
+            MediaExtra = new Dictionary<string, object?> { ["provider"] = "original" }
+        };
+
+        var snapshot = options.Snapshot(CancellationToken.None);
+        options.Power = HomeAssistantPowerAction.Off;
+        options.VolumePercent = 80;
+        options.Source = "Bedroom";
+        options.MediaContentId = "media-source://radio/mutated";
+        options.MediaContentType = "audio/mpeg";
+        options.MediaExtra = new Dictionary<string, object?> { ["provider"] = "mutated" };
+
+        Assert.Equal(HomeAssistantPowerAction.On, snapshot.Power);
+        Assert.Equal(35, snapshot.VolumePercent);
+        Assert.Equal("Kitchen", snapshot.Source);
+        Assert.Equal("media-source://radio/original", snapshot.MediaContentId);
+        Assert.Equal("music", snapshot.MediaContentType);
+        Assert.Equal(
+            "original",
+            Assert.IsType<JsonElement>(snapshot.MediaExtra!["provider"]).GetString());
+    }
+
+    [Fact]
+    public void PlayMediaOptionSnapshotIsIndependentFromLaterCallerMutation()
+    {
+        var options = new HomeAssistantPlayMediaOptions
+        {
+            Enqueue = HomeAssistantMediaEnqueueMode.Add,
+            Announce = false,
+            Extra = new Dictionary<string, object?> { ["provider"] = "original" }
+        };
+
+        var snapshot = options.Snapshot(CancellationToken.None);
+        options.Enqueue = HomeAssistantMediaEnqueueMode.Replace;
+        options.Announce = true;
+        options.Extra = new Dictionary<string, object?> { ["provider"] = "mutated" };
+
+        Assert.Equal(HomeAssistantMediaEnqueueMode.Add, snapshot.Enqueue);
+        Assert.False(snapshot.Announce);
+        Assert.Equal(
+            "original",
+            Assert.IsType<JsonElement>(snapshot.Extra!["provider"]).GetString());
+    }
+
+    [Fact]
     public async Task ContradictoryOrInvalidAdvancedMediaOperationsFailBeforeDispatch()
     {
         using var server = new TestHomeAssistantServer();
