@@ -72,16 +72,7 @@ public sealed class HomeAssistantAutomationClient
         var value = await _rest.SendAsync<JsonElement>(HttpMethod.Get, ConfigurationPath(id, cancellationToken), null, cancellationToken).ConfigureAwait(false);
         if (value.ValueKind != JsonValueKind.Object) throw new HomeAssistantProtocolException("Home Assistant returned a non-object automation definition.");
         if (HomeAssistantAutomationIdentifier.HasDuplicateProperties(value, cancellationToken)) throw new HomeAssistantProtocolException("Home Assistant returned an automation definition with duplicate JSON properties.");
-        var responseIds = new List<JsonElement>();
-        foreach (var property in value.EnumerateObject())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
-            if (property.NameEquals("id"))
-            {
-                responseIds.Add(property.Value);
-            }
-        }
+        var responseIds = HomeAssistantAutomationIdentifier.GetDefinitionIds(value, cancellationToken);
         var responseId = responseIds.Count == 1 && responseIds[0].ValueKind == JsonValueKind.String
             ? await HomeAssistantJson.GetStringAsync(responseIds[0], cancellationToken).ConfigureAwait(false)
             : null;
@@ -95,7 +86,7 @@ public sealed class HomeAssistantAutomationClient
         return new HomeAssistantAutomationConfiguration
         {
             AutomationId = id,
-            Definition = HomeAssistantJson.DeserializeResponse<JsonElement>(
+            Definition = HomeAssistantJson.DeserializeResponseIsolated<JsonElement>(
                 value,
                 "The automation definition could not be snapshotted.",
                 cancellationToken: cancellationToken)
@@ -167,5 +158,16 @@ public sealed class HomeAssistantAutomationClient
     }
 
     private static string ConfigurationPath(string automationId, CancellationToken cancellationToken)
-        => "api/config/automation/config/" + HomeAssistantAutomationIdentifier.EscapeConfigurationId(automationId, cancellationToken);
+        => ConfigurationPathFromEscapedId(
+            HomeAssistantAutomationIdentifier.EscapeConfigurationId(automationId, cancellationToken),
+            cancellationToken);
+
+    internal static string ConfigurationPathFromEscapedId(
+        string escapedAutomationId,
+        CancellationToken cancellationToken)
+        => CancellationAwareString.Concat(
+            "api/config/automation/config/",
+            string.Empty,
+            escapedAutomationId,
+            cancellationToken);
 }

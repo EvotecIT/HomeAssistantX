@@ -664,6 +664,30 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void AutomationConfigurationPathCompositionObservesCancellationAfterEscaping()
+    {
+        var escaped = "automation-" + new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationClient.ConfigurationPathFromEscapedId(escaped, cancellation.Token));
+    }
+
+    [Fact]
+    public void AutomationDefinitionIdentifierScanObservesMidTraversalCancellation()
+    {
+        var extensionProperties = string.Join(",", Enumerable.Range(0, 1_000_000)
+            .Select(index => "\"provider_" + index + "\":0"));
+        using var definition = JsonDocument.Parse("{" + extensionProperties + ",\"id\":\"morning\"}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationIdentifier.GetDefinitionIds(definition.RootElement, cancellation.Token));
+    }
+
+    [Fact]
     public async Task AutomationEntityNormalizationObservesCancellationDuringTraversal()
     {
         using var server = new TestHomeAssistantServer();

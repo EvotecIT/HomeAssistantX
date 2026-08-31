@@ -97,6 +97,38 @@ public static class HomeAssistantAutomationIdentifier
         }
     }
 
+    internal static IReadOnlyList<JsonElement> GetDefinitionIds(
+        JsonElement definition,
+        CancellationToken cancellationToken = default)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => GetDefinitionIdsCore(definition, cancellationToken),
+            cancellationToken);
+
+    private static IReadOnlyList<JsonElement> GetDefinitionIdsCore(
+        JsonElement definition,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (definition.ValueKind != JsonValueKind.Object)
+        {
+            return Array.Empty<JsonElement>();
+        }
+
+        var definitionIds = new List<JsonElement>();
+        foreach (var property in definition.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            HomeAssistantJson.ThrowIfStringTraversalCanceled(property.Name, cancellationToken);
+            if (property.NameEquals("id"))
+            {
+                definitionIds.Add(property.Value);
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return definitionIds;
+    }
+
     internal static bool HasDuplicateProperties(
         JsonElement value,
         CancellationToken cancellationToken = default)
