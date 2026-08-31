@@ -1,4 +1,5 @@
 using HomeAssistantX.Exceptions;
+using NodaTime;
 using TimeZoneConverter;
 
 namespace HomeAssistantX.Protocol;
@@ -12,7 +13,7 @@ internal enum HomeAssistantCalendarPeriod
 
 internal static class HomeAssistantCalendarTime
 {
-    internal static TimeZoneInfo RequireTimeZone(
+    internal static HomeAssistantCalendarZone RequireTimeZone(
         string? timeZoneId,
         string purpose,
         CancellationToken cancellationToken = default)
@@ -27,8 +28,9 @@ internal static class HomeAssistantCalendarTime
         {
             cancellationToken.ThrowIfCancellationRequested();
             var timeZone = TZConvert.GetTimeZoneInfo(timeZoneId);
+            var ianaZone = DateTimeZoneProviders.Tzdb.GetZoneOrNull(timeZoneId);
             cancellationToken.ThrowIfCancellationRequested();
-            return timeZone;
+            return new HomeAssistantCalendarZone(timeZone, ianaZone);
         }
         catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
@@ -38,17 +40,18 @@ internal static class HomeAssistantCalendarTime
 
     internal static bool IsBoundary(
         DateTimeOffset value,
-        TimeZoneInfo homeTimeZone,
+        HomeAssistantCalendarZone homeTimeZone,
         HomeAssistantCalendarPeriod period)
         => value.Ticks % TimeSpan.TicksPerMillisecond == 0
             && IsBoundary(value.ToUnixTimeMilliseconds(), homeTimeZone, period);
 
     internal static bool IsBoundary(
         long unixMilliseconds,
-        TimeZoneInfo homeTimeZone,
+        HomeAssistantCalendarZone homeTimeZone,
         HomeAssistantCalendarPeriod period)
     {
-        var local = TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds), homeTimeZone);
+        var instant = DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds);
+        var local = ToLocalDateTime(instant, homeTimeZone);
         if (period == HomeAssistantCalendarPeriod.Week && local.DayOfWeek != DayOfWeek.Monday
             || period == HomeAssistantCalendarPeriod.Month && local.Day != 1)
         {
@@ -60,31 +63,37 @@ internal static class HomeAssistantCalendarTime
         return ResolveBoundary(localMidnight, homeTimeZone).ToUnixTimeMilliseconds() == unixMilliseconds;
     }
 
-    internal static DateTimeOffset ResolveBoundary(DateTime localBoundary, TimeZoneInfo homeTimeZone)
+    internal static DateTimeOffset ResolveBoundary(DateTime localBoundary, HomeAssistantCalendarZone homeTimeZone)
     {
+        if (homeTimeZone.IanaZone is not null)
+        {
+            var local = LocalDateTime.FromDateTime(DateTime.SpecifyKind(localBoundary, DateTimeKind.Unspecified));
+            return homeTimeZone.IanaZone.AtLeniently(local).ToDateTimeOffset();
+        }
+
         TimeSpan offset;
-        if (homeTimeZone.IsInvalidTime(localBoundary))
+        if (homeTimeZone.SystemZone.IsInvalidTime(localBoundary))
         {
             // Home Assistant uses Python zoneinfo fold=0 semantics. For a local time in a
             // forward gap, that means the offset immediately before the transition and
             // therefore normalizes the requested midnight to the first valid local time.
-            offset = homeTimeZone.GetUtcOffset(localBoundary.AddTicks(-1));
+            offset = homeTimeZone.SystemZone.GetUtcOffset(localBoundary.AddTicks(-1));
         }
         else
         {
-            offset = homeTimeZone.IsAmbiguousTime(localBoundary)
-                ? homeTimeZone.GetAmbiguousTimeOffsets(localBoundary).Max()
-                : homeTimeZone.GetUtcOffset(localBoundary);
+            offset = homeTimeZone.SystemZone.IsAmbiguousTime(localBoundary)
+                ? homeTimeZone.SystemZone.GetAmbiguousTimeOffsets(localBoundary).Max()
+                : homeTimeZone.SystemZone.GetUtcOffset(localBoundary);
         }
         return new DateTimeOffset(localBoundary, offset);
     }
 
     internal static DateTimeOffset GetContainingBoundary(
         DateTimeOffset value,
-        TimeZoneInfo homeTimeZone,
+        HomeAssistantCalendarZone homeTimeZone,
         HomeAssistantCalendarPeriod period)
     {
-        var local = TimeZoneInfo.ConvertTime(value, homeTimeZone);
+        var local = ToLocalDateTime(value, homeTimeZone);
         var localBoundary = new DateTime(
             local.Year,
             local.Month,
@@ -101,4 +110,24 @@ internal static class HomeAssistantCalendarTime
 
         return ResolveBoundary(localBoundary, homeTimeZone);
     }
+
+    internal static DateTime ToLocalDateTime(DateTimeOffset value, HomeAssistantCalendarZone homeTimeZone)
+    {
+        if (homeTimeZone.IanaZone is not null)
+            return Instant.FromDateTimeOffset(value).InZone(homeTimeZone.IanaZone).LocalDateTime.ToDateTimeUnspecified();
+        return TimeZoneInfo.ConvertTime(value, homeTimeZone.SystemZone).DateTime;
+    }
+}
+
+internal sealed class HomeAssistantCalendarZone
+{
+    internal HomeAssistantCalendarZone(TimeZoneInfo systemZone, DateTimeZone? ianaZone)
+    {
+        SystemZone = systemZone;
+        IanaZone = ianaZone;
+    }
+
+    internal TimeZoneInfo SystemZone { get; }
+
+    internal DateTimeZone? IanaZone { get; }
 }

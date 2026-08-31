@@ -141,7 +141,7 @@ public sealed class HomeAssistantRecorderClient
             payload["units"] = units;
         }
 
-        TimeZoneInfo? homeTimeZone = null;
+        HomeAssistantCalendarZone? homeTimeZone = null;
         if (period is HomeAssistantStatisticPeriod.Day or HomeAssistantStatisticPeriod.Week or HomeAssistantStatisticPeriod.Month)
         {
             var configuration = await _rest.GetConfigurationAsync(cancellationToken).ConfigureAwait(false);
@@ -429,7 +429,7 @@ public sealed class HomeAssistantRecorderClient
         DateTimeOffset earliestPeriodStart,
         DateTimeOffset? endTimeExclusive,
         HomeAssistantStatisticPeriod period,
-        TimeZoneInfo? homeTimeZone,
+        HomeAssistantCalendarZone? homeTimeZone,
         IReadOnlyList<HomeAssistantStatisticType>? requestedTypes,
         CancellationToken cancellationToken)
     {
@@ -540,7 +540,7 @@ public sealed class HomeAssistantRecorderClient
         long end,
         DateTimeOffset periodOrigin,
         HomeAssistantStatisticPeriod period,
-        TimeZoneInfo? homeTimeZone)
+        HomeAssistantCalendarZone? homeTimeZone)
     {
         var duration = end - start;
         if (period is HomeAssistantStatisticPeriod.FiveMinute or HomeAssistantStatisticPeriod.Hour)
@@ -560,7 +560,7 @@ public sealed class HomeAssistantRecorderClient
             return false;
         }
 
-        var localStart = TimeZoneInfo.ConvertTime(
+        var localStart = HomeAssistantCalendarTime.ToLocalDateTime(
             DateTimeOffset.FromUnixTimeMilliseconds(start),
             homeTimeZone);
         var localSuccessor = period switch
@@ -755,7 +755,7 @@ public sealed class HomeAssistantRecorderClient
     private static DateTimeOffset GetPeriodStart(
         DateTimeOffset value,
         HomeAssistantStatisticPeriod period,
-        TimeZoneInfo? homeTimeZone)
+        HomeAssistantCalendarZone? homeTimeZone)
     {
         if (period is HomeAssistantStatisticPeriod.FiveMinute or HomeAssistantStatisticPeriod.Hour)
         {
@@ -774,8 +774,8 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var localValue = homeTimeZone is null
-            ? value
-            : TimeZoneInfo.ConvertTime(value, homeTimeZone);
+            ? value.DateTime
+            : HomeAssistantCalendarTime.ToLocalDateTime(value, homeTimeZone);
         if (homeTimeZone is null)
         {
             throw new ArgumentOutOfRangeException(nameof(period));

@@ -2147,7 +2147,6 @@ public sealed class EnergyRecorderWeatherContractTests
     [Fact]
     public async Task FossilEnergyAcceptsAHistoricFortySevenHourLocalDayBucket()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var server = new TestHomeAssistantServer
         {
             ConfigurationResponseJson = "{\"time_zone\":\"Pacific/Kwajalein\",\"components\":[]}",

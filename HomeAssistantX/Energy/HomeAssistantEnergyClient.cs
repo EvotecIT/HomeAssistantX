@@ -111,7 +111,7 @@ public sealed class HomeAssistantEnergyClient
 
     private static bool HasCanonicalUniqueDomains(JsonElement domains, CancellationToken cancellationToken)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var item in domains.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -141,7 +141,7 @@ public sealed class HomeAssistantEnergyClient
             throw new ArgumentOutOfRangeException(nameof(period));
         var ids = RequireIds(energyStatisticIds, nameof(energyStatisticIds), cancellationToken);
         var normalizedCo2StatisticId = RequireStatisticId(co2StatisticId, nameof(co2StatisticId), cancellationToken);
-        TimeZoneInfo? homeTimeZone = null;
+        HomeAssistantCalendarZone? homeTimeZone = null;
         if (period != HomeAssistantEnergyPeriod.Hour)
         {
             var configuration = await _rest.GetConfigurationAsync(cancellationToken).ConfigureAwait(false);
@@ -209,7 +209,7 @@ public sealed class HomeAssistantEnergyClient
     private static bool IsPeriodBoundary(
         DateTimeOffset value,
         HomeAssistantEnergyPeriod period,
-        TimeZoneInfo? homeTimeZone)
+        HomeAssistantCalendarZone? homeTimeZone)
         => period switch
         {
             HomeAssistantEnergyPeriod.Hour => IsUtcHourBoundary(value),
@@ -236,7 +236,7 @@ public sealed class HomeAssistantEnergyClient
         DateTimeOffset start,
         DateTimeOffset end,
         HomeAssistantEnergyPeriod period,
-        TimeZoneInfo? homeTimeZone)
+        HomeAssistantCalendarZone? homeTimeZone)
     {
         var earliest = period switch
         {
@@ -270,7 +270,7 @@ public sealed class HomeAssistantEnergyClient
         if (values is null || values.Count == 0)
             throw new ArgumentException("At least one statistic identifier is required.", parameterName);
         var normalized = new List<string>(values.Count);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
