@@ -38,6 +38,7 @@ internal static partial class HomeAssistantAtomicFile
     private const int MacCloseOnExec = 0x1000000;
     private const int MacNonBlocking = 0x0004;
     private const int MacEventOnly = 0x8000;
+    private const int MacOpenSymbolicLink = 0x200000;
     private const int UnixCurrentWorkingDirectory = -100;
     private const uint LinuxRenameExchange = 0x2;
     private const uint MacRenameSwap = 0x2;
@@ -271,7 +272,7 @@ internal static partial class HomeAssistantAtomicFile
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             descriptor = EnsureUsableUnixDescriptor(
-                Open(path, MacEventOnly | MacNoFollow | MacCloseOnExec | MacNonBlocking, 0));
+                Open(path, MacEventOnly | MacOpenSymbolicLink | MacNoFollow | MacCloseOnExec | MacNonBlocking, 0));
         }
         else
         {

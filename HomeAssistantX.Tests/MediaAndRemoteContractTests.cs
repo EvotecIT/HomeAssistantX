@@ -1882,7 +1882,6 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Theory]
-    [InlineData("{\"title\":\"Music\",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":0,\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\" music \",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
     [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"children_media_class\":\" album \",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
@@ -1908,6 +1907,20 @@ public sealed class MediaAndRemoteContractTests
         var item = await client.Media.BrowseSourcesAsync();
 
         Assert.Null(item.ChildrenMediaClass);
+    }
+
+    [Fact]
+    public async Task MediaBrowseAcceptsAnOmittedOptionalMediaClass()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Provider root\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var item = await client.Media.BrowseSourcesAsync();
+
+        Assert.Null(item.MediaClass);
     }
 
     private static string[] ReadServices(TestHomeAssistantServer server)

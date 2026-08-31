@@ -186,8 +186,8 @@ public sealed class HomeAssistantMediaBrowserClient
         var childrenMediaClassText = childrenMediaClass.ValueKind == JsonValueKind.String
             ? HomeAssistantJson.GetString(childrenMediaClass, cancellationToken)
             : null;
-        if (mediaClass.ValueKind == JsonValueKind.Undefined
-            || mediaClass.ValueKind != JsonValueKind.Null
+        if (mediaClass.ValueKind != JsonValueKind.Undefined
+                && mediaClass.ValueKind != JsonValueKind.Null
                 && (mediaClass.ValueKind != JsonValueKind.String
                     || !IsCanonicalMediaClass(mediaClassText, cancellationToken))
             || mediaContentId.ValueKind == JsonValueKind.Undefined
