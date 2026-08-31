@@ -33,10 +33,10 @@ public sealed class SendHomeAssistantNotificationCommand : HomeAssistantTargetCm
 
     protected override async Task ProcessTargetRecordAsync()
     {
-        RequireNonBlank(Message, nameof(Message));
+        RequireNonBlank(Message, nameof(Message), CancelToken);
         if (NotificationId is not null)
         {
-            RequireNonBlank(NotificationId, nameof(NotificationId));
+            RequireNonBlank(NotificationId, nameof(NotificationId), CancelToken);
         }
 
         if (ParameterSetName == PersistentParameterSet)
@@ -56,9 +56,12 @@ public sealed class SendHomeAssistantNotificationCommand : HomeAssistantTargetCm
         }
     }
 
-    private static void RequireNonBlank(string value, string parameterName)
+    private static void RequireNonBlank(
+        string value,
+        string parameterName,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(value, cancellationToken))
         {
             throw new ArgumentException("A non-empty value is required.", parameterName);
         }

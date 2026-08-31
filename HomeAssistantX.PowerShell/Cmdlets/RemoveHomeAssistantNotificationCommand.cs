@@ -22,7 +22,8 @@ public sealed class RemoveHomeAssistantNotificationCommand : HomeAssistantCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        if (ParameterSetName == "Id" && string.IsNullOrWhiteSpace(NotificationId))
+        if (ParameterSetName == "Id"
+            && HomeAssistantX.Protocol.CancellationAwareString.IsNullOrWhiteSpace(NotificationId, CancelToken))
         {
             throw new ArgumentException("A non-empty notification ID is required.", nameof(NotificationId));
         }

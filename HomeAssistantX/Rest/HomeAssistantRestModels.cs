@@ -293,6 +293,7 @@ internal sealed class HomeAssistantCalendarEventJsonConverter : JsonConverter<Ho
 internal static class HomeAssistantCancellationJsonValueReader
 {
     private const int CopyChunkLength = 16 * 1024;
+    private const int IsolatedParseThreshold = 64 * 1024;
 
     internal static string ReadString(ref Utf8JsonReader reader, CancellationToken cancellationToken)
     {
@@ -357,31 +358,51 @@ internal static class HomeAssistantCancellationJsonValueReader
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (!cancellationToken.CanBeCanceled)
+        if (!cancellationToken.CanBeCanceled || payload.Count <= IsolatedParseThreshold)
         {
-            var document = JsonDocument.Parse(payload.AsMemory());
-            return document.RootElement;
+            JsonDocument? document = null;
+            try
+            {
+                document = JsonDocument.Parse(payload.AsMemory());
+                cancellationToken.ThrowIfCancellationRequested();
+                return document.RootElement;
+            }
+            catch
+            {
+                document?.Dispose();
+                throw;
+            }
         }
 
-        var parseTask = Task.Run(() =>
-        {
-            var document = JsonDocument.Parse(payload.AsMemory());
-            return document.RootElement;
-        });
+        var parseTask = Task.Run(() => JsonDocument.Parse(payload.AsMemory()));
         var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
         var completed = Task.WhenAny(parseTask, canceled.Task).GetAwaiter().GetResult();
         if (!ReferenceEquals(completed, parseTask))
         {
             _ = parseTask.ContinueWith(
-                task => _ = task.Exception,
+                static task =>
+                {
+                    if (task.Status == TaskStatus.RanToCompletion) task.Result.Dispose();
+                    else _ = task.Exception;
+                },
                 CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted,
+                TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
             cancellationToken.ThrowIfCancellationRequested();
         }
 
-        return parseTask.GetAwaiter().GetResult();
+        var parsed = parseTask.GetAwaiter().GetResult();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return parsed.RootElement;
+        }
+        catch
+        {
+            parsed.Dispose();
+            throw;
+        }
     }
 
     internal static void AddExtensionData(

@@ -123,7 +123,8 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
                 var labelIds = snapshot.Registries.IsLabelRegistryAvailable
                     ? SelectDistinct(resolved, x => x.LabelId, StringComparer.Ordinal, CancelToken)
                     : SelectDistinct(selectors, value => ResolveAssignedLabelId(snapshot, value, CancelToken), StringComparer.Ordinal, CancelToken);
-                var matching = Count(snapshot.Entities, entity => IsSelectedByLabel(snapshot, entity, labelIds, CancelToken)
+                var selection = IndexLabelSelection(snapshot, labelIds, CancelToken);
+                var matching = Count(snapshot.Entities, entity => IsSelectedByLabel(entity, selection, CancelToken)
                     && string.Equals(entity.Domain, expectedDomain, StringComparison.OrdinalIgnoreCase), CancelToken);
                 if (matching == 0)
                 {
@@ -271,30 +272,99 @@ public abstract class HomeAssistantTargetCmdlet : HomeAssistantCmdlet
         return value.Trim();
     }
 
-    private static bool IsSelectedByLabel(
+    private static LabelSelectionIndex IndexLabelSelection(
         HomeAssistantInventorySnapshot snapshot,
-        HomeAssistantEntityInfo entity,
         IReadOnlyCollection<string> labelIds,
         CancellationToken cancellationToken)
     {
+        var selectedLabels = new HashSet<string>(
+            new HomeAssistantX.Protocol.CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
+        foreach (var labelId in labelIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            selectedLabels.Add(labelId);
+        }
+
+        var selectedDevices = new HashSet<string>(
+            new HomeAssistantX.Protocol.CancellationAwareStringEqualityComparer(cancellationToken));
+        foreach (var device in snapshot.Devices)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (AnySelectedLabel(device.Raw.Labels, selectedLabels, cancellationToken))
+            {
+                selectedDevices.Add(device.DeviceId);
+            }
+        }
+
+        var selectedAreas = new HashSet<string>(
+            new HomeAssistantX.Protocol.CancellationAwareStringEqualityComparer(cancellationToken));
+        foreach (var area in snapshot.Areas)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (AnySelectedLabel(area.Raw.Labels, selectedLabels, cancellationToken))
+            {
+                selectedAreas.Add(area.AreaId);
+            }
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
-        if (entity.RegistryEntry?.Labels.Any(value => Contains(labelIds, value, cancellationToken)) == true)
+        return new LabelSelectionIndex(selectedLabels, selectedDevices, selectedAreas);
+    }
+
+    private static bool IsSelectedByLabel(
+        HomeAssistantEntityInfo entity,
+        LabelSelectionIndex selection,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (entity.RegistryEntry is not null
+            && AnySelectedLabel(entity.RegistryEntry.Labels, selection.LabelIds, cancellationToken))
         {
             return true;
         }
 
         if (entity.DeviceId is not null
-            && FirstOrDefault(snapshot.Devices, device => string.Equals(device.DeviceId, entity.DeviceId, StringComparison.OrdinalIgnoreCase), cancellationToken)
-                is { } device
-            && device.Raw.Labels.Any(value => Contains(labelIds, value, cancellationToken)))
+            && selection.DeviceIds.Contains(entity.DeviceId))
         {
             return true;
         }
 
         return entity.AreaId is not null
-            && FirstOrDefault(snapshot.Areas, area => string.Equals(area.AreaId, entity.AreaId, StringComparison.OrdinalIgnoreCase), cancellationToken)
-                is { } area
-            && area.Raw.Labels.Any(value => Contains(labelIds, value, cancellationToken));
+            && selection.AreaIds.Contains(entity.AreaId);
+    }
+
+    private static bool AnySelectedLabel(
+        IEnumerable<string> values,
+        HashSet<string> selectedLabels,
+        CancellationToken cancellationToken)
+    {
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (selectedLabels.Contains(value)) return true;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
+    private sealed class LabelSelectionIndex
+    {
+        internal LabelSelectionIndex(
+            HashSet<string> labelIds,
+            HashSet<string> deviceIds,
+            HashSet<string> areaIds)
+        {
+            LabelIds = labelIds;
+            DeviceIds = deviceIds;
+            AreaIds = areaIds;
+        }
+
+        internal HashSet<string> LabelIds { get; }
+
+        internal HashSet<string> DeviceIds { get; }
+
+        internal HashSet<string> AreaIds { get; }
     }
 
     private static TTarget[] Select<TSource, TTarget>(IEnumerable<TSource> source, Func<TSource, TTarget> selector, CancellationToken cancellationToken)
