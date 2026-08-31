@@ -76,6 +76,7 @@ public sealed class InvokeHomeAssistantRemoteCommand : HomeAssistantTargetCmdlet
 
     protected override async Task ProcessTargetRecordAsync()
     {
+        CancelToken.ThrowIfCancellationRequested();
         if (!Enum.IsDefined(typeof(HomeAssistantRemoteAction), Action))
         {
             throw new ArgumentOutOfRangeException(nameof(Action), Action, "Unsupported remote action.");

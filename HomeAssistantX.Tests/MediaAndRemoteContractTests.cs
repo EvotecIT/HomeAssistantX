@@ -508,6 +508,35 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal(9007199254740993L, HomeAssistantAttributeReader.GetInt64(attributes, "value"));
     }
 
+    [Theory]
+    [InlineData("9223372036854775807", long.MaxValue)]
+    [InlineData("-9223372036854775808", long.MinValue)]
+    [InlineData("9.223372036854775807e18", long.MaxValue)]
+    [InlineData("-9.223372036854775808e18", long.MinValue)]
+    public void IntegralAttributeParserPreservesInt64Boundaries(string value, long expected)
+    {
+        using var document = JsonDocument.Parse("{\"value\":\"" + value + "\"}");
+        var attributes = new Dictionary<string, JsonElement>
+        {
+            ["value"] = document.RootElement.GetProperty("value").Clone()
+        };
+
+        Assert.Equal(expected, HomeAssistantAttributeReader.GetInt64(attributes, "value"));
+    }
+
+    [Fact]
+    public void IntegralAttributeParserRejectsOversizedInputWithoutMaterializingDigits()
+    {
+        var value = new string('9', 1_000_000);
+        using var document = JsonDocument.Parse("{\"value\":\"" + value + "\"}");
+        var attributes = new Dictionary<string, JsonElement>
+        {
+            ["value"] = document.RootElement.GetProperty("value").Clone()
+        };
+
+        Assert.Null(HomeAssistantAttributeReader.GetInt64(attributes, "value"));
+    }
+
 #if NET10_0
     [Fact]
     public async Task MediaActionsMapCompleteStandardServicePayloadsInDeterministicOrder()
@@ -1104,6 +1133,41 @@ public sealed class MediaAndRemoteContractTests
         Assert.Equal("ir", learnData.GetProperty("command_type").GetString());
         Assert.True(learnData.GetProperty("alternative").GetBoolean());
         Assert.Equal(15, learnData.GetProperty("timeout").GetInt32());
+    }
+
+    [Fact]
+    public async Task RemoteSendOptionsAreSnapshottedBeforeCommandEnumeration()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var options = new HomeAssistantRemoteSendOptions
+        {
+            Device = "television",
+            RepeatCount = 2,
+            Delay = TimeSpan.FromMilliseconds(400),
+            Hold = TimeSpan.FromSeconds(1)
+        };
+        var commands = new MutatingStringList(
+            () =>
+            {
+                options.Device = "mutated";
+                options.RepeatCount = 9;
+                options.Delay = TimeSpan.FromSeconds(9);
+                options.Hold = TimeSpan.FromSeconds(9);
+            },
+            "power");
+
+        await client.Controls.Remotes.SendCommandsAsync(
+            HomeAssistantTarget.ForEntity("remote.living_room"),
+            commands,
+            options);
+
+        using var call = FindCall(server, "send_command");
+        var data = call.RootElement.GetProperty("service_data");
+        Assert.Equal("television", data.GetProperty("device").GetString());
+        Assert.Equal(2, data.GetProperty("num_repeats").GetInt32());
+        Assert.Equal(0.4, data.GetProperty("delay_secs").GetDouble(), 3);
+        Assert.Equal(1, data.GetProperty("hold_secs").GetDouble());
     }
 
     [Fact]

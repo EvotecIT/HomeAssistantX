@@ -107,13 +107,14 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var optionSnapshot = options?.Snapshot(cancellationToken);
         var values = ValidateCommands(commands, nameof(commands), cancellationToken);
-        var device = options?.Device is null
+        var device = optionSnapshot?.Device is null
             ? null
-            : RequiredSelector(options.Device, nameof(options.Device), cancellationToken);
-        var repeatCount = options?.RepeatCount;
-        var delay = options?.Delay;
-        var hold = options?.Hold;
+            : RequiredSelector(optionSnapshot.Device, nameof(options.Device), cancellationToken);
+        var repeatCount = optionSnapshot?.RepeatCount;
+        var delay = optionSnapshot?.Delay;
+        var hold = optionSnapshot?.Hold;
         return CallAsync(
             "send_command",
             target,
@@ -149,13 +150,14 @@ public sealed class HomeAssistantRemoteClient : HomeAssistantControlClientBase
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var device = options?.Device is null
+        var optionSnapshot = options?.Snapshot(cancellationToken);
+        var device = optionSnapshot?.Device is null
             ? null
-            : RequiredSelector(options.Device, nameof(options.Device), cancellationToken);
-        var timeout = options?.Timeout;
-        var commandTypeOption = options?.CommandType;
-        var alternative = options?.Alternative;
-        var optionCommands = options?.Commands;
+            : RequiredSelector(optionSnapshot.Device, nameof(options.Device), cancellationToken);
+        var timeout = optionSnapshot?.Timeout;
+        var commandTypeOption = optionSnapshot?.CommandType;
+        var alternative = optionSnapshot?.Alternative;
+        var optionCommands = optionSnapshot?.Commands;
         var transport = CaptureTransport(cancellationToken);
         var requestTimeout = _options.RequestTimeout;
         var learningTimeoutSeconds = ResolveLearningTimeoutSeconds(

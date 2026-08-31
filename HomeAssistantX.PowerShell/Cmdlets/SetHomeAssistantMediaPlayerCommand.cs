@@ -99,6 +99,7 @@ public sealed class SetHomeAssistantMediaPlayerCommand : HomeAssistantTargetCmdl
 
     protected override async Task ProcessTargetRecordAsync()
     {
+        CancelToken.ThrowIfCancellationRequested();
         ValidateOptionalEnum(Power, nameof(Power));
         ValidateOptionalEnum(Playback, nameof(Playback));
         ValidateOptionalEnum(VolumeStep, nameof(VolumeStep));

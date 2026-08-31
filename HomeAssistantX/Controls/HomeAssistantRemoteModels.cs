@@ -23,57 +23,79 @@ public enum HomeAssistantRemoteCommandType
 /// <summary>Options accepted by Home Assistant's <c>remote.send_command</c> action.</summary>
 public sealed class HomeAssistantRemoteSendOptions
 {
+    private readonly object _sync = new();
+    private string? _device;
     private int? _repeatCount;
     private TimeSpan? _delay;
     private TimeSpan? _hold;
 
-    public string? Device { get; set; }
+    public string? Device { get { lock (_sync) return _device; } set { lock (_sync) _device = value; } }
 
     public int? RepeatCount
     {
-        get => _repeatCount;
+        get { lock (_sync) return _repeatCount; }
         set
         {
+            lock (_sync)
+            {
             if (value.HasValue && value.Value < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(RepeatCount), "RepeatCount must be at least one.");
             }
 
             _repeatCount = value;
+            }
         }
     }
 
     public TimeSpan? Delay
     {
-        get => _delay;
-        set => _delay = ControlValidation.Duration(value, nameof(Delay));
+        get { lock (_sync) return _delay; }
+        set { lock (_sync) _delay = ControlValidation.Duration(value, nameof(Delay)); }
     }
 
     public TimeSpan? Hold
     {
-        get => _hold;
-        set => _hold = ControlValidation.Duration(value, nameof(Hold));
+        get { lock (_sync) return _hold; }
+        set { lock (_sync) _hold = ControlValidation.Duration(value, nameof(Hold)); }
+    }
+
+    internal HomeAssistantRemoteSendOptions Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantRemoteSendOptions { Device = _device, RepeatCount = _repeatCount, Delay = _delay, Hold = _hold };
+        }
     }
 }
 
 /// <summary>Options accepted when a Home Assistant remote learns commands.</summary>
 public sealed class HomeAssistantRemoteLearnOptions
 {
+    private readonly object _sync = new();
+    private string? _device;
+    private IReadOnlyList<string>? _commands;
+    private HomeAssistantRemoteCommandType? _commandType;
+    private bool? _alternative;
     private TimeSpan? _timeout;
 
-    public string? Device { get; set; }
+    public string? Device { get { lock (_sync) return _device; } set { lock (_sync) _device = value; } }
 
-    public IReadOnlyList<string>? Commands { get; set; }
+    public IReadOnlyList<string>? Commands { get { lock (_sync) return _commands; } set { lock (_sync) _commands = value; } }
 
-    public HomeAssistantRemoteCommandType? CommandType { get; set; }
+    public HomeAssistantRemoteCommandType? CommandType { get { lock (_sync) return _commandType; } set { lock (_sync) _commandType = value; } }
 
-    public bool? Alternative { get; set; }
+    public bool? Alternative { get { lock (_sync) return _alternative; } set { lock (_sync) _alternative = value; } }
 
     public TimeSpan? Timeout
     {
-        get => _timeout;
+        get { lock (_sync) return _timeout; }
         set
         {
+            lock (_sync)
+            {
             var validated = ControlValidation.Duration(value, nameof(Timeout));
             if (validated.HasValue
                 && (validated.Value <= TimeSpan.Zero || validated.Value.TotalSeconds > int.MaxValue))
@@ -84,6 +106,24 @@ public sealed class HomeAssistantRemoteLearnOptions
             }
 
             _timeout = validated;
+            }
+        }
+    }
+
+    internal HomeAssistantRemoteLearnOptions Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantRemoteLearnOptions
+            {
+                Device = _device,
+                Commands = _commands,
+                CommandType = _commandType,
+                Alternative = _alternative,
+                Timeout = _timeout
+            };
         }
     }
 }

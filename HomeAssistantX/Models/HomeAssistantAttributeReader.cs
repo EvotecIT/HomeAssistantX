@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Numerics;
 using System.Text.Json;
 using HomeAssistantX.Protocol;
 
@@ -24,8 +23,8 @@ internal static class HomeAssistantAttributeReader
 
         var result = value.ValueKind switch
         {
-            JsonValueKind.String => value.GetString(),
-            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.String => DecodeString(value, cancellationToken),
+            JsonValueKind.Number => DecodeRawText(value, cancellationToken),
             JsonValueKind.True => "true",
             JsonValueKind.False => "false",
             _ => null
@@ -45,7 +44,7 @@ internal static class HomeAssistantAttributeReader
             return null;
         }
 
-        var result = value.GetString();
+        var result = DecodeString(value, cancellationToken);
         ObserveString(result, cancellationToken);
         return result;
     }
@@ -65,7 +64,7 @@ internal static class HomeAssistantAttributeReader
 
         if (value.ValueKind == JsonValueKind.Number)
         {
-            var rawNumber = value.GetRawText();
+            var rawNumber = DecodeRawText(value, cancellationToken);
             ObserveString(rawNumber, cancellationToken);
             if (rawNumber.Length <= MaximumFloatingPointTextLength
                 && value.TryGetDouble(out var numericValue))
@@ -75,7 +74,7 @@ internal static class HomeAssistantAttributeReader
             return null;
         }
 
-        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        var text = value.ValueKind == JsonValueKind.String ? DecodeString(value, cancellationToken) : null;
         ObserveString(text, cancellationToken);
         if (text is not null
             && text.Length <= MaximumFloatingPointTextLength
@@ -102,12 +101,12 @@ internal static class HomeAssistantAttributeReader
         }
 
         if (value.ValueKind == JsonValueKind.Number
-            && TryParseIntegralInt64(value.GetRawText(), cancellationToken, out var integer))
+            && TryParseIntegralInt64(DecodeRawText(value, cancellationToken), cancellationToken, out var integer))
         {
             return integer;
         }
 
-        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        var text = value.ValueKind == JsonValueKind.String ? DecodeString(value, cancellationToken) : null;
         ObserveString(text, cancellationToken);
         if (text is not null && TryParseIntegralInt64(text, cancellationToken, out integer))
         {
@@ -154,7 +153,7 @@ internal static class HomeAssistantAttributeReader
             return null;
         }
 
-        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        var text = value.ValueKind == JsonValueKind.String ? DecodeString(value, cancellationToken) : null;
         ObserveString(text, cancellationToken);
         bool? parsed = value.ValueKind switch
         {
@@ -191,7 +190,7 @@ internal static class HomeAssistantAttributeReader
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (item.ValueKind == JsonValueKind.String
-                && item.GetString() is string text
+                && DecodeString(item, cancellationToken) is string text
                 && HasNonWhitespace(text, cancellationToken))
             {
                 result.Add(text);
@@ -218,7 +217,7 @@ internal static class HomeAssistantAttributeReader
             cancellationToken.ThrowIfCancellationRequested();
             return null;
         }
-        var text = value.GetString();
+        var text = DecodeString(value, cancellationToken);
         ObserveString(text, cancellationToken);
         return HomeAssistantTimestamp.TryParse(text, out var result)
             ? result
@@ -246,6 +245,12 @@ internal static class HomeAssistantAttributeReader
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
+
+    private static string? DecodeString(JsonElement value, CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(value.GetString, cancellationToken);
+
+    private static string DecodeRawText(JsonElement value, CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(value.GetRawText, cancellationToken);
 
     private static bool IsFinite(double value)
     {
@@ -301,28 +306,36 @@ internal static class HomeAssistantAttributeReader
             if (++index == end) return false;
         }
 
-        var digits = new System.Text.StringBuilder(Math.Min(end - start, 64));
-        var fractionalDigits = 0;
+        var integerStart = index;
+        long totalDigits = 0;
+        long fractionalDigits = 0;
         var sawDigit = false;
         while (index < end && IsAsciiDigit(value[index]))
         {
             if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            digits.Append(value[index++]);
+            index++;
+            totalDigits++;
             sawDigit = true;
         }
 
+        var fractionStart = -1;
+        var fractionEnd = -1;
         if (index < end && value[index] == '.')
         {
             index++;
-            var fractionStart = digits.Length;
+            fractionStart = index;
             while (index < end && IsAsciiDigit(value[index]))
             {
                 if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-                digits.Append(value[index++]);
+                index++;
+                totalDigits++;
+                fractionalDigits++;
                 sawDigit = true;
             }
-            fractionalDigits = digits.Length - fractionStart;
+            fractionEnd = index;
         }
+
+        var integerEnd = fractionStart < 0 ? index : fractionStart - 1;
 
         if (!sawDigit) return false;
         long exponent = 0;
@@ -349,61 +362,63 @@ internal static class HomeAssistantAttributeReader
 
         cancellationToken.ThrowIfCancellationRequested();
         if (index != end) return false;
-        var scale = (long)fractionalDigits - exponent;
-        var effectiveLength = digits.Length;
+        var scale = fractionalDigits - exponent;
+        var effectiveLength = totalDigits;
         if (scale > 0)
         {
-            if (scale > digits.Length)
-            {
-                for (var digitIndex = 0; digitIndex < digits.Length; digitIndex++)
-                {
-                    if ((digitIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-                    if (digits[digitIndex] != '0') return false;
-                }
-                cancellationToken.ThrowIfCancellationRequested();
-                return true;
-            }
-            var scaleCount = (int)scale;
-            effectiveLength = digits.Length - scaleCount;
-            for (var digitIndex = effectiveLength; digitIndex < digits.Length; digitIndex++)
-            {
-                if ((digitIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-                if (digits[digitIndex] != '0') return false;
-            }
+            effectiveLength = totalDigits - scale;
         }
         else if (scale < 0)
         {
             var appendedZeroCount = -scale;
-            if (appendedZeroCount > 20 || digits.Length + appendedZeroCount > 20) return false;
-            effectiveLength = digits.Length + (int)appendedZeroCount;
+            if (appendedZeroCount > 20 || totalDigits + appendedZeroCount > 20) return false;
+            effectiveLength = totalDigits + appendedZeroCount;
         }
 
-        if (effectiveLength == 0) return true;
-        var firstSignificant = 0;
-        while (firstSignificant < digits.Length && digits[firstSignificant] == '0')
+        ulong magnitude = 0;
+        var significantDigits = 0;
+        long digitPosition = 0;
+        var maximumMagnitude = negative ? 9223372036854775808UL : (ulong)long.MaxValue;
+        for (var sourceIndex = integerStart; sourceIndex < integerEnd; sourceIndex++)
         {
-            if ((firstSignificant & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            firstSignificant++;
+            if ((sourceIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (!ConsumeIntegralDigit(value[sourceIndex], digitPosition++, effectiveLength, maximumMagnitude, ref magnitude, ref significantDigits)) return false;
         }
-        cancellationToken.ThrowIfCancellationRequested();
-        if (firstSignificant == digits.Length) return true;
-        if (effectiveLength - firstSignificant > 19) return false;
+        if (fractionStart >= 0)
+        {
+            for (var sourceIndex = fractionStart; sourceIndex < fractionEnd; sourceIndex++)
+            {
+                if ((sourceIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if (!ConsumeIntegralDigit(value[sourceIndex], digitPosition++, effectiveLength, maximumMagnitude, ref magnitude, ref significantDigits)) return false;
+            }
+        }
+        for (; digitPosition < effectiveLength; digitPosition++)
+        {
+            if ((digitPosition & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (!ConsumeIntegralDigit('0', digitPosition, effectiveLength, maximumMagnitude, ref magnitude, ref significantDigits)) return false;
+        }
 
-        BigInteger exact = 0;
-        for (var digitIndex = firstSignificant; digitIndex < digits.Length && digitIndex < effectiveLength; digitIndex++)
-        {
-            if ((digitIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            exact = (exact * 10) + (digits[digitIndex] - '0');
-        }
-        for (var digitIndex = digits.Length; digitIndex < effectiveLength; digitIndex++)
-        {
-            if ((digitIndex & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
-            exact *= 10;
-        }
-        if (negative) exact = -exact;
-        if (exact < long.MinValue || exact > long.MaxValue) return false;
-        result = (long)exact;
+        if (negative)
+            result = magnitude == 9223372036854775808UL ? long.MinValue : -(long)magnitude;
+        else
+            result = (long)magnitude;
         cancellationToken.ThrowIfCancellationRequested();
+        return true;
+    }
+
+    private static bool ConsumeIntegralDigit(
+        char character,
+        long position,
+        long effectiveLength,
+        ulong maximumMagnitude,
+        ref ulong magnitude,
+        ref int significantDigits)
+    {
+        var digit = character - '0';
+        if (position >= effectiveLength) return digit == 0;
+        if (significantDigits == 0 && digit == 0) return true;
+        if (++significantDigits > 19 || magnitude > (maximumMagnitude - (uint)digit) / 10UL) return false;
+        magnitude = (magnitude * 10UL) + (uint)digit;
         return true;
     }
 
