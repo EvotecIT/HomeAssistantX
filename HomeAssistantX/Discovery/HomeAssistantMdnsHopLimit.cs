@@ -68,7 +68,11 @@ internal static class HomeAssistantMdnsHopLimit
                 return receiver(handle, ref message, out _, IntPtr.Zero, IntPtr.Zero);
             });
             if (result == SocketErrorResult) throw new SocketException(GetLastSocketError());
-            return FindTimeToLive(control, checked((int)message.Control.Length), WindowsTtlControl);
+            return FindTimeToLive(
+                control,
+                checked((int)message.Control.Length),
+                WindowsTtlControl,
+                darwinHeader: false);
         }
         finally
         {
@@ -123,7 +127,11 @@ internal static class HomeAssistantMdnsHopLimit
             var controlType = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
                 ? DarwinTtlControl
                 : LinuxTtlControl;
-            return FindTimeToLive(control, controlLength, controlType);
+            return FindTimeToLive(
+                control,
+                controlLength,
+                controlType,
+                darwinHeader: RuntimeInformation.IsOSPlatform(OSPlatform.OSX));
         }
         finally
         {
@@ -136,21 +144,23 @@ internal static class HomeAssistantMdnsHopLimit
     private static int FindTimeToLive(
         IntPtr control,
         int controlLength,
-        int expectedType)
+        int expectedType,
+        bool darwinHeader)
     {
         var offset = 0;
-        var alignment = IntPtr.Size;
+        var alignment = darwinHeader ? sizeof(int) : IntPtr.Size;
         while (offset >= 0 && offset < controlLength)
         {
             var header = IntPtr.Add(control, offset);
-            var messageLength = IntPtr.Size == 8
+            var lengthBytes = darwinHeader ? sizeof(int) : IntPtr.Size;
+            var messageLength = lengthBytes == sizeof(long)
                 ? checked((int)unchecked((ulong)Marshal.ReadInt64(header)))
                 : Marshal.ReadInt32(header);
-            var rawHeaderLength = IntPtr.Size + sizeof(int) + sizeof(int);
+            var rawHeaderLength = lengthBytes + sizeof(int) + sizeof(int);
             var dataOffset = Align(rawHeaderLength, alignment);
             if (messageLength < dataOffset || messageLength > controlLength - offset) break;
-            var level = Marshal.ReadInt32(header, IntPtr.Size);
-            var type = Marshal.ReadInt32(header, IntPtr.Size + sizeof(int));
+            var level = Marshal.ReadInt32(header, lengthBytes);
+            var type = Marshal.ReadInt32(header, lengthBytes + sizeof(int));
             if (level == IpProtocol && type == expectedType)
             {
                 var valueLength = messageLength - dataOffset;
@@ -165,6 +175,21 @@ internal static class HomeAssistantMdnsHopLimit
         }
 
         throw new SocketException((int)SocketError.ProtocolOption);
+    }
+
+    internal static int ReadDarwinTimeToLive(byte[] control)
+    {
+        if (control is null) throw new ArgumentNullException(nameof(control));
+        var buffer = Marshal.AllocHGlobal(control.Length);
+        try
+        {
+            Marshal.Copy(control, 0, buffer, control.Length);
+            return FindTimeToLive(buffer, control.Length, DarwinTtlControl, darwinHeader: true);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
     }
 
     private static int Align(int value, int alignment)

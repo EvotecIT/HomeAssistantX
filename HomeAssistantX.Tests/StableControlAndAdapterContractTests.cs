@@ -1106,6 +1106,18 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void DnsSdTransportReadsDarwinAlignedIpv4TimeToLiveControlData()
+    {
+        var control = new byte[16];
+        BitConverter.GetBytes(13).CopyTo(control, 0);
+        BitConverter.GetBytes(0).CopyTo(control, 4);
+        BitConverter.GetBytes(24).CopyTo(control, 8);
+        control[12] = 255;
+
+        Assert.Equal(255, HomeAssistantMdnsHopLimit.ReadDarwinTimeToLive(control));
+    }
+
+    [Fact]
     public void DnsSdTransportListensOnTheMulticastServicePort()
     {
         var endpoint = UdpHomeAssistantDiscoveryTransport.CreateMulticastListenerEndpoint(
