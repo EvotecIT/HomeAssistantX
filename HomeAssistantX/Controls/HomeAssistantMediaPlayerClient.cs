@@ -370,7 +370,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
     {
         cancellationToken.ThrowIfCancellationRequested();
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
-            .NormalizeForDomain(Domain, cancellationToken);
+            .NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
         mediaContentId = ControlValidation.RequiredUnchanged(
             mediaContentId,
             nameof(mediaContentId),
@@ -434,7 +434,7 @@ public sealed class HomeAssistantMediaPlayerClient : HomeAssistantControlClientB
         cancellationToken.ThrowIfCancellationRequested();
         var context = CaptureContext(cancellationToken);
         var frozenTarget = (target ?? throw new ArgumentNullException(nameof(target)))
-            .NormalizeForDomain(Domain, cancellationToken);
+            .NormalizeRequiredForDomain(Domain, cancellationToken: cancellationToken);
         var frozenPlayMediaOptions = playMediaOptions?.Snapshot(cancellationToken);
         var results = new List<HomeAssistantServiceCallResult>();
         if (settings is not null)
