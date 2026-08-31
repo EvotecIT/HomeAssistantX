@@ -7,12 +7,24 @@ namespace HomeAssistantX.IO;
 internal static partial class HomeAssistantAtomicFile
 {
     private const int DaclSecurityInformation = 0x00000004;
+    private const int OwnerSecurityInformation = 0x00000001;
+    private const int GroupSecurityInformation = 0x00000002;
+    private const int PreservedWindowsSecurityInformation =
+        OwnerSecurityInformation | GroupSecurityInformation | DaclSecurityInformation;
     private const uint WindowsCreateNew = 1;
     private const uint WindowsFileAttributeNormal = 0x00000080;
     private const uint WindowsFileFlagOverlapped = 0x40000000;
     private const uint WindowsGenericWrite = 0x40000000;
+    private const uint WindowsReadControl = 0x00020000;
     private const uint WindowsDelete = 0x00010000;
     private const uint WindowsWriteDac = 0x00040000;
+    private const uint WindowsWriteOwner = 0x00080000;
+    private const uint WindowsFileShareRead = 0x00000001;
+    private const uint WindowsFileShareWrite = 0x00000002;
+    private const uint WindowsFileShareDelete = 0x00000004;
+    private const uint WindowsOpenExisting = 3;
+    private const int WindowsFileNotFound = 2;
+    private const int WindowsPathNotFound = 3;
     private const int WindowsInsufficientBuffer = 122;
     private const ushort SecurityDescriptorDaclProtected = 0x1000;
     private const string RestrictiveTemporaryFileSddl = "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;OW)";
@@ -24,7 +36,7 @@ internal static partial class HomeAssistantAtomicFile
     {
         var handle = CreateFile(
             temporaryPath,
-            WindowsGenericWrite | WindowsWriteDac | WindowsDelete,
+            WindowsGenericWrite | WindowsWriteDac | WindowsWriteOwner | WindowsDelete,
             0,
             IntPtr.Zero,
             WindowsCreateNew,
@@ -71,6 +83,24 @@ internal static partial class HomeAssistantAtomicFile
         cancellationToken.ThrowIfCancellationRequested();
         temporaryStream.Flush(flushToDisk: true);
         cancellationToken.ThrowIfCancellationRequested();
+
+        using var destinationSecurity = overwrite
+            ? TryCaptureWindowsDestinationSecurity(destinationPath)
+            : null;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (destinationSecurity is not null)
+        {
+            if (!SetKernelObjectSecurity(
+                    temporaryStream.SafeFileHandle,
+                    PreservedWindowsSecurityInformation,
+                    destinationSecurity.Descriptor))
+            {
+                throw new IOException(
+                    "The Windows destination owner or access control list could not be preserved on the pinned replacement.",
+                    new Win32Exception(Marshal.GetLastWin32Error()));
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+        }
 
         var fullDestinationPath = Path.GetFullPath(destinationPath);
         var fileNameBytes = checked(fullDestinationPath.Length * sizeof(char));
@@ -119,6 +149,60 @@ internal static partial class HomeAssistantAtomicFile
         }
     }
 
+    private static WindowsSecurityDescriptor? TryCaptureWindowsDestinationSecurity(string destinationPath)
+    {
+        var handle = CreateFile(
+            destinationPath,
+            WindowsReadControl,
+            WindowsFileShareRead | WindowsFileShareWrite | WindowsFileShareDelete,
+            IntPtr.Zero,
+            WindowsOpenExisting,
+            WindowsFileAttributeNormal,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            var error = Marshal.GetLastWin32Error();
+            handle.Dispose();
+            if (error is WindowsFileNotFound or WindowsPathNotFound) return null;
+            throw new IOException(
+                "The existing Windows destination security descriptor could not be opened for preservation.",
+                new Win32Exception(error));
+        }
+
+        using (handle)
+        {
+            if (GetKernelObjectSecurity(
+                    handle,
+                    PreservedWindowsSecurityInformation,
+                    IntPtr.Zero,
+                    0,
+                    out var required)
+                || Marshal.GetLastWin32Error() != WindowsInsufficientBuffer)
+            {
+                throw new IOException(
+                    "The existing Windows destination security descriptor size could not be read.",
+                    new Win32Exception(Marshal.GetLastWin32Error()));
+            }
+
+            var descriptor = Marshal.AllocHGlobal(checked((int)required));
+            if (GetKernelObjectSecurity(
+                    handle,
+                    PreservedWindowsSecurityInformation,
+                    descriptor,
+                    required,
+                    out _))
+            {
+                return new WindowsSecurityDescriptor(descriptor);
+            }
+
+            var error = Marshal.GetLastWin32Error();
+            Marshal.FreeHGlobal(descriptor);
+            throw new IOException(
+                "The existing Windows destination security descriptor could not be captured.",
+                new Win32Exception(error));
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WindowsFileRenameInformation
     {
@@ -127,6 +211,20 @@ internal static partial class HomeAssistantAtomicFile
         internal IntPtr RootDirectory;
         internal uint FileNameLength;
         internal char FileName;
+    }
+
+    private sealed class WindowsSecurityDescriptor : IDisposable
+    {
+        internal WindowsSecurityDescriptor(IntPtr descriptor) => Descriptor = descriptor;
+
+        internal IntPtr Descriptor { get; private set; }
+
+        public void Dispose()
+        {
+            if (Descriptor == IntPtr.Zero) return;
+            Marshal.FreeHGlobal(Descriptor);
+            Descriptor = IntPtr.Zero;
+        }
     }
 
     private static void ApplyRestrictiveWindowsDacl(FileStream stream)

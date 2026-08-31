@@ -40,10 +40,10 @@ public sealed class HomeAssistantMediaBrowserClient
         }
         var value = await _webSocket.RequestAsync("media_source/resolve_media", payload, cancellationToken).ConfigureAwait(false);
         RequireNoDuplicateProperties(value, "The resolved media response contained duplicate JSON properties.", cancellationToken);
-        var result = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantResolvedMedia>(
+        var result = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantResolvedMedia>(
             value,
             "The resolved media response could not be decoded.",
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         if (!IsValidResolvedUrl(result.Url, cancellationToken))
             throw new HomeAssistantProtocolException("The resolved media response contained an invalid URL.");
@@ -87,10 +87,10 @@ public sealed class HomeAssistantMediaBrowserClient
             throw new HomeAssistantProtocolException("The media search response had an unexpected shape.");
         ValidateItemShapes(result, cancellationToken);
 
-        var response = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantMediaSearchResponse>(
+        var response = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantMediaSearchResponse>(
             value,
             "The media search response could not be decoded.",
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
         if (response.Items is null)
             throw new HomeAssistantProtocolException("The media search response contained a null result.");
         foreach (var item in response.Items)
@@ -112,10 +112,10 @@ public sealed class HomeAssistantMediaBrowserClient
         cancellationToken.ThrowIfCancellationRequested();
         RequireNoDuplicateProperties(value, "The media browse response contained duplicate JSON properties.", cancellationToken);
         ValidateItemShape(value, cancellationToken);
-        var result = await HomeAssistantJson.DeserializeResponseAsync<HomeAssistantMediaItem>(
+        var result = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantMediaItem>(
             value,
             "The media browse response could not be decoded.",
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         ValidateItemCollections(result, cancellationToken);
         return result;

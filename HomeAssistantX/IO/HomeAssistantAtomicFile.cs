@@ -130,7 +130,14 @@ internal static partial class HomeAssistantAtomicFile
             return;
         }
 
-        CommitTemporaryFile(temporaryPath, destinationPath, overwrite, cancellationToken);
+        temporaryStream.Flush(flushToDisk: true);
+        cancellationToken.ThrowIfCancellationRequested();
+        CommitUnixPinnedFile(
+            temporaryStream.SafeFileHandle,
+            temporaryPath,
+            destinationPath,
+            overwrite,
+            cancellationToken);
     }
 
     internal static FileStream CreateSecureTemporaryFileStream(string temporaryPath)

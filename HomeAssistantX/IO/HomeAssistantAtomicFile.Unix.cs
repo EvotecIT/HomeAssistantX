@@ -59,6 +59,57 @@ internal static partial class HomeAssistantAtomicFile
         using var replacementHandle = OpenPinnedUnixFile(temporaryPath);
         var replacementIdentity = ReadUnixFileMetadata(replacementHandle, includeAccessAcl: false);
         RequireRegularUnixFile(replacementIdentity, "The Unix replacement must be a regular file.");
+        CommitUnixOverwriteCore(
+            replacementHandle,
+            replacementIdentity,
+            temporaryPath,
+            destinationPath,
+            cancellationToken,
+            afterExchange,
+            beforeCommit);
+    }
+
+    private static void CommitUnixPinnedFile(
+        SafeFileHandle replacementHandle,
+        string temporaryPath,
+        string destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken)
+    {
+        var replacementIdentity = ReadUnixFileMetadata(replacementHandle, includeAccessAcl: false);
+        RequireRegularUnixFile(replacementIdentity, "The Unix replacement must be a regular file.");
+        RequireUnixPathIdentity(temporaryPath, replacementIdentity);
+        if (!overwrite)
+        {
+            MovePinnedUnixFile(
+                temporaryPath,
+                destinationPath,
+                replacementIdentity,
+                cancellationToken);
+            return;
+        }
+
+        CommitUnixOverwriteCore(
+            replacementHandle,
+            replacementIdentity,
+            temporaryPath,
+            destinationPath,
+            cancellationToken,
+            afterExchange: null,
+            beforeCommit: null);
+    }
+
+    private static void CommitUnixOverwriteCore(
+        SafeFileHandle replacementHandle,
+        UnixFileMetadata replacementIdentity,
+        string temporaryPath,
+        string destinationPath,
+        CancellationToken cancellationToken,
+        Action? afterExchange,
+        Action? beforeCommit)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RequireUnixPathIdentity(temporaryPath, replacementIdentity);
 
         if (TryReadUnixFileMetadata(destinationPath, includeAccessAcl: false) is null)
         {
@@ -66,7 +117,11 @@ internal static partial class HomeAssistantAtomicFile
             {
                 beforeCommit?.Invoke();
                 cancellationToken.ThrowIfCancellationRequested();
-                File.Move(temporaryPath, destinationPath);
+                MovePinnedUnixFile(
+                    temporaryPath,
+                    destinationPath,
+                    replacementIdentity,
+                    cancellationToken);
                 return;
             }
             catch (IOException) when (File.Exists(destinationPath))
@@ -85,6 +140,7 @@ internal static partial class HomeAssistantAtomicFile
 
         beforeCommit?.Invoke();
         cancellationToken.ThrowIfCancellationRequested();
+        RequireUnixPathIdentity(temporaryPath, replacementIdentity);
         var exchangeResult = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
             ? RenameMac(temporaryPath, destinationPath, MacRenameSwap)
             : RenameLinux(
@@ -164,7 +220,11 @@ internal static partial class HomeAssistantAtomicFile
             {
                 beforeCommit?.Invoke();
                 cancellationToken.ThrowIfCancellationRequested();
-                File.Move(temporaryPath, destinationPath);
+                MovePinnedUnixFile(
+                    temporaryPath,
+                    destinationPath,
+                    replacementIdentity,
+                    cancellationToken);
                 return;
             }
             catch (IOException exception) when (File.Exists(destinationPath))
@@ -178,6 +238,47 @@ internal static partial class HomeAssistantAtomicFile
         throw new IOException(
             "The Unix destination could not be exchanged atomically.",
             new Win32Exception(exchangeError));
+    }
+
+    private static void MovePinnedUnixFile(
+        string temporaryPath,
+        string destinationPath,
+        UnixFileMetadata replacementIdentity,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RequireUnixPathIdentity(temporaryPath, replacementIdentity);
+        File.Move(temporaryPath, destinationPath);
+        try
+        {
+            RequireUnixPathIdentity(destinationPath, replacementIdentity);
+        }
+        catch (Exception identityException)
+        {
+            Exception? rollbackException = null;
+            try
+            {
+                if (File.Exists(temporaryPath))
+                    throw new IOException("The Unix staging path was occupied during rollback.");
+                File.Move(destinationPath, temporaryPath);
+            }
+            catch (Exception exception)
+            {
+                rollbackException = exception;
+            }
+
+            if (rollbackException is null)
+            {
+                throw new IOException(
+                    "The Unix staging entry changed during commit; the unverified destination was removed.",
+                    identityException);
+            }
+
+            throw new HomeAssistantAtomicCommitException(
+                "The Unix staging entry changed during commit and the unverified destination could not be removed safely.",
+                new AggregateException(identityException, rollbackException),
+                preserveTemporaryFile: false);
+        }
     }
 
     private static void PreserveUnixDestinationMetadata(

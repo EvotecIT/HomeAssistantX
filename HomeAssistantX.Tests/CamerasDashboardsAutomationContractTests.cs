@@ -724,6 +724,31 @@ public sealed class CamerasDashboardsAutomationContractTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
     }
 
+    [Fact]
+    public async Task MediaExtensionKeyProjectionIsCancellationIsolated()
+    {
+        var json = "{\"result\":[],\"future_" + new string('a', 16_000_000) + "\":true}";
+        using var document = JsonDocument.Parse(json);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantMediaSearchResponse>(
+                    document.RootElement,
+                    "The test media response could not be decoded.",
+                    cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
@@ -1382,21 +1407,11 @@ public sealed class CamerasDashboardsAutomationContractTests
                 }
 
                 var temporary = Path.Combine(directory, "temporary-" + Guid.NewGuid().ToString("N") + ".bin");
-                if (OperatingSystem.IsWindows())
+                using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
                 {
-                    using var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary);
                     stream.WriteByte(2);
                     HomeAssistantAtomicFile.CommitTemporaryFile(
                         stream,
-                        temporary,
-                        destination,
-                        overwrite: true,
-                        CancellationToken.None);
-                }
-                else
-                {
-                    File.WriteAllBytes(temporary, new byte[] { 2 });
-                    HomeAssistantAtomicFile.CommitTemporaryFile(
                         temporary,
                         destination,
                         overwrite: true,
@@ -1513,6 +1528,15 @@ public sealed class CamerasDashboardsAutomationContractTests
         try
         {
             File.WriteAllBytes(destination, new byte[] { 1 });
+            bool originalDaclProtected;
+            using (var original = new FileStream(
+                       destination,
+                       FileMode.Open,
+                       FileAccess.Read,
+                       FileShare.ReadWrite | FileShare.Delete))
+            {
+                originalDaclProtected = HomeAssistantAtomicFile.IsWindowsTemporaryDaclProtected(original);
+            }
             using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
             {
                 Assert.True(HomeAssistantAtomicFile.IsWindowsTemporaryDaclProtected(stream));
@@ -1528,6 +1552,14 @@ public sealed class CamerasDashboardsAutomationContractTests
 
             Assert.Equal(new byte[] { 42 }, File.ReadAllBytes(destination));
             Assert.False(File.Exists(temporary));
+            using var committed = new FileStream(
+                destination,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            Assert.Equal(
+                originalDaclProtected,
+                HomeAssistantAtomicFile.IsWindowsTemporaryDaclProtected(committed));
         }
         finally
         {
