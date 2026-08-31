@@ -123,10 +123,6 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? LastRequestPath { get; private set; }
 
-    public string? ExactStateResponseJson { get; set; }
-    public string StateMutationResponseJson { get; set; } =
-        "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}";
-
     public int OAuthTokenRequestCount { get; private set; }
 
     public string? LastRevokedRefreshToken { get; private set; }
@@ -227,6 +223,13 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string EntityRegistryResponseJson { get; set; } =
         "[{\"entity_id\":\"sensor.kitchen_temperature\",\"unique_id\":\"temperature-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"has_entity_name\":true},{\"entity_id\":\"light.kitchen\",\"unique_id\":\"light-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"name\":\"Light\",\"has_entity_name\":true,\"list_only\":{\"source\":\"partial\"}},{\"entity_id\":\"sensor.disabled_temperature\",\"unique_id\":\"temperature-2\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Temperature\",\"has_entity_name\":true,\"disabled_by\":\"integration\"},{\"entity_id\":\"sensor.legacy_disabled\",\"unique_id\":\"legacy-1\",\"platform\":\"test\",\"device_id\":\"device-1\",\"config_entry_id\":\"entry-1\",\"original_name\":\"Kitchen legacy temperature\",\"has_entity_name\":false,\"disabled_by\":\"integration\"}]";
 
+    public string AutomationConfigurationResponseJson { get; set; } =
+        "{\"id\":\"morning-routine\",\"alias\":\"Morning\",\"triggers\":[],\"actions\":[],\"future_automation\":true}";
+
+    public string? ExactStateResponseJson { get; set; }
+    public string StateMutationResponseJson { get; set; } =
+        "{\"entity_id\":\"sensor.virtual\",\"state\":\"ready\",\"attributes\":{\"friendly_name\":\"Virtual\"}}";
+
     public string WeatherForecastResponseJson { get; set; } =
         "{\"weather.home\":{\"forecast\":[{\"datetime\":\"2026-08-27T00:00:00+00:00\",\"condition\":\"sunny\",\"temperature\":24.5,\"templow\":15.0,\"precipitation_probability\":10,\"future_field\":\"kept\"}]}}";
 
@@ -253,6 +256,46 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string EnergyInfoResponseJson { get; set; } =
         "{\"cost_sensors\":{\"sensor.grid_energy\":\"sensor.grid_cost\"},\"solar_forecast_domains\":[\"forecast_solar\"]}";
+
+    public string MediaBrowseResponseJson { get; set; } =
+        "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"media-source://media_source\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":true,\"children\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"future_media_field\":true}]}";
+
+    public string MediaSearchResponseJson { get; set; } =
+        "{\"result\":[{\"title\":\"Dinner\",\"media_class\":\"music\",\"media_content_id\":\"media-source://media_source/local/dinner.mp3\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false}],\"future_search_metadata\":{\"provider\":\"kept\"}}";
+
+    public string ResolvedMediaResponseJson { get; set; } =
+        "{\"url\":\"/api/media_source_proxy/local/dinner.mp3?authSig=signed\",\"mime_type\":\"audio/mpeg\",\"future_resolve\":true}";
+
+    public string DashboardListResponseJson { get; set; } =
+        "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"icon\":\"mdi:home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\",\"future_dashboard\":true}]";
+
+    public string DashboardMutationResponseJson { get; set; } =
+        "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}";
+
+    public string DashboardResourceListResponseJson { get; set; } =
+        "[{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\"module\",\"future_resource\":true}]";
+
+    public string DashboardResourceMutationResponseJson { get; set; } =
+        "{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\"module\"}";
+
+    public string CameraPreferencesResponseJson { get; set; } =
+        "{\"preload_stream\":true,\"orientation\":3,\"future_preference\":true}";
+    public string CameraCapabilitiesResponseJson { get; set; } =
+        "{\"frontend_stream_types\":[\"hls\",\"web_rtc\"],\"future_capability\":true}";
+    public string CameraStreamResponseJson { get; set; } =
+        "{\"url\":\"/api/hls/test/master_playlist.m3u8\",\"future_stream_field\":true,\"Future_Stream_Field\":\"also-kept\"}";
+    public string CameraImageResponse { get; set; } = "test-image-bytes";
+
+    public string LovelaceInfoResponseJson { get; set; } =
+        "{\"resource_mode\":\"storage\",\"future_info\":true}";
+
+    public ConcurrentQueue<string> LovelaceInfoResponses { get; } = new();
+
+    public string FrontendPanelsResponseJson { get; set; } =
+        "{\"lovelace\":{\"title\":\"Overview\",\"component_name\":\"lovelace\",\"default_visible\":true,\"show_in_sidebar\":true,\"require_admin\":false,\"future_panel\":true}}";
+
+    public string LovelaceConfigurationResponseJson { get; set; } =
+        "{\"title\":\"Home\",\"views\":[{\"title\":\"Kitchen\"}],\"future_config\":true}";
 
     public Task WaitForSystemHealthEventsAsync()
     {
@@ -652,7 +695,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(ActionCatalogResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "get_panels":
-                await session.SendResultAsync(id, ParseJson("{\"lovelace\":{\"title\":\"Overview\"}}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(FrontendPanelsResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "validate_config":
                 await session.SendResultAsync(id, ParseJson("{\"trigger\":null,\"condition\":null,\"action\":null}"), false, _source.Token).ConfigureAwait(false);
@@ -860,6 +903,58 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 session.SubscriptionIds.Add(id);
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
                 await session.SendSubscriptionEventAsync(id, ParseJson(WeatherForecastSubscriptionEventJson), _source.Token).ConfigureAwait(false);
+                return;
+            case "camera/capabilities":
+                await session.SendResultAsync(id, ParseJson(CameraCapabilitiesResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "camera/stream":
+                await session.SendResultAsync(id, ParseJson(CameraStreamResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "camera/get_prefs":
+                await session.SendResultAsync(id, ParseJson(CameraPreferencesResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "camera/update_prefs":
+                await session.SendResultAsync(id, ParseJson(CameraPreferencesResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "media_source/browse_media":
+            case "media_player/browse_media":
+                await session.SendResultAsync(id, ParseJson(MediaBrowseResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "media_source/search_media":
+            case "media_player/search_media":
+                await session.SendResultAsync(id, ParseJson(MediaSearchResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "media_source/resolve_media":
+                await session.SendResultAsync(id, ParseJson(ResolvedMediaResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "lovelace/info":
+                var infoResponse = LovelaceInfoResponses.TryDequeue(out var queuedInfoResponse)
+                    ? queuedInfoResponse
+                    : LovelaceInfoResponseJson;
+                await session.SendResultAsync(id, ParseJson(infoResponse), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "lovelace/dashboards/list":
+                await session.SendResultAsync(id, ParseJson(DashboardListResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "lovelace/dashboards/create":
+            case "lovelace/dashboards/update":
+                await session.SendResultAsync(id, ParseJson(DashboardMutationResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "lovelace/dashboards/delete":
+            case "lovelace/config/save":
+            case "lovelace/config/delete":
+            case "lovelace/resources/delete":
+                await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                return;
+            case "lovelace/config":
+                await session.SendResultAsync(id, ParseJson(LovelaceConfigurationResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "lovelace/resources/list":
+                await session.SendResultAsync(id, ParseJson(DashboardResourceListResponseJson), false, _source.Token).ConfigureAwait(false);
+                return;
+            case "lovelace/resources/create":
+            case "lovelace/resources/update":
+                await session.SendResultAsync(id, ParseJson(DashboardResourceMutationResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "test/error":
                 await session.SendErrorAsync(id, "service_validation_error", "Option is not supported.", "unsupported_option", _source.Token)

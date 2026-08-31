@@ -157,13 +157,57 @@ public sealed partial class HomeAssistantRestClient
     }
 
     /// <summary>Gets an image from a camera entity.</summary>
-    public Task<byte[]> GetCameraImageAsync(string entityId, CancellationToken cancellationToken = default)
+    public Task<byte[]> GetCameraImageAsync(
+        string entityId,
+        CancellationToken cancellationToken = default)
+        => GetCameraImageCoreAsync(entityId, null, null, cancellationToken);
+
+    /// <summary>Gets a bounded image from a camera entity at a best-effort size.</summary>
+    public Task<byte[]> GetCameraImageAsync(
+        string entityId,
+        int width,
+        int height,
+        CancellationToken cancellationToken = default)
+        => GetCameraImageCoreAsync(entityId, width, height, cancellationToken);
+
+    private async Task<byte[]> GetCameraImageCoreAsync(
+        string entityId,
+        int? width,
+        int? height,
+        CancellationToken cancellationToken)
     {
         if (!HomeAssistantEntityId.TryNormalizeForDomain(entityId, "camera", cancellationToken, out var normalizedEntityId))
+        {
             throw new ArgumentException("A camera entity identifier is required.", nameof(entityId));
-        return GetBytesAsync(
-            "api/camera_proxy/" + EscapePath(normalizedEntityId, cancellationToken),
-            cancellationToken);
+        }
+
+        if (width.HasValue != height.HasValue)
+        {
+            throw new ArgumentException("Camera image width and height must be supplied together.");
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width), "Camera image dimensions must be positive.");
+        }
+
+        var path = "api/camera_proxy/" + EscapePath(normalizedEntityId, cancellationToken);
+        if (width.HasValue)
+        {
+            path = AppendQuery(path, new[]
+            {
+                new KeyValuePair<string, string?>("width", width.Value.ToString(CultureInfo.InvariantCulture)),
+                new KeyValuePair<string, string?>("height", height!.Value.ToString(CultureInfo.InvariantCulture))
+            }, cancellationToken);
+        }
+
+        var image = await GetBytesAsync(path, cancellationToken).ConfigureAwait(false);
+        if (image.Length == 0)
+        {
+            throw new HomeAssistantProtocolException("Home Assistant returned an empty camera image.");
+        }
+
+        return image;
     }
 
     /// <summary>Gets all calendar entities.</summary>

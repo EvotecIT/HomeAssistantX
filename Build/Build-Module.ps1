@@ -71,6 +71,9 @@ Build-Module -ModuleName 'HomeAssistantX' -RunMode $RunMode {
             'HomeAssistantX.Recorder.HomeAssistantStatisticImportRow'
             'HomeAssistantX.Weather.HomeAssistantWeatherForecastType'
             'HomeAssistantX.Weather.HomeAssistantWeatherFeature'
+            'HomeAssistantX.Cameras.HomeAssistantCameraFeature'
+            'HomeAssistantX.Cameras.HomeAssistantCameraOrientation'
+            'HomeAssistantX.Dashboards.HomeAssistantDashboardResourceType'
         )
         DeleteTargetModuleBeforeBuild           = $true
         NETBinaryModuleDocumentation            = $true

@@ -1,0 +1,64 @@
+using System.Management.Automation;
+using HomeAssistantX.IO;
+using HomeAssistantX.Models;
+
+namespace HomeAssistantX.PowerShell;
+
+/// <summary>Exports one bounded camera snapshot through an atomic local-file replacement.</summary>
+/// <example><summary>Save a scaled snapshot</summary><code>Export-HomeAssistantCameraSnapshot camera.front ./front.jpg -Width 1280 -Height 720</code></example>
+[Cmdlet(VerbsData.Export, "HomeAssistantCameraSnapshot", SupportsShouldProcess = true)]
+[OutputType(typeof(FileInfo))]
+public sealed class ExportHomeAssistantCameraSnapshotCommand : HomeAssistantCmdlet
+{
+    private string _entityId = string.Empty;
+    private string _resolvedPath = string.Empty;
+    [Parameter(Mandatory = true, Position = 0)][ValidateNotNullOrEmpty] public string EntityId { get; set; } = string.Empty;
+    [Parameter(Mandatory = true, Position = 1)][ValidateNotNullOrEmpty] public string Path { get; set; } = string.Empty;
+    [Parameter][ValidateRange(1, int.MaxValue)] public int? Width { get; set; }
+    [Parameter][ValidateRange(1, int.MaxValue)] public int? Height { get; set; }
+    [Parameter] public SwitchParameter Force { get; set; }
+
+    protected override Task BeginProcessingAsync()
+    {
+        if (!HomeAssistantEntityId.TryNormalizeForDomain(EntityId, "camera", CancelToken, out _entityId))
+        {
+            throw new ArgumentException("A lowercase camera entity identifier is required.", nameof(EntityId));
+        }
+
+        _resolvedPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
+        if (Width.HasValue != Height.HasValue) throw new ArgumentException("Width and Height must be supplied together.");
+        return Task.CompletedTask;
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        if (File.Exists(_resolvedPath) && !Force) throw new IOException("The destination file already exists. Use -Force to overwrite it.");
+        var directory = System.IO.Path.GetDirectoryName(_resolvedPath);
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) throw new DirectoryNotFoundException("The snapshot destination directory does not exist.");
+        if (!ShouldProcess(_resolvedPath, "Export Home Assistant camera snapshot")) return;
+        var bytes = await Client.Cameras.GetSnapshotAsync(_entityId, Width, Height, CancelToken).ConfigureAwait(false);
+        var temporaryPath = HomeAssistantAtomicFile.CreateTemporaryPath(directory);
+        var preserveTemporaryFile = false;
+        try
+        {
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(
+                       temporaryPath,
+                       _resolvedPath,
+                       Force))
+            {
+                await HomeAssistantAtomicFile.WriteAllBytesAsync(stream, bytes, CancelToken).ConfigureAwait(false);
+                HomeAssistantAtomicFile.CommitTemporaryFile(stream, temporaryPath, _resolvedPath, Force, CancelToken);
+            }
+        }
+        catch (HomeAssistantAtomicCommitException exception) when (exception.PreserveTemporaryFile)
+        {
+            preserveTemporaryFile = true;
+            throw;
+        }
+        finally
+        {
+            if (!preserveTemporaryFile && File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
+        WriteObject(new FileInfo(_resolvedPath));
+    }
+}

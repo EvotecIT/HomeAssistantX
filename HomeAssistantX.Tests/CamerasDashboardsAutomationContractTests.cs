@@ -1,0 +1,3020 @@
+#if NET10_0
+using System.Text;
+using System.Text.Json;
+using HomeAssistantX.Automations;
+using HomeAssistantX.Cameras;
+using HomeAssistantX.Dashboards;
+using HomeAssistantX.Exceptions;
+using HomeAssistantX.IO;
+using HomeAssistantX.Media;
+using HomeAssistantX.Models;
+using HomeAssistantX.Protocol;
+using HomeAssistantX.Services;
+using HomeAssistantX.Tests.Infrastructure;
+
+namespace HomeAssistantX.Tests;
+
+public sealed class CamerasDashboardsAutomationContractTests
+{
+    [Fact]
+    public void AtomicExportTemporaryNamesAreBoundedAndDestinationIndependent()
+    {
+        var directory = Path.GetTempPath();
+        var temporary = HomeAssistantAtomicFile.CreateTemporaryPath(directory);
+
+        Assert.Equal(directory.TrimEnd(Path.DirectorySeparatorChar), Path.GetDirectoryName(temporary)!.TrimEnd(Path.DirectorySeparatorChar));
+        Assert.Matches("^\\.homeassistantx-[0-9a-f]{32}\\.tmp$", Path.GetFileName(temporary));
+        Assert.True(Path.GetFileName(temporary).Length < 64);
+    }
+
+    [Theory]
+    [InlineData("X64", 316)]
+    [InlineData("X86", 353)]
+    [InlineData("Arm", 382)]
+    [InlineData("Arm64", 276)]
+    [InlineData("Armv6", 382)]
+    [InlineData("S390x", 347)]
+    [InlineData("Ppc64le", 357)]
+    [InlineData("LoongArch64", 276)]
+    [InlineData("RiscV64", 276)]
+    public void LinuxAtomicExchangeUsesKernelRenameAt2Numbers(
+        string architectureName,
+        int expected)
+    {
+        var architecture = Enum.Parse<System.Runtime.InteropServices.Architecture>(architectureName);
+        Assert.Equal(expected, HomeAssistantAtomicFile.GetLinuxRenameAt2SystemCallNumber(architecture));
+    }
+
+    [Fact]
+    public void WindowsDestinationSecurityCaptureOpensTheReparseEntry()
+    {
+        const uint fileFlagOpenReparsePoint = 0x00200000;
+        const uint fileFlagBackupSemantics = 0x02000000;
+
+        Assert.Equal(
+            fileFlagOpenReparsePoint | fileFlagBackupSemantics,
+            HomeAssistantAtomicFile.WindowsDestinationSecurityOpenFlags
+                & (fileFlagOpenReparsePoint | fileFlagBackupSemantics));
+        Assert.Equal(0u, HomeAssistantAtomicFile.WindowsDestinationSecurityShareMode & 0x00000004u);
+        Assert.Equal(22, HomeAssistantAtomicFile.WindowsAtomicRenameInformationClass);
+        Assert.Equal(0x00000003u, HomeAssistantAtomicFile.WindowsAtomicRenameFlags);
+        Assert.Equal(0x0000001F, HomeAssistantAtomicFile.WindowsPreservedSecurityInformation);
+        Assert.Equal(0x00000010, HomeAssistantAtomicFile.WindowsMandatoryLabelSecurityInformation);
+        Assert.Equal(0x00000008, HomeAssistantAtomicFile.WindowsAuditSecurityInformation);
+        Assert.Equal(0x00004000u, HomeAssistantAtomicFile.WindowsEncryptedAttribute);
+        Assert.Equal(3, HomeAssistantAtomicFile.GetWindowsRenameInformationClass(overwrite: true, destinationPinned: false));
+        Assert.Equal(0u, HomeAssistantAtomicFile.GetWindowsRenameFlags(overwrite: true, destinationPinned: false));
+        Assert.Equal(22, HomeAssistantAtomicFile.GetWindowsRenameInformationClass(overwrite: true, destinationPinned: true));
+        Assert.Equal(0x00000003u, HomeAssistantAtomicFile.GetWindowsRenameFlags(overwrite: true, destinationPinned: true));
+    }
+
+    [Fact]
+    public async Task DashboardPropertyNameDecodePrioritizesCancellation()
+    {
+        var escapedRoute = string.Concat(Enumerable.Repeat("\\u0061", 100_000));
+        using var document = JsonDocument.Parse("{\"" + escapedRoute + "\":{}}");
+        var property = document.RootElement.EnumerateObject().First();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantJson.GetPropertyNameAsync(property, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task CameraAndMediaPropertyNameBatchesPrioritizeCancellation()
+    {
+        var escaped = string.Concat(Enumerable.Repeat("\\u0061", 1_000_000));
+        using var cameraDocument = JsonDocument.Parse("{\"" + escaped + "\":0,\"preload_stream\":true,\"orientation\":1}");
+        using var mediaDocument = JsonDocument.Parse("{\"" + escaped + "\":0,\"result\":[]}");
+        using var cameraCancellation = new CancellationTokenSource();
+        using var mediaCancellation = new CancellationTokenSource();
+
+        var cameraTask = Task.Run(() => HomeAssistantCameraClient.ReadUniqueObjectProperties(
+            cameraDocument.RootElement,
+            "Invalid camera response.",
+            cameraCancellation.Token));
+        cameraCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cameraTask);
+
+        var mediaTask = Task.Run(() => HomeAssistantMediaBrowserClient.FindSearchResult(
+            mediaDocument.RootElement,
+            mediaCancellation.Token));
+        mediaCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await mediaTask);
+    }
+
+    [Fact]
+    public async Task CameraAndPanelResponseProjectionPrioritizeCancellation()
+    {
+        var escaped = string.Concat(Enumerable.Repeat("\\u0061", 1_000_000));
+        using var cameraDocument = JsonDocument.Parse(
+            "{\"" + escaped + "\":0,\"preload_stream\":true,\"orientation\":1}");
+        using var panelDocument = JsonDocument.Parse(
+            "{\"" + escaped + "\":0,\"component_name\":\"custom\",\"require_admin\":false}");
+        using var cameraCancellation = new CancellationTokenSource();
+        using var panelCancellation = new CancellationTokenSource();
+
+        var cameraTask = Task.Run(() => HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantCameraPreferences>(
+            cameraDocument.RootElement,
+            "Invalid camera response.",
+            cameraCancellation.Token));
+        cameraCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cameraTask);
+
+        var panelTask = Task.Run(() => HomeAssistantDashboardClient.RequirePanelBooleans(
+            panelDocument.RootElement,
+            panelCancellation.Token));
+        panelCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await panelTask);
+    }
+
+    [Fact]
+    public void LinuxExtendedAttributeComparisonSkipsOnlyIdenticalValues()
+    {
+        Assert.True(HomeAssistantAtomicFile.ExtendedAttributeEquals(null, null));
+        Assert.True(HomeAssistantAtomicFile.ExtendedAttributeEquals(new byte[] { 1, 2 }, new byte[] { 1, 2 }));
+        Assert.False(HomeAssistantAtomicFile.ExtendedAttributeEquals(null, Array.Empty<byte>()));
+        Assert.False(HomeAssistantAtomicFile.ExtendedAttributeEquals(new byte[] { 1, 2 }, new byte[] { 1, 3 }));
+    }
+
+    [Theory]
+    [InlineData(22)]
+    [InlineData(38)]
+    [InlineData(45)]
+    [InlineData(95)]
+    public void UnixAtomicExchangeClassifiesErrorsThatMustFailClosed(int error)
+    {
+        Assert.True(HomeAssistantAtomicFile.IsUnixExchangeUnsupported(error));
+        Assert.False(HomeAssistantAtomicFile.IsUnixExchangeUnsupported(2));
+    }
+
+    [Fact]
+    public void CameraSubscriptionStateProjectionPreservesIdentityCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var state = new HomeAssistantState
+        {
+            EntityId = new string('x', 1_000_000),
+            State = "idle"
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCameraClient.ToOptionalStatus(state, cancellation.Token));
+    }
+
+    [Fact]
+    public void FrontendPanelSortingHonorsCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantDashboardClient.SortPanels(
+                new List<HomeAssistantPanel>
+                {
+                    new() { UrlPath = "settings" },
+                    new() { UrlPath = "energy" }
+                },
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void DashboardVisibilityValidationHonorsCancellation()
+    {
+        var extensionProperties = string.Join(",", Enumerable.Range(0, 1_000_000)
+            .Select(index => "\"provider_" + index + "\":0"));
+        using var document = JsonDocument.Parse(
+            "{" + extensionProperties + ",\"show_in_sidebar\":true,\"require_admin\":false}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantDashboardClient.RequireDashboardVisibility(
+                document.RootElement,
+                "A dashboard did not contain its required visibility fields.",
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void AutomationStatusProjectionHonorsCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationClient.ToStatus(
+                new HomeAssistantState { EntityId = "automation.morning", State = "on" },
+                cancellation.Token));
+    }
+
+    [Theory]
+    [InlineData(":")]
+    [InlineData("mdi:")]
+    [InlineData(":home")]
+    [InlineData("custom:room_kitchen")]
+    [InlineData(" mdi:home ")]
+    public void DashboardIconsFollowHomeAssistantColonContract(string icon)
+    {
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeIcon(icon, out var normalized));
+        Assert.Equal(icon, normalized);
+    }
+
+    [Fact]
+    public void DashboardStorageSelectorsRemainBoundedWithoutBoundingIcons()
+    {
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeIcon("mdi:" + new string('a', 251), out _));
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeIcon("mdi:" + new string('a', 10_000), out _));
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeSelector(new string('a', 255), out _, CancellationToken.None));
+        Assert.False(HomeAssistantDashboardIdentifier.TryNormalizeSelector(new string('a', 256), out _, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task GlobalMediaSelectorsRejectBlankValuesBeforeDispatch(string selector)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Media.BrowseSourcesAsync(selector));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Media.SearchSourcesResponseAsync("music", selector));
+        Assert.Null(server.GetLastWebSocketCommand("media_source/browse_media"));
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+    }
+
+    [Fact]
+    public async Task GlobalMediaSelectorNormalizationObservesCancellationDuringTraversal()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var selector = new string(' ', 16_000_000) + "media-source://media_source";
+        var operation = Task.Run(async () =>
+        {
+            started.TrySetResult(true);
+            await client.Media.BrowseSourcesAsync(selector, cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.GetLastWebSocketCommand("media_source/browse_media"));
+    }
+
+    [Fact]
+    public async Task GlobalMediaClassNormalizationObservesCancellationBeforeHashing()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var mediaClass = "music" + new string('a', 16_000_000);
+        var operation = Task.Run(async () =>
+        {
+            started.TrySetResult(true);
+            await client.Media.SearchSourcesResponseAsync(
+                "music",
+                mediaClasses: new[] { mediaClass },
+                cancellationToken: cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+    }
+
+    [Fact]
+    public async Task CameraSurfaceIsTypedBoundedSignedAndPushCapable()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[" +
+            "{\"entity_id\":\"camera.front\",\"state\":\"idle\",\"attributes\":{\"friendly_name\":\"Front\",\"brand\":\"Test\",\"model_name\":\"One\",\"motion_detection\":true,\"supported_features\":3}}," +
+            "{\"entity_id\":\"camera.bad\",\"state\":\"idle\",\"attributes\":{\"supported_features\":4294967297}}]");
+        using var client = TestClientFactory.Create(server);
+
+        var cameras = await client.Cameras.GetAsync();
+        var camera = Assert.Single(cameras, value => value.EntityId == "camera.front");
+        Assert.Equal(HomeAssistantCameraFeature.OnOff | HomeAssistantCameraFeature.Stream, camera.SupportedFeatures);
+        Assert.Equal(
+            HomeAssistantCameraFeature.None,
+            Assert.Single(cameras, value => value.EntityId == "camera.bad").SupportedFeatures);
+        Assert.True(camera.MotionDetectionEnabled);
+        Assert.Equal("test-image-bytes", Encoding.UTF8.GetString(await client.Cameras.GetSnapshotAsync("camera.front", 640, 360)));
+        Assert.Contains("width=640", server.LastRequestPath);
+        var capabilities = await client.Cameras.GetCapabilitiesAsync("camera.front");
+        Assert.Contains("web_rtc", capabilities.FrontendStreamTypes);
+        Assert.True(capabilities.AdditionalData["future_capability"].GetBoolean());
+        var stream = await client.Cameras.GetStreamAsync("camera.front");
+        Assert.EndsWith("master_playlist.m3u8", stream.Path);
+        Assert.True(stream.AdditionalData["future_stream_field"].GetBoolean());
+        Assert.Equal("also-kept", stream.AdditionalData["Future_Stream_Field"].GetString());
+        Assert.Equal(HomeAssistantCameraOrientation.Rotate180, (await client.Cameras.GetPreferencesAsync("camera.front")).Orientation);
+        await client.Cameras.SavePreferencesAsync("camera.front", new HomeAssistantCameraPreferencesUpdate { Orientation = HomeAssistantCameraOrientation.Rotate180 });
+        using (var prefs = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("camera/update_prefs"))))
+            Assert.Equal(3, prefs.RootElement.GetProperty("orientation").GetInt32());
+        var signedImage = await client.Cameras.GetSignedImagePathAsync("camera.front", width: 640, height: 360);
+        Assert.Contains("authSig=signed", signedImage);
+        Assert.Contains("width=640&height=360", signedImage);
+        using (var imageSign = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("auth/sign_path"))))
+            Assert.Equal("/api/camera_proxy/camera.front", imageSign.RootElement.GetProperty("path").GetString());
+        var signedMjpeg = await client.Cameras.GetSignedMjpegStreamPathAsync("camera.front", intervalSeconds: 1.5);
+        Assert.Contains("authSig=signed", signedMjpeg);
+        Assert.Contains("interval=1.5", signedMjpeg);
+        using (var signed = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("auth/sign_path"))))
+            Assert.Equal("/api/camera_proxy_stream/camera.front", signed.RootElement.GetProperty("path").GetString());
+    }
+
+    [Fact]
+    public async Task CameraPreflightRejectsInvalidDimensionsAndPreferencesBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Cameras.GetSnapshotAsync("camera.front", 640));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Cameras.GetSnapshotAsync("camera."));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Cameras.GetCapabilitiesAsync("camera.front.extra"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.GetCameraImageAsync("camera.front.extra"));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.Cameras.GetSignedMjpegStreamPathAsync("camera.front", intervalSeconds: 0.1));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Cameras.SavePreferencesAsync("camera.front", new HomeAssistantCameraPreferencesUpdate()));
+        Assert.Null(server.GetLastWebSocketCommand("camera/update_prefs"));
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"frontend_stream_types\":null}")]
+    [InlineData("{\"frontend_stream_types\":{}}")]
+    [InlineData("{\"frontend_stream_types\":[\"\"]}")]
+    [InlineData("{\"frontend_stream_types\":[\" hls \"]}")]
+    [InlineData("{\"frontend_stream_types\":[\"HLS\"]}")]
+    [InlineData("{\"frontend_stream_types\":[\"hls\",\"hls\"]}")]
+    public async Task CameraCapabilitiesRequireTheFrontendStreamTypeArray(string response)
+    {
+        using var server = new TestHomeAssistantServer { CameraCapabilitiesResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetCapabilitiesAsync("camera.front"));
+    }
+
+    [Fact]
+    public async Task CameraCapabilitiesPreserveCanonicalFutureStreamTypes()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            CameraCapabilitiesResponseJson = "{\"frontend_stream_types\":[\"future_stream\"]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal("future_stream", Assert.Single((await client.Cameras.GetCapabilitiesAsync("camera.front")).FrontendStreamTypes));
+    }
+
+    [Theory]
+    [InlineData("{\"url\":\" stream.m3u8 \"}")]
+    [InlineData("{\"url\":\"stream.m3u8\"}")]
+    [InlineData("{\"url\":\"//other.example/stream.m3u8\"}")]
+    [InlineData("{\"url\":\"/api\\\\hls\\\\stream.m3u8\"}")]
+    [InlineData("{\"url\":\"https://other.example/stream.m3u8\"}")]
+    [InlineData("{\"url\":\"/api/hls/stream.m3u8#fragment\"}")]
+    [InlineData("{\"url\":\"/api/one/../hls/stream.m3u8\"}")]
+    [InlineData("{\"url\":\"/api/%2e%2e/hls/stream.m3u8\"}")]
+    public async Task CameraStreamsRequireCanonicalRootRelativePaths(string response)
+    {
+        using var server = new TestHomeAssistantServer { CameraStreamResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetStreamAsync("camera.front"));
+    }
+
+    [Fact]
+    public async Task CameraMutationsRejectEmptySnapshotsAndMismatchedPreferences()
+    {
+        using var server = new TestHomeAssistantServer { CameraImageResponse = string.Empty };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetSnapshotAsync("camera.front"));
+
+        server.CameraPreferencesResponseJson = "{\"preload_stream\":false,\"orientation\":3}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
+
+        server.CameraPreferencesResponseJson = "{\"preload_stream\":true,\"orientation\":1}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { Orientation = HomeAssistantCameraOrientation.Rotate180 }));
+
+        server.CameraPreferencesResponseJson = "{\"orientation\":3}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { PreloadStream = false }));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(9)]
+    public async Task CameraPreferenceReadsRejectUndefinedOrientations(int orientation)
+    {
+        using var server = new TestHomeAssistantServer { CameraPreferencesResponseJson = "{\"preload_stream\":true,\"orientation\":" + orientation + "}" };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetPreferencesAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front", new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
+    }
+
+    [Fact]
+    public async Task CameraSignedPathsRejectMismatchedRoutes()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            SignedPathResponseJson = "{\"path\":\"/api/camera_proxy/camera.other?authSig=signed\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Cameras.GetSignedImagePathAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Cameras.GetSignedMjpegStreamPathAsync("camera.front"));
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"preload_stream\":true}")]
+    [InlineData("{\"orientation\":3}")]
+    [InlineData("{\"preload_stream\":null,\"orientation\":3}")]
+    [InlineData("{\"preload_stream\":true,\"orientation\":\"3\"}")]
+    public async Task CameraPreferencesRequireCompleteTypedResponses(string response)
+    {
+        using var server = new TestHomeAssistantServer { CameraPreferencesResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetPreferencesAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
+    }
+
+    [Fact]
+    public async Task CameraWebSocketResponsesRejectDuplicateProperties()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            CameraCapabilitiesResponseJson = "{\"frontend_stream_types\":[\"mjpeg\"],\"frontend_stream_types\":[\"hls\"]}",
+            CameraStreamResponseJson = "{\"url\":\"/api/hls/other.m3u8\",\"url\":\"/api/hls/stream.m3u8\"}",
+            CameraPreferencesResponseJson = "{\"preload_stream\":false,\"preload_stream\":true,\"orientation\":1}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetCapabilitiesAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetStreamAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetPreferencesAsync("camera.front"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.SavePreferencesAsync(
+            "camera.front",
+            new HomeAssistantCameraPreferencesUpdate { PreloadStream = true }));
+    }
+
+    [Fact]
+    public void CameraStreamTypeValidationObservesCancellationDuringTraversal()
+    {
+        using var cancellation = new CancellationTokenSource();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantCameraClient.ValidateStreamTypes(CancelAfterFirstStreamType(cancellation), cancellation.Token));
+    }
+
+    [Fact]
+    public void CameraStreamTypeValidationBoundsDuplicateHashing()
+    {
+        var maximumLengthType = new string('a', 255);
+        HomeAssistantCameraClient.ValidateStreamTypes(new[] { maximumLengthType }, CancellationToken.None);
+        Assert.Throws<HomeAssistantProtocolException>(() =>
+            HomeAssistantCameraClient.ValidateStreamTypes(new[] { maximumLengthType, maximumLengthType }, CancellationToken.None));
+        Assert.Throws<HomeAssistantProtocolException>(() =>
+            HomeAssistantCameraClient.ValidateStreamTypes(new[] { new string('a', 256) }, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("House_Main-panel")]
+    [InlineData("House-main")]
+    [InlineData("house--main")]
+    [InlineData("-house-main")]
+    [InlineData("house-main-")]
+    [InlineData("house main-panel")]
+    public async Task DashboardCreationPreservesHomeAssistantStorageUrlPaths(string urlPath)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardMutationResponseJson = JsonSerializer.Serialize(new
+            {
+                id = "house-main",
+                url_path = urlPath,
+                title = "House",
+                show_in_sidebar = true,
+                require_admin = false,
+                mode = "storage"
+            })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var dashboard = await client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate { UrlPath = urlPath, Title = "House" });
+
+        Assert.Equal(urlPath, dashboard.UrlPath);
+        using var command = JsonDocument.Parse(Assert.IsType<string>(
+            server.GetLastWebSocketCommand("lovelace/dashboards/create")));
+        Assert.Equal(urlPath, command.RootElement.GetProperty("url_path").GetString());
+    }
+
+    [Fact]
+    public async Task DashboardSlugValidationObservesCancellationDuringTraversal()
+    {
+        var longValue = new string(' ', 16_000_000) + "house-main";
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var canceller = Task.Factory.StartNew(
+            () =>
+            {
+                started.Task.GetAwaiter().GetResult();
+                cancellation.Cancel();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(
+                    longValue,
+                    allowSingleWord: false,
+                    out _,
+                    cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        await canceller;
+    }
+
+    [Fact]
+    public async Task DashboardMutationValuesObserveCancellationDuringNormalization()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var title = new string(' ', 16_000_000);
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.TrySetResult(true);
+                await client.Dashboards.CreateDashboardAsync(
+                    new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = title },
+                    cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
+    }
+
+    [Fact]
+    public async Task DashboardMutationCorrelationObservesCancellationAcrossUnboundedValues()
+    {
+        var left = new string('x', 16_000_000);
+        var right = new string(left.ToCharArray());
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return CancellationAwareString.EqualsOrdinal(left, right, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
+    public void DashboardMutationValuesFollowHomeAssistantWithoutClientOnlyCaps()
+    {
+        var title = new string('T', 512);
+        var resourceUrl = "/local/" + new string('a', 10_000) + ".js";
+        var urlPath = "house-" + new string('a', 512);
+
+        Assert.Equal(title, HomeAssistantDashboardIdentifier.RequireTitle(title, "title", CancellationToken.None));
+        Assert.Equal(resourceUrl, HomeAssistantDashboardIdentifier.RequireResourceUrl(resourceUrl, "url", CancellationToken.None));
+        Assert.True(HomeAssistantDashboardIdentifier.TryNormalizeUrlPath(
+            urlPath,
+            allowSingleWord: false,
+            out var normalizedUrlPath,
+            CancellationToken.None));
+        Assert.Equal(urlPath, normalizedUrlPath);
+        Assert.Equal(
+            "  " + resourceUrl + "  ",
+            HomeAssistantDashboardIdentifier.RequireResourceUrl("  " + resourceUrl + "  ", "url", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AutomationIdentifierNormalizationObservesCancellationDuringTraversal()
+    {
+        var longValue = "automation-" + new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Run(() =>
+        {
+            started.TrySetResult(true);
+            return HomeAssistantAutomationIdentifier.NormalizeConfigurationId(longValue, cancellation.Token);
+        });
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
+    public void AutomationIdentifierEscapingSupportsNetFrameworkSizedValues()
+    {
+        var value = "automation-" + new string('a', 40_000) + " 🏠";
+
+        var escaped = HomeAssistantAutomationIdentifier.EscapeConfigurationId(value, CancellationToken.None);
+
+        Assert.StartsWith("automation-", escaped, StringComparison.Ordinal);
+        Assert.EndsWith("%20%F0%9F%8F%A0", escaped, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AutomationIdentifierEscapingObservesCancellationDuringTraversal()
+    {
+        var value = "automation-" + new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var canceller = Task.Factory.StartNew(
+            () =>
+            {
+                started.Task.GetAwaiter().GetResult();
+                cancellation.Cancel();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantAutomationIdentifier.EscapeConfigurationId(value, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        await canceller;
+    }
+
+    [Fact]
+    public async Task AutomationConfigurationPathCompositionObservesCancellationAfterEscaping()
+    {
+        var escaped = "automation-" + new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var canceller = Task.Factory.StartNew(
+            () =>
+            {
+                started.Task.GetAwaiter().GetResult();
+                cancellation.Cancel();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantAutomationClient.ConfigurationPathFromEscapedId(escaped, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        await canceller;
+    }
+
+    [Fact]
+    public void AutomationDefinitionIdentifierScanObservesMidTraversalCancellation()
+    {
+        var extensionProperties = string.Join(",", Enumerable.Range(0, 1_000_000)
+            .Select(index => "\"provider_" + index + "\":0"));
+        using var definition = JsonDocument.Parse("{" + extensionProperties + ",\"id\":\"morning\"}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationIdentifier.GetDefinitionIds(definition.RootElement, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task AutomationEntityNormalizationObservesCancellationDuringTraversal()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entityId = new string(' ', 16_000_000) + "automation.front";
+        var canceller = Task.Factory.StartNew(
+            () =>
+            {
+                started.Task.GetAwaiter().GetResult();
+                cancellation.Cancel();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var operation = Task.Factory.StartNew(
+            async () =>
+            {
+                started.TrySetResult(true);
+                await client.Automations.GetAsync(entityId, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        await canceller;
+    }
+
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"media_content_type\":\"library\",\"can_play\":true,\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_content_id\":\"media-source://media_source\",\"can_expand\":true,\"children\":[{\"title\":\"Child\",\"media_content_id\":\"child\",\"can_play\":true,\"children\":[]}]}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\"track-1\",\"media_content_type\":\" audio/mpeg \",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"search-root\",\"media_content_type\":\" library \",\"can_play\":false,\"can_expand\":false,\"can_search\":true,\"children\":[]}")]
+    public async Task MediaBrowseRejectsInvalidActionableContentIdentity(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task CallerJsonParsingReturnsPromptlyWhenCancellationArrives()
+    {
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+        try
+        {
+            var parsing = HomeAssistantJson.ParseDocumentAsync(
+                "{}",
+                cancellation.Token,
+                value =>
+                {
+                    started.TrySetResult(true);
+                    release.Task.GetAwaiter().GetResult();
+                    return JsonDocument.Parse(value);
+                });
+            await started.Task;
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => parsing);
+        }
+        finally
+        {
+            release.TrySetResult(true);
+        }
+    }
+
+    [Fact]
+    public async Task MediaBrowseAllowsNonActionableProviderMessagesWithoutSelectors()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Provider unavailable\",\"media_class\":\"message\",\"media_content_id\":\"\",\"media_content_type\":\"\",\"can_play\":false,\"can_expand\":false,\"can_search\":false,\"children\":[]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var item = await client.Media.BrowseSourcesAsync();
+
+        Assert.Equal("Provider unavailable", item.Title);
+        Assert.Empty(item.MediaContentId);
+        Assert.Empty(item.MediaContentType);
+    }
+
+    [Fact]
+    public async Task MediaBrowseAllowsNullProviderMediaClasses()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson =
+                "{\"title\":\"Provider root\",\"media_class\":null,\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[{\"title\":\"Provider message\",\"media_class\":null,\"media_content_id\":\"\",\"media_content_type\":\"\",\"can_play\":false,\"can_expand\":false,\"can_search\":false,\"children\":[]}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var root = await client.Media.BrowseSourcesAsync();
+
+        Assert.Null(root.MediaClass);
+        Assert.Null(Assert.Single(root.Children).MediaClass);
+    }
+
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"not_shown\":-1,\"children\":[]}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[{\"title\":\"Hidden\",\"media_class\":\"music\",\"media_content_id\":\"child\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"not_shown\":-1}]}")]
+    public async Task MediaBrowseRejectsNegativeHiddenCounts(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task MediaSearchRejectsNegativeHiddenCounts()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaSearchResponseJson = "{\"result\":[{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\"item\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"not_shown\":-1}]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.SearchSourcesAsync("music"));
+    }
+
+    [Fact]
+    public async Task MediaBrowseValidationHonorsCancellationBeforeTraversingResults()
+    {
+        using var document = JsonDocument.Parse(
+            "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[null]}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantMediaBrowserClient.DecodeItemAsync(document.RootElement, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task MediaBrowseRequiredFieldDiscoveryObservesCancellationAcrossWideObjects()
+    {
+        var json = new StringBuilder("{");
+        for (var index = 0; index < 250_000; index++)
+        {
+            if (index != 0) json.Append(',');
+            json.Append("\"provider_").Append(index).Append("\":true");
+        }
+        json.Append('}');
+        using var document = JsonDocument.Parse(json.ToString());
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                HomeAssistantMediaBrowserClient.ValidateItemShape(document.RootElement, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+    }
+
+    [Fact]
+    public async Task MediaExtensionKeyProjectionIsCancellationIsolated()
+    {
+        var json = "{\"result\":[],\"future_" + new string('a', 16_000_000) + "\":true}";
+        using var document = JsonDocument.Parse(json);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantMediaSearchResponse>(
+                    document.RootElement,
+                    "The test media response could not be decoded.",
+                    cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" music ")]
+    public async Task MediaBrowseRejectsNoncanonicalSearchMediaClasses(string mediaClass)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson =
+                "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":true,\"search_media_classes\":[\""
+                + mediaClass + "\"],\"children\":[]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task TypedMediaResponsesRejectDuplicateProperties()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson =
+                "{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"other\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false,\"children\":[]}",
+            MediaSearchResponseJson =
+                "{\"result\":[{\"title\":\"Music\",\"media_class\":\"music\",\"media_content_id\":\"other\",\"media_content_id\":\"item\",\"media_content_type\":\"audio/mpeg\",\"can_play\":true,\"can_expand\":false,\"can_search\":false}]}",
+            ResolvedMediaResponseJson = "{\"url\":\"/api/media/other\",\"url\":\"/api/media/file\",\"mime_type\":\"audio/mpeg\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.SearchSourcesAsync("music"));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.ResolveAsync("media-source://media_source/local/file.mp3"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" audio/mpeg")]
+    [InlineData("audio /mpeg")]
+    [InlineData("audio")]
+    [InlineData("audio/mpeg/extra")]
+    [InlineData("audio/mpeg; charset")]
+    [InlineData("audio/mpeg; =utf-8")]
+    [InlineData("audio/mpeg; charset=\"unterminated")]
+    [InlineData("audio/mpeg; charset=utf-8 garbage")]
+    [InlineData("audio/mpeg; charset=\"bad\rvalue\"")]
+    [InlineData("audio/mpeg; name=\"bad\\\u0000value\"")]
+    [InlineData("audio/mpeg; name=\"bad\\\u0001value\"")]
+    [InlineData("audio/mpeg; name=\"bad\\\u007fvalue\"")]
+    public async Task MediaResolveRejectsMalformedMimeTypes(string mimeType)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ResolvedMediaResponseJson = JsonSerializer.Serialize(new { url = "/api/media/file", mime_type = mimeType })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Media.ResolveAsync("media-source://media_source/local/file.mp3"));
+    }
+
+    [Theory]
+    [InlineData("application/json;charset=utf-8")]
+    [InlineData("audio/mpeg; profile=\"provider-v1\"")]
+    [InlineData("text/plain ; charset=utf-8")]
+    [InlineData("image/png\t;name=preview")]
+    public async Task MediaResolveAcceptsParameterizedMimeTypes(string mimeType)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ResolvedMediaResponseJson = JsonSerializer.Serialize(new { url = "/api/media/file", mime_type = mimeType })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(
+            mimeType,
+            (await client.Media.ResolveAsync("media-source://media_source/local/file.mp3")).MimeType);
+    }
+
+    [Fact]
+    public async Task CameraEntityValidationPrioritizesAPreCanceledTokenWithoutDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var entityId = new string(' ', 1_000_000) + "camera.front";
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.Cameras.GetAsync(entityId, cancellation.Token));
+
+        Assert.Null(server.LastRequestPath);
+        Assert.Null(server.GetLastWebSocketCommand("get_states"));
+    }
+
+    [Fact]
+    public async Task CameraStatusAttributeLookupObservesCancellation()
+    {
+        using var document = JsonDocument.Parse("0");
+        var attributes = Enumerable.Range(0, 250_000)
+            .ToDictionary(index => "provider_" + index, _ => document.RootElement.Clone(), StringComparer.Ordinal);
+        var state = new HomeAssistantState
+        {
+            EntityId = "camera.front",
+            State = "idle",
+            Attributes = attributes
+        };
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                return HomeAssistantCameraClient.ToStatus(state, cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+
+        await started.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
+    public async Task CameraCapabilityAndPreferencePropertyLookupHonorCancellation()
+    {
+        var filler = string.Join(",", Enumerable.Range(0, 20_000).Select(index => "\"provider_" + index + "\":0"));
+        using var server = new TestHomeAssistantServer
+        {
+            CameraCapabilitiesResponseJson = "{" + filler + ",\"frontend_stream_types\":[\"hls\"]}",
+            CameraPreferencesResponseJson = "{" + filler + ",\"preload_stream\":true,\"orientation\":1}"
+        };
+        using var client = TestClientFactory.Create(server);
+        using var capabilityCancellation = new CancellationTokenSource();
+        using var preferenceCancellation = new CancellationTokenSource();
+
+        var capabilities = client.Cameras.GetCapabilitiesAsync("camera.front", capabilityCancellation.Token);
+        capabilityCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await capabilities);
+
+        var preferences = client.Cameras.GetPreferencesAsync("camera.front", preferenceCancellation.Token);
+        preferenceCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await preferences);
+    }
+
+    [Fact]
+    public async Task MediaClassFiltersPreserveOrderWhileDeduplicatingCaseInsensitively()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Media.SearchSourcesAsync("music", mediaClasses: new[] { " music ", "Music", "video" });
+
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("media_source/search_media")));
+        Assert.Equal(
+            new[] { "music", "video" },
+            command.RootElement.GetProperty("media_filter_classes").EnumerateArray().Select(value => value.GetString()).ToArray());
+    }
+
+    [Fact]
+    public async Task MediaSearchPreservesProviderDefinedQueryText()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Media.SearchSourcesAsync(" dinner music ");
+
+        using var command = JsonDocument.Parse(
+            Assert.IsType<string>(server.GetLastWebSocketCommand("media_source/search_media")));
+        Assert.Equal(" dinner music ", command.RootElement.GetProperty("search_query").GetString());
+    }
+
+    [Theory]
+    [InlineData(" /api/media/file")]
+    [InlineData("/api/media/../secret")]
+    [InlineData("//other.example/media")]
+    [InlineData("http://[")]
+    [InlineData("relative/media")]
+    [InlineData("file:///var/media/file.mp3")]
+    [InlineData("data:audio/mpeg;base64,AA==")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("ftp://provider.example/media/file.mp3")]
+    [InlineData("https://user:secret@provider.example/media/file.mp3")]
+    public async Task MediaResolveRejectsMalformedOrNoncanonicalUrls(string url)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ResolvedMediaResponseJson = JsonSerializer.Serialize(new { url, mime_type = "audio/mpeg" })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Media.ResolveAsync("media-source://media_source/local/test"));
+    }
+
+    [Theory]
+    [InlineData("/api/media/file?authSig=signed")]
+    [InlineData("https://provider.example/media/file?token=signed")]
+    public async Task MediaResolveAcceptsCanonicalProviderUrls(string url)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ResolvedMediaResponseJson = JsonSerializer.Serialize(new { url, mime_type = "audio/mpeg" })
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(url, (await client.Media.ResolveAsync("media-source://media_source/local/test")).Url);
+    }
+
+    [Fact]
+    public void ResolvedMediaStringValidationHonorsCancellation()
+    {
+        var longValue = new string('a', 16_000_000);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaBrowserClient.IsValidResolvedUrl(
+                "/api/media/" + longValue,
+                cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantMediaBrowserClient.IsValidMediaType(
+                "audio/" + longValue,
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void ResolvedMediaUrlValidationRejectsUnboundedProviderValues()
+    {
+        Assert.False(HomeAssistantMediaBrowserClient.IsValidResolvedUrl(
+            "/api/media/" + new string('a', 16 * 1024)));
+    }
+
+    [Fact]
+    public async Task CameraAndAutomationBulkReadsRejectMalformedServerEntityIds()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        server.SetStates("[{\"entity_id\":\"camera.front.extra\",\"state\":\"idle\",\"attributes\":{}}]");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetAsync());
+
+        server.SetStates("[{\"entity_id\":\"automation.Morning\",\"state\":\"on\",\"attributes\":{}}]");
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Automations.GetAsync());
+
+        server.SetStates("[{\"entity_id\":null,\"state\":\"idle\",\"attributes\":{}}]");
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetAsync());
+
+        server.SetStates("[{\"entity_id\":\" automation.morning\",\"state\":\"on\",\"attributes\":{}}]");
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Automations.GetAsync());
+    }
+
+    [Fact]
+    public async Task AutomationStatusTreatsNegativeCurrentRunsAsUnavailable()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{\"current\":-1}}]");
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Null(Assert.Single(await client.Automations.GetAsync()).CurrentRuns);
+    }
+
+    [Fact]
+    public async Task CameraAndAutomationListingsRejectDuplicateEntityIdentities()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        server.SetStates("["
+            + "{\"entity_id\":\"camera.front\",\"state\":\"idle\",\"attributes\":{}},"
+            + "{\"entity_id\":\"camera.front\",\"state\":\"streaming\",\"attributes\":{}}]");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetAsync());
+
+        server.SetStates("["
+            + "{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{}},"
+            + "{\"entity_id\":\"automation.morning\",\"state\":\"off\",\"attributes\":{}}]");
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Automations.GetAsync());
+    }
+
+    [Fact]
+    public async Task MediaBrowserPreservesProviderFieldsAndExactWireContracts()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var root = await client.Media.BrowseSourcesAsync();
+        Assert.True(root.CanSearch);
+        Assert.True(Assert.Single(root.Children).AdditionalData["future_media_field"].GetBoolean());
+        var searched = await client.Media.SearchPlayerAsync("media_player.kitchen", "dinner", mediaClasses: new[] { "music" });
+        Assert.Equal("Dinner", Assert.Single(searched).Title);
+        using (var search = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("media_player/search_media"))))
+        {
+            Assert.Equal("dinner", search.RootElement.GetProperty("search_query").GetString());
+            Assert.False(search.RootElement.TryGetProperty("media_search_query", out _));
+            Assert.Equal("music", search.RootElement.GetProperty("media_filter_classes")[0].GetString());
+        }
+        var detailedSearch = await client.Media.SearchPlayerResponseAsync("media_player.kitchen", "dinner");
+        Assert.Equal("Dinner", Assert.Single(detailedSearch.Items).Title);
+        Assert.Equal("kept", detailedSearch.AdditionalData["future_search_metadata"].GetProperty("provider").GetString());
+        var resolved = await client.Media.ResolveAsync("media-source://media_source/local/dinner.mp3", TimeSpan.FromMinutes(5));
+        Assert.Equal("audio/mpeg", resolved.MimeType);
+        Assert.True(resolved.AdditionalData["future_resolve"].GetBoolean());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Media.BrowsePlayerAsync("media_player."));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Media.SearchPlayerAsync("media_player.kitchen.extra", "dinner"));
+
+    }
+
+    [Fact]
+    public async Task CameraAndAutomationGettersRejectMismatchedResponseEntities()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExactStateResponseJson = "{\"entity_id\":\"camera.back\",\"state\":\"idle\",\"attributes\":{}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetAsync("camera.front"));
+        server.ExactStateResponseJson = "{\"entity_id\":\"automation.evening\",\"state\":\"on\",\"attributes\":{}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Automations.GetAsync("automation.morning"));
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[null]")]
+    [InlineData("[{}]")]
+    public async Task MediaBrowseRejectsMalformedChildCollections(string childrenJson)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Music\",\"children\":" + childrenJson + "}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task MediaSearchRejectsItemsWithoutRequiredTitles()
+    {
+        using var server = new TestHomeAssistantServer { MediaSearchResponseJson = "{\"result\":[{}]}" };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.SearchSourcesAsync("dinner"));
+    }
+
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"can_expand\":true}")]
+    [InlineData("{\"title\":\"Music\",\"can_play\":false}")]
+    [InlineData("{\"title\":\"Music\",\"can_play\":0,\"can_expand\":true}")]
+    public async Task MediaBrowseRejectsMissingOrInvalidActionabilityFlags(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task MediaSearchRejectsMissingActionabilityFlags()
+    {
+        using var server = new TestHomeAssistantServer { MediaSearchResponseJson = "{\"result\":[{\"title\":\"Music\"}]}" };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.SearchSourcesAsync("music"));
+    }
+
+    [Fact]
+    public async Task DashboardsExposeReadModelsAndGuardStorageMutations()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var panel = Assert.Single(await client.Dashboards.GetPanelsAsync());
+        Assert.Equal("lovelace", panel.UrlPath);
+        Assert.True(panel.DefaultVisible);
+        Assert.True(panel.AdditionalData["future_panel"].GetBoolean());
+        Assert.Equal("storage", (await client.Dashboards.GetInfoAsync()).ResourceMode);
+        Assert.True(Assert.Single(await client.Dashboards.GetDashboardsAsync()).AdditionalData["future_dashboard"].GetBoolean());
+        Assert.True((await client.Dashboards.GetConfigurationAsync()).GetProperty("future_config").GetBoolean());
+        Assert.True(Assert.Single(await client.Dashboards.GetResourcesAsync()).AdditionalData["future_resource"].GetBoolean());
+
+        await client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House" });
+        await client.Dashboards.UpdateDashboardAsync("house-main", new HomeAssistantDashboardUpdate { RemoveIcon = true });
+        using (var update = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/dashboards/update"))))
+            Assert.Equal(JsonValueKind.Null, update.RootElement.GetProperty("icon").ValueKind);
+        await client.Dashboards.CreateResourceAsync("/local/card.js", HomeAssistantDashboardResourceType.Module);
+        using (var resource = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/resources/create"))))
+            Assert.Equal("module", resource.RootElement.GetProperty("res_type").GetString());
+        await client.Dashboards.UpdateResourceAsync("resource-1", url: "/local/card.js");
+
+        server.ClearLastWebSocketCommand("lovelace/dashboards/create");
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house", Title = "House" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House", Icon = "home" }));
+        using var emptyConfiguration = JsonDocument.Parse("{}");
+        await client.Dashboards.GetConfigurationAsync("House_main-panel");
+        await client.Dashboards.SaveConfigurationAsync(emptyConfiguration.RootElement, "House_main-panel");
+        await client.Dashboards.DeleteConfigurationAsync("House_main-panel");
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/dashboards/create"));
+        using (var save = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/config/save"))))
+            Assert.Equal("House_main-panel", save.RootElement.GetProperty("url_path").GetString());
+        using (var delete = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/config/delete"))))
+            Assert.Equal("House_main-panel", delete.RootElement.GetProperty("url_path").GetString());
+    }
+
+    [Fact]
+    public async Task DashboardResponsesRejectMissingRequiredIdentifiersAndFields()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        server.DashboardListResponseJson = "[{\"id\":\"\",\"url_path\":\"house-main\",\"title\":\"House\",\"mode\":\"storage\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.DashboardListResponseJson = "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"mode\":\"storage\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.DashboardListResponseJson = "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":false,\"require_admin\":0,\"mode\":\"storage\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.DashboardListResponseJson = "[{\"url_path\":\"yaml-home\",\"title\":\"YAML Home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"yaml\",\"filename\":\"ui-lovelace.yaml\"}]";
+        Assert.Empty(Assert.Single(await client.Dashboards.GetDashboardsAsync()).Id);
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\" \",\"title\":\"House\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House" }));
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { Title = "Updated" }));
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"yaml\",\"filename\":\"ui-lovelace.yaml\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House", ShowInSidebar = true }));
+
+        server.DashboardResourceListResponseJson = "[{\"url\":\"/local/storage-card.js\",\"type\":\"module\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
+
+        server.LovelaceInfoResponseJson = "{\"resource_mode\":\"yaml\"}";
+        server.DashboardResourceListResponseJson = "[{\"url\":\"/local/yaml-card.js\",\"type\":\"module\"}]";
+        Assert.Empty(Assert.Single(await client.Dashboards.GetResourcesAsync()).Id);
+
+        server.LovelaceInfoResponseJson = "{\"resource_mode\":\"storage\"}";
+        server.DashboardResourceListResponseJson = "[{\"url\":\" \",\"type\":\"module\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
+
+        server.DashboardResourceMutationResponseJson = "{\"id\":\"\",\"url\":\"/local/card.js\",\"type\":\"module\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateResourceAsync(
+            "/local/card.js",
+            HomeAssistantDashboardResourceType.Module));
+
+        server.DashboardResourceMutationResponseJson = "{\"id\":\" resource-1 \",\"url\":\"/local/card.js\",\"type\":\"module\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateResourceAsync(
+            "/local/card.js",
+            HomeAssistantDashboardResourceType.Module));
+
+        server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\" \"}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\" lovelace \"}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\"lovelace\",\"show_in_sidebar\":true}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\"lovelace\",\"show_in_sidebar\":true,\"require_admin\":0}}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.LovelaceInfoResponseJson = "{}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetInfoAsync());
+    }
+
+    [Fact]
+    public async Task DashboardResourcesRetryWhenResourceModeChangesDuringTheRead()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardResourceListResponseJson = "[{\"url\":\"/local/card.js\",\"type\":\"module\"}]"
+        };
+        server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"storage\"}");
+        server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"yaml\"}");
+        server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"yaml\"}");
+        server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"yaml\"}");
+        using var client = TestClientFactory.Create(server);
+
+        var resource = Assert.Single(await client.Dashboards.GetResourcesAsync());
+
+        Assert.Empty(resource.Id);
+    }
+
+    [Fact]
+    public async Task DashboardResourcesFailWhenResourceModeNeverStabilizes()
+    {
+        using var server = new TestHomeAssistantServer();
+        for (var index = 0; index < 3; index++)
+        {
+            server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"storage\"}");
+            server.LovelaceInfoResponses.Enqueue("{\"resource_mode\":\"yaml\"}");
+        }
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantConnectionException>(() => client.Dashboards.GetResourcesAsync());
+    }
+
+    [Fact]
+    public void AtomicExportsPreserveUnixDestinationPermissions()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-permissions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.SetUnixFileMode(
+                temporary,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+            HomeAssistantAtomicFile.PreserveDestinationPermissions(destination, temporary);
+
+            Assert.Equal(File.GetUnixFileMode(destination), File.GetUnixFileMode(temporary));
+
+            File.SetUnixFileMode(
+                temporary,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+            HomeAssistantAtomicFile.PreserveDestinationPermissions(destination, temporary, useManagedApis: false);
+            Assert.Equal(File.GetUnixFileMode(destination), File.GetUnixFileMode(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ForcedAtomicExportsReplaceWriteOnlyUnixDestinations()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-write-only-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            File.SetUnixFileMode(destination, UnixFileMode.UserWrite);
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None);
+
+            Assert.Equal(UnixFileMode.UserWrite, File.GetUnixFileMode(destination));
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AtomicExportsClearUnixSetIdBitsFromReplacementFiles()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-setid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            var requested = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                | UnixFileMode.GroupRead | UnixFileMode.SetUser | UnixFileMode.SetGroup;
+            File.SetUnixFileMode(destination, requested);
+
+            HomeAssistantAtomicFile.PreserveDestinationPermissions(destination, temporary, useManagedApis: false);
+
+            var actual = File.GetUnixFileMode(temporary);
+            Assert.Equal(
+                requested & ~(UnixFileMode.SetUser | UnixFileMode.SetGroup),
+                actual);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AtomicExportsPreserveLinuxOwnershipAndAccessAclWhenAvailable()
+    {
+        if (!OperatingSystem.IsLinux()
+            || !File.Exists("/usr/bin/setfacl")
+            || !File.Exists("/usr/bin/getfacl"))
+        {
+            return;
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-acl-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            RunUnixCommand("/usr/bin/setfacl", "-m", "u:nobody:r--", destination);
+            var expectedOwner = RunUnixCommand("/usr/bin/stat", "-c", "%u:%g", destination);
+            var expectedAcl = RunUnixCommand("/usr/bin/getfacl", "-cp", destination);
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None);
+
+            Assert.Equal(expectedOwner, RunUnixCommand("/usr/bin/stat", "-c", "%u:%g", destination));
+            Assert.Equal(expectedAcl, RunUnixCommand("/usr/bin/getfacl", "-cp", destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ForcedAtomicExportsCommitForPresentAndAbsentDestinations()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-atomic-overwrite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        try
+        {
+            foreach (var destinationExists in new[] { false, true })
+            {
+                if (destinationExists)
+                {
+                    File.WriteAllBytes(destination, new byte[] { 1 });
+                }
+                else if (File.Exists(destination))
+                {
+                    File.Delete(destination);
+                }
+
+                var temporary = Path.Combine(directory, "temporary-" + Guid.NewGuid().ToString("N") + ".bin");
+                using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+                {
+                    stream.WriteByte(2);
+                    HomeAssistantAtomicFile.CommitTemporaryFile(
+                        stream,
+                        temporary,
+                        destination,
+                        overwrite: true,
+                        CancellationToken.None);
+                }
+
+                Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+                Assert.False(File.Exists(temporary));
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnixAtomicExportsReplaceSymbolicLinksWithoutFollowingTheirTargets(bool targetExists)
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists("/usr/bin/ln")) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-symlink-overwrite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var target = Path.Combine(directory, "target.bin");
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            if (targetExists) File.WriteAllBytes(target, new byte[] { 1 });
+            RunUnixCommand("/usr/bin/ln", "-s", target, destination);
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None);
+
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
+            if (targetExists) Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(target));
+            else Assert.False(File.Exists(target));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LinuxAtomicExportsRejectFifoDestinationsWithoutBlocking()
+    {
+        if (!OperatingSystem.IsLinux() || !File.Exists("/usr/bin/mkfifo")) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-fifo-overwrite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.pipe");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            RunUnixCommand("/usr/bin/mkfifo", destination);
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+
+            var exception = Assert.Throws<IOException>(() => HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None));
+
+            Assert.Contains("must be a regular file or symbolic link", exception.Message, StringComparison.Ordinal);
+            Assert.Equal("fifo", RunUnixCommand("/usr/bin/stat", "-c", "%F", destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void UnixTemporaryExportsAreRestrictiveWhileBeingWritten()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-secure-temp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        try
+        {
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(42);
+                var mode = File.GetUnixFileMode(temporary);
+                Assert.Equal(
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                    mode & (UnixFileMode.UserRead | UnixFileMode.UserWrite
+                        | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WindowsTemporaryExportsApplyProtectedDaclBeforeWriting()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-secure-windows-temp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        var destination = Path.Combine(directory, "snapshot.jpg");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            bool originalDaclProtected;
+            using (var original = new FileStream(
+                       destination,
+                       FileMode.Open,
+                       FileAccess.Read,
+                       FileShare.ReadWrite | FileShare.Delete))
+            {
+                originalDaclProtected = HomeAssistantAtomicFile.IsWindowsTemporaryDaclProtected(original);
+            }
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                Assert.True(HomeAssistantAtomicFile.IsWindowsTemporaryDaclProtected(stream));
+                stream.WriteByte(42);
+                Assert.ThrowsAny<IOException>(() => File.Move(temporary, temporary + ".swapped"));
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None);
+            }
+
+            Assert.Equal(new byte[] { 42 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
+            using var committed = new FileStream(
+                destination,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            Assert.Equal(
+                originalDaclProtected,
+                HomeAssistantAtomicFile.IsWindowsTemporaryDaclProtected(committed));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WindowsAtomicExportsPreserveEfsEncryptionWhenAvailable()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-efs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        var destination = Path.Combine(directory, "snapshot.jpg");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            try
+            {
+                File.Encrypt(destination);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            Assert.True((File.GetAttributes(destination) & FileAttributes.Encrypted) != 0);
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(
+                       temporary,
+                       destination,
+                       overwrite: true))
+            {
+                stream.WriteByte(42);
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None);
+            }
+
+            Assert.True((File.GetAttributes(destination) & FileAttributes.Encrypted) != 0);
+            Assert.Equal(new byte[] { 42 }, File.ReadAllBytes(destination));
+        }
+        finally
+        {
+            if (File.Exists(destination))
+            {
+                try { File.Decrypt(destination); } catch { }
+            }
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WindowsAtomicExportsPreserveMandatoryIntegrityLabels()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-integrity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        var destination = Path.Combine(directory, "snapshot.jpg");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            RunCommand("icacls.exe", destination, "/setintegritylevel", "L");
+            string expected;
+            using (var original = new FileStream(
+                       destination,
+                       FileMode.Open,
+                       FileAccess.Read,
+                       FileShare.ReadWrite | FileShare.Delete))
+            {
+                expected = HomeAssistantAtomicFile.ReadWindowsMandatoryLabel(original);
+            }
+
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(
+                       temporary,
+                       destination,
+                       overwrite: true))
+            {
+                stream.WriteByte(42);
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None);
+            }
+
+            using var committed = new FileStream(
+                destination,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            Assert.Equal(expected, HomeAssistantAtomicFile.ReadWindowsMandatoryLabel(committed));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WindowsPinnedTemporaryExportsCommitIntoAnAbsentDestination()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-pinned-windows-temp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, "snapshot.tmp");
+        var destination = Path.Combine(directory, "snapshot.jpg");
+        try
+        {
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(42);
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: false,
+                    CancellationToken.None);
+            }
+
+            Assert.Equal(new byte[] { 42 }, File.ReadAllBytes(destination));
+            Assert.False(File.Exists(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void UnixAtomicExportsReapplyMetadataWhenDestinationIdentityChanges()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-metadata-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(2);
+            }
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None,
+                beforeUnixMetadataRecheck: () =>
+                {
+                    File.Delete(destination);
+                    File.WriteAllBytes(destination, new byte[] { 3 });
+                    RunUnixCommand("/bin/chmod", "600", destination);
+                });
+
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.Equal(
+                UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                File.GetUnixFileMode(destination)
+                    & (UnixFileMode.UserRead | UnixFileMode.UserWrite
+                        | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void UnixAtomicExportsRestoreTheDisplacedDestinationWhenCommitFinalizationFails()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-exchange-rollback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+
+            var exception = Assert.Throws<IOException>(() =>
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None,
+                    beforeUnixMetadataRecheck: null,
+                    beforeWindowsNoReplaceMove: null,
+                    afterUnixExchange: () => throw new InvalidOperationException("Injected finalization failure.")));
+
+            Assert.Contains("original destination was restored", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void UnixAtomicExportsNeverApplyMetadataThroughAnExchangedSymlink()
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists("/usr/bin/ln")) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-exchange-symlink-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var victim = Path.Combine(directory, "victim.bin");
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(victim, new byte[] { 9 });
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            File.SetUnixFileMode(victim, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.SetUnixFileMode(
+                destination,
+                UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+            var exception = Assert.Throws<IOException>(() =>
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None,
+                    beforeUnixMetadataRecheck: null,
+                    beforeWindowsNoReplaceMove: null,
+                    afterUnixExchange: () =>
+                    {
+                        File.Delete(destination);
+                        RunUnixCommand("/usr/bin/ln", "-s", victim, destination);
+                    }));
+
+            Assert.Contains("original destination was restored", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 9 }, File.ReadAllBytes(victim));
+            Assert.Equal(
+                UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                File.GetUnixFileMode(victim)
+                    & (UnixFileMode.UserRead | UnixFileMode.UserWrite
+                        | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void UnixAtomicExportsRejectDisplacedDestinationSubstitutionBeforeMetadata()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-displaced-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        var movedOriginal = Path.Combine(directory, "moved-original.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(2);
+            }
+            File.SetUnixFileMode(
+                destination,
+                UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+            var exception = Assert.Throws<HomeAssistantAtomicCommitException>(() =>
+                HomeAssistantAtomicFile.CommitTemporaryFile(
+                    temporary,
+                    destination,
+                    overwrite: true,
+                    CancellationToken.None,
+                    beforeUnixMetadataRecheck: null,
+                    beforeWindowsNoReplaceMove: null,
+                    afterUnixExchange: () =>
+                    {
+                        File.Move(temporary, movedOriginal);
+                        File.WriteAllBytes(temporary, new byte[] { 9 });
+                        RunUnixCommand("/bin/chmod", "666", temporary);
+                    }));
+
+            Assert.Contains("concurrent directory change", exception.Message, StringComparison.Ordinal);
+            Assert.False(exception.PreserveTemporaryFile);
+            Assert.Null(exception.RecoveryPath);
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(movedOriginal));
+            Assert.Equal(
+                UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                File.GetUnixFileMode(destination)
+                    & (UnixFileMode.UserRead | UnixFileMode.UserWrite
+                        | UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LinuxAtomicExportsReapplyAccessAclWhenIdentityAndModeStayStable()
+    {
+        if (!OperatingSystem.IsLinux()
+            || !File.Exists("/usr/bin/setfacl")
+            || !File.Exists("/usr/bin/getfacl"))
+        {
+            return;
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-acl-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            RunUnixCommand("/usr/bin/setfacl", "-m", "u:nobody:r--,m::rw-", destination);
+            string? expectedAcl = null;
+
+            HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                CancellationToken.None,
+                beforeUnixMetadataRecheck: () =>
+                {
+                    RunUnixCommand("/usr/bin/setfacl", "-m", "u:nobody:rw-,m::rw-", destination);
+                    expectedAcl = RunUnixCommand("/usr/bin/getfacl", "-cp", destination);
+                });
+
+            Assert.Equal(expectedAcl, RunUnixCommand("/usr/bin/getfacl", "-cp", destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(destination));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LinuxPermissionPreservationCanBypassProcDescriptorPaths()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-proc-independent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            File.SetUnixFileMode(destination, UnixFileMode.UserWrite);
+
+            HomeAssistantAtomicFile.PreserveDestinationPermissions(
+                destination,
+                temporary,
+                useManagedApis: false);
+
+            Assert.Equal(File.GetUnixFileMode(destination), File.GetUnixFileMode(temporary));
+        }
+        finally
+        {
+            File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AtomicExportWritesObserveCancellationBetweenBoundedChunks()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new CancelAfterFirstWriteStream(cancellation);
+        var bytes = new byte[256 * 1024];
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantAtomicFile.WriteAllBytesAsync(stream, bytes, cancellation.Token));
+
+        Assert.InRange(stream.LargestWrite, 1, 64 * 1024);
+        Assert.False(stream.FlushCalled);
+    }
+
+    [Fact]
+    public void WindowsPinnedTemporaryExportsDoNotReplaceAnExistingDestinationWithoutForce()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-windows-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 3 });
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(temporary))
+            {
+                stream.WriteByte(2);
+                Assert.Throws<IOException>(() => HomeAssistantAtomicFile.CommitTemporaryFile(
+                    stream,
+                    temporary,
+                    destination,
+                    overwrite: false,
+                    CancellationToken.None));
+            }
+
+            Assert.Equal(new byte[] { 3 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("Linux", "X64", 24)]
+    [InlineData("Linux", "Ppc64le", 24)]
+    [InlineData("Linux", "S390x", 24)]
+    [InlineData("Linux", "Arm64", 16)]
+    [InlineData("Linux", "RiscV64", 16)]
+    [InlineData("OSX", "Arm64", 4)]
+    public void AtomicExportsSelectTheNativeStatModeOffsetByAbi(
+        string operatingSystem,
+        string architecture,
+        int expectedOffset)
+    {
+        Assert.Equal(expectedOffset, HomeAssistantAtomicFile.UnixModeOffset(operatingSystem, architecture));
+        Assert.Equal(
+            expectedOffset,
+            HomeAssistantAtomicFile.UnixMetadataOffsets(operatingSystem, architecture).Mode);
+    }
+
+    [Theory]
+    [InlineData("Linux", "X64", 28, 32)]
+    [InlineData("Linux", "Ppc64le", 28, 32)]
+    [InlineData("Linux", "S390x", 28, 32)]
+    [InlineData("Linux", "X86", 24, 28)]
+    [InlineData("Linux", "Arm", 24, 28)]
+    [InlineData("Linux", "Arm64", 24, 28)]
+    [InlineData("Linux", "RiscV64", 24, 28)]
+    [InlineData("OSX", "Arm64", 16, 20)]
+    public void AtomicExportsSelectNativeOwnershipOffsetsByAbi(
+        string operatingSystem,
+        string architecture,
+        int expectedUserIdOffset,
+        int expectedGroupIdOffset)
+    {
+        var offsets = HomeAssistantAtomicFile.UnixMetadataOffsets(operatingSystem, architecture);
+
+        Assert.Equal(expectedUserIdOffset, offsets.UserId);
+        Assert.Equal(expectedGroupIdOffset, offsets.GroupId);
+    }
+
+    [Fact]
+    public void AtomicExportsRejectUnknownNativeStatLayouts()
+    {
+        Assert.Throws<PlatformNotSupportedException>(() => HomeAssistantAtomicFile.UnixModeOffset("Linux", "FutureCpu"));
+    }
+
+    [Fact]
+    public void AtomicExportsKeepDescriptorZeroOwnedThroughDuplication()
+    {
+        var closed = new List<int>();
+        var descriptor = HomeAssistantAtomicFile.EnsureUsableUnixDescriptor(
+            0,
+            value => value == 0 ? 7 : -1,
+            value =>
+            {
+                closed.Add(value);
+                return 0;
+            });
+
+        Assert.Equal(7, descriptor);
+        Assert.Equal(new[] { 0 }, closed);
+        Assert.Equal(8, HomeAssistantAtomicFile.EnsureUsableUnixDescriptor(8, _ => -1, _ => -1));
+    }
+
+    [Fact]
+    public void MacAclSetterMatchesTheNativeArgumentOrder()
+    {
+        var method = typeof(HomeAssistantAtomicFile).GetMethod(
+            "AclSetFileDescriptor",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+
+        Assert.Equal(
+            new[] { typeof(Microsoft.Win32.SafeHandles.SafeFileHandle), typeof(IntPtr), typeof(int) },
+            method.GetParameters().Select(parameter => parameter.ParameterType));
+    }
+
+    [Fact]
+    public void MacAclDeleteMatchesTheNativeArgumentOrder()
+    {
+        var method = typeof(HomeAssistantAtomicFile).GetMethod(
+            "AclDeleteFileDescriptor",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+
+        Assert.Equal(
+            new[] { typeof(Microsoft.Win32.SafeHandles.SafeFileHandle), typeof(int) },
+            method.GetParameters().Select(parameter => parameter.ParameterType));
+    }
+
+    private static string RunUnixCommand(string fileName, params string[] arguments)
+        => RunCommand(fileName, arguments);
+
+    private static string RunCommand(string fileName, params string[] arguments)
+    {
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = fileName,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+        using var process = System.Diagnostics.Process.Start(startInfo)
+            ?? throw new InvalidOperationException("The metadata probe could not be started.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException("The metadata probe failed: " + error.Trim());
+        return output.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+    }
+
+    private sealed class CancelAfterFirstWriteStream : Stream
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        internal CancelAfterFirstWriteStream(CancellationTokenSource cancellation)
+        {
+            _cancellation = cancellation;
+        }
+
+        internal int LargestWrite { get; private set; }
+
+        internal bool FlushCalled { get; private set; }
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() => FlushCalled = true;
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            FlushCalled = true;
+            return Task.CompletedTask;
+        }
+
+        public override Task WriteAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LargestWrite = Math.Max(LargestWrite, count);
+            _cancellation.Cancel();
+            return Task.CompletedTask;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void AtomicExportsDoNotCommitAfterCancellation()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-canceled-export-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            Assert.ThrowsAny<OperationCanceledException>(() => HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                cancellation.Token));
+
+            Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(destination));
+            Assert.True(File.Exists(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnixAtomicExportsRecheckCancellationImmediatelyBeforeCommit(bool destinationExists)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-canceled-unix-commit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            if (destinationExists) File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            using var cancellation = new CancellationTokenSource();
+
+            Assert.ThrowsAny<OperationCanceledException>(() => HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                cancellation.Token,
+                beforeUnixMetadataRecheck: null,
+                beforeWindowsNoReplaceMove: null,
+                afterUnixExchange: null,
+                beforeUnixCommit: cancellation.Cancel));
+
+            Assert.Equal(destinationExists, File.Exists(destination));
+            if (destinationExists) Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("House-main")]
+    [InlineData("house--main")]
+    [InlineData(" house-main ")]
+    [InlineData("house_main-panel")]
+    public async Task DashboardResponsesPreserveNativeStorageRoutes(string urlPath)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardListResponseJson = "[{\"id\":\"house-main\",\"url_path\":\"" + urlPath + "\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var dashboard = Assert.Single(await client.Dashboards.GetDashboardsAsync());
+
+        Assert.Equal(urlPath, dashboard.UrlPath);
+    }
+
+    [Fact]
+    public async Task DashboardResponsesPreserveProviderTitleWhitespace()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardListResponseJson = "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"  House  \",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var dashboard = Assert.Single(await client.Dashboards.GetDashboardsAsync());
+
+        Assert.Equal("  House  ", dashboard.Title);
+    }
+
+    [Fact]
+    public async Task DashboardMutationsPreserveCallerTitleWhitespace()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"  House  \",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var dashboard = await client.Dashboards.CreateDashboardAsync(new HomeAssistantDashboardCreate
+        {
+            UrlPath = "house-main",
+            Title = "  House  "
+        });
+        using var request = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("lovelace/dashboards/create")));
+
+        Assert.Equal("  House  ", request.RootElement.GetProperty("title").GetString());
+        Assert.Equal("  House  ", dashboard.Title);
+    }
+
+    [Theory]
+    [InlineData("[{\"id\":\"one\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"},{\"id\":\"two\",\"url_path\":\"house-main\",\"title\":\"House 2\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]")]
+    [InlineData("[{\"id\":\"same\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"},{\"id\":\"same\",\"url_path\":\"garden-main\",\"title\":\"Garden\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]")]
+    public async Task DashboardResponsesRejectDuplicateRoutesAndStorageIdentifiers(string response)
+    {
+        using var server = new TestHomeAssistantServer { DashboardListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+    }
+
+    [Theory]
+    [InlineData("[{\"id\":\" same \",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]")]
+    [InlineData("[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"Storage\"}]")]
+    [InlineData("[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"future\"}]")]
+    [InlineData("[{\"url_path\":\"yaml-home\",\"title\":\"YAML\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"yaml\",\"filename\":\" ui-lovelace.yaml \"}]")]
+    public async Task DashboardResponsesRejectNonCanonicalSelectorsAndModes(string response)
+    {
+        using var server = new TestHomeAssistantServer { DashboardListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+    }
+
+    [Fact]
+    public async Task DashboardResponsesRejectNoncanonicalIconsAndResourceFields()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardListResponseJson =
+                "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"icon\":\"home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.DashboardMutationResponseJson =
+            "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"icon\":\"home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { Title = "Updated" }));
+
+        server.DashboardResourceListResponseJson =
+            "[{\"id\":\"resource-1\",\"url\":\" /local/card.js \",\"type\":\"module\"}]";
+        var resources = await client.Dashboards.GetResourcesAsync();
+        Assert.Equal(" /local/card.js ", Assert.Single(resources).Url);
+
+        server.DashboardResourceListResponseJson =
+            "[{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\" module \"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
+    }
+
+    [Theory]
+    [InlineData("{\" House \":{\"component_name\":\"lovelace\"}}")]
+    [InlineData("{\"house\":{\"component_name\":\"lovelace\"},\"house\":{\"component_name\":\"lovelace\"}}")]
+    public async Task PanelResponsesRejectNonCanonicalAndDuplicateRoutes(string response)
+    {
+        using var server = new TestHomeAssistantServer { FrontendPanelsResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Fact]
+    public async Task PanelResponsesPreserveValidNonDashboardRoutes()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"config/integrations\":{\"component_name\":\"config\",\"default_visible\":false,\"require_admin\":true,\"show_in_sidebar\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal("config/integrations", Assert.Single(await client.Dashboards.GetPanelsAsync()).UrlPath);
+    }
+
+    [Fact]
+    public void AtomicRollbackFailuresExposeTheExactRecoveryPath()
+    {
+        var recoveryPath = Path.Combine(Path.GetTempPath(), "homeassistantx-recovery-file");
+        var exception = new HomeAssistantAtomicCommitException(
+            "The original could not be restored; recover it from '" + recoveryPath + "'.",
+            new IOException("rollback failed"),
+            preserveTemporaryFile: true,
+            recoveryPath);
+
+        Assert.True(exception.PreserveTemporaryFile);
+        Assert.Equal(recoveryPath, exception.RecoveryPath);
+        Assert.Contains(recoveryPath, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PanelResponsesPreserveLongNativeFrontendRoutes()
+    {
+        var route = "custom/" + new string('a', 300);
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"" + route + "\":{\"url_path\":\"" + route
+                + "\",\"component_name\":\"custom\",\"require_admin\":false}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(route, Assert.Single(await client.Dashboards.GetPanelsAsync()).UrlPath);
+    }
+
+    [Fact]
+    public async Task EmbeddedPanelRouteDecodePrioritizesCancellation()
+    {
+        var escapedRoute = string.Concat(Enumerable.Repeat("\\u0061", 1_000_000));
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"custom\":{\"url_path\":\"" + escapedRoute
+                + "\",\"component_name\":\"custom\",\"require_admin\":false}}"
+        };
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+
+        var operation = client.Dashboards.GetPanelsAsync(cancellation.Token);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    [Fact]
+    public async Task PanelResponsesPreserveLongNativeComponentNames()
+    {
+        var componentName = "custom_" + new string('a', 1024);
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"custom\":{\"component_name\":\"" + componentName
+                + "\",\"require_admin\":false}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(componentName, Assert.Single(await client.Dashboards.GetPanelsAsync()).ComponentName);
+    }
+
+    [Fact]
+    public async Task PanelResponsesAllowOmittedOptionalVisibilityBooleans()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"config/integrations\":{\"component_name\":\"config\",\"require_admin\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var panel = Assert.Single(await client.Dashboards.GetPanelsAsync());
+
+        Assert.Equal("config/integrations", panel.UrlPath);
+        Assert.True(panel.RequireAdmin);
+    }
+
+    [Theory]
+    [InlineData("default_visible")]
+    [InlineData("show_in_sidebar")]
+    public async Task PanelResponsesRejectMalformedOptionalVisibilityBooleans(string propertyName)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"lovelace\":{\"component_name\":\"lovelace\",\"require_admin\":false,\""
+                + propertyName + "\":0}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\"\"")]
+    [InlineData("\" \"")]
+    public async Task PanelResponsesRejectPresentInvalidEmbeddedRoutes(string embeddedRoute)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson =
+                "{\"lovelace\":{\"url_path\":" + embeddedRoute
+                + ",\"component_name\":\"lovelace\",\"default_visible\":true,\"require_admin\":false,\"show_in_sidebar\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Theory]
+    [InlineData("home")]
+    public async Task PanelResponsesRejectNoncanonicalIcons(string icon)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson =
+                "{\"lovelace\":{\"component_name\":\"lovelace\",\"icon\":\"" + icon
+                + "\",\"default_visible\":true,\"require_admin\":false,\"show_in_sidebar\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("true")]
+    public async Task DashboardConfigurationReadsRejectNonObjectResponses(string response)
+    {
+        using var server = new TestHomeAssistantServer { LovelaceConfigurationResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetConfigurationAsync());
+    }
+
+    [Fact]
+    public async Task DashboardConfigurationSaveHonorsCancellationBeforeInspectingOrCopyingJson()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        JsonElement configuration;
+        using (var document = JsonDocument.Parse("{}"))
+        {
+            configuration = document.RootElement;
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Dashboards.SaveConfigurationAsync(configuration, cancellationToken: cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/config/save"));
+    }
+
+    [Fact]
+    public async Task DashboardConfigurationSaveRejectsDuplicatePropertiesBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var configuration = JsonDocument.Parse("{\"views\":[],\"nested\":{\"cards\":[],\"cards\":[{}]}}");
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Dashboards.SaveConfigurationAsync(configuration.RootElement));
+
+        Assert.Null(server.GetLastWebSocketCommand("lovelace/config/save"));
+    }
+
+    [Theory]
+    [InlineData("[{\"id\":\" resource-1 \",\"url\":\"/local/card.js\",\"type\":\"module\"}]")]
+    [InlineData("[{\"id\":\"resource-1\",\"url\":\"/local/a.js\",\"type\":\"module\"},{\"id\":\"resource-1\",\"url\":\"/local/b.js\",\"type\":\"module\"}]")]
+    public async Task StorageResourceResponsesRejectNonCanonicalAndDuplicateIdentifiers(string response)
+    {
+        using var server = new TestHomeAssistantServer { DashboardResourceListResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
+    }
+
+    [Fact]
+    public async Task DashboardResponsesCorrelatePanelAndMutationIdentities()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"lovelace\":{\"url_path\":\"other\",\"component_name\":\"lovelace\"}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.DashboardMutationResponseJson = "{\"id\":\"other\",\"url_path\":\"house-main\",\"title\":\"House\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { Title = "Updated" }));
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"other\",\"title\":\"House\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate { UrlPath = "house-main", Title = "House" }));
+
+        server.DashboardResourceMutationResponseJson = "{\"id\":\"resource-other\",\"url\":\"/local/card.js\",\"type\":\"module\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateResourceAsync(
+            "resource-1",
+            url: "/local/card-v2.js"));
+
+        server.DashboardResourceMutationResponseJson = "{\"id\":\"resource-2\",\"url\":\"/local/other.js\",\"type\":\"css\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateResourceAsync(
+            "/local/card.js",
+            HomeAssistantDashboardResourceType.Module));
+    }
+
+    [Fact]
+    public async Task DashboardMutationResponsesRejectDuplicatePropertiesBeforeProjection()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            DashboardMutationResponseJson =
+                "{\"id\":\"other\",\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { Title = "House" }));
+
+        server.DashboardResourceMutationResponseJson =
+            "{\"id\":\"other\",\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"type\":\"module\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateResourceAsync(
+            "resource-1",
+            url: "/local/card.js"));
+    }
+
+    [Fact]
+    public async Task DashboardReadsRejectDuplicatePropertiesBeforeProjection()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson =
+                "{\"lovelace\":{\"component_name\":\"lovelace\",\"component_name\":\"other\",\"default_visible\":true,\"require_admin\":false,\"show_in_sidebar\":true}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetPanelsAsync());
+
+        server.LovelaceInfoResponseJson = "{\"resource_mode\":\"storage\",\"resource_mode\":\"yaml\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetInfoAsync());
+
+        server.DashboardListResponseJson =
+            "[{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"title\":\"Other\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetDashboardsAsync());
+
+        server.LovelaceInfoResponseJson = "{\"resource_mode\":\"storage\"}";
+        server.DashboardResourceListResponseJson =
+            "[{\"id\":\"resource-1\",\"url\":\"/local/card.js\",\"url\":\"/local/other.js\",\"type\":\"module\"}]";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.GetResourcesAsync());
+    }
+
+    [Fact]
+    public async Task DashboardMutationsCorrelateEverySuppliedField()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Old\",\"icon\":\"mdi:old\",\"show_in_sidebar\":false,\"require_admin\":false,\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate
+            {
+                Title = "Updated",
+                Icon = "mdi:home",
+                ShowInSidebar = true,
+                RequireAdmin = true
+            }));
+
+        foreach (var response in new[]
+        {
+            "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"icon\":\"mdi:old\",\"show_in_sidebar\":true,\"require_admin\":true,\"mode\":\"storage\"}",
+            "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"icon\":\"mdi:home\",\"show_in_sidebar\":false,\"require_admin\":true,\"mode\":\"storage\"}",
+            "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Updated\",\"icon\":\"mdi:home\",\"show_in_sidebar\":true,\"require_admin\":false,\"mode\":\"storage\"}"
+        })
+        {
+            server.DashboardMutationResponseJson = response;
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+                "house-main",
+                new HomeAssistantDashboardUpdate
+                {
+                    Title = "Updated",
+                    Icon = "mdi:home",
+                    ShowInSidebar = true,
+                    RequireAdmin = true
+                }));
+        }
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"icon\":\"mdi:home\",\"show_in_sidebar\":false,\"require_admin\":false,\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { RemoveIcon = true }));
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"Wrong\",\"icon\":\"mdi:home\",\"show_in_sidebar\":false,\"require_admin\":true,\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.CreateDashboardAsync(
+            new HomeAssistantDashboardCreate
+            {
+                UrlPath = "house-main",
+                Title = "House",
+                Icon = "mdi:home",
+                ShowInSidebar = true,
+                RequireAdmin = false
+            }));
+
+        server.DashboardMutationResponseJson = "{\"id\":\"house-main\",\"url_path\":\"house-main\",\"title\":\"House\",\"mode\":\"storage\"}";
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Dashboards.UpdateDashboardAsync(
+            "house-main",
+            new HomeAssistantDashboardUpdate { ShowInSidebar = false }));
+    }
+
+    [Fact]
+    public async Task AutomationConfigurationIsSeparateFromRuntimeExecution()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{\"friendly_name\":\"Morning\",\"last_triggered\":\"2026-08-26T06:00:00Z\",\"mode\":\"single\",\"current\":0}}]");
+        using var client = TestClientFactory.Create(server);
+        Assert.True(Assert.Single(await client.Automations.GetAsync()).IsEnabled);
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.GetAsync("automation.morning.extra"));
+        var definition = await client.Automations.GetConfigurationAsync("morning-routine");
+        Assert.True(definition.Definition.GetProperty("future_automation").GetBoolean());
+        using var updated = JsonDocument.Parse("{\"alias\":\"Morning\",\"triggers\":[],\"actions\":[]}");
+        await client.Automations.SaveConfigurationAsync("morning-routine", updated.RootElement);
+        Assert.Contains("\"alias\":\"Morning\"", server.LastRequestBody);
+        await client.Automations.TriggerAsync(HomeAssistantTarget.ForEntity("automation.morning"), skipConditions: false);
+        using var runtime = JsonDocument.Parse(server.LastServiceCallBody!);
+        Assert.Equal("trigger", runtime.RootElement.GetProperty("service").GetString());
+        Assert.False(runtime.RootElement.GetProperty("service_data").GetProperty("skip_condition").GetBoolean());
+        await client.Automations.DeleteConfigurationAsync("morning-routine");
+    }
+
+    [Theory]
+    [InlineData("on", true)]
+    [InlineData("off", false)]
+    [InlineData("unavailable", null)]
+    [InlineData("unknown", null)]
+    public async Task AutomationEnablementRepresentsOnlyNativeOnAndOffStates(string state, bool? expected)
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"" + state + "\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(expected, Assert.Single(await client.Automations.GetAsync()).IsEnabled);
+    }
+
+    [Theory]
+    [InlineData("{\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"other-routine\",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":42,\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"other-routine\",\"id\":\"morning-routine\",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"alias\":\"First\",\"alias\":\"Second\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"actions\":[{\"service\":\"light.turn_on\",\"service\":\"light.turn_off\"}]}")]
+    public async Task AutomationConfigurationCorrelatesReturnedIdentifier(string response)
+    {
+        using var server = new TestHomeAssistantServer { AutomationConfigurationResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Automations.GetConfigurationAsync("morning-routine"));
+    }
+
+    [Theory]
+    [InlineData("camera.front")]
+    [InlineData("automation.morning")]
+    public async Task TypedCameraAndAutomationReadsRejectMissingStateValues(string entityId)
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ExactStateResponseJson = "{\"entity_id\":\"" + entityId + "\",\"state\":null,\"attributes\":{}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        if (entityId.StartsWith("camera", StringComparison.Ordinal))
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Cameras.GetAsync(entityId));
+        else
+            await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Automations.GetAsync(entityId));
+    }
+
+    [Fact]
+    public async Task AutomationTriggerRejectsWrongDomainEntityTargetsBeforeDispatch()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.TriggerAsync(
+            HomeAssistantTarget.ForEntity("script.morning")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.TriggerAsync(
+            HomeAssistantTarget.ForEntity("automation.morning.extra")));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.TriggerAsync(
+            HomeAssistantTarget.Create()));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Fact]
+    public async Task AutomationTargetNormalizationHonorsPreCancellation()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var target = new HomeAssistantTarget
+        {
+            EntityIds = new[] { "automation.morning", "not-an-entity" }
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Automations.TriggerAsync(target, cancellationToken: cancellation.Token));
+
+        Assert.Null(server.LastServiceCallBody);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task AutomationConfigurationIdsFailBeforeDispatch(string automationId)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var definition = JsonDocument.Parse("{\"alias\":\"Morning\",\"triggers\":[],\"actions\":[]}");
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Automations.SaveConfigurationAsync(automationId, definition.RootElement));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Automations.DeleteConfigurationAsync(automationId));
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public void AutomationConfigurationIdentifiersPreserveProviderWhitespace()
+    {
+        const string identifier = " morning-routine ";
+
+        Assert.Equal(identifier, HomeAssistantAutomationIdentifier.NormalizeConfigurationId(identifier));
+    }
+
+    [Theory]
+    [InlineData("{\"id\":\"other-routine\",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":42,\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\" morning-routine \",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"id\":\"morning-routine\",\"alias\":\"Morning\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"alias\":\"First\",\"alias\":\"Second\"}")]
+    [InlineData("{\"id\":\"morning-routine\",\"actions\":[{\"service\":\"light.turn_on\",\"service\":\"light.turn_off\"}]}")]
+    public async Task AutomationConfigurationSaveRejectsAmbiguousDefinitionsBeforeDispatch(string json)
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var definition = JsonDocument.Parse(json);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.Automations.SaveConfigurationAsync("morning-routine", definition.RootElement));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task AutomationConfigurationSaveObservesCancellationDuringDefinitionSnapshot()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var definition = JsonDocument.Parse("{\"alias\":\"" + new string('a', 16_000_000) + "\"}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Automations.SaveConfigurationAsync(
+                "morning-routine",
+                definition.RootElement,
+                cancellation.Token));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
+    public void AutomationConfigurationIdentityScanHonorsCancellationForEmptyDefinitions()
+    {
+        using var definition = JsonDocument.Parse("{}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(
+                "morning-routine",
+                definition.RootElement,
+                "definition",
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void CameraRootRelativePathValidationHonorsCancellation()
+    {
+        Assert.True(HomeAssistantRootRelativePath.IsValid("/api/hls/front/master_playlist.m3u8"));
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantRootRelativePath.IsValid("/api/hls/front/master_playlist.m3u8", cancellation.Token));
+    }
+
+    [Fact]
+    public void SharedRootRelativePathValidationRejectsUnboundedProviderValues()
+    {
+        var path = "/" + new string('a', HomeAssistantRootRelativePath.MaximumLength);
+
+        Assert.False(HomeAssistantRootRelativePath.IsValid(path));
+        Assert.True(HomeAssistantRootRelativePath.IsValid(path.Substring(0, HomeAssistantRootRelativePath.MaximumLength)));
+    }
+
+    private static IEnumerable<string> CancelAfterFirstStreamType(CancellationTokenSource cancellation)
+    {
+        yield return "hls";
+        cancellation.Cancel();
+        yield return "mjpeg";
+    }
+}
+#endif

@@ -1111,6 +1111,40 @@ public sealed class MediaAndRemoteContractTests
         server.ExactStateResponseJson = "{\"entity_id\":\"remote.bedroom\",\"state\":\"on\",\"attributes\":{}}";
         await Assert.ThrowsAsync<HomeAssistantProtocolException>(
             () => client.Controls.Remotes.GetAsync("remote.living_room"));
+
+    }
+
+    [Fact]
+    public async Task PlayerBrowseSelectorsAreIndependentlyOptionalAndNormalized()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        await client.Media.BrowsePlayerAsync("media_player.kitchen", mediaContentType: " music ");
+        using (var typeOnly = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("media_player/browse_media"))))
+        {
+            Assert.Equal("music", typeOnly.RootElement.GetProperty("media_content_type").GetString());
+            Assert.False(typeOnly.RootElement.TryGetProperty("media_content_id", out _));
+        }
+
+        await client.Media.BrowsePlayerAsync("media_player.kitchen", mediaContentId: " source-only ");
+        using var idOnly = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("media_player/browse_media")));
+        Assert.Equal(" source-only ", idOnly.RootElement.GetProperty("media_content_id").GetString());
+        Assert.False(idOnly.RootElement.TryGetProperty("media_content_type", out _));
+    }
+
+    [Fact]
+    public async Task ActionableMediaResponsesPreserveProviderOpaqueContentIdentifiers()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Station\",\"media_class\":\"music\",\"media_content_id\":\" opaque station \",\"media_content_type\":\"music\",\"can_play\":true,\"can_expand\":false,\"can_search\":false}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var item = await client.Media.BrowseSourcesAsync();
+
+        Assert.Equal(" opaque station ", item.MediaContentId);
     }
 
     [Fact]
@@ -1563,6 +1597,56 @@ public sealed class MediaAndRemoteContractTests
     }
 
     [Fact]
+    public async Task MediaSearchHonorsCancellationBeforeEnumeratingClasses()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Media.SearchSourcesResponseAsync(
+                "music",
+                mediaClasses: new ThrowingStringList(),
+                cancellationToken: cancellation.Token));
+
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+    }
+
+    [Fact]
+    public async Task MediaSearchHonorsCancellationDuringClassEnumeration()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var classes = new CancellationProbeStringList(cancellation, "music");
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Media.SearchSourcesResponseAsync(
+                    "dinner",
+                    mediaClasses: classes,
+                    cancellationToken: cancellation.Token));
+            Assert.InRange(classes.ReadCount, 1, 16);
+        }
+
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var classes = new CancellationProbeStringList(cancellation, "music");
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.Media.SearchPlayerResponseAsync(
+                    "media_player.kitchen",
+                    "dinner",
+                    mediaClasses: classes,
+                    cancellationToken: cancellation.Token));
+            Assert.InRange(classes.ReadCount, 1, 16);
+        }
+
+        Assert.Null(server.GetLastWebSocketCommand("media_source/search_media"));
+        Assert.Null(server.GetLastWebSocketCommand("media_player/search_media"));
+    }
+
+    [Fact]
     public async Task MediaSelectorsPreserveProviderDefinedText()
     {
         using var server = new TestHomeAssistantServer();
@@ -1786,6 +1870,77 @@ public sealed class MediaAndRemoteContractTests
     }
 
 #if NET10_0
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":0}")]
+    public async Task MediaBrowseRejectsMissingOrInvalidSearchCapability(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Theory]
+    [InlineData("{\"title\":\"Music\",\"media_class\":0,\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\" music \",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"children_media_class\":\" album \",\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    [InlineData("{\"title\":\"Music\",\"media_class\":\"directory\",\"media_content_id\":\"music\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}")]
+    public async Task MediaBrowseRejectsMissingOrInvalidIdentityFields(string response)
+    {
+        using var server = new TestHomeAssistantServer { MediaBrowseResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => client.Media.BrowseSourcesAsync());
+    }
+
+    [Fact]
+    public async Task MediaBrowseAcceptsNullOptionalChildrenMediaClass()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Music\",\"media_class\":\"directory\",\"children_media_class\":null,\"media_content_id\":\"music\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":false,\"can_search\":false}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var item = await client.Media.BrowseSourcesAsync();
+
+        Assert.Null(item.ChildrenMediaClass);
+    }
+
+    [Fact]
+    public async Task MediaBrowseAndSearchNormalizeNullLeafChildrenToEmptyCollections()
+    {
+        const string leaf = "{\"title\":\"Station\",\"media_class\":\"music\",\"media_content_id\":\"station\",\"media_content_type\":\"music\",\"can_play\":true,\"can_expand\":false,\"can_search\":false,\"children\":null}";
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = leaf,
+            MediaSearchResponseJson = "{\"result\":[" + leaf + "]}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var browsed = await client.Media.BrowseSourcesAsync();
+        var searched = await client.Media.SearchSourcesAsync("station");
+
+        Assert.Empty(browsed.Children);
+        Assert.Empty(Assert.Single(searched).Children);
+    }
+
+    [Fact]
+    public async Task MediaBrowseAcceptsAnOmittedOptionalMediaClass()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            MediaBrowseResponseJson = "{\"title\":\"Provider root\",\"media_content_id\":\"root\",\"media_content_type\":\"library\",\"can_play\":false,\"can_expand\":true,\"can_search\":false}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var item = await client.Media.BrowseSourcesAsync();
+
+        Assert.Null(item.MediaClass);
+    }
+
     private static string[] ReadServices(TestHomeAssistantServer server)
     {
         return server.ServiceCallBodies.Select(body =>

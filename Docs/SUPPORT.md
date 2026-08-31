@@ -37,7 +37,8 @@ All endpoints currently listed in the official REST API reference have named met
 | State list/read/create/update/delete | First class | State writes alter HA's state representation; they do not control the device |
 | Service/action calls | First class / extensible | Fluent entity, device, area, floor, and label targets; optional response data preserved; typed controls can select WebSocket or REST at client configuration time |
 | Fire event | Extensible | Named method with open event-data object |
-| Camera proxy | First class | Bounded binary response |
+| Camera proxy | First class | Bounded binary response with optional paired width/height request |
+| Editable automation definitions | First class / extensible | Administrator-only get/save/delete of ID-backed automation definitions; future fields retained as JSON; runtime execution is separate |
 | Calendars and calendar events | First class | REST discovery/read plus WebSocket create, update, delete, and reconnect-safe event-list subscriptions; timed and all-day boundaries supported |
 | Error log | First class | Bounded plaintext response; consumers must treat log content as sensitive |
 | Template rendering | First class | Bounded plaintext response and optional variables |
@@ -69,6 +70,9 @@ All endpoints currently listed in the official REST API reference have named met
 | Energy dashboard | First class / extensible | Named preference read/update, capabilities, validation, provider forecasts, and fossil-energy calculations; integration-owned source/forecast fields are preserved as JSON |
 | Recorder statistics | First class | Catalog and metadata, aggregated periods, validation, issue refresh, metadata/unit/sum maintenance, import, and explicit clearing |
 | Weather | First class | Current observations, convertible units, service-response forecasts, and reconnect-safe daily/hourly/twice-daily subscriptions |
+| Cameras | First class / extensible | Typed state/features, bounded snapshots, capabilities, HLS request, preferences, signed image/MJPEG paths, and reconnect-safe state updates |
+| Media browsing | First class / extensible | Global media-source and per-player browse/search plus signed media resolution; recursive stable fields are typed and provider additions retained |
+| Lovelace dashboards | First class / extensible | Panels, dashboard/resource collections, mode information, configuration read/write/delete; collection mutations require an administrator and storage mode |
 | Other/custom commands | Raw | `RequestAsync` and `SubscribeAsync` |
 | Coalesced message batches | First class | Object and array frames are decoded; byte and message-count limits reject oversized batches |
 
@@ -153,7 +157,7 @@ The following boundaries are intentional:
 | Instance discovery over mDNS | Not supported yet | Cross-platform discovery deserves an optional adapter or a dependency-free implementation; manual URL entry works today |
 | Native companion-app registration and webhook lifecycle | Raw / future adapter | Different lifecycle from the Core client; should not distort the base transport |
 | HACS/custom repository package installation | Not modeled | Not a stable Core package-management contract; Supervisor apps are supported separately |
-| Media browsers | Raw | Provider media trees evolve independently; consumers can use the protected raw command until Tactra establishes a reusable model |
+| Full streaming transport and transcoding | Consumer-owned | HomeAssistantX returns HA stream/media paths and metadata; playback, codecs, buffering, and rendering belong to Tactra/CasaRay hosts |
 | Product device-domain normalization | Consumer-owned | CasaRay/Tactra map joined HA inventory into their own product models and safety/UI policy |
 | HomeKit protocol/bridge | Out of scope | Separate protocol and credential model; not part of HomeAssistantX |
 

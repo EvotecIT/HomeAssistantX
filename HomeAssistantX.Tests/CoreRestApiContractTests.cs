@@ -70,7 +70,7 @@ public sealed class CoreRestApiContractTests
         });
         var logbookPath = server.LastRequestPath;
         var errorLog = await client.Rest.GetErrorLogAsync();
-        var camera = await client.Rest.GetCameraImageAsync("camera.front");
+        var camera = await client.Rest.GetCameraImageAsync("camera.front", CancellationToken.None);
         var calendars = await client.Rest.GetCalendarsAsync();
         var calendarEvents = await client.Rest.GetCalendarEventsAsync("calendar.home", start, end);
 
@@ -132,6 +132,18 @@ public sealed class CoreRestApiContractTests
 
         Assert.Equal(2, providerPayload.EnumerateObject().Count());
         Assert.Equal(new[] { 1, 2 }, providerPayload.EnumerateObject().Select(value => value.Value.GetInt32()));
+    }
+
+    [Fact]
+    public async Task CameraRestOverloadsRejectEmptySuccessfulResponses()
+    {
+        using var server = new TestHomeAssistantServer { CameraImageResponse = string.Empty };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Rest.GetCameraImageAsync("camera.front", CancellationToken.None));
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Rest.GetCameraImageAsync("camera.front", 640, 360, CancellationToken.None));
     }
 
     [Fact]
@@ -259,6 +271,20 @@ public sealed class CoreRestApiContractTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => client.Rest.GetCameraImageAsync(entityId));
 
+        Assert.Null(server.LastRequestPath);
+    }
+
+    [Fact]
+    public async Task CameraImageEntityValidationHonorsCancellationBeforeRequest()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var entityId = new string(' ', 4096) + "camera.front";
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Rest.GetCameraImageAsync(entityId, cancellation.Token));
         Assert.Null(server.LastRequestPath);
     }
 

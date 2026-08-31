@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using HomeAssistantX.IO;
 
 namespace HomeAssistantX.PowerShell;
 
@@ -59,40 +60,27 @@ public sealed class ExportHomeAssistantDiagnosticCommand : HomeAssistantCmdlet
 
         var directory = System.IO.Path.GetDirectoryName(_resolvedPath)
             ?? throw new IOException("The diagnostic destination directory could not be resolved.");
-        var temporaryPath = System.IO.Path.Combine(
-            directory,
-            "." + System.IO.Path.GetFileName(_resolvedPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        var temporaryPath = HomeAssistantAtomicFile.CreateTemporaryPath(directory);
+        var preserveTemporaryFile = false;
         try
         {
-            using (var stream = new FileStream(
-                temporaryPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                81920,
-                useAsync: true))
+            using (var stream = HomeAssistantAtomicFile.CreateSecureTemporaryFileStream(
+                       temporaryPath,
+                       _resolvedPath,
+                       Force))
             {
-                await stream.WriteAsync(bytes, 0, bytes.Length, CancelToken).ConfigureAwait(false);
-                await stream.FlushAsync(CancelToken).ConfigureAwait(false);
+                await HomeAssistantAtomicFile.WriteAllBytesAsync(stream, bytes, CancelToken).ConfigureAwait(false);
+                HomeAssistantAtomicFile.CommitTemporaryFile(stream, temporaryPath, _resolvedPath, Force, CancelToken);
             }
-
-            if (File.Exists(_resolvedPath))
-            {
-                if (!Force)
-                {
-                    throw new IOException("The destination file already exists. Use -Force to overwrite it.");
-                }
-
-                File.Replace(temporaryPath, _resolvedPath, null);
-            }
-            else
-            {
-                File.Move(temporaryPath, _resolvedPath);
-            }
+        }
+        catch (HomeAssistantAtomicCommitException exception) when (exception.PreserveTemporaryFile)
+        {
+            preserveTemporaryFile = true;
+            throw;
         }
         finally
         {
-            if (File.Exists(temporaryPath))
+            if (!preserveTemporaryFile && File.Exists(temporaryPath))
             {
                 File.Delete(temporaryPath);
             }

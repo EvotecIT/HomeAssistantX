@@ -123,6 +123,10 @@ Invoke-HomeAssistantAction vacuum send_command `
 | Read current/history/logbook | `Get-HomeAssistantEntity`, `Get-HomeAssistantHistory`, `Get-HomeAssistantLogbook` |
 | Energy and Recorder statistics | `Get/Set-HomeAssistantEnergy`, `Get/Set/Remove/Test-HomeAssistantStatistic`, `Invoke-HomeAssistantRecorderMaintenance` |
 | Weather | `Get-HomeAssistantWeather`, `Receive-HomeAssistantWeatherForecast` |
+| Cameras | `Get/Set-HomeAssistantCamera`, `Export-HomeAssistantCameraSnapshot` |
+| Media browsing | `Get-HomeAssistantMedia` |
+| Lovelace dashboards | `Get/Set/Remove-HomeAssistantDashboard` |
+| Automation runtime and configuration | `Get/Invoke/Set/Remove-HomeAssistantAutomation` |
 | Send/read/stream notifications | `Get-HomeAssistantNotification`, `Send-HomeAssistantNotification`, `Remove-HomeAssistantNotification`, `Receive-HomeAssistantNotification` |
 | Calendars | `Get-HomeAssistantCalendar`, `Get-HomeAssistantCalendarEvent`, `Set-HomeAssistantCalendarEvent`, `Remove-HomeAssistantCalendarEvent`, `Receive-HomeAssistantCalendarEvent` |
 | Labels and scoped categories | `Get/Set/Remove-HomeAssistantLabel`, `Get/Set/Remove-HomeAssistantCategory` |
@@ -171,12 +175,25 @@ Get-HomeAssistantStatistic -StatisticId sensor.grid_energy `
     -StartTime (Get-Date).AddDays(-1) -Period Hour -Type Change, Sum
 Get-HomeAssistantWeather weather.home -Forecast -ForecastType Daily
 Receive-HomeAssistantWeatherForecast weather.home -ForecastType Hourly -Count 1
+
+Get-HomeAssistantCamera camera.front -Stream
+Export-HomeAssistantCameraSnapshot camera.front ./front.jpg -Width 1280 -Height 720
+Get-HomeAssistantMedia -PlayerEntityId media_player.kitchen -Search dinner
+Get-HomeAssistantDashboard -Configuration -UrlPath house-main
+Invoke-HomeAssistantAutomation automation.morning -WhatIf
+Get-HomeAssistantAutomation morning-routine -Configuration
 ```
 
 Timed and all-day calendar parameter sets prevent mixed boundary types.
 Supplying `-Uid` selects update behavior. Label/category setters similarly use
 create/update parameter sets, while `-ClearColor`, `-ClearDescription`, and
 `-ClearIcon` intentionally clear nullable registry fields.
+
+Camera snapshot export writes atomically and never exposes the camera access
+token. Lovelace configuration and resource mutations require administrator
+permissions and storage-backed data. Automation runtime invocation and editable
+definitions use separate commands and separate identifiers, preventing a run
+operation from silently becoming a configuration rewrite.
 
 ## Safety and Supervisor boundaries
 

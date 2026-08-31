@@ -49,6 +49,15 @@ internal static class HomeAssistantUri
             return Uri.EscapeDataString(value);
         }
 
+        return cancellationToken.CanBeCanceled
+            ? HomeAssistantX.Protocol.HomeAssistantJson.RunCancellationIsolated(
+                () => EscapeDataStringInline(value, cancellationToken),
+                cancellationToken)
+            : EscapeDataStringInline(value, cancellationToken);
+    }
+
+    internal static string EscapeDataStringInline(string value, CancellationToken cancellationToken)
+    {
         var escaped = new StringBuilder(value.Length);
         for (var offset = 0; offset < value.Length;)
         {

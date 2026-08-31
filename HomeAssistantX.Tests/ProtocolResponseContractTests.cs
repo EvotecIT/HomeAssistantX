@@ -25,6 +25,8 @@ public sealed class ProtocolResponseContractTests
         Assert.False(HomeAssistantEntityId.TryNormalizeDomain("li__ght", out _));
         Assert.False(HomeAssistantEntityId.TryNormalizeDomain("1sensor", out _));
         Assert.False(HomeAssistantEntityId.TryNormalize("1sensor.room", out _));
+        Assert.True(HomeAssistantEntityId.TryNormalize("sensor." + new string('a', 248), out _));
+        Assert.False(HomeAssistantEntityId.TryNormalize("sensor." + new string('a', 249), out _));
         foreach (var invalid in new[]
         {
             "_light.kitchen",

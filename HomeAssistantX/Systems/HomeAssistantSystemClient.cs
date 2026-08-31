@@ -70,6 +70,7 @@ public sealed class HomeAssistantSystemClient
         bool expandGroup = false,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (target is null)
         {
             throw new ArgumentNullException(nameof(target));
@@ -79,7 +80,7 @@ public sealed class HomeAssistantSystemClient
             "extract_from_target",
             new Dictionary<string, object?>
             {
-                ["target"] = target.Normalize(),
+                ["target"] = target.Normalize(cancellationToken),
                 ["expand_group"] = expandGroup
             },
             cancellationToken);
@@ -356,6 +357,7 @@ public sealed class HomeAssistantSystemClient
         bool expandGroup,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (target is null)
         {
             throw new ArgumentNullException(nameof(target));
@@ -365,7 +367,7 @@ public sealed class HomeAssistantSystemClient
             command,
             new Dictionary<string, object?>
             {
-                ["target"] = target.Normalize(),
+                ["target"] = target.Normalize(cancellationToken),
                 ["expand_group"] = expandGroup
             },
             cancellationToken);

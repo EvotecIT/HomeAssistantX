@@ -50,6 +50,11 @@ raw access for custom integrations.
 - labels and scoped categories, including create/update/delete with explicit nullable-field clearing
 - Energy preferences, validation, solar forecasts, fossil-energy calculations, Recorder long-term statistics, and maintenance
 - typed current weather observations plus daily, hourly, and twice-daily push forecasts
+- typed camera state, bounded/scaled snapshots, HLS and signed MJPEG paths,
+  stream capabilities, preferences, and reconnect-safe state updates
+- Home Assistant-native media-source and media-player browse, search, and resolve APIs
+- frontend panels plus Lovelace dashboard, configuration, and resource management
+- automation runtime state and execution kept separate from administrator-managed definitions
 - OAuth authorization, proactive and rejection-triggered refresh, revocation,
   and host-owned token persistence
 - logs, Repairs, system health, diagnostics, traces, integrations, and updates
@@ -80,6 +85,10 @@ set.
 | Work with labels and categories | `Get/Set/Remove-HomeAssistantLabel`, `Get/Set/Remove-HomeAssistantCategory` | `client.Registries` |
 | Inspect Energy and Recorder data | `Get-HomeAssistantEnergy`, `Get-HomeAssistantStatistic`, `Get-HomeAssistantHistory`, `Get-HomeAssistantLogbook` | `client.Energy`, `client.Recorder`, `client.Rest` |
 | Read and stream weather | `Get-HomeAssistantWeather`, `Receive-HomeAssistantWeatherForecast` | `client.Weather` |
+| View cameras and export snapshots | `Get/Set-HomeAssistantCamera`, `Export-HomeAssistantCameraSnapshot` | `client.Cameras` |
+| Browse and resolve playable media | `Get-HomeAssistantMedia` | `client.Media` |
+| Manage Lovelace dashboards | `Get/Set/Remove-HomeAssistantDashboard` | `client.Dashboards` |
+| Inspect, run, or edit automations | `Get/Invoke/Set/Remove-HomeAssistantAutomation` | `client.Automations` |
 | Receive general events | `Receive-HomeAssistantEvent` | `client.Events`, `client.States` |
 | Inspect and troubleshoot | `Get-HomeAssistantInfo`, `Get-HomeAssistantLog`, `Get-HomeAssistantIssue`, `Get-HomeAssistantTrace`, `Export-HomeAssistantDiagnostic` | `client.Operations` |
 | Inspect Supervisor and OS | `Get-HomeAssistantApp`, `Get-HomeAssistantBackup`, `Get-HomeAssistantJob`, `Get-HomeAssistantUpdate` | `client.Supervisor` |
@@ -327,6 +336,38 @@ Assistant fields. Recorder mutation commands use high-impact confirmation and
 validate their parameter sets before `-WhatIf`; clearing statistics and purging
 Recorder data are deliberately explicit operations.
 
+### Work with cameras, media, dashboards, and automations
+
+```powershell
+Get-HomeAssistantCamera
+Get-HomeAssistantCamera camera.front -Capabilities
+Get-HomeAssistantCamera camera.front -Stream
+Export-HomeAssistantCameraSnapshot camera.front ./front.jpg `
+    -Width 1280 -Height 720
+
+$library = Get-HomeAssistantMedia
+Get-HomeAssistantMedia -PlayerEntityId media_player.kitchen -Search dinner
+Get-HomeAssistantMedia -Resolve `
+    -MediaContentId 'media-source://media_source/local/dinner.mp3'
+
+Get-HomeAssistantDashboard
+Get-HomeAssistantDashboard -Configuration -UrlPath house-main
+Set-HomeAssistantDashboard -ConfigurationJson $dashboardJson `
+    -UrlPath house-main -WhatIf
+
+Get-HomeAssistantAutomation
+Invoke-HomeAssistantAutomation automation.morning -WhatIf
+Get-HomeAssistantAutomation morning-routine -Configuration
+Set-HomeAssistantAutomation morning-routine $automationJson -WhatIf
+```
+
+Camera snapshots are bounded by the connection response limit and exported
+through an atomic local-file replacement. Media trees retain provider-specific
+fields while exposing stable browse/play identifiers. Lovelace writes require
+an administrator and storage-backed dashboards/resources. Automation entity
+execution is a runtime action; editing uses the separate administrator-only
+configuration identifier and never happens implicitly during `Invoke`.
+
 ### Troubleshoot and administer
 
 ```powershell
@@ -404,8 +445,9 @@ var result = await client.Controls.Lights.TurnOnAsync(
 
 `client.Controls` exposes focused clients for lights, switches, climate,
 covers, media players, remotes, and locks. `client.Notifications`,
-`client.Calendars`, and `client.Registries` own their corresponding live
-platform data. `client.Services` retains the generic fluent
+`client.Calendars`, `client.Registries`, `client.Cameras`, `client.Media`,
+`client.Dashboards`, and `client.Automations` own their corresponding platform
+contracts. `client.Services` retains the generic fluent
 action builder for every other domain and custom integration.
 
 Typed controls use WebSocket calls by default. Hosts that deliberately keep

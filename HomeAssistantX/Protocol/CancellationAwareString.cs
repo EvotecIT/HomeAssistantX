@@ -85,7 +85,22 @@ internal static class CancellationAwareString
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var result = new System.Text.StringBuilder(left.Length + separator.Length + right.Length);
+        var length = checked(left.Length + separator.Length + right.Length);
+        return length > 4096 && cancellationToken.CanBeCanceled
+            ? HomeAssistantJson.RunCancellationIsolated(
+                () => ConcatInline(left, separator, right, cancellationToken),
+                cancellationToken)
+            : ConcatInline(left, separator, right, cancellationToken);
+    }
+
+    internal static string ConcatInline(
+        string left,
+        string separator,
+        string right,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = new System.Text.StringBuilder(checked(left.Length + separator.Length + right.Length));
         Append(result, left, cancellationToken);
         Append(result, separator, cancellationToken);
         Append(result, right, cancellationToken);
@@ -93,6 +108,18 @@ internal static class CancellationAwareString
         var combined = result.ToString();
         cancellationToken.ThrowIfCancellationRequested();
         return combined;
+    }
+
+    internal static bool Contains(string value, char character, CancellationToken cancellationToken)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] == character) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
     }
 
     internal static bool EqualsOrdinal(

@@ -43,6 +43,8 @@ public sealed class LiveHomeAssistantTests
         var inventory = await client.Inventory.GetSnapshotAsync();
         var mediaPlayers = await client.Controls.MediaPlayers.GetAllAsync();
         var remotes = await client.Controls.Remotes.GetAllAsync();
+        var cameras = await client.Cameras.GetAsync();
+        var automations = await client.Automations.GetAsync();
         var capabilities = await client.Operations.GetCapabilitiesAsync();
         var integrations = await client.Operations.Integrations.GetAllAsync();
         var updates = await client.Operations.Updates.GetAllAsync();
@@ -50,6 +52,29 @@ public sealed class LiveHomeAssistantTests
             HomeAssistantStateFilter.All,
             (_, _) => Task.CompletedTask);
         await subscription.StopAsync();
+
+        if (cameras.Count > 0)
+        {
+            _ = await client.Cameras.GetCapabilitiesAsync(cameras[0].EntityId);
+            var signedCameraPath = await client.Cameras.GetSignedImagePathAsync(cameras[0].EntityId, width: 320, height: 180);
+            Assert.True(signedCameraPath.Contains("authSig=", StringComparison.Ordinal), "The signed camera path omitted its authentication signature.");
+            Assert.True(signedCameraPath.Contains("width=320&height=180", StringComparison.Ordinal), "The signed camera path omitted the requested dimensions.");
+        }
+
+        var mediaRootValidated = false;
+        if (components.Contains("media_source", StringComparer.OrdinalIgnoreCase))
+        {
+            mediaRootValidated = !string.IsNullOrWhiteSpace((await client.Media.BrowseSourcesAsync()).Title);
+            Assert.True(mediaRootValidated);
+        }
+
+        var typedPanelCount = (await client.Dashboards.GetPanelsAsync()).Count;
+        var dashboardInfoValidated = false;
+        if (components.Contains("lovelace", StringComparer.OrdinalIgnoreCase))
+        {
+            dashboardInfoValidated = !string.IsNullOrWhiteSpace((await client.Dashboards.GetInfoAsync()).ResourceMode);
+            Assert.True(dashboardInfoValidated);
+        }
 
         if (components.Contains("recorder", StringComparer.OrdinalIgnoreCase))
         {
@@ -205,6 +230,8 @@ public sealed class LiveHomeAssistantTests
         Assert.All(restStates, state => Assert.Contains(inventory.Entities, entity => entity.EntityId == state.EntityId));
         Assert.Equal(restStates.Count(state => state.Domain == "media_player"), mediaPlayers.Count);
         Assert.Equal(restStates.Count(state => state.Domain == "remote"), remotes.Count);
+        Assert.Equal(restStates.Count(state => state.Domain == "camera"), cameras.Count);
+        Assert.Equal(restStates.Count(state => state.Domain == "automation"), automations.Count);
         Assert.All(mediaPlayers, status => Assert.Equal("media_player", status.RawState.Domain));
         Assert.All(remotes, status => Assert.Equal("remote", status.RawState.Domain));
         Assert.Equal(configuration.Version, capabilities.CoreVersion);
@@ -214,9 +241,10 @@ public sealed class LiveHomeAssistantTests
         Assert.NotEmpty(webSocketStates);
         Assert.Equal(System.Text.Json.JsonValueKind.Object, webSocketServices.ValueKind);
         Assert.Equal(System.Text.Json.JsonValueKind.Object, panels.ValueKind);
+        Assert.Equal(panels.EnumerateObject().Count(), typedPanelCount);
         Assert.Equal(System.Text.Json.JsonValueKind.Object, displayRegistry.ValueKind);
-        Assert.StartsWith("/api/", signedPath);
-        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}, media players={12}, remotes={13}, labels={14}, automation categories={15}, calendars={16}, sampled calendar events={17}, persistent notifications={18}, statistics={19}, Energy configured={20}, solar forecast providers={21}, weather entities={22}",
+        Assert.True(signedPath.StartsWith("/api/", StringComparison.Ordinal), "The signed API path omitted the requested path prefix.");
+        _output.WriteLine("Home Assistant {0}: REST states={1}, WebSocket states={2}, joined entities={3}, actions={4}, event types={5}, updates={6}, system log entries={7}, repairs={8}, diagnostic handlers={9}, Supervisor apps={10}, backups={11}, media players={12}, remotes={13}, labels={14}, automation categories={15}, calendars={16}, sampled calendar events={17}, persistent notifications={18}, statistics={19}, Energy configured={20}, solar forecast providers={21}, weather entities={22}, cameras={23}, automations={24}, panels={25}, dashboard info validated={26}, media root validated={27}",
             configuration.Version,
             restStates.Count,
             webSocketStates.Count,
@@ -239,7 +267,12 @@ public sealed class LiveHomeAssistantTests
             statisticCount,
             energyConfigured,
             energySolarForecastProviders,
-            weather.Count);
+            weather.Count,
+            cameras.Count,
+            automations.Count,
+            typedPanelCount,
+            dashboardInfoValidated,
+            mediaRootValidated);
     }
 }
 

@@ -152,7 +152,16 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, "test integration warning").ConfigureAwait(false);
                 break;
             case "GET /api/camera_proxy/camera.front":
-                await WriteHttpResponseAsync(stream, 200, "test-image-bytes").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, CameraImageResponse).ConfigureAwait(false);
+                break;
+            case "GET /api/config/automation/config/morning-routine":
+                await WriteHttpResponseAsync(stream, 200, AutomationConfigurationResponseJson).ConfigureAwait(false);
+                break;
+            case "POST /api/config/automation/config/morning-routine":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\"}").ConfigureAwait(false);
+                break;
+            case "DELETE /api/config/automation/config/morning-routine":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\"}").ConfigureAwait(false);
                 break;
             case "GET /api/calendars":
                 await WriteHttpResponseAsync(stream, 200, CalendarListResponseJson).ConfigureAwait(false);
