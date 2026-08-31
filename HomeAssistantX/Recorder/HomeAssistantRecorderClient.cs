@@ -245,6 +245,7 @@ public sealed class HomeAssistantRecorderClient
         if (metadata is null) throw new ArgumentNullException(nameof(metadata));
         if (rows is null) throw new ArgumentNullException(nameof(rows));
         cancellationToken.ThrowIfCancellationRequested();
+        var metadataSnapshot = metadata.Snapshot(cancellationToken);
         var rowSnapshot = new List<HomeAssistantStatisticImportRow>(rows.Count);
         foreach (var row in rows)
         {
@@ -266,20 +267,20 @@ public sealed class HomeAssistantRecorderClient
             });
         }
         cancellationToken.ThrowIfCancellationRequested();
-        metadata.ValidateRows(rowSnapshot, cancellationToken);
-        var unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadata.UnitClass, nameof(metadata.UnitClass), cancellationToken);
-        var unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadata.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement), cancellationToken);
+        metadataSnapshot.ValidateRows(rowSnapshot, cancellationToken);
+        var unitClass = HomeAssistantStatisticIdentifier.NormalizeOptionalUnitClass(metadataSnapshot.UnitClass, nameof(metadata.UnitClass), cancellationToken);
+        var unitOfMeasurement = HomeAssistantStatisticIdentifier.NormalizeOptionalUnit(metadataSnapshot.UnitOfMeasurement, nameof(metadata.UnitOfMeasurement), cancellationToken);
         var metadataPayload = new Dictionary<string, object?>
         {
-            ["statistic_id"] = RequireStatisticId(metadata.StatisticId, nameof(metadata.StatisticId), cancellationToken),
-            ["source"] = Require(metadata.Source, nameof(metadata.Source), cancellationToken),
-            ["name"] = metadata.Name,
-            ["has_mean"] = metadata.HasMean,
-            ["has_sum"] = metadata.HasSum,
+            ["statistic_id"] = RequireStatisticId(metadataSnapshot.StatisticId, nameof(metadata.StatisticId), cancellationToken),
+            ["source"] = Require(metadataSnapshot.Source, nameof(metadata.Source), cancellationToken),
+            ["name"] = metadataSnapshot.Name,
+            ["has_mean"] = metadataSnapshot.HasMean,
+            ["has_sum"] = metadataSnapshot.HasSum,
             ["unit_class"] = unitClass,
             ["unit_of_measurement"] = unitOfMeasurement
         };
-        metadataPayload["mean_type"] = (int)metadata.MeanType;
+        metadataPayload["mean_type"] = (int)metadataSnapshot.MeanType;
         var rowPayload = new List<Dictionary<string, object?>>(rowSnapshot.Count);
         foreach (var row in rowSnapshot)
         {
@@ -673,7 +674,7 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var normalized = new List<string>(values.Count);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -699,7 +700,7 @@ public sealed class HomeAssistantRecorderClient
     {
         if (values is null || values.Count == 0) throw new ArgumentException("At least one statistic identifier is required.", name);
         var normalized = new List<string>(values.Count);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -732,7 +733,7 @@ public sealed class HomeAssistantRecorderClient
         }
 
         var normalized = new List<string>(values.Count);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
         foreach (var value in values)
         {
             cancellationToken.ThrowIfCancellationRequested();

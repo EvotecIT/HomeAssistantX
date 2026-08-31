@@ -161,14 +161,44 @@ public sealed class HomeAssistantStatisticsQuery
 /// <summary>Metadata used when importing external Recorder statistics.</summary>
 public sealed class HomeAssistantStatisticImportMetadata
 {
-    public string StatisticId { get; set; } = string.Empty;
-    public string Source { get; set; } = string.Empty;
-    public string? Name { get; set; }
-    public bool HasMean { get; set; }
-    public bool HasSum { get; set; }
-    public HomeAssistantStatisticMeanType MeanType { get; set; }
-    public string? UnitClass { get; set; }
-    public string? UnitOfMeasurement { get; set; }
+    private readonly object _sync = new();
+    private string _statisticId = string.Empty;
+    private string _source = string.Empty;
+    private string? _name;
+    private bool _hasMean;
+    private bool _hasSum;
+    private HomeAssistantStatisticMeanType _meanType;
+    private string? _unitClass;
+    private string? _unitOfMeasurement;
+
+    public string StatisticId { get { lock (_sync) return _statisticId; } set { lock (_sync) _statisticId = value; } }
+    public string Source { get { lock (_sync) return _source; } set { lock (_sync) _source = value; } }
+    public string? Name { get { lock (_sync) return _name; } set { lock (_sync) _name = value; } }
+    public bool HasMean { get { lock (_sync) return _hasMean; } set { lock (_sync) _hasMean = value; } }
+    public bool HasSum { get { lock (_sync) return _hasSum; } set { lock (_sync) _hasSum = value; } }
+    public HomeAssistantStatisticMeanType MeanType { get { lock (_sync) return _meanType; } set { lock (_sync) _meanType = value; } }
+    public string? UnitClass { get { lock (_sync) return _unitClass; } set { lock (_sync) _unitClass = value; } }
+    public string? UnitOfMeasurement { get { lock (_sync) return _unitOfMeasurement; } set { lock (_sync) _unitOfMeasurement = value; } }
+
+    internal HomeAssistantStatisticImportMetadata Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantStatisticImportMetadata
+            {
+                StatisticId = _statisticId,
+                Source = _source,
+                Name = _name,
+                HasMean = _hasMean,
+                HasSum = _hasSum,
+                MeanType = _meanType,
+                UnitClass = _unitClass,
+                UnitOfMeasurement = _unitOfMeasurement
+            };
+        }
+    }
 
     /// <summary>Validates metadata and rows as one Recorder import before dispatch.</summary>
     public void ValidateRows(IReadOnlyCollection<HomeAssistantStatisticImportRow> rows)
@@ -176,6 +206,9 @@ public sealed class HomeAssistantStatisticImportMetadata
 
     /// <summary>Validates metadata and rows as one Recorder import before dispatch while observing cancellation.</summary>
     public void ValidateRows(IReadOnlyCollection<HomeAssistantStatisticImportRow> rows, CancellationToken cancellationToken)
+        => Snapshot(cancellationToken).ValidateRowsCore(rows, cancellationToken);
+
+    private void ValidateRowsCore(IReadOnlyCollection<HomeAssistantStatisticImportRow> rows, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (CancellationAwareString.IsNullOrWhiteSpace(StatisticId, cancellationToken)) throw new ArgumentException("Import metadata requires StatisticId.", nameof(StatisticId));

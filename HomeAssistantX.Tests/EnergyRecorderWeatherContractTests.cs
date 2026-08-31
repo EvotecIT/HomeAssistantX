@@ -773,6 +773,24 @@ public sealed class EnergyRecorderWeatherContractTests
     }
 
     [Fact]
+    public async Task RecorderImportSnapshotsMutableMetadataBeforeEnumeratingRows()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        var metadata = CreateSumImportMetadata();
+
+        await client.Recorder.ImportStatisticsAsync(
+            metadata,
+            new MetadataMutatingStatisticRows(metadata));
+
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("recorder/import_statistics")));
+        var serialized = command.RootElement.GetProperty("metadata");
+        Assert.Equal("external:daily_energy", serialized.GetProperty("statistic_id").GetString());
+        Assert.Equal("external", serialized.GetProperty("source").GetString());
+        Assert.True(serialized.GetProperty("has_sum").GetBoolean());
+    }
+
+    [Fact]
     public void RecorderImportValidationObservesCancellationAfterEnumerationCompletes()
     {
         using var cancellation = new CancellationTokenSource();
@@ -2415,6 +2433,25 @@ public sealed class EnergyRecorderWeatherContractTests
             row.Start = row.Start.AddHours(1);
             row.Sum = 2.5;
             yield return row;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class MetadataMutatingStatisticRows : IReadOnlyCollection<HomeAssistantStatisticImportRow>
+    {
+        private readonly HomeAssistantStatisticImportMetadata _metadata;
+
+        internal MetadataMutatingStatisticRows(HomeAssistantStatisticImportMetadata metadata) => _metadata = metadata;
+
+        public int Count => 1;
+
+        public IEnumerator<HomeAssistantStatisticImportRow> GetEnumerator()
+        {
+            _metadata.StatisticId = "external:changed";
+            _metadata.Source = "changed";
+            _metadata.HasSum = false;
+            yield return CreateSumRow(10, 1.5);
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
