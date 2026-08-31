@@ -104,6 +104,36 @@ internal static class HomeAssistantJson
         return result;
     }
 
+    /// <summary>Decodes a JSON property name without making cancellation wait for synchronous unescaping.</summary>
+    internal static async Task<string> GetPropertyNameAsync(
+        JsonProperty property,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!cancellationToken.CanBeCanceled) return property.Name;
+
+        var decodeTask = Task.Factory.StartNew(
+            () => property.Name,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        if (await Task.WhenAny(decodeTask, canceled.Task).ConfigureAwait(false) != decodeTask)
+        {
+            _ = decodeTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var result = await decodeTask.ConfigureAwait(false);
+        ThrowIfStringTraversalCanceled(result, cancellationToken);
+        return result;
+    }
+
     /// <summary>Decodes a JSON string inside an already cancellation-isolated validation operation.</summary>
     internal static string? GetString(
         JsonElement value,

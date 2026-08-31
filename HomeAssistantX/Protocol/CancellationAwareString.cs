@@ -73,7 +73,9 @@ internal static class CancellationAwareString
             result.Append(value[start + index]);
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return result.ToString();
+        return length > 4096 && cancellationToken.CanBeCanceled
+            ? HomeAssistantJson.RunCancellationIsolated(result.ToString, cancellationToken)
+            : result.ToString();
     }
 
     internal static string Concat(
