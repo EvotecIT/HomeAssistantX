@@ -165,6 +165,33 @@ public sealed class LivePlatformDataContractTests
     }
 
     [Fact]
+    public async Task PersistentNotificationPropertyDecodingIsCancellationIsolated()
+    {
+        var json = "[{\"notification_id\":\"notice\",\"message\":\"Message\",\"future_"
+            + new string('a', 16_000_000) + "\":true}]";
+        using var document = JsonDocument.Parse(json);
+        using var cancellation = new CancellationTokenSource();
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var operation = Task.Factory.StartNew(
+            () =>
+            {
+                started.TrySetResult(true);
+                HomeAssistantNotificationClient.ValidateNotificationObjects(
+                    document.RootElement,
+                    dictionary: false,
+                    "The test notification response",
+                    cancellation.Token);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        await started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+    }
+
+    [Fact]
     public async Task RegistrySnapshotTreatsUnsupportedOrUnauthorizedLabelsAsOptionalEnrichment()
     {
         foreach (var errorCode in new[] { "unknown_command", "unauthorized" })

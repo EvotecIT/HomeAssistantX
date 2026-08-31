@@ -24,10 +24,10 @@ public sealed class HomeAssistantNotificationClient
     {
         var value = await _webSocket.RequestAsync("persistent_notification/get", null, cancellationToken).ConfigureAwait(false);
         ValidateNotificationObjects(value, dictionary: false, "The Home Assistant persistent-notification response", cancellationToken);
-        var notifications = HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification[]>(
+        var notifications = HomeAssistantJson.DeserializeResponseIsolated<HomeAssistantPersistentNotification[]>(
             value,
             "The Home Assistant persistent-notification response could not be decoded.",
-            cancellationToken: cancellationToken);
+            cancellationToken);
         ValidateNotifications(notifications, "The Home Assistant persistent-notification response", cancellationToken);
         return notifications;
     }
@@ -118,41 +118,11 @@ public sealed class HomeAssistantNotificationClient
         JsonElement value,
         CancellationToken token)
     {
-            if (value.ValueKind != JsonValueKind.Object)
-            {
-                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update had an unexpected shape.");
-            }
-
-            var hasType = false;
-            var hasNotifications = false;
-            var typeValue = default(JsonElement);
-            var notificationsValue = default(JsonElement);
-            foreach (var property in value.EnumerateObject())
-            {
-                token.ThrowIfCancellationRequested();
-                if (CancellationAwareString.EqualsOrdinal(property.Name, "type", token))
-                {
-                    if (hasType)
-                        throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate type field.");
-                    hasType = true;
-                    typeValue = property.Value;
-                }
-                else if (CancellationAwareString.EqualsOrdinal(property.Name, "notifications", token))
-                {
-                    if (hasNotifications)
-                        throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notifications field.");
-                    hasNotifications = true;
-                    notificationsValue = property.Value;
-                }
-            }
-
-            if (!hasType
-                || typeValue.ValueKind != JsonValueKind.String
-                || !hasNotifications
-                || notificationsValue.ValueKind != JsonValueKind.Object)
-            {
-                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update had an unexpected shape.");
-            }
+            var shape = HomeAssistantJson.RunCancellationIsolated(
+                () => ReadPersistentUpdateShape(value, token),
+                token);
+            var typeValue = shape.Type;
+            var notificationsValue = shape.Notifications;
 
             var rawType = await HomeAssistantJson.GetStringAsync(typeValue, token).ConfigureAwait(false)
                 ?? string.Empty;
@@ -195,6 +165,46 @@ public sealed class HomeAssistantNotificationClient
             };
     }
 
+    private static (JsonElement Type, JsonElement Notifications) ReadPersistentUpdateShape(
+        JsonElement value,
+        CancellationToken cancellationToken)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+            throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update had an unexpected shape.");
+
+        var hasType = false;
+        var hasNotifications = false;
+        var typeValue = default(JsonElement);
+        var notificationsValue = default(JsonElement);
+        foreach (var property in value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (CancellationAwareString.EqualsOrdinal(property.Name, "type", cancellationToken))
+            {
+                if (hasType)
+                    throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate type field.");
+                hasType = true;
+                typeValue = property.Value;
+            }
+            else if (CancellationAwareString.EqualsOrdinal(property.Name, "notifications", cancellationToken))
+            {
+                if (hasNotifications)
+                    throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notifications field.");
+                hasNotifications = true;
+                notificationsValue = property.Value;
+            }
+        }
+
+        if (!hasType
+            || typeValue.ValueKind != JsonValueKind.String
+            || !hasNotifications
+            || notificationsValue.ValueKind != JsonValueKind.Object)
+            throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update had an unexpected shape.");
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return (typeValue, notificationsValue);
+    }
+
     internal static void ValidateNotifications(
         IEnumerable<HomeAssistantPersistentNotification> notifications,
         string responseName,
@@ -224,28 +234,27 @@ public sealed class HomeAssistantNotificationClient
         cancellationToken.ThrowIfCancellationRequested();
         if (value.ValueKind != JsonValueKind.Object)
             throw new HomeAssistantProtocolException(failureMessage);
-
-        var result = new Dictionary<string, HomeAssistantPersistentNotification>(StringComparer.Ordinal);
-        var identifiers = new List<string>();
-        foreach (var property in value.EnumerateObject())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (identifiers.Any(identifier =>
-                    CancellationAwareString.EqualsOrdinal(identifier, property.Name, cancellationToken)))
-                throw new HomeAssistantProtocolException("The Home Assistant persistent-notification update contained a duplicate notification identifier.");
-            identifiers.Add(property.Name);
-            result.Add(
-                property.Name,
-                HomeAssistantJson.DeserializeResponse<HomeAssistantPersistentNotification>(
-                    property.Value,
-                    failureMessage,
-                    cancellationToken: cancellationToken));
-        }
-        cancellationToken.ThrowIfCancellationRequested();
-        return result;
+        var decoded = HomeAssistantJson.DeserializeResponseIsolated<Dictionary<string, HomeAssistantPersistentNotification>>(
+            value,
+            failureMessage,
+            cancellationToken);
+        return new Dictionary<string, HomeAssistantPersistentNotification>(decoded, StringComparer.Ordinal);
     }
 
-    private static void ValidateNotificationObjects(
+    internal static void ValidateNotificationObjects(
+        JsonElement value,
+        bool dictionary,
+        string responseName,
+        CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                ValidateNotificationObjectsCore(value, dictionary, responseName, cancellationToken);
+                return true;
+            },
+            cancellationToken);
+
+    private static void ValidateNotificationObjectsCore(
         JsonElement value,
         bool dictionary,
         string responseName,
@@ -257,30 +266,50 @@ public sealed class HomeAssistantNotificationClient
             throw new HomeAssistantProtocolException(responseName + " had an unexpected shape.");
         }
 
-        var objects = dictionary
-            ? value.EnumerateObject().Select(property => property.Value)
-            : value.EnumerateArray();
-        foreach (var item in objects)
+        if (dictionary)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (item.ValueKind != JsonValueKind.Object) continue;
-            var names = new HashSet<string>(
+            var identifiers = new HashSet<string>(
                 new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
-            var knownFields = 0;
-            foreach (var property in item.EnumerateObject())
+            foreach (var property in value.EnumerateObject())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!names.Add(property.Name))
-                    throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification field.");
-
-                var field = NotificationField(property.Name, cancellationToken);
-                if (field == 0) continue;
-                if ((knownFields & field) != 0)
-                    throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification field.");
-                knownFields |= field;
+                if (!identifiers.Add(property.Name))
+                    throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification identifier.");
+                ValidateNotificationObject(property.Value, responseName, cancellationToken);
+            }
+        }
+        else
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ValidateNotificationObject(item, responseName, cancellationToken);
             }
         }
         cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void ValidateNotificationObject(
+        JsonElement item,
+        string responseName,
+        CancellationToken cancellationToken)
+    {
+        if (item.ValueKind != JsonValueKind.Object) return;
+        var names = new HashSet<string>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
+        var knownFields = 0;
+        foreach (var property in item.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!names.Add(property.Name))
+                throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification field.");
+
+            var field = NotificationField(property.Name, cancellationToken);
+            if (field == 0) continue;
+            if ((knownFields & field) != 0)
+                throw new HomeAssistantProtocolException(responseName + " contained a duplicate notification field.");
+            knownFields |= field;
+        }
     }
 
     private static int NotificationField(string name, CancellationToken cancellationToken)
