@@ -513,6 +513,9 @@ public sealed class MediaAndRemoteContractTests
     [InlineData("-9223372036854775808", long.MinValue)]
     [InlineData("9.223372036854775807e18", long.MaxValue)]
     [InlineData("-9.223372036854775808e18", long.MinValue)]
+    [InlineData("0.027631033535365E20", 2763103353536500000L)]
+    [InlineData("0000000000000000000000000000000000001e1", 10L)]
+    [InlineData("0e2147483647", 0L)]
     public void IntegralAttributeParserPreservesInt64Boundaries(string value, long expected)
     {
         using var document = JsonDocument.Parse("{\"value\":\"" + value + "\"}");
@@ -522,6 +525,20 @@ public sealed class MediaAndRemoteContractTests
         };
 
         Assert.Equal(expected, HomeAssistantAttributeReader.GetInt64(attributes, "value"));
+    }
+
+    [Theory]
+    [InlineData("0.09223372036854775808e20")]
+    [InlineData("1e19")]
+    public void IntegralAttributeParserRejectsPositiveExponentOverflow(string value)
+    {
+        using var document = JsonDocument.Parse("{\"value\":\"" + value + "\"}");
+        var attributes = new Dictionary<string, JsonElement>
+        {
+            ["value"] = document.RootElement.GetProperty("value").Clone()
+        };
+
+        Assert.Null(HomeAssistantAttributeReader.GetInt64(attributes, "value"));
     }
 
     [Fact]

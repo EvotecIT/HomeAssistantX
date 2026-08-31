@@ -320,9 +320,11 @@ internal static class HomeAssistantAttributeReader
         long totalDigits = 0;
         long fractionalDigits = 0;
         var sawDigit = false;
+        var sawNonZeroDigit = false;
         while (index < end && IsAsciiDigit(value[index]))
         {
             if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            sawNonZeroDigit |= value[index] != '0';
             index++;
             totalDigits++;
             sawDigit = true;
@@ -337,6 +339,7 @@ internal static class HomeAssistantAttributeReader
             while (index < end && IsAsciiDigit(value[index]))
             {
                 if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+                sawNonZeroDigit |= value[index] != '0';
                 index++;
                 totalDigits++;
                 fractionalDigits++;
@@ -372,6 +375,11 @@ internal static class HomeAssistantAttributeReader
 
         cancellationToken.ThrowIfCancellationRequested();
         if (index != end) return false;
+        if (!sawNonZeroDigit)
+        {
+            result = 0;
+            return true;
+        }
         var scale = fractionalDigits - exponent;
         var effectiveLength = totalDigits;
         if (scale > 0)
@@ -381,7 +389,10 @@ internal static class HomeAssistantAttributeReader
         else if (scale < 0)
         {
             var appendedZeroCount = -scale;
-            if (appendedZeroCount > 20 || totalDigits + appendedZeroCount > 20) return false;
+            // Leading source zeroes do not contribute to Int64 magnitude. Bound
+            // only the appended significant zeroes; ConsumeIntegralDigit keeps
+            // the final 19-digit/overflow contract exact.
+            if (appendedZeroCount > 19) return false;
             effectiveLength = totalDigits + appendedZeroCount;
         }
 
