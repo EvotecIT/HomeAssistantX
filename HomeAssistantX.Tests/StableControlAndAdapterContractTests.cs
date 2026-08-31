@@ -223,6 +223,36 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void LightOptionsSnapshotKeepsOneCoherentCopiedOperationState()
+    {
+        var callerRgb = new[] { 10, 20, 30 };
+        var options = new HomeAssistantLightOptions
+        {
+            BrightnessPercent = 40,
+            RgbColor = callerRgb,
+            Effect = "Aurora",
+            Transition = TimeSpan.FromSeconds(2)
+        };
+
+        callerRgb[0] = 255;
+        var exposedRgb = Assert.IsType<int[]>(options.RgbColor);
+        exposedRgb[1] = 255;
+        var snapshot = options.Snapshot(default);
+
+        options.BrightnessPercent = 75;
+        options.RgbColor = null;
+        options.ColorTemperatureKelvin = 3000;
+        options.Effect = "Other";
+        options.Transition = TimeSpan.FromSeconds(5);
+
+        Assert.Equal(40, snapshot.BrightnessPercent);
+        Assert.Equal(new[] { 10, 20, 30 }, snapshot.RgbColor);
+        Assert.Null(snapshot.ColorTemperatureKelvin);
+        Assert.Equal("Aurora", snapshot.Effect);
+        Assert.Equal(TimeSpan.FromSeconds(2), snapshot.Transition);
+    }
+
+    [Fact]
     public async Task RoutineAndHelperControlsKeepDomainsAndValueShapesTyped()
     {
         using var server = new TestHomeAssistantServer();

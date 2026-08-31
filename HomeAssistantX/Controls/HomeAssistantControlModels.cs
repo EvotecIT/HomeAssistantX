@@ -27,6 +27,7 @@ public enum HomeAssistantLockAction
 /// <summary>Typed inputs accepted when a light is turned on or toggled.</summary>
 public sealed class HomeAssistantLightOptions
 {
+    private readonly object _sync = new();
     private double? _brightnessPercent;
     private int? _colorTemperatureKelvin;
     private string? _effect;
@@ -35,81 +36,127 @@ public sealed class HomeAssistantLightOptions
 
     public double? BrightnessPercent
     {
-        get => _brightnessPercent;
-        set => _brightnessPercent = ControlValidation.Percent(value, nameof(BrightnessPercent));
+        get { lock (_sync) return _brightnessPercent; }
+        set
+        {
+            var validated = ControlValidation.Percent(value, nameof(BrightnessPercent));
+            lock (_sync) _brightnessPercent = validated;
+        }
     }
 
     public int? ColorTemperatureKelvin
     {
-        get => _colorTemperatureKelvin;
+        get { lock (_sync) return _colorTemperatureKelvin; }
         set
         {
             var validated = ControlValidation.Positive(value, nameof(ColorTemperatureKelvin));
-            if (validated.HasValue && _rgbColor is not null)
+            lock (_sync)
             {
-                throw new ArgumentException("ColorTemperatureKelvin and RgbColor cannot be combined.", nameof(ColorTemperatureKelvin));
-            }
+                if (validated.HasValue && _rgbColor is not null)
+                {
+                    throw new ArgumentException("ColorTemperatureKelvin and RgbColor cannot be combined.", nameof(ColorTemperatureKelvin));
+                }
 
-            _colorTemperatureKelvin = validated;
+                _colorTemperatureKelvin = validated;
+            }
         }
     }
 
     public IReadOnlyList<int>? RgbColor
     {
-        get => _rgbColor;
+        get
+        {
+            lock (_sync) return _rgbColor?.ToArray();
+        }
         set
         {
             var validated = ControlValidation.Rgb(value, nameof(RgbColor));
-            if (validated is not null && _colorTemperatureKelvin.HasValue)
+            lock (_sync)
             {
-                throw new ArgumentException("RgbColor and ColorTemperatureKelvin cannot be combined.", nameof(RgbColor));
-            }
+                if (validated is not null && _colorTemperatureKelvin.HasValue)
+                {
+                    throw new ArgumentException("RgbColor and ColorTemperatureKelvin cannot be combined.", nameof(RgbColor));
+                }
 
-            _rgbColor = validated;
+                _rgbColor = validated;
+            }
         }
     }
 
     public string? Effect
     {
-        get => _effect;
-        set => _effect = value is null
-            ? null
-            : ControlValidation.RequiredUnchanged(value, nameof(Effect));
+        get { lock (_sync) return _effect; }
+        set
+        {
+            var validated = value is null
+                ? null
+                : ControlValidation.RequiredUnchanged(value, nameof(Effect));
+            lock (_sync) _effect = validated;
+        }
     }
 
     public TimeSpan? Transition
     {
-        get => _transition;
-        set => _transition = ControlValidation.Duration(value, nameof(Transition), TimeSpan.FromSeconds(6553));
+        get { lock (_sync) return _transition; }
+        set
+        {
+            var validated = ControlValidation.Duration(value, nameof(Transition), TimeSpan.FromSeconds(6553));
+            lock (_sync) _transition = validated;
+        }
     }
 
-    internal void SetValidatedEffect(string? value) => _effect = value;
+    internal void SetValidatedEffect(string? value)
+    {
+        lock (_sync) _effect = value;
+    }
+
+    internal HomeAssistantLightOptions Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantLightOptions
+            {
+                _brightnessPercent = _brightnessPercent,
+                _colorTemperatureKelvin = _colorTemperatureKelvin,
+                _effect = _effect,
+                _rgbColor = _rgbColor?.ToArray(),
+                _transition = _transition
+            };
+        }
+    }
 
     internal void Apply(HomeAssistantX.Services.HomeAssistantServiceCall call)
     {
-        if (BrightnessPercent.HasValue)
+        var brightnessPercent = BrightnessPercent;
+        var colorTemperatureKelvin = ColorTemperatureKelvin;
+        var rgbColor = RgbColor;
+        var effect = Effect;
+        var transition = Transition;
+        if (brightnessPercent.HasValue)
         {
-            call.WithData("brightness_pct", BrightnessPercent.Value);
+            call.WithData("brightness_pct", brightnessPercent.Value);
         }
 
-        if (ColorTemperatureKelvin.HasValue)
+        if (colorTemperatureKelvin.HasValue)
         {
-            call.WithData("color_temp_kelvin", ColorTemperatureKelvin.Value);
+            call.WithData("color_temp_kelvin", colorTemperatureKelvin.Value);
         }
 
-        if (RgbColor is not null)
+        if (rgbColor is not null)
         {
-            call.WithData("rgb_color", RgbColor);
+            call.WithData("rgb_color", rgbColor);
         }
 
-        if (Effect is not null)
+        if (effect is not null)
         {
-            call.WithData("effect", Effect);
+            call.WithData("effect", effect);
         }
 
-        if (Transition.HasValue)
+        if (transition.HasValue)
         {
-            call.WithData("transition", Transition.Value.TotalSeconds);
+            call.WithData("transition", transition.Value.TotalSeconds);
         }
     }
 }

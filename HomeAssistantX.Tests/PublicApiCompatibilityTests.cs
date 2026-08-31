@@ -268,6 +268,21 @@ public sealed class PublicApiCompatibilityTests
         Assert.Contains("get-platform(SupportedOSPlatform:\"windows10.0\")", contract, StringComparison.Ordinal);
         Assert.Contains("set-platform(UnsupportedOSPlatform:\"browser\")", contract, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void SurfacePreservesNonPublicJsonAccessorOwnershipAndMetadata()
+    {
+        var property = typeof(NonPublicJsonIncludeFixture).GetProperty(
+            "MixedVisibility",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var contract = FormatProperty(property);
+
+        Assert.StartsWith("P internal instance ", contract, StringComparison.Ordinal);
+        Assert.Contains("get-platform(SupportedOSPlatform:\"windows10.0\")", contract, StringComparison.Ordinal);
+        Assert.Contains("set-platform(UnsupportedOSPlatform:\"browser\")", contract, StringComparison.Ordinal);
+        Assert.EndsWith(" {private get;set;}", contract, StringComparison.Ordinal);
+        Assert.Contains("  " + contract, BuildSurface(typeof(PublicApiCompatibilityTests).Assembly), StringComparison.Ordinal);
+    }
 #endif
 
     [Fact]
@@ -1505,8 +1520,9 @@ public sealed class PublicApiCompatibilityTests
     private static string FormatProperty(PropertyInfo property)
     {
         var accessor = MostAccessible(property.GetMethod, property.SetMethod)!;
-        var getter = IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
-        var setter = IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
+        var includeNonPublic = HasJsonInclude(property);
+        var getter = includeNonPublic || IsExternallyAccessibleMethod(property.GetMethod) ? property.GetMethod : null;
+        var setter = includeNonPublic || IsExternallyAccessibleMethod(property.SetMethod) ? property.SetMethod : null;
         return "P " + MemberAccess(accessor) + MemberScope(accessor) + " " + SpecialNameContract(property) + ObsoleteContract(property)
             + ExperimentalContract(property, getter, setter) + PreviewFeatureContract(property, getter, setter) + PlatformContract(property)
             + NamedPlatformContract("get", getter) + NamedPlatformContract("set", setter) + RequiresCodeContract(property, getter, setter)
@@ -1807,7 +1823,7 @@ public sealed class PublicApiCompatibilityTests
         public string Converted = string.Empty;
     }
 
-    private sealed class NonPublicJsonIncludeFixture
+    public sealed class NonPublicJsonIncludeFixture
     {
         [JsonInclude]
         private string IncludedField = string.Empty;
@@ -1818,6 +1834,17 @@ public sealed class PublicApiCompatibilityTests
         private string IncludedProperty { get; set; } = string.Empty;
 
         private string OmittedProperty { get; set; } = string.Empty;
+
+#if NET10_0
+        [JsonInclude]
+        internal string MixedVisibility
+        {
+            [System.Runtime.Versioning.SupportedOSPlatform("windows10.0")]
+            private get;
+            [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
+            set;
+        } = string.Empty;
+#endif
     }
 
     private sealed class JsonPropertyOrderFixture
@@ -3182,7 +3209,12 @@ public sealed class PublicApiCompatibilityTests
     }
 
     private static int AccessRank(MethodBase method)
-        => method.IsPublic ? 3 : method.IsFamilyOrAssembly ? 2 : method.IsFamily ? 1 : 0;
+        => method.IsPublic ? 6
+            : method.IsFamilyOrAssembly ? 5
+            : method.IsFamily ? 4
+            : method.IsAssembly ? 3
+            : method.IsFamilyAndAssembly ? 2
+            : 1;
 
     private static string MemberAccess(MethodBase method)
         => method.IsPublic ? string.Empty
