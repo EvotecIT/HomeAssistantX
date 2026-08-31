@@ -115,10 +115,9 @@ public sealed class HomeAssistantEnergyClient
                 throw new HomeAssistantProtocolException("The Home Assistant solar forecast contained a duplicate configuration-entry identifier.");
             }
 
-            result.Add(property.Name, HomeAssistantJson.DeserializeResponse<JsonElement>(
-                property.Value,
-                "A Home Assistant solar-forecast entry could not be decoded.",
-                cancellationToken: cancellationToken));
+            // The child retains the transport-owned parent document, avoiding a
+            // second response-sized clone or one isolated worker per provider.
+            result.Add(property.Name, property.Value);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
