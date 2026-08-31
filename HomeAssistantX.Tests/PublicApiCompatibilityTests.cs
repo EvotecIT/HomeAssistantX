@@ -799,6 +799,24 @@ public sealed class PublicApiCompatibilityTests
     }
 
     [Fact]
+    public void MemberFormatterIncludesNonPublicJsonWireMembers()
+    {
+        const BindingFlags members = BindingFlags.Instance | BindingFlags.NonPublic;
+        var field = typeof(NonPublicJsonIncludeFixture).GetField("IncludedField", members)!;
+        var property = typeof(NonPublicJsonIncludeFixture).GetProperty("IncludedProperty", members)!;
+        var omittedField = typeof(NonPublicJsonIncludeFixture).GetField("OmittedField", members)!;
+        var omittedProperty = typeof(NonPublicJsonIncludeFixture).GetProperty("OmittedProperty", members)!;
+
+        Assert.True(ShouldIncludeField(field));
+        Assert.True(ShouldIncludeProperty(property));
+        Assert.False(ShouldIncludeField(omittedField));
+        Assert.False(ShouldIncludeProperty(omittedProperty));
+        Assert.Contains("F private instance json-include ", FormatField(field), StringComparison.Ordinal);
+        Assert.Contains("P private instance json-include ", FormatProperty(property), StringComparison.Ordinal);
+        Assert.EndsWith(" {get;set;}", FormatProperty(property), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FieldFormatterPreservesJsonWireNamesAndDerivedConverterAttributes()
     {
         var wireName = typeof(JsonFieldFixture).GetField(nameof(JsonFieldFixture.WireName))!;
@@ -1050,11 +1068,11 @@ public sealed class PublicApiCompatibilityTests
                          .OrderBy(FormatMethod, StringComparer.Ordinal))
                 lines.Add("  " + FormatConstructor(constructor));
             foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                         .Where(IsExternallyAccessibleField)
+                         .Where(ShouldIncludeField)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
                 lines.Add("  " + FormatField(field));
             foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                         .Where(IsExternallyAccessibleProperty)
+                         .Where(ShouldIncludeProperty)
                          .OrderBy(value => value.Name, StringComparer.Ordinal))
             {
                 lines.Add("  " + FormatProperty(property));
@@ -1761,12 +1779,15 @@ public sealed class PublicApiCompatibilityTests
             : string.Empty;
 
     private static string JsonIncludeContract(MemberInfo member)
+        => HasJsonInclude(member)
+            ? "json-include "
+            : string.Empty;
+
+    private static bool HasJsonInclude(MemberInfo member)
         => member.CustomAttributes.Any(attribute => string.Equals(
             attribute.AttributeType.FullName,
             typeof(JsonIncludeAttribute).FullName,
-            StringComparison.Ordinal))
-            ? "json-include "
-            : string.Empty;
+            StringComparison.Ordinal));
 
     private sealed class JsonFieldFixture
     {
@@ -1784,6 +1805,19 @@ public sealed class PublicApiCompatibilityTests
 
         [DerivedJsonConverter]
         public string Converted = string.Empty;
+    }
+
+    private sealed class NonPublicJsonIncludeFixture
+    {
+        [JsonInclude]
+        private string IncludedField = string.Empty;
+
+        private string OmittedField = string.Empty;
+
+        [JsonInclude]
+        private string IncludedProperty { get; set; } = string.Empty;
+
+        private string OmittedProperty { get; set; } = string.Empty;
     }
 
     private sealed class JsonPropertyOrderFixture
@@ -3040,8 +3074,9 @@ public sealed class PublicApiCompatibilityTests
         var representativeAccessor = MostAccessible(property.GetMethod, property.SetMethod)!;
         var propertyAccess = MemberAccess(representativeAccessor);
         var propertyScope = MemberScope(representativeAccessor);
-        var getter = FormatAccessor(property.GetMethod, propertyAccess, propertyScope, "get;");
-        if (!IsExternallyAccessibleMethod(property.SetMethod)) return getter;
+        var includeNonPublic = HasJsonInclude(property);
+        var getter = FormatAccessor(property.GetMethod, propertyAccess, propertyScope, "get;", includeNonPublic);
+        if (property.SetMethod is null || (!includeNonPublic && !IsExternallyAccessibleMethod(property.SetMethod))) return getter;
 
         var isInitOnly = property.SetMethod!.ReturnParameter
             .GetRequiredCustomModifiers()
@@ -3049,7 +3084,12 @@ public sealed class PublicApiCompatibilityTests
                 modifier.FullName,
                 "System.Runtime.CompilerServices.IsExternalInit",
                 StringComparison.Ordinal));
-        return getter + FormatAccessor(property.SetMethod, propertyAccess, propertyScope, isInitOnly ? "init;" : "set;");
+        return getter + FormatAccessor(
+            property.SetMethod,
+            propertyAccess,
+            propertyScope,
+            isInitOnly ? "init;" : "set;",
+            includeNonPublic);
     }
 
     private static string FormatEventAccessors(EventInfo eventInfo)
@@ -3120,8 +3160,14 @@ public sealed class PublicApiCompatibilityTests
     private static bool IsExternallyAccessibleField(FieldInfo field)
         => field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly;
 
+    private static bool ShouldIncludeField(FieldInfo field)
+        => IsExternallyAccessibleField(field) || HasJsonInclude(field);
+
     private static bool IsExternallyAccessibleProperty(PropertyInfo property)
         => IsExternallyAccessibleMethod(property.GetMethod) || IsExternallyAccessibleMethod(property.SetMethod);
+
+    private static bool ShouldIncludeProperty(PropertyInfo property)
+        => IsExternallyAccessibleProperty(property) || HasJsonInclude(property);
 
     private static bool IsExternallyAccessibleEvent(EventInfo eventInfo)
         => IsExternallyAccessibleMethod(eventInfo.AddMethod)
@@ -3139,18 +3185,29 @@ public sealed class PublicApiCompatibilityTests
         => method.IsPublic ? 3 : method.IsFamilyOrAssembly ? 2 : method.IsFamily ? 1 : 0;
 
     private static string MemberAccess(MethodBase method)
-        => method.IsPublic ? string.Empty : method.IsFamilyOrAssembly ? "protected internal " : "protected ";
+        => method.IsPublic ? string.Empty
+            : method.IsFamilyOrAssembly ? "protected internal "
+            : method.IsFamilyAndAssembly ? "private protected "
+            : method.IsFamily ? "protected "
+            : method.IsAssembly ? "internal "
+            : "private ";
 
     private static string FieldAccess(FieldInfo field)
-        => field.IsPublic ? string.Empty : field.IsFamilyOrAssembly ? "protected internal " : "protected ";
+        => field.IsPublic ? string.Empty
+            : field.IsFamilyOrAssembly ? "protected internal "
+            : field.IsFamilyAndAssembly ? "private protected "
+            : field.IsFamily ? "protected "
+            : field.IsAssembly ? "internal "
+            : "private ";
 
     private static string FormatAccessor(
         MethodInfo? accessor,
         string propertyAccess,
         string propertyScope,
-        string text)
+        string text,
+        bool includeNonPublic = false)
     {
-        if (!IsExternallyAccessibleMethod(accessor)) return string.Empty;
+        if (accessor is null || (!includeNonPublic && !IsExternallyAccessibleMethod(accessor))) return string.Empty;
         var accessorAccess = MemberAccess(accessor!);
         var accessorScope = MemberScope(accessor!);
         var independentScope = string.Equals(accessorScope, propertyScope, StringComparison.Ordinal)

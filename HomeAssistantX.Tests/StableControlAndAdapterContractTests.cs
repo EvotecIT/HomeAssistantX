@@ -201,6 +201,28 @@ public sealed class StableControlAndAdapterContractTests
     }
 
     [Fact]
+    public void SirenOptionsSnapshotKeepsOneCoherentOperationState()
+    {
+        var options = new HomeAssistantSirenOptions
+        {
+            Tone = "alarm",
+            VolumePercent = 40,
+            Duration = TimeSpan.FromSeconds(5)
+        };
+
+        var snapshot = options.Snapshot(default);
+        options.Tone = null;
+        options.ToneId = 2;
+        options.VolumePercent = 75;
+        options.Duration = TimeSpan.FromSeconds(10);
+
+        Assert.Equal("alarm", snapshot.Tone);
+        Assert.Null(snapshot.ToneId);
+        Assert.Equal(40, snapshot.VolumePercent);
+        Assert.Equal(TimeSpan.FromSeconds(5), snapshot.Duration);
+    }
+
+    [Fact]
     public async Task RoutineAndHelperControlsKeepDomainsAndValueShapesTyped()
     {
         using var server = new TestHomeAssistantServer();

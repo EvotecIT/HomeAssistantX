@@ -22,6 +22,7 @@ public enum HomeAssistantSirenAction
 
 public sealed class HomeAssistantSirenOptions
 {
+    private readonly object _sync = new();
     private double? _volumePercent;
     private TimeSpan? _duration;
     private string? _tone;
@@ -29,49 +30,83 @@ public sealed class HomeAssistantSirenOptions
 
     public string? Tone
     {
-        get => _tone;
+        get { lock (_sync) return _tone; }
         set
         {
-            if (value is null)
+            lock (_sync)
             {
-                _tone = null;
-                return;
-            }
+                if (value is null)
+                {
+                    _tone = null;
+                    return;
+                }
 
-            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Tone cannot be blank.", nameof(Tone));
-            if (_toneId.HasValue) throw new ArgumentException("Tone and ToneId cannot be combined.", nameof(Tone));
-            _tone = value;
+                if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Tone cannot be blank.", nameof(Tone));
+                if (_toneId.HasValue) throw new ArgumentException("Tone and ToneId cannot be combined.", nameof(Tone));
+                _tone = value;
+            }
         }
     }
 
     public int? ToneId
     {
-        get => _toneId;
+        get { lock (_sync) return _toneId; }
         set
         {
-            if (value.HasValue && _tone is not null) throw new ArgumentException("ToneId and Tone cannot be combined.", nameof(ToneId));
-            _toneId = value;
+            lock (_sync)
+            {
+                if (value.HasValue && _tone is not null) throw new ArgumentException("ToneId and Tone cannot be combined.", nameof(ToneId));
+                _toneId = value;
+            }
         }
     }
 
     public double? VolumePercent
     {
-        get => _volumePercent;
-        set => _volumePercent = ControlValidation.Percent(value, nameof(VolumePercent));
+        get { lock (_sync) return _volumePercent; }
+        set
+        {
+            var validated = ControlValidation.Percent(value, nameof(VolumePercent));
+            lock (_sync) _volumePercent = validated;
+        }
     }
 
     public TimeSpan? Duration
     {
-        get => _duration;
+        get { lock (_sync) return _duration; }
         set
         {
             if (value.HasValue && (value.Value <= TimeSpan.Zero || value.Value.TotalSeconds > int.MaxValue || value.Value.TotalSeconds != Math.Truncate(value.Value.TotalSeconds)))
                 throw new ArgumentOutOfRangeException(nameof(Duration), "Siren duration must be a positive whole number of seconds.");
-            _duration = value;
+            lock (_sync) _duration = value;
         }
     }
 
-    internal void SetValidatedTone(string? value) => _tone = value;
+    internal void SetValidatedTone(string? value)
+    {
+        lock (_sync)
+        {
+            if (value is not null && _toneId.HasValue)
+                throw new ArgumentException("Tone and ToneId cannot be combined.", nameof(Tone));
+            _tone = value;
+        }
+    }
+
+    internal HomeAssistantSirenOptions Snapshot(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new HomeAssistantSirenOptions
+            {
+                _tone = _tone,
+                _toneId = _toneId,
+                _volumePercent = _volumePercent,
+                _duration = _duration
+            };
+        }
+    }
 }
 
 /// <summary>Controls alarm panels; callers remain responsible for product authorization and confirmation policy.</summary>
@@ -113,10 +148,11 @@ public sealed class HomeAssistantSirenClient : HomeAssistantControlClientBase
             throw new ArgumentException("Siren options are valid only when turning a siren on.", nameof(options));
         }
 
-        var tone = options?.Tone;
-        var toneId = options?.ToneId;
-        var volumePercent = options?.VolumePercent;
-        var duration = options?.Duration;
+        var frozenOptions = options?.Snapshot(cancellationToken);
+        var tone = frozenOptions?.Tone;
+        var toneId = frozenOptions?.ToneId;
+        var volumePercent = frozenOptions?.VolumePercent;
+        var duration = frozenOptions?.Duration;
         if (tone is not null)
         {
             tone = ControlValidation.RequiredUnchanged(tone, nameof(options), cancellationToken);
