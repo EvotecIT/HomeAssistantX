@@ -599,12 +599,19 @@ public sealed class HomeAssistantRegistryClient
     private static bool HasDuplicateRegistryArrayProperties(
         JsonElement value,
         CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => HasDuplicateRegistryArrayPropertiesCore(value, cancellationToken),
+            cancellationToken);
+
+    private static bool HasDuplicateRegistryArrayPropertiesCore(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
         foreach (var entry in value.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (entry.ValueKind == JsonValueKind.Object
-                && HomeAssistantJson.HasDuplicateObjectProperties(entry, cancellationToken)) return true;
+                && HomeAssistantJson.HasDuplicateObjectPropertiesInline(entry, cancellationToken)) return true;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -614,13 +621,20 @@ public sealed class HomeAssistantRegistryClient
     private static bool HasDuplicateRegistryMapProperties(
         JsonElement value,
         CancellationToken cancellationToken)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => HasDuplicateRegistryMapPropertiesCore(value, cancellationToken),
+            cancellationToken);
+
+    private static bool HasDuplicateRegistryMapPropertiesCore(
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
-        if (HomeAssistantJson.HasDuplicateObjectProperties(value, cancellationToken)) return true;
+        if (HomeAssistantJson.HasDuplicateObjectPropertiesInline(value, cancellationToken)) return true;
         foreach (var entry in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (entry.Value.ValueKind == JsonValueKind.Object
-                && HomeAssistantJson.HasDuplicateObjectProperties(entry.Value, cancellationToken)) return true;
+                && HomeAssistantJson.HasDuplicateObjectPropertiesInline(entry.Value, cancellationToken)) return true;
         }
 
         cancellationToken.ThrowIfCancellationRequested();

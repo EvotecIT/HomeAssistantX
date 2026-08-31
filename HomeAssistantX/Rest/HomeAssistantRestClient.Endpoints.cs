@@ -107,10 +107,26 @@ public sealed partial class HomeAssistantRestClient
             throw new HomeAssistantProtocolException(
                 "The Home Assistant calendar list contained duplicate properties or was not an array.");
         }
+        var hasDuplicateCalendarProperties = HomeAssistantJson.RunCancellationIsolated(
+            () =>
+            {
+                foreach (var rawCalendar in rawCalendars.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (rawCalendar.ValueKind == JsonValueKind.Object
+                        && HomeAssistantJson.HasDuplicateObjectPropertiesInline(rawCalendar, cancellationToken)) return true;
+                }
+
+                return false;
+            },
+            cancellationToken);
+        if (hasDuplicateCalendarProperties)
+            throw new HomeAssistantProtocolException(
+                "The Home Assistant calendar list contained duplicate properties or was not an array.");
         foreach (var rawCalendar in rawCalendars.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (HomeAssistantJson.HasDuplicateObjectProperties(rawCalendar, cancellationToken))
+            if (rawCalendar.ValueKind != JsonValueKind.Object)
             {
                 throw new HomeAssistantProtocolException(
                     "The Home Assistant calendar list contained duplicate properties or was not an array.");
