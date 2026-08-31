@@ -63,6 +63,25 @@ internal static partial class HomeAssistantAtomicFile
         Action? beforeUnixMetadataRecheck,
         Action? beforeWindowsNoReplaceMove,
         Action? afterUnixExchange)
+        => CommitTemporaryFile(
+            temporaryPath,
+            destinationPath,
+            overwrite,
+            cancellationToken,
+            beforeUnixMetadataRecheck,
+            beforeWindowsNoReplaceMove,
+            afterUnixExchange,
+            beforeUnixCommit: null);
+
+    internal static void CommitTemporaryFile(
+        string temporaryPath,
+        string destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken,
+        Action? beforeUnixMetadataRecheck,
+        Action? beforeWindowsNoReplaceMove,
+        Action? afterUnixExchange,
+        Action? beforeUnixCommit)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!overwrite)
@@ -95,7 +114,8 @@ internal static partial class HomeAssistantAtomicFile
             destinationPath,
             cancellationToken,
             beforeUnixMetadataRecheck,
-            afterUnixExchange);
+            afterUnixExchange,
+            beforeUnixCommit);
     }
 
     internal static FileStream CreateSecureTemporaryFileStream(string temporaryPath)

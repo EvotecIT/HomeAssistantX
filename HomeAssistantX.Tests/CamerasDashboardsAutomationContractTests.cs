@@ -1987,6 +1987,42 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnixAtomicExportsRecheckCancellationImmediatelyBeforeCommit(bool destinationExists)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Path.Combine(Path.GetTempPath(), "homeassistantx-canceled-unix-commit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var destination = Path.Combine(directory, "destination.bin");
+        var temporary = Path.Combine(directory, "temporary.bin");
+        try
+        {
+            if (destinationExists) File.WriteAllBytes(destination, new byte[] { 1 });
+            File.WriteAllBytes(temporary, new byte[] { 2 });
+            using var cancellation = new CancellationTokenSource();
+
+            Assert.ThrowsAny<OperationCanceledException>(() => HomeAssistantAtomicFile.CommitTemporaryFile(
+                temporary,
+                destination,
+                overwrite: true,
+                cancellation.Token,
+                beforeUnixMetadataRecheck: null,
+                beforeWindowsNoReplaceMove: null,
+                afterUnixExchange: null,
+                beforeUnixCommit: cancellation.Cancel));
+
+            Assert.Equal(destinationExists, File.Exists(destination));
+            if (destinationExists) Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(destination));
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData("House-main")]
     [InlineData("house--main")]
     [InlineData(" house-main ")]
@@ -2137,6 +2173,20 @@ public sealed class CamerasDashboardsAutomationContractTests
         using var client = TestClientFactory.Create(server);
 
         Assert.Equal(route, Assert.Single(await client.Dashboards.GetPanelsAsync()).UrlPath);
+    }
+
+    [Fact]
+    public async Task PanelResponsesPreserveLongNativeComponentNames()
+    {
+        var componentName = "custom_" + new string('a', 1024);
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"custom\":{\"component_name\":\"" + componentName
+                + "\",\"require_admin\":false}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(componentName, Assert.Single(await client.Dashboards.GetPanelsAsync()).ComponentName);
     }
 
     [Fact]

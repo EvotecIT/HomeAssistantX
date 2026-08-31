@@ -52,7 +52,7 @@ public sealed class HomeAssistantDashboardClient
             }
             if (string.IsNullOrWhiteSpace(panel.UrlPath))
                 throw new HomeAssistantProtocolException("A frontend panel did not contain its required fields.");
-            panel.ComponentName = RequireResponseSelector(
+            panel.ComponentName = RequireResponsePanelComponentName(
                 panel.ComponentName,
                 "A frontend panel contained a noncanonical component name.",
                 cancellationToken);
@@ -444,6 +444,16 @@ public sealed class HomeAssistantDashboardClient
         }
         cancellationToken.ThrowIfCancellationRequested();
         return found;
+    }
+
+    private static string RequireResponsePanelComponentName(
+        string? value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        if (!IsCanonicalTrimmed(value, cancellationToken))
+            throw new HomeAssistantProtocolException(failureMessage);
+        return value!;
     }
 
     internal static void RequireDashboardVisibility(

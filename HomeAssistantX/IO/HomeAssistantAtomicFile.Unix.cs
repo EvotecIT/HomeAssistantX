@@ -48,7 +48,8 @@ internal static partial class HomeAssistantAtomicFile
         string destinationPath,
         CancellationToken cancellationToken,
         Action? beforeMetadataRecheck,
-        Action? afterExchange)
+        Action? afterExchange,
+        Action? beforeCommit)
     {
         cancellationToken.ThrowIfCancellationRequested();
         beforeMetadataRecheck?.Invoke();
@@ -62,6 +63,8 @@ internal static partial class HomeAssistantAtomicFile
         {
             try
             {
+                beforeCommit?.Invoke();
+                cancellationToken.ThrowIfCancellationRequested();
                 File.Move(temporaryPath, destinationPath);
                 return;
             }
@@ -79,6 +82,8 @@ internal static partial class HomeAssistantAtomicFile
             throw new IOException("The Unix destination must be a regular file or symbolic link.");
         }
 
+        beforeCommit?.Invoke();
+        cancellationToken.ThrowIfCancellationRequested();
         var exchangeResult = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
             ? RenameMac(temporaryPath, destinationPath, MacRenameSwap)
             : RenameLinux(
@@ -156,6 +161,8 @@ internal static partial class HomeAssistantAtomicFile
         {
             try
             {
+                beforeCommit?.Invoke();
+                cancellationToken.ThrowIfCancellationRequested();
                 File.Move(temporaryPath, destinationPath);
                 return;
             }
