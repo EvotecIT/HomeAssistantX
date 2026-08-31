@@ -247,10 +247,20 @@ internal static class HomeAssistantAttributeReader
     }
 
     private static string? DecodeString(JsonElement value, CancellationToken cancellationToken)
-        => HomeAssistantJson.RunCancellationIsolated(value.GetString, cancellationToken);
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = value.GetString();
+        ObserveString(result, cancellationToken);
+        return result;
+    }
 
     private static string DecodeRawText(JsonElement value, CancellationToken cancellationToken)
-        => HomeAssistantJson.RunCancellationIsolated(value.GetRawText, cancellationToken);
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = value.GetRawText();
+        ObserveString(result, cancellationToken);
+        return result;
+    }
 
     private static bool IsFinite(double value)
     {
