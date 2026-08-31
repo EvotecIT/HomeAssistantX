@@ -127,9 +127,10 @@ internal static partial class HomeAssistantAtomicFile
                 var rollbackError = new Win32Exception(Marshal.GetLastWin32Error());
                 throw new HomeAssistantAtomicCommitException(
                     "The Unix replacement could not be completed or rolled back. "
-                    + "The displaced original remains at the temporary path and was preserved for recovery.",
+                    + "The displaced original was preserved for recovery at '" + temporaryPath + "'.",
                     new AggregateException(commitException, rollbackError),
-                    preserveTemporaryFile: true);
+                    preserveTemporaryFile: true,
+                    recoveryPath: temporaryPath);
             }
             return;
         }

@@ -2058,6 +2058,35 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void AtomicRollbackFailuresExposeTheExactRecoveryPath()
+    {
+        var recoveryPath = Path.Combine(Path.GetTempPath(), "homeassistantx-recovery-file");
+        var exception = new HomeAssistantAtomicCommitException(
+            "The original could not be restored; recover it from '" + recoveryPath + "'.",
+            new IOException("rollback failed"),
+            preserveTemporaryFile: true,
+            recoveryPath);
+
+        Assert.True(exception.PreserveTemporaryFile);
+        Assert.Equal(recoveryPath, exception.RecoveryPath);
+        Assert.Contains(recoveryPath, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PanelResponsesPreserveLongNativeFrontendRoutes()
+    {
+        var route = "custom/" + new string('a', 300);
+        using var server = new TestHomeAssistantServer
+        {
+            FrontendPanelsResponseJson = "{\"" + route + "\":{\"url_path\":\"" + route
+                + "\",\"component_name\":\"custom\",\"require_admin\":false}}"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        Assert.Equal(route, Assert.Single(await client.Dashboards.GetPanelsAsync()).UrlPath);
+    }
+
+    [Fact]
     public async Task PanelResponsesAllowOmittedOptionalVisibilityBooleans()
     {
         using var server = new TestHomeAssistantServer

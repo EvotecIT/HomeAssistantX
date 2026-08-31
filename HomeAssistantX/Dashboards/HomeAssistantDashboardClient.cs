@@ -27,7 +27,7 @@ public sealed class HomeAssistantDashboardClient
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var route = RequireResponseSelector(property.Name, "A frontend panel contained an invalid route.", cancellationToken);
+            var route = RequireResponsePanelRoute(property.Name, "A frontend panel contained an invalid route.", cancellationToken);
             if (!routes.Add(route))
                 throw new HomeAssistantProtocolException("The frontend panel response contained a duplicate route.");
             var embeddedRoute = RequirePanelBooleans(property.Value, cancellationToken);
@@ -43,7 +43,7 @@ public sealed class HomeAssistantDashboardClient
             {
                 if (embeddedRoute.ValueKind != JsonValueKind.String)
                     throw new HomeAssistantProtocolException("A frontend panel contained an invalid route.");
-                panel.UrlPath = RequireResponseSelector(
+                panel.UrlPath = RequireResponsePanelRoute(
                     embeddedRoute.GetString(),
                     "A frontend panel contained an invalid route.",
                     cancellationToken);
@@ -573,6 +573,16 @@ public sealed class HomeAssistantDashboardClient
             || !string.Equals(value, selector, StringComparison.Ordinal))
             throw new HomeAssistantProtocolException(failureMessage);
         return selector;
+    }
+
+    private static string RequireResponsePanelRoute(
+        string? value,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        if (!IsCanonicalTrimmed(value, cancellationToken))
+            throw new HomeAssistantProtocolException(failureMessage);
+        return value!;
     }
 
     private static string RequireIcon(string value, string parameterName, CancellationToken cancellationToken)

@@ -95,6 +95,18 @@ internal static class CancellationAwareString
         return combined;
     }
 
+    internal static bool Contains(string value, char character, CancellationToken cancellationToken)
+    {
+        if (value is null) throw new ArgumentNullException(nameof(value));
+        for (var index = 0; index < value.Length; index++)
+        {
+            if ((index & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (value[index] == character) return true;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return false;
+    }
+
     internal static bool EqualsOrdinal(
         string? left,
         string? right,

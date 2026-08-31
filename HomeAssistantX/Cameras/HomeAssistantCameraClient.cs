@@ -264,10 +264,10 @@ public sealed class HomeAssistantCameraClient
         var signedPath = await _system.SignPathAsync(path, expiration, cancellationToken).ConfigureAwait(false);
         if (!width.HasValue) return signedPath;
 
-        var separator = signedPath.IndexOf('?') >= 0 ? "&" : "?";
-        return signedPath + separator
-            + "width=" + width.Value.ToString(CultureInfo.InvariantCulture)
+        var separator = CancellationAwareString.Contains(signedPath, '?', cancellationToken) ? "&" : "?";
+        var options = "width=" + width.Value.ToString(CultureInfo.InvariantCulture)
             + "&height=" + height!.Value.ToString(CultureInfo.InvariantCulture);
+        return CancellationAwareString.Concat(signedPath, separator, options, cancellationToken);
     }
 
     public async Task<string> GetSignedMjpegStreamPathAsync(string entityId, TimeSpan? expiration = null, double? intervalSeconds = null, CancellationToken cancellationToken = default)
@@ -279,8 +279,9 @@ public sealed class HomeAssistantCameraClient
         var signedPath = await _system.SignPathAsync(path, expiration, cancellationToken).ConfigureAwait(false);
         if (!intervalSeconds.HasValue) return signedPath;
 
-        var separator = signedPath.IndexOf('?') >= 0 ? "&" : "?";
-        return signedPath + separator + "interval=" + intervalSeconds.Value.ToString("R", CultureInfo.InvariantCulture);
+        var separator = CancellationAwareString.Contains(signedPath, '?', cancellationToken) ? "&" : "?";
+        var options = "interval=" + intervalSeconds.Value.ToString("R", CultureInfo.InvariantCulture);
+        return CancellationAwareString.Concat(signedPath, separator, options, cancellationToken);
     }
 
     public Task<IHomeAssistantSubscription> SubscribeAsync(Func<HomeAssistantCameraStateChange, CancellationToken, Task> handler, CancellationToken cancellationToken = default)
