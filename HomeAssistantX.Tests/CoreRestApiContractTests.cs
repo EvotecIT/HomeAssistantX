@@ -64,6 +64,19 @@ public sealed class CoreRestApiContractTests
     }
 
     [Theory]
+    [InlineData("[{\"summary\":\" \",\"start\":{\"dateTime\":\"2026-08-25T18:00:00+02:00\"},\"end\":{\"dateTime\":\"2026-08-25T20:00:00+02:00\"}}]")]
+    [InlineData("[{\"summary\":\"Dinner\",\"start\":{\"dateTime\":\"2026-08-25T20:00:00+02:00\"},\"end\":{\"dateTime\":\"2026-08-25T18:00:00+02:00\"}}]")]
+    public async Task DirectCalendarRestEndpointRejectsMalformedEvents(string response)
+    {
+        using var server = new TestHomeAssistantServer { CalendarEventsResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+        var start = new DateTimeOffset(2026, 8, 25, 0, 0, 0, TimeSpan.Zero);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Rest.GetCalendarEventsAsync("calendar.home", start, start.AddDays(1)));
+    }
+
+    [Theory]
     [InlineData("[null]")]
     [InlineData("[{\"entity_id\":\"light.kitchen\",\"name\":\"Wrong domain\"}]")]
     [InlineData("[{\"entity_id\":\" calendar.home \",\"name\":\"Padded\"}]")]

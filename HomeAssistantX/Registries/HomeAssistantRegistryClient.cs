@@ -31,6 +31,7 @@ public sealed class HomeAssistantRegistryClient
             "entity registry",
             cancellationToken);
         ValidateAssignmentCollections(partialEntities, cancellationToken);
+        ValidatePartialEntityIds(partialEntities, cancellationToken);
         var entities = partialEntities;
         if (partialEntities.Count > 0)
         {
@@ -365,6 +366,27 @@ public sealed class HomeAssistantRegistryClient
             cancellationToken.ThrowIfCancellationRequested();
             RequireAssignmentCollection(entry.Aliases, "entity aliases", cancellationToken, allowNullEntries: true);
             RequireIdentifierAssignmentCollection(entry.Labels, "entity label assignments", cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void ValidatePartialEntityIds(
+        IEnumerable<HomeAssistantEntityRegistryEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        var entityIds = new HashSet<string>(
+            new CancellationAwareOrdinalStringEqualityComparer(cancellationToken));
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var entityId = HomeAssistantEntityId.RequireResponseEntityId(
+                entry.EntityId,
+                cancellationToken);
+            if (!entityIds.Add(entityId))
+            {
+                throw new HomeAssistantProtocolException(
+                    "The Home Assistant entity registry contained a duplicate entity identifier.");
+            }
         }
         cancellationToken.ThrowIfCancellationRequested();
     }

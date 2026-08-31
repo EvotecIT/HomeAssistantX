@@ -153,8 +153,7 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, CalendarListResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/calendars/calendar.home":
-                await WriteHttpResponseAsync(stream, 200,
-                    "[{\"summary\":\"Dinner\",\"start\":{\"dateTime\":\"2026-08-25T18:00:00+02:00\",\"future\":1,\"Future\":2},\"end\":{\"dateTime\":\"2026-08-25T20:00:00+02:00\"},\"location\":\"Home\"}]")
+                await WriteHttpResponseAsync(stream, 200, CalendarEventsResponseJson)
                     .ConfigureAwait(false);
                 break;
             case "POST /api/events/homeassistantx_test":

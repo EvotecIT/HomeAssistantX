@@ -2,6 +2,7 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using HomeAssistantX.Calendars;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
@@ -168,8 +169,10 @@ public sealed partial class HomeAssistantRestClient
                 new KeyValuePair<string, string?>("start", FormatTimestamp(start)),
                 new KeyValuePair<string, string?>("end", FormatTimestamp(end))
             });
-        return await SendHomeAssistantAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
+        var events = await SendHomeAssistantAsync<HomeAssistantCalendarEvent[]>(HttpMethod.Get, path, null, cancellationToken)
             .ConfigureAwait(false);
+        HomeAssistantCalendarClient.ValidateEvents(events, cancellationToken);
+        return events;
     }
 
     /// <summary>Creates or updates a state representation without controlling the underlying device.</summary>

@@ -758,6 +758,20 @@ public sealed class LivePlatformDataContractTests
         }
     }
 
+    [Theory]
+    [InlineData("[{\"entity_id\":\"Sensor.NotCanonical\",\"aliases\":[],\"labels\":[]}]")]
+    [InlineData("[{\"entity_id\":\"sensor.duplicate\",\"aliases\":[],\"labels\":[]},{\"entity_id\":\"sensor.duplicate\",\"aliases\":[],\"labels\":[]}]")]
+    public async Task RegistrySnapshotRejectsInvalidPartialEntityIdsBeforeEnrichment(string response)
+    {
+        using var server = new TestHomeAssistantServer { EntityRegistryResponseJson = response };
+        using var client = TestClientFactory.Create(server);
+
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() =>
+            client.Registries.GetSnapshotAsync());
+
+        Assert.Null(server.GetLastWebSocketCommand("config/entity_registry/get_entries"));
+    }
+
     [Fact]
     public async Task RegistryResponsesPreserveNestedProviderDuplicateProperties()
     {
