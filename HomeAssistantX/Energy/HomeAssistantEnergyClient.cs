@@ -83,7 +83,8 @@ public sealed class HomeAssistantEnergyClient
             throw new HomeAssistantProtocolException("The Home Assistant solar forecast was not an object.");
         }
 
-        var result = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, JsonElement>(
+            new CancellationAwareStringEqualityComparer(cancellationToken));
         foreach (var property in value.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
