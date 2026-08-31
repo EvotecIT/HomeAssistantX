@@ -63,7 +63,7 @@ public static class HomeAssistantAutomationIdentifier
         cancellationToken.ThrowIfCancellationRequested();
         if (definition.ValueKind != JsonValueKind.Object)
             throw new ArgumentException("An automation definition JSON object is required.", parameterName);
-        if (HomeAssistantJson.HasDuplicateProperties(definition, cancellationToken))
+        if (HomeAssistantJson.HasDuplicatePropertiesInline(definition, cancellationToken))
             throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", parameterName);
 
         JsonElement? definitionId = null;

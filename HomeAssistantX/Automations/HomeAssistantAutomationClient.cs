@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Text.Json;
+using HomeAssistantX.Configuration;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Models;
 using HomeAssistantX.Protocol;
@@ -99,10 +100,12 @@ public sealed class HomeAssistantAutomationClient
         cancellationToken.ThrowIfCancellationRequested();
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
         HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(id, definition, nameof(definition), cancellationToken);
-        var frozenDefinition = HomeAssistantJson.FreezeValue(
-            definition,
-            nameof(definition),
-            "Automation definition",
+        var frozenDefinition = HomeAssistantJson.RunCancellationIsolated(
+            () => HomeAssistantJson.FreezeValue(
+                definition,
+                nameof(definition),
+                "Automation definition",
+                cancellationToken),
             cancellationToken);
         return await _rest.SendAsync<JsonElement>(HttpMethod.Post, ConfigurationPath(id, cancellationToken), frozenDefinition, cancellationToken).ConfigureAwait(false);
     }
@@ -158,8 +161,12 @@ public sealed class HomeAssistantAutomationClient
     }
 
     private static string ConfigurationPath(string automationId, CancellationToken cancellationToken)
-        => ConfigurationPathFromEscapedId(
-            HomeAssistantAutomationIdentifier.EscapeConfigurationId(automationId, cancellationToken),
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => CancellationAwareString.ConcatInline(
+                "api/config/automation/config/",
+                string.Empty,
+                HomeAssistantUri.EscapeDataStringInline(automationId, cancellationToken),
+                cancellationToken),
             cancellationToken);
 
     internal static string ConfigurationPathFromEscapedId(

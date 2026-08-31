@@ -85,7 +85,22 @@ internal static class CancellationAwareString
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var result = new System.Text.StringBuilder(left.Length + separator.Length + right.Length);
+        var length = checked(left.Length + separator.Length + right.Length);
+        return length > 4096 && cancellationToken.CanBeCanceled
+            ? HomeAssistantJson.RunCancellationIsolated(
+                () => ConcatInline(left, separator, right, cancellationToken),
+                cancellationToken)
+            : ConcatInline(left, separator, right, cancellationToken);
+    }
+
+    internal static string ConcatInline(
+        string left,
+        string separator,
+        string right,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = new System.Text.StringBuilder(checked(left.Length + separator.Length + right.Length));
         Append(result, left, cancellationToken);
         Append(result, separator, cancellationToken);
         Append(result, right, cancellationToken);

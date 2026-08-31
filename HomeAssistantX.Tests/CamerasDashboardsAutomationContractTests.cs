@@ -2919,6 +2919,24 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task AutomationConfigurationSaveObservesCancellationDuringDefinitionSnapshot()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var definition = JsonDocument.Parse("{\"alias\":\"" + new string('a', 16_000_000) + "\"}");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.Automations.SaveConfigurationAsync(
+                "morning-routine",
+                definition.RootElement,
+                cancellation.Token));
+
+        Assert.Null(server.LastRequestBody);
+    }
+
+    [Fact]
     public void AutomationConfigurationIdentityScanHonorsCancellationForEmptyDefinitions()
     {
         using var definition = JsonDocument.Parse("{}");
