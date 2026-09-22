@@ -63,7 +63,7 @@ public sealed class OperationalSnapshotContractTests
     {
         using var server = new TestHomeAssistantServer
         {
-            ComponentsResponseJson = "[\"api\",\"websocket_api\",\"hassio\",\"repairs\",\"system_log\",\"update\"]",
+            ComponentsResponseJson = "[\"api\",\"websocket_api\",\"hassio\",\"backup\",\"repairs\",\"system_log\",\"update\"]",
             RejectWebSocketUpgrade = true
         };
         server.SetStates("[{\"entity_id\":\"light.kitchen\",\"state\":\"unavailable\",\"attributes\":{}},"
@@ -83,8 +83,30 @@ public sealed class OperationalSnapshotContractTests
             Assert.Single(snapshot.Capabilities.Capabilities, capability => capability.Name == "repairs").Availability);
         Assert.Equal(HomeAssistantCapabilityAvailability.Unavailable,
             Assert.Single(snapshot.Capabilities.Capabilities, capability => capability.Name == "supervisor").Availability);
+        Assert.Equal(HomeAssistantCapabilityAvailability.Unavailable,
+            Assert.Single(snapshot.Capabilities.Capabilities, capability => capability.Name == "backups").Availability);
         Assert.True(snapshot.IsPartial);
         Assert.Equal("websocket", Assert.Single(snapshot.UnavailableSections));
+    }
+
+    [Fact]
+    public async Task BackupCapabilityReflectsSupervisorAuthorization()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ComponentsResponseJson = "[\"api\",\"websocket_api\",\"hassio\",\"backup\"]",
+            SupervisorInfoErrorCode = "unauthorized"
+        };
+        using var client = TestClientFactory.Create(server);
+
+        var report = await client.Operations.GetCapabilitiesAsync();
+
+        Assert.Equal(HomeAssistantCapabilityAvailability.Available,
+            Assert.Single(report.Capabilities, capability => capability.Name == "websocket").Availability);
+        Assert.Equal(HomeAssistantCapabilityAvailability.NotAuthorized,
+            Assert.Single(report.Capabilities, capability => capability.Name == "supervisor").Availability);
+        Assert.Equal(HomeAssistantCapabilityAvailability.NotAuthorized,
+            Assert.Single(report.Capabilities, capability => capability.Name == "backups").Availability);
     }
 #endif
 

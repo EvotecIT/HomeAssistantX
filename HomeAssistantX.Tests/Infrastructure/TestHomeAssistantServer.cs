@@ -204,6 +204,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? RepairsListErrorCode { get; set; }
 
+    public string? SupervisorInfoErrorCode { get; set; }
+
     public bool RejectWebSocketUpgrade { get; set; }
 
     public string? ExtendedEntityRegistryResponseJson { get; set; }
@@ -1309,6 +1311,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private async Task HandleSupervisorWebSocketCommandAsync(SocketSession session, int id, JsonElement command)
     {
         var endpoint = command.GetProperty("endpoint").GetString();
+        if (endpoint == "/supervisor/info" && SupervisorInfoErrorCode is not null)
+        {
+            await session.SendErrorAsync(id, SupervisorInfoErrorCode, "Supervisor unavailable", SupervisorInfoErrorCode, _source.Token).ConfigureAwait(false);
+            return;
+        }
         object response = endpoint switch
         {
             "/supervisor/info" => ParseJson("{\"version\":\"2026.08.0\",\"version_latest\":\"2026.08.1\",\"update_available\":true,\"arch\":\"amd64\",\"channel\":\"stable\",\"healthy\":true,\"supported\":true,\"timezone\":\"Europe/Warsaw\"}"),

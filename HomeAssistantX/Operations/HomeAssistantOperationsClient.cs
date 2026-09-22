@@ -224,6 +224,16 @@ public sealed class HomeAssistantOperationsClient
             }
         }
 
+        var backups = FromComponent("backups", "backup", componentSet);
+        if (backups.Availability == HomeAssistantCapabilityAvailability.Available
+            && supervisorAvailability != HomeAssistantCapabilityAvailability.Available)
+        {
+            backups.Availability = supervisorAvailability == HomeAssistantCapabilityAvailability.NotInstalled
+                ? HomeAssistantCapabilityAvailability.Unavailable
+                : supervisorAvailability;
+            backups.Detail = "Supervisor backup access is unavailable through the current connection.";
+        }
+
         var capabilities = new[]
         {
             Available("rest"),
@@ -241,7 +251,7 @@ public sealed class HomeAssistantOperationsClient
             FromComponent("diagnostics", "diagnostics", componentSet, webSocketAvailability),
             FromComponents("traces", new[] { "automation", "script" }, componentSet, webSocketAvailability),
             FromComponent("updates", "update", componentSet),
-            FromComponent("backups", "backup", componentSet),
+            backups,
             new HomeAssistantCapability
             {
                 Name = "supervisor",
