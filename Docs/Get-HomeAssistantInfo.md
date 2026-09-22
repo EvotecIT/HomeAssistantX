@@ -6,7 +6,7 @@ schema: 2.0.0
 ---
 # Get-HomeAssistantInfo
 ## SYNOPSIS
-Gets Core configuration, discovered capabilities, system health, or Supervisor information.
+Gets Core configuration, an operational snapshot, capabilities, system health, or Supervisor information.
 
 ## SYNTAX
 ### Overview (Default)
@@ -17,6 +17,11 @@ Get-HomeAssistantInfo [-Overview] [-Connection <HomeAssistantConnection>] [<Comm
 ### Capabilities
 ```powershell
 Get-HomeAssistantInfo -Capabilities [-Connection <HomeAssistantConnection>] [<CommonParameters>]
+```
+
+### OperationalSnapshot
+```powershell
+Get-HomeAssistantInfo -OperationalSnapshot [-Connection <HomeAssistantConnection>] [<CommonParameters>]
 ```
 
 ### Health
@@ -30,7 +35,7 @@ Get-HomeAssistantInfo -Supervisor [-Connection <HomeAssistantConnection>] [<Comm
 ```
 
 ## DESCRIPTION
-Gets Core configuration, discovered capabilities, system health, or Supervisor information.
+Gets Core configuration, an operational snapshot, capabilities, system health, or Supervisor information.
 
 ## EXAMPLES
 
@@ -40,6 +45,12 @@ $ha | Get-HomeAssistantInfo -Capabilities
 ```
 
 Reports installed and permission-dependent operational capabilities without changing Home Assistant.
+
+### EXAMPLE 2
+```powershell
+$ha | Get-HomeAssistantInfo -OperationalSnapshot
+```
+
 
 ## PARAMETERS
 
@@ -64,7 +75,7 @@ Optional explicit session returned by Connect-HomeAssistant. It also accepts pip
 
 ```yaml
 Type: HomeAssistantConnection
-Parameter Sets: Overview, Capabilities, Health, Supervisor
+Parameter Sets: Overview, Capabilities, OperationalSnapshot, Health, Supervisor
 Aliases: None
 Possible values:
 
@@ -81,6 +92,22 @@ Returns the streamed Core system-health snapshot.
 ```yaml
 Type: SwitchParameter
 Parameter Sets: Health
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OperationalSnapshot
+Returns bounded counts and capability availability with explicit partial-read state.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: OperationalSnapshot
 Aliases: None
 Possible values:
 
@@ -134,6 +161,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 - `HomeAssistantX.Models.HomeAssistantConfiguration`
 - `HomeAssistantX.Operations.HomeAssistantCapabilityReport`
+- `HomeAssistantX.Operations.HomeAssistantOperationalSnapshot`
 - `HomeAssistantX.Operations.HomeAssistantSystemHealthSnapshot`
 - `HomeAssistantX.Supervisor.HomeAssistantSupervisorOverview`
 

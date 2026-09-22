@@ -3774,11 +3774,11 @@
       <command:verb>Get</command:verb>
       <command:noun>HomeAssistantInfo</command:noun>
       <maml:description>
-        <maml:para>Gets Core configuration, discovered capabilities, system health, or Supervisor information.</maml:para>
+        <maml:para>Gets Core configuration, an operational snapshot, capabilities, system health, or Supervisor information.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Gets Core configuration, discovered capabilities, system health, or Supervisor information.</maml:para>
+      <maml:para>Gets Core configuration, an operational snapshot, capabilities, system health, or Supervisor information.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="Overview">
@@ -3830,6 +3830,33 @@
           <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
           <dev:type>
             <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="OperationalSnapshot">
+        <maml:name>Get-HomeAssistantInfo</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Connection</maml:name>
+          <maml:description>
+            <maml:para>Optional explicit session returned by Connect-HomeAssistant. It also accepts pipeline input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">HomeAssistantConnection</command:parameterValue>
+          <dev:type>
+            <maml:name>HomeAssistantConnection</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OperationalSnapshot</maml:name>
+          <maml:description>
+            <maml:para>Returns bounded counts and capability availability with explicit partial-read state.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -3927,6 +3954,18 @@
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OperationalSnapshot</maml:name>
+        <maml:description>
+          <maml:para>Returns bounded counts and capability availability with explicit partial-read state.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Overview</maml:name>
         <maml:description>
@@ -3975,6 +4014,11 @@
       </command:returnValue>
       <command:returnValue>
         <dev:type>
+          <maml:name>HomeAssistantX.Operations.HomeAssistantOperationalSnapshot</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
           <maml:name>HomeAssistantX.Operations.HomeAssistantSystemHealthSnapshot</maml:name>
         </dev:type>
       </command:returnValue>
@@ -3995,6 +4039,13 @@
         <dev:code>$ha | Get-HomeAssistantInfo -Capabilities</dev:code>
         <dev:remarks>
           <maml:para>Reports installed and permission-dependent operational capabilities without changing Home Assistant.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Summarize operational health without exposing entity names or log messages</maml:title>
+        <dev:code>$ha | Get-HomeAssistantInfo -OperationalSnapshot</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

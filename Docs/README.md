@@ -74,7 +74,7 @@ Lists Home Assistant floors with their joined areas, devices, and entities.
 Gets recorder history for one or more entity identifiers.
 
 ### [Get-HomeAssistantInfo](Get-HomeAssistantInfo.md)
-Gets Core configuration, discovered capabilities, system health, or Supervisor information.
+Gets Core configuration, an operational snapshot, capabilities, system health, or Supervisor information.
 
 ### [Get-HomeAssistantIntegration](Get-HomeAssistantIntegration.md)
 Gets Home Assistant configuration entries by identifier, domain, or all integrations.
