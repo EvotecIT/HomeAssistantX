@@ -33,6 +33,8 @@ public sealed class McpTransportTests
         var overview = Assert.Single(tools, tool => tool.Name == "get_home_overview");
         Assert.True(overview.ProtocolTool.Annotations?.ReadOnlyHint);
         Assert.Contains(tools, tool => tool.Name == "find_home_entities");
+        Assert.True(Assert.Single(tools, tool => tool.Name == "get_home_traces").ProtocolTool.Annotations?.ReadOnlyHint);
+        Assert.True(Assert.Single(tools, tool => tool.Name == "get_home_trace").ProtocolTool.Annotations?.ReadOnlyHint);
         Assert.Contains(tools, tool => tool.Name == "validate_home_automation_draft");
         var save = Assert.Single(tools, tool => tool.Name == "save_home_automation_definition");
         Assert.True(save.ProtocolTool.Annotations?.DestructiveHint);
@@ -93,6 +95,13 @@ public sealed class McpTransportTests
                 CancellationToken.None));
         Assert.Equal("Test", draft.GetProperty("Definition").GetProperty("alias").GetString());
         Assert.Equal(JsonValueKind.Object, draft.GetProperty("Validation").ValueKind);
+
+        var traces = JsonSerializer.SerializeToElement(
+            await HomeAssistantMcpTools.GetHomeTraces(client, "automation", "night", CancellationToken.None));
+        Assert.Equal("Test failure", traces.GetProperty("Runs")[0].GetProperty("Error").GetString());
+        var trace = await HomeAssistantMcpTools.GetHomeTrace(
+            client, "automation", "night", "run-1", CancellationToken.None);
+        Assert.Equal("Test failure", trace.GetProperty("trace").GetProperty("action/0")[0].GetProperty("error").GetString());
 
         var current = JsonSerializer.SerializeToElement(
             await HomeAssistantMcpTools.GetHomeAutomationDefinition(

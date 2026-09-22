@@ -80,6 +80,40 @@ public sealed class HomeAssistantMcpTools
         HomeAssistantClient client, CancellationToken cancellationToken)
         => client.Operations.Updates.GetAllAsync(availableOnly: true, cancellationToken);
 
+    [McpServerTool(Name = "get_home_traces", ReadOnly = true), Description("List recent execution traces for one automation or script. Returns at most 20 runs with outcome and error context. Makes no changes.")]
+    public static async Task<object> GetHomeTraces(
+        HomeAssistantClient client,
+        [Description("'automation' or 'script'.")] string domain,
+        [Description("Home Assistant automation or script item id.")] string itemId,
+        CancellationToken cancellationToken)
+    {
+        var runs = await client.Operations.Traces.GetAllAsync(domain, itemId, cancellationToken);
+        return new
+        {
+            Total = runs.Count,
+            Runs = runs.Take(20).Select(run => new
+            {
+                run.Domain,
+                run.ItemId,
+                run.RunId,
+                run.State,
+                run.ScriptExecution,
+                run.LastStep,
+                run.Error,
+                run.Timestamp
+            }).ToArray()
+        };
+    }
+
+    [McpServerTool(Name = "get_home_trace", ReadOnly = true), Description("Read one automation or script execution trace by run id. The trace can contain private home data. Makes no changes.")]
+    public static Task<JsonElement> GetHomeTrace(
+        HomeAssistantClient client,
+        [Description("'automation' or 'script'.")] string domain,
+        [Description("Home Assistant automation or script item id.")] string itemId,
+        [Description("Run id from get_home_traces.")] string runId,
+        CancellationToken cancellationToken)
+        => client.Operations.Traces.GetAsync(domain, itemId, runId, cancellationToken);
+
     [McpServerTool(Name = "get_home_errors", ReadOnly = true), Description("Read up to 30 recent aggregated Home Assistant system log entries. Entries can contain private home data.")]
     public static async Task<object> GetHomeErrors(HomeAssistantClient client, CancellationToken cancellationToken)
     {

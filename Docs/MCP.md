@@ -36,6 +36,12 @@ usable. The overview returns a null issue count when Repairs is not installed.
 The issues tool lists active, nonignored issues. Log entries may contain private
 information from the home, so review them before sharing an AI transcript.
 
+For a failing automation or script, use `get_home_traces` with its item ID to
+see up to 20 recent runs, their outcome, last step, and error. Pass one returned
+run ID to `get_home_trace` when you need the detailed execution path. A trace
+can include private state or action data, so review it before sharing the AI
+transcript.
+
 Use `find_home_entities` to resolve a room, device, or entity and
 `get_home_actions` to inspect the actions and fields the connected installation
 actually offers. These tools also work with custom integrations.
