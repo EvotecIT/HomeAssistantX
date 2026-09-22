@@ -405,6 +405,7 @@ Assistant without saving the definition; it does not test physical effects.
 ### Troubleshoot and administer
 
 ```powershell
+Get-HomeAssistantInfo -OperationalSnapshot
 Get-HomeAssistantInfo -Capabilities
 Get-HomeAssistantInfo -Health
 Get-HomeAssistantLog | Where-Object Level -In Error, Warning
@@ -419,6 +420,19 @@ Get-HomeAssistantInfo -Supervisor
 Get-HomeAssistantApp
 Get-HomeAssistantBackup
 Get-HomeAssistantUpdate -AvailableOnly
+```
+
+Use the operational snapshot as a first read when investigating a home. It
+returns entity availability, available-update, active unignored Repairs, and system-log
+entry counts without entity names or log messages. Counts are `null` when a
+section is not installed or its read failed; `IsPartial` and
+`UnavailableSections` distinguish read failures from missing capabilities.
+C# callers use the same engine:
+
+```csharp
+var snapshot = await client.Operations.GetOperationalSnapshotAsync(cancellationToken);
+if (snapshot.IsPartial)
+    Console.WriteLine(string.Join(", ", snapshot.UnavailableSections));
 ```
 
 Logs and diagnostics may contain sensitive installation information. Treat the

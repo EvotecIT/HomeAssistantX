@@ -38,6 +38,36 @@ public sealed class HomeAssistantCapabilityReport
     public IReadOnlyList<HomeAssistantCapability> Capabilities { get; set; } = Array.Empty<HomeAssistantCapability>();
 }
 
+/// <summary>
+/// A bounded, read-only operational summary. Nullable counts distinguish an unavailable or
+/// uninstalled section from a verified count of zero. No entity names or log messages are included.
+/// </summary>
+public sealed class HomeAssistantOperationalSnapshot
+{
+    public DateTimeOffset ObservedAt { get; set; }
+
+    public HomeAssistantCapabilityReport Capabilities { get; set; } = new();
+
+    public int? EntityCount { get; set; }
+
+    public int? UnavailableEntityCount { get; set; }
+
+    public int? UnknownEntityCount { get; set; }
+
+    public int? AvailableUpdateCount { get; set; }
+
+    /// <summary>Active Repairs issues that have not been ignored by an administrator.</summary>
+    public int? ActiveUnignoredRepairIssueCount { get; set; }
+
+    /// <summary>Number of aggregated system-log entries, not the sum of their occurrence counts.</summary>
+    public int? SystemLogEntryCount { get; set; }
+
+    /// <summary>Stable section names for optional reads that failed; exception text is never exposed.</summary>
+    public IReadOnlyList<string> UnavailableSections { get; set; } = Array.Empty<string>();
+
+    public bool IsPartial => UnavailableSections.Count != 0;
+}
+
 /// <summary>A structured entry returned by Home Assistant's in-memory system log.</summary>
 public sealed class HomeAssistantSystemLogEntry
 {

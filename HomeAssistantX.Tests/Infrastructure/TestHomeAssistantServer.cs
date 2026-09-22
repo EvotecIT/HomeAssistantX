@@ -203,6 +203,14 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string ConfigurationResponseJson { get; set; } =
         "{\"location_name\":\"Test Home\",\"Location_Name\":\"Case-distinct extension\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}";
 
+    public string ComponentsResponseJson { get; set; } = "[\"api\",\"websocket_api\",\"recorder\"]";
+
+    public string? RepairsListErrorCode { get; set; }
+
+    public string? SupervisorInfoErrorCode { get; set; }
+
+    public bool RejectWebSocketUpgrade { get; set; }
+
     public string? ExtendedEntityRegistryResponseJson { get; set; }
 
     public bool PublishNullStateEventData { get; set; }
@@ -485,6 +493,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             if (headers.TryGetValue("Upgrade", out var upgrade)
                 && string.Equals(upgrade, "websocket", StringComparison.OrdinalIgnoreCase))
             {
+                if (RejectWebSocketUpgrade)
+                {
+                    await WriteHttpResponseAsync(stream, 503, "{\"message\":\"WebSocket unavailable\"}").ConfigureAwait(false);
+                    return;
+                }
                 await HandleWebSocketAsync(client, stream, headers).ConfigureAwait(false);
                 return;
             }
@@ -1279,6 +1292,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"name\":\"homeassistant.components.test\",\"message\":[\"Test warning\"],\"level\":\"WARNING\",\"source\":[\"homeassistant/components/test/__init__.py\",42],\"exception\":\"test exception\",\"count\":2,\"timestamp\":1787680800,\"first_occurred\":1787680700}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "repairs/list_issues":
+                if (RepairsListErrorCode is not null)
+                {
+                    await session.SendErrorAsync(id, RepairsListErrorCode, "Repairs unavailable", RepairsListErrorCode, _source.Token).ConfigureAwait(false);
+                    return;
+                }
                 await session.SendResultAsync(id, ParseJson(RepairIssuesResponseJson ?? "{\"issues\":[{\"domain\":\"test\",\"issue_id\":\"warning-1\",\"active\":true,\"is_fixable\":true,\"severity\":\"warning\",\"ignored\":false,\"created\":\"2026-08-25T10:00:00Z\"},{\"domain\":\"test\",\"issue_id\":\"ignored-1\",\"active\":true,\"is_fixable\":false,\"severity\":\"warning\",\"ignored\":true,\"created\":\"2026-08-25T09:00:00Z\"}]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "repairs/get_issue_data":
@@ -1328,6 +1346,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private async Task HandleSupervisorWebSocketCommandAsync(SocketSession session, int id, JsonElement command)
     {
         var endpoint = command.GetProperty("endpoint").GetString();
+        if (endpoint == "/supervisor/info" && SupervisorInfoErrorCode is not null)
+        {
+            await session.SendErrorAsync(id, SupervisorInfoErrorCode, "Supervisor unavailable", SupervisorInfoErrorCode, _source.Token).ConfigureAwait(false);
+            return;
+        }
         object response = endpoint switch
         {
             "/supervisor/info" => ParseJson("{\"version\":\"2026.08.0\",\"version_latest\":\"2026.08.1\",\"update_available\":true,\"arch\":\"amd64\",\"channel\":\"stable\",\"healthy\":true,\"supported\":true,\"timezone\":\"Europe/Warsaw\"}"),
