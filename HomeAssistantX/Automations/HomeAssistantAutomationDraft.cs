@@ -26,6 +26,15 @@ public sealed class HomeAssistantAutomationDraft
     /// <summary>The action or actions fragment accepted by Home Assistant.</summary>
     public JsonElement Action { get; }
 
+    /// <summary>Parses and snapshots a JSON definition without making cancellation wait for synchronous JSON parsing.</summary>
+    public static async Task<HomeAssistantAutomationDraft> ParseAsync(
+        string definitionJson,
+        CancellationToken cancellationToken = default)
+    {
+        using var document = await HomeAssistantJson.ParseDocumentAsync(definitionJson, cancellationToken).ConfigureAwait(false);
+        return Parse(document.RootElement, cancellationToken);
+    }
+
     /// <summary>Snapshots a definition and rejects ambiguous fragment names before validation or save.</summary>
     public static HomeAssistantAutomationDraft Parse(JsonElement definition, CancellationToken cancellationToken = default)
     {

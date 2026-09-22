@@ -27,6 +27,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _failNextSubscription;
     private TaskCompletionSource<bool>? _pausedSubscriptionReceived;
     private TaskCompletionSource<bool>? _pausedSubscriptionRelease;
+    private TaskCompletionSource<bool>? _pausedSubscriptionActivated;
     private TaskCompletionSource<bool>? _pausedServiceCallReceived;
     private TaskCompletionSource<bool>? _pausedServiceCallRelease;
     private TaskCompletionSource<bool>? _pausedGetStatesReceived;
@@ -329,6 +330,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         _pausedSubscriptionReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pausedSubscriptionRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pausedSubscriptionActivated = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     public Task WaitForPausedSubscriptionAsync()
@@ -341,6 +343,14 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         (_pausedSubscriptionRelease
             ?? throw new InvalidOperationException("No subscription pause is configured.")).TrySetResult(true);
+    }
+
+    public async Task ReleasePausedSubscriptionAndWaitAsync()
+    {
+        var activated = _pausedSubscriptionActivated
+            ?? throw new InvalidOperationException("No subscription pause is configured.");
+        ReleasePausedSubscription();
+        await activated.Task.ConfigureAwait(false);
     }
 
     public Task WaitForUnsubscribeAsync()
@@ -768,6 +778,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
                 var pauseReceived = _pausedSubscriptionReceived;
                 var pauseRelease = _pausedSubscriptionRelease;
+                var pauseActivated = _pausedSubscriptionActivated;
                 if (pauseReceived is not null && pauseRelease is not null)
                 {
                     pauseReceived.TrySetResult(true);
@@ -783,6 +794,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ? id
                     : session.StateSubscriptionId;
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                pauseActivated?.TrySetResult(true);
+                if (ReferenceEquals(_pausedSubscriptionActivated, pauseActivated))
+                    _pausedSubscriptionActivated = null;
                 return;
             case "unsubscribe_events":
                 var unsubscribeSubscriptionId = command.GetProperty("subscription").GetInt32();
@@ -1434,6 +1448,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
         _source.Cancel();
         _pausedSubscriptionRelease?.TrySetCanceled();
+        _pausedSubscriptionActivated?.TrySetCanceled();
         _listener.Stop();
         foreach (var session in _sessions.Values)
         {

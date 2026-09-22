@@ -1,6 +1,8 @@
 using HomeAssistantX.Mcp;
 using HomeAssistantX.Tests.Infrastructure;
 using ModelContextProtocol.Client;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace HomeAssistantX.Mcp.Tests;
@@ -32,7 +34,14 @@ public sealed class McpTransportTests
 
         var overview = Assert.Single(tools, tool => tool.Name == "get_home_overview");
         Assert.True(overview.ProtocolTool.Annotations?.ReadOnlyHint);
-        Assert.Contains(tools, tool => tool.Name == "find_home_entities");
+        var find = Assert.Single(tools, tool => tool.Name == "find_home_entities");
+        if (find.JsonSchema.TryGetProperty("required", out var required))
+        {
+            var requiredNames = required.EnumerateArray().Select(value => value.GetString()).ToArray();
+            Assert.DoesNotContain("name", requiredNames);
+            Assert.DoesNotContain("area", requiredNames);
+            Assert.DoesNotContain("domain", requiredNames);
+        }
         Assert.True(Assert.Single(tools, tool => tool.Name == "get_home_traces").ProtocolTool.Annotations?.ReadOnlyHint);
         Assert.True(Assert.Single(tools, tool => tool.Name == "get_home_trace").ProtocolTool.Annotations?.ReadOnlyHint);
         Assert.Contains(tools, tool => tool.Name == "validate_home_automation_draft");
@@ -135,5 +144,34 @@ public sealed class McpTransportTests
                 CancellationToken.None));
         Assert.True(created.GetProperty("Created").GetBoolean());
         Assert.Contains("\"alias\":\"New\"", server.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task AutomationRevisionPreservesRawJsonHashAcrossUtf8Chunks()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            AutomationConfigurationResponseJson =
+                "{\"id\":\"morning-routine\",\"alias\":\"" + new string('a', 8_180) + "🙂\",\"triggers\":[],\"actions\":[]}"
+        };
+        using var client = HomeAssistantClient.Create(server.BaseUri, TestHomeAssistantServer.AccessToken);
+        var configuration = await client.Automations.GetConfigurationAsync("morning-routine");
+        var expected = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(configuration.Definition.GetRawText())));
+
+        var result = JsonSerializer.SerializeToElement(
+            await HomeAssistantMcpTools.GetHomeAutomationDefinition(client, "morning-routine", CancellationToken.None));
+
+        Assert.Equal(expected, result.GetProperty("Revision").GetString());
+    }
+
+    [Fact]
+    public async Task AutomationRevisionHonorsCancellationForLargeDefinitions()
+    {
+        using var document = JsonDocument.Parse("{\"payload\":\"" + new string('x', 16_000_000) + "\"}");
+        using var canceled = new CancellationTokenSource();
+        canceled.CancelAfter(TimeSpan.FromMilliseconds(1));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantMcpRevision.CreateAsync(document.RootElement, canceled.Token));
     }
 }

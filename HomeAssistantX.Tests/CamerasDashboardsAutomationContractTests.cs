@@ -2874,6 +2874,19 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task AutomationDraftParsesJsonTextWithAnOwnedSnapshotAndCancellation()
+    {
+        var draft = await HomeAssistantAutomationDraft.ParseAsync(
+            "{\"triggers\":[],\"actions\":[],\"future_key\":{\"nested\":true}}");
+        Assert.True(draft.Definition.GetProperty("future_key").GetProperty("nested").GetBoolean());
+
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantAutomationDraft.ParseAsync("{\"triggers\":[],\"actions\":[]}", canceled.Token));
+    }
+
+    [Fact]
     public void AutomationDefinitionIdTraversalHonorsPreCanceledTokensBeforeJsonAccess()
     {
         JsonElement definition;

@@ -1,6 +1,4 @@
 using System.ComponentModel;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
 using HomeAssistantX.Automations;
@@ -39,10 +37,10 @@ public sealed class HomeAssistantMcpTools
     [McpServerTool(Name = "find_home_entities", ReadOnly = true), Description("Find entities by room, domain, or name using the joined Home Assistant inventory. Returns at most 50 matches with live state and integration context.")]
     public static async Task<object> FindHomeEntities(
         HomeAssistantClient client,
-        [Description("Optional entity name or part of a name.")] string? name,
-        [Description("Optional room or area name.")] string? area,
-        [Description("Optional domain such as light, sensor, or media_player.")] string? domain,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [Description("Optional entity name or part of a name.")] string? name = null,
+        [Description("Optional room or area name.")] string? area = null,
+        [Description("Optional domain such as light, sensor, or media_player.")] string? domain = null)
     {
         var matches = await client.Inventory.GetEntitiesAsync(new()
         {
@@ -172,7 +170,7 @@ public sealed class HomeAssistantMcpTools
         {
             configuration.AutomationId,
             configuration.Definition,
-            Revision = Fingerprint(configuration.Definition)
+            Revision = await HomeAssistantMcpRevision.CreateAsync(configuration.Definition, cancellationToken)
         };
     }
 
@@ -182,8 +180,7 @@ public sealed class HomeAssistantMcpTools
         [Description("Complete automation definition as a JSON object.")] string definitionJson,
         CancellationToken cancellationToken)
     {
-        using var document = JsonDocument.Parse(definitionJson);
-        var draft = HomeAssistantAutomationDraft.Parse(document.RootElement, cancellationToken);
+        var draft = await HomeAssistantAutomationDraft.ParseAsync(definitionJson, cancellationToken);
         var validation = await client.Automations.ValidateDraftAsync(draft.Definition, cancellationToken);
         return new { draft.Definition, Validation = validation };
     }
@@ -198,10 +195,9 @@ public sealed class HomeAssistantMcpTools
         CancellationToken cancellationToken)
     {
         access.RequireChanges();
-        using var document = JsonDocument.Parse(definitionJson);
-        _ = HomeAssistantAutomationDraft.Parse(document.RootElement, cancellationToken);
         if (string.IsNullOrWhiteSpace(expectedRevision))
             throw new ArgumentException("An expected revision is required.", nameof(expectedRevision));
+        var draft = await HomeAssistantAutomationDraft.ParseAsync(definitionJson, cancellationToken);
 
         HomeAssistantX.Automations.HomeAssistantAutomationConfiguration? existing;
         try
@@ -215,13 +211,13 @@ public sealed class HomeAssistantMcpTools
 
         if (existing is null && expectedRevision != "new")
             throw new InvalidOperationException("The automation no longer exists. Read its current state before saving.");
-        if (existing is not null && !string.Equals(Fingerprint(existing.Definition), expectedRevision, StringComparison.Ordinal))
+        if (existing is not null && !string.Equals(
+                await HomeAssistantMcpRevision.CreateAsync(existing.Definition, cancellationToken),
+                expectedRevision,
+                StringComparison.Ordinal))
             throw new InvalidOperationException("The automation changed since it was read. Fetch its current definition before saving.");
 
-        var response = await client.Automations.SaveConfigurationAsync(automationId, document.RootElement, cancellationToken);
+        var response = await client.Automations.SaveConfigurationAsync(automationId, draft.Definition, cancellationToken);
         return new { AutomationId = automationId, Created = existing is null, Response = response };
     }
-
-    private static string Fingerprint(JsonElement definition)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(definition.GetRawText())));
 }
