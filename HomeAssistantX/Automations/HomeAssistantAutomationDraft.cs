@@ -58,6 +58,16 @@ public sealed class HomeAssistantAutomationDraft
         return draft;
     }
 
+    /// <summary>Snapshots a caller-owned JSON definition on a worker; keep its document alive until the returned task completes.</summary>
+    public static Task<HomeAssistantAutomationDraft> ParseAsync(
+        JsonElement definition,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // Awaiting this worker also keeps the borrowed source document alive through cancellation.
+        return Task.Run(() => ParseCore(definition, cancellationToken), CancellationToken.None);
+    }
+
     /// <summary>Snapshots a definition and rejects ambiguous fragment names before validation or save.</summary>
     public static HomeAssistantAutomationDraft Parse(JsonElement definition, CancellationToken cancellationToken = default)
         => HomeAssistantJson.RunCancellationIsolated(

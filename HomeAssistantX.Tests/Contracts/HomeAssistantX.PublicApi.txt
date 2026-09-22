@@ -45,6 +45,7 @@ T before-field-init sealed class HomeAssistantX.Automations.HomeAssistantAutomat
   P instance System.Text.Json.JsonElement Trigger {get;}
   M static HomeAssistantX.Automations.HomeAssistantAutomationDraft Parse(System.Text.Json.JsonElement definition, System.Threading.CancellationToken cancellationToken = null)
   M static System.Threading.Tasks.Task<HomeAssistantX.Automations.HomeAssistantAutomationDraft> ParseAsync(System.String definitionJson, System.Threading.CancellationToken cancellationToken = null)
+  M static System.Threading.Tasks.Task<HomeAssistantX.Automations.HomeAssistantAutomationDraft> ParseAsync(System.Text.Json.JsonElement definition, System.Threading.CancellationToken cancellationToken = null)
 T before-field-init static class HomeAssistantX.Automations.HomeAssistantAutomationIdentifier
   M static System.String NormalizeConfigurationId(System.String automationId)
 T before-field-init sealed class HomeAssistantX.Automations.HomeAssistantAutomationStatus

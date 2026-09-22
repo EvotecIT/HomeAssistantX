@@ -100,26 +100,30 @@ public sealed class HomeAssistantAutomationClient
         };
     }
 
-    /// <summary>Asks Home Assistant to validate a draft's trigger, condition, and action fragments without saving it.</summary>
-    public Task<JsonElement> ValidateDraftAsync(JsonElement definition, CancellationToken cancellationToken = default)
+    /// <summary>Asks Home Assistant to validate a draft's trigger, condition, and action fragments without saving it. Keep the source JSON document alive until the task completes.</summary>
+    public async Task<JsonElement> ValidateDraftAsync(JsonElement definition, CancellationToken cancellationToken = default)
     {
-        var draft = HomeAssistantAutomationDraft.Parse(definition, cancellationToken);
-        return _system.ValidateConfigAsync(draft.Trigger, draft.Condition, draft.Action, cancellationToken);
+        var draft = await HomeAssistantAutomationDraft.ParseAsync(definition, cancellationToken).ConfigureAwait(false);
+        return await _system.ValidateConfigAsync(draft.Trigger, draft.Condition, draft.Action, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Creates or replaces an editable automation definition and requests a targeted automation reload.</summary>
+    /// <summary>Creates or replaces an editable automation definition and requests a targeted automation reload. Keep the source JSON document alive until the task completes.</summary>
     public async Task<JsonElement> SaveConfigurationAsync(string automationId, JsonElement definition, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
-        HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(id, definition, nameof(definition), cancellationToken);
-        var frozenDefinition = HomeAssistantJson.RunCancellationIsolated(
-            () => HomeAssistantJson.FreezeValue(
+        // The source JsonElement belongs to the caller until this worker completes, even on cancellation.
+        var frozenDefinition = await Task.Run(() =>
+        {
+            HomeAssistantAutomationIdentifier.ValidateDefinitionForSaveInline(
+                id, definition, nameof(definition), cancellationToken);
+            return HomeAssistantJson.FreezeValue(
                 definition,
                 nameof(definition),
                 "Automation definition",
-                cancellationToken),
-            cancellationToken);
+                cancellationToken);
+        }, CancellationToken.None).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         return await _rest.SendAsync<JsonElement>(HttpMethod.Post, ConfigurationPath(id, cancellationToken), frozenDefinition, cancellationToken).ConfigureAwait(false);
     }
 
