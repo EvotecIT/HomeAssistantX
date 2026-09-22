@@ -8,6 +8,7 @@ internal sealed class HomeAssistantAttributeDictionaryConverter
     : JsonConverter<Dictionary<string, JsonElement>>
 {
     private static readonly AsyncLocal<CancellationToken> CurrentCancellationToken = new();
+    private static readonly AsyncLocal<bool> TreatMalformedAsEmpty = new();
 
     public override bool HandleNull => true;
 
@@ -16,6 +17,13 @@ internal sealed class HomeAssistantAttributeDictionaryConverter
         var previous = CurrentCancellationToken.Value;
         CurrentCancellationToken.Value = cancellationToken;
         return new CancellationScope(previous);
+    }
+
+    internal static IDisposable UseTolerantStateAttributes(bool enabled)
+    {
+        var previous = TreatMalformedAsEmpty.Value;
+        TreatMalformedAsEmpty.Value = enabled;
+        return new ToleranceScope(previous);
     }
 
     public override Dictionary<string, JsonElement> Read(
@@ -32,6 +40,12 @@ internal sealed class HomeAssistantAttributeDictionaryConverter
 
         if (reader.TokenType != JsonTokenType.StartObject)
         {
+            if (TreatMalformedAsEmpty.Value)
+            {
+                _ = CancellationAwareJsonValueReader.Read(ref reader, cancellationToken);
+                return new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            }
+
             throw new JsonException("Home Assistant state attributes must be an object or null.");
         }
 
@@ -101,6 +115,24 @@ internal sealed class HomeAssistantAttributeDictionaryConverter
         {
             if (_disposed) return;
             CurrentCancellationToken.Value = _previous;
+            _disposed = true;
+        }
+    }
+
+    private sealed class ToleranceScope : IDisposable
+    {
+        private readonly bool _previous;
+        private bool _disposed;
+
+        internal ToleranceScope(bool previous)
+        {
+            _previous = previous;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            TreatMalformedAsEmpty.Value = _previous;
             _disposed = true;
         }
     }

@@ -44,6 +44,12 @@ public sealed class HomeAssistantClientOptions
 
     public int MaximumRestResponseBytes { get; set; } = 64 * 1024 * 1024;
 
+    /// <summary>
+    /// Treats a non-object state attributes value as an empty attribute set when reading states.
+    /// The default rejects malformed attributes.
+    /// </summary>
+    public bool TreatMalformedStateAttributesAsEmpty { get; set; }
+
     public int SubscriptionBufferCapacity { get; set; } = 256;
 
     public IHomeAssistantDiagnosticsSink Diagnostics { get; set; } = NullHomeAssistantDiagnosticsSink.Instance;

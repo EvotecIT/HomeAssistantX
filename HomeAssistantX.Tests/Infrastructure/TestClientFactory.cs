@@ -17,7 +17,8 @@ internal static class TestClientFactory
         int maximumCoalescedWebSocketMessages = 4096,
         bool enableWebSocketMessageCoalescing = true,
         HomeAssistantServiceCallTransport controlServiceCallTransport = HomeAssistantServiceCallTransport.WebSocket,
-        IHomeAssistantDiagnosticsSink? diagnostics = null)
+        IHomeAssistantDiagnosticsSink? diagnostics = null,
+        bool treatMalformedStateAttributesAsEmpty = false)
     {
         var options = new HomeAssistantClientOptions(
             server.BaseUri,
@@ -32,7 +33,8 @@ internal static class TestClientFactory
             MaximumRestResponseBytes = maximumRestResponseBytes,
             MaximumCoalescedWebSocketMessages = maximumCoalescedWebSocketMessages,
             EnableWebSocketMessageCoalescing = enableWebSocketMessageCoalescing,
-            ControlServiceCallTransport = controlServiceCallTransport
+            ControlServiceCallTransport = controlServiceCallTransport,
+            TreatMalformedStateAttributesAsEmpty = treatMalformedStateAttributesAsEmpty
         };
         if (diagnostics is not null)
         {

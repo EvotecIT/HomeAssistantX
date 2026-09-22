@@ -378,6 +378,21 @@ public sealed class MediaAndRemoteContractTests
             "{\"entity_id\":\"sensor.compatibility\",\"state\":\"unknown\",\"attributes\":\"malformed\"}"));
     }
 
+    [Theory]
+    [InlineData("\"malformed\"")]
+    [InlineData("true")]
+    [InlineData("[1,2]")]
+    public void StateDecoderCanTreatNonObjectAttributesAsEmptyWhenRequested(string attributesJson)
+    {
+        using var policy = HomeAssistantAttributeDictionaryConverter.UseTolerantStateAttributes(true);
+        var state = DeserializeState(
+            "{\"entity_id\":\"sensor.compatibility\",\"state\":\"unknown\",\"attributes\":" +
+            attributesJson + ",\"last_updated\":\"2026-01-01T00:00:00Z\"}");
+
+        Assert.Empty(state.Attributes);
+        Assert.NotNull(state.LastUpdated);
+    }
+
     [Fact]
     public void StateDecoderPreservesCaseDistinctAttributesAndKnownReadsStayCaseInsensitive()
     {
