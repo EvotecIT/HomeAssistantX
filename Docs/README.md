@@ -244,6 +244,9 @@ Moves a valve with one typed action or target position.
 ### [Set-HomeAssistantWaterHeater](Set-HomeAssistantWaterHeater.md)
 Sets water-heater power, temperature, operation mode, or away mode.
 
+### [Test-HomeAssistantAutomationDraft](Test-HomeAssistantAutomationDraft.md)
+Asks Home Assistant to validate an automation draft without saving it.
+
 ### [Test-HomeAssistantConfiguration](Test-HomeAssistantConfiguration.md)
 Validates the active Home Assistant configuration without restarting Core.
 

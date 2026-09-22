@@ -27,6 +27,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     private int _failNextSubscription;
     private TaskCompletionSource<bool>? _pausedSubscriptionReceived;
     private TaskCompletionSource<bool>? _pausedSubscriptionRelease;
+    private TaskCompletionSource<bool>? _pausedSubscriptionActivated;
     private TaskCompletionSource<bool>? _pausedServiceCallReceived;
     private TaskCompletionSource<bool>? _pausedServiceCallRelease;
     private TaskCompletionSource<bool>? _pausedGetStatesReceived;
@@ -54,6 +55,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     }
 
     public const string AccessToken = "test-access-token";
+
+    public string? RepairIssuesResponseJson { get; set; }
 
     public Uri BaseUri { get; }
 
@@ -303,6 +306,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string FrontendPanelsResponseJson { get; set; } =
         "{\"lovelace\":{\"title\":\"Overview\",\"component_name\":\"lovelace\",\"default_visible\":true,\"show_in_sidebar\":true,\"require_admin\":false,\"future_panel\":true}}";
+    public bool UseLegacyValidationFields { get; set; }
     public string LovelaceConfigurationResponseJson { get; set; } =
         "{\"title\":\"Home\",\"views\":[{\"title\":\"Kitchen\"}],\"future_config\":true}";
 
@@ -334,6 +338,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         _pausedSubscriptionReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pausedSubscriptionRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pausedSubscriptionActivated = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     public Task WaitForPausedSubscriptionAsync()
@@ -346,6 +351,14 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     {
         (_pausedSubscriptionRelease
             ?? throw new InvalidOperationException("No subscription pause is configured.")).TrySetResult(true);
+    }
+
+    public async Task ReleasePausedSubscriptionAndWaitAsync()
+    {
+        var activated = _pausedSubscriptionActivated
+            ?? throw new InvalidOperationException("No subscription pause is configured.");
+        ReleasePausedSubscription();
+        await activated.Task.ConfigureAwait(false);
     }
 
     public Task WaitForUnsubscribeAsync()
@@ -712,7 +725,25 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(FrontendPanelsResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "validate_config":
-                await session.SendResultAsync(id, ParseJson("{\"trigger\":null,\"condition\":null,\"action\":null}"), false, _source.Token).ConfigureAwait(false);
+                var names = UseLegacyValidationFields
+                    ? new[] { "trigger", "condition", "action" }
+                    : new[] { "triggers", "conditions", "actions" };
+                var invalidNames = UseLegacyValidationFields
+                    ? new[] { "triggers", "conditions", "actions" }
+                    : new[] { "trigger", "condition", "action" };
+                if (invalidNames.Any(name => command.TryGetProperty(name, out _)))
+                {
+                    await session.SendErrorAsync(id, "invalid_format", "Unexpected validation fields.", "invalid_format", _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
+                var validation = new Dictionary<string, object?>();
+                foreach (var name in names)
+                {
+                    if (command.TryGetProperty(name, out _))
+                        validation[name] = new { valid = true, error = (string?)null };
+                }
+                await session.SendResultAsync(id, JsonSerializer.SerializeToElement(validation), false, _source.Token).ConfigureAwait(false);
                 return;
             case "extract_from_target":
                 await session.SendResultAsync(id, ParseJson("{\"referenced_entities\":[\"light.kitchen\"],\"referenced_devices\":[],\"referenced_areas\":[]}"), false, _source.Token).ConfigureAwait(false);
@@ -760,6 +791,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
                 var pauseReceived = _pausedSubscriptionReceived;
                 var pauseRelease = _pausedSubscriptionRelease;
+                var pauseActivated = _pausedSubscriptionActivated;
                 if (pauseReceived is not null && pauseRelease is not null)
                 {
                     pauseReceived.TrySetResult(true);
@@ -775,6 +807,9 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     ? id
                     : session.StateSubscriptionId;
                 await session.SendResultAsync(id, null, false, _source.Token).ConfigureAwait(false);
+                pauseActivated?.TrySetResult(true);
+                if (ReferenceEquals(_pausedSubscriptionActivated, pauseActivated))
+                    _pausedSubscriptionActivated = null;
                 return;
             case "unsubscribe_events":
                 var unsubscribeSubscriptionId = command.GetProperty("subscription").GetInt32();
@@ -1262,7 +1297,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                     await session.SendErrorAsync(id, RepairsListErrorCode, "Repairs unavailable", RepairsListErrorCode, _source.Token).ConfigureAwait(false);
                     return;
                 }
-                await session.SendResultAsync(id, ParseJson("{\"issues\":[{\"domain\":\"test\",\"issue_id\":\"warning-1\",\"active\":true,\"is_fixable\":true,\"severity\":\"warning\",\"ignored\":false,\"created\":\"2026-08-25T10:00:00Z\"},{\"domain\":\"test\",\"issue_id\":\"ignored-1\",\"active\":true,\"is_fixable\":false,\"severity\":\"warning\",\"ignored\":true,\"created\":\"2026-08-25T09:00:00Z\"}]}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(RepairIssuesResponseJson ?? "{\"issues\":[{\"domain\":\"test\",\"issue_id\":\"warning-1\",\"active\":true,\"is_fixable\":true,\"severity\":\"warning\",\"ignored\":false,\"created\":\"2026-08-25T10:00:00Z\"},{\"domain\":\"test\",\"issue_id\":\"ignored-1\",\"active\":true,\"is_fixable\":false,\"severity\":\"warning\",\"ignored\":true,\"created\":\"2026-08-25T09:00:00Z\"}]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "repairs/get_issue_data":
                 await session.SendResultAsync(id, ParseJson("{\"issue_data\":{\"summary\":\"Test repair\"}}"), false, _source.Token).ConfigureAwait(false);
@@ -1436,6 +1471,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
         _source.Cancel();
         _pausedSubscriptionRelease?.TrySetCanceled();
+        _pausedSubscriptionActivated?.TrySetCanceled();
         _listener.Stop();
         foreach (var session in _sessions.Values)
         {

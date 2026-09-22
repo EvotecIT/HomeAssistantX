@@ -401,9 +401,61 @@ namespace HomeAssistantX.DevelopmentModuleLoadContext
                         'AddExportedCmdlet',
                         [System.Reflection.BindingFlags]'Instance, NonPublic'
                     )
-                    if ($null -ne $AddExportedCmdlet) {
+                    $PowerForgeOuterModule = $ExecutionContext.SessionState.Module
+                    $PowerForgeIsModuleWrapper = $false
+                    if ($null -ne $PowerForgeOuterModule -and
+                        -not [string]::IsNullOrWhiteSpace($PowerForgeOuterModule.Path) -and
+                        -not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
+                        try {
+                            [StringComparison] $PowerForgePathComparison = & {
+                                param([string] $PowerForgeProbePath)
+
+                                # Case behavior belongs to the containing filesystem. Windows can opt individual
+                                # directories into case sensitivity, while macOS volumes may be case-insensitive.
+                                # Inspect existing names without requiring write access; ambiguity fails closed.
+                                try {
+                                    $PowerForgeProbeDirectory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($PowerForgeProbePath))
+                                    $PowerForgeNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+                                    foreach ($PowerForgeEntry in [IO.Directory]::EnumerateFileSystemEntries($PowerForgeProbeDirectory)) {
+                                        [void] $PowerForgeNames.Add([IO.Path]::GetFileName($PowerForgeEntry))
+                                    }
+
+                                    foreach ($PowerForgeName in $PowerForgeNames) {
+                                        foreach ($PowerForgeAlternateName in @($PowerForgeName.ToUpperInvariant(), $PowerForgeName.ToLowerInvariant())) {
+                                            if ([string]::Equals($PowerForgeName, $PowerForgeAlternateName, [StringComparison]::Ordinal) -or
+                                                $PowerForgeNames.Contains($PowerForgeAlternateName)) {
+                                                continue
+                                            }
+
+                                            $PowerForgeAlternatePath = [IO.Path]::Combine($PowerForgeProbeDirectory, $PowerForgeAlternateName)
+                                            if ([IO.File]::Exists($PowerForgeAlternatePath) -or [IO.Directory]::Exists($PowerForgeAlternatePath)) {
+                                                return [StringComparison]::OrdinalIgnoreCase
+                                            }
+
+                                            return [StringComparison]::Ordinal
+                                        }
+                                    }
+                                } catch {
+                                    # Ordinal comparison prevents an uncertain probe from exporting into a caller.
+                                }
+
+                                return [StringComparison]::Ordinal
+                            } $PSCommandPath
+                            $PowerForgeIsModuleWrapper = [string]::Equals(
+                                [IO.Path]::GetFullPath($PowerForgeOuterModule.Path),
+                                [IO.Path]::GetFullPath($PSCommandPath),
+                                $PowerForgePathComparison
+                            )
+                        } catch {
+                            $PowerForgeIsModuleWrapper = $false
+                        }
+                    }
+                    if (-not $PowerForgeIsModuleWrapper) {
+                        # A Script/ScriptPacked entry point, including one dot-sourced by another module, must not mutate
+                        # that caller's export table. The imported inner module's commands remain available to this script.
+                    } elseif ($null -ne $AddExportedCmdlet) {
                         foreach ($Cmd in $PowerForgeDevelopmentInnerModule.ExportedCmdlets.Values) {
-                            $AddExportedCmdlet.Invoke($ExecutionContext.SessionState.Module, @(, $Cmd)) | Out-Null
+                            $AddExportedCmdlet.Invoke($PowerForgeOuterModule, @(, $Cmd)) | Out-Null
                         }
                         $AddExportedAlias = [System.Management.Automation.PSModuleInfo].GetMethod(
                             'AddExportedAlias',
@@ -417,7 +469,7 @@ namespace HomeAssistantX.DevelopmentModuleLoadContext
                                     Set-Alias -Name $Alias.Name -Value $AliasTarget -Scope Local -Force -ErrorAction Stop
                                     $ExportedAlias = $ExecutionContext.SessionState.InvokeCommand.GetCommand($Alias.Name, [System.Management.Automation.CommandTypes]::Alias)
                                     if ($null -ne $ExportedAlias) {
-                                        $AddExportedAlias.Invoke($ExecutionContext.SessionState.Module, @(, $ExportedAlias)) | Out-Null
+                                        $AddExportedAlias.Invoke($PowerForgeOuterModule, @(, $ExportedAlias)) | Out-Null
                                     } else {
                                         Write-Warning -Message "Alias '$($Alias.Name)' from HomeAssistantX.PowerShell was created but could not be resolved for export."
                                     }
@@ -803,6 +855,6 @@ namespace HomeAssistantX.DevelopmentModuleLoadContext
 
 # PowerForge script payload end
 $FunctionsToExport = @()
-$CmdletsToExport = @('Connect-HomeAssistant', 'Disconnect-HomeAssistant', 'Export-HomeAssistantCameraSnapshot', 'Export-HomeAssistantDiagnostic', 'Find-HomeAssistant', 'Get-HomeAssistantAction', 'Get-HomeAssistantApp', 'Get-HomeAssistantArea', 'Get-HomeAssistantAutomation', 'Get-HomeAssistantBackup', 'Get-HomeAssistantCalendar', 'Get-HomeAssistantCalendarEvent', 'Get-HomeAssistantCamera', 'Get-HomeAssistantCategory', 'Get-HomeAssistantConnection', 'Get-HomeAssistantDashboard', 'Get-HomeAssistantDevice', 'Get-HomeAssistantEnergy', 'Get-HomeAssistantEntity', 'Get-HomeAssistantFloor', 'Get-HomeAssistantHistory', 'Get-HomeAssistantInfo', 'Get-HomeAssistantIntegration', 'Get-HomeAssistantIssue', 'Get-HomeAssistantJob', 'Get-HomeAssistantLabel', 'Get-HomeAssistantLog', 'Get-HomeAssistantLogbook', 'Get-HomeAssistantMedia', 'Get-HomeAssistantNotification', 'Get-HomeAssistantStatistic', 'Get-HomeAssistantTrace', 'Get-HomeAssistantUpdate', 'Get-HomeAssistantWeather', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantAutomation', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'Invoke-HomeAssistantRoutine', 'New-HomeAssistantBackup', 'Receive-HomeAssistantCalendarEvent', 'Receive-HomeAssistantEvent', 'Receive-HomeAssistantNotification', 'Receive-HomeAssistantWeatherForecast', 'Remove-HomeAssistantAutomation', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantDashboard', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantAlarm', 'Set-HomeAssistantAutomation', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCamera', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantDashboard', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantFan', 'Set-HomeAssistantHelper', 'Set-HomeAssistantHumidifier', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLawnMower', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSiren', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch', 'Set-HomeAssistantVacuum', 'Set-HomeAssistantValve', 'Set-HomeAssistantWaterHeater', 'Test-HomeAssistantConfiguration', 'Test-HomeAssistantStatistic')
+$CmdletsToExport = @('Connect-HomeAssistant', 'Disconnect-HomeAssistant', 'Export-HomeAssistantCameraSnapshot', 'Export-HomeAssistantDiagnostic', 'Find-HomeAssistant', 'Get-HomeAssistantAction', 'Get-HomeAssistantApp', 'Get-HomeAssistantArea', 'Get-HomeAssistantAutomation', 'Get-HomeAssistantBackup', 'Get-HomeAssistantCalendar', 'Get-HomeAssistantCalendarEvent', 'Get-HomeAssistantCamera', 'Get-HomeAssistantCategory', 'Get-HomeAssistantConnection', 'Get-HomeAssistantDashboard', 'Get-HomeAssistantDevice', 'Get-HomeAssistantEnergy', 'Get-HomeAssistantEntity', 'Get-HomeAssistantFloor', 'Get-HomeAssistantHistory', 'Get-HomeAssistantInfo', 'Get-HomeAssistantIntegration', 'Get-HomeAssistantIssue', 'Get-HomeAssistantJob', 'Get-HomeAssistantLabel', 'Get-HomeAssistantLog', 'Get-HomeAssistantLogbook', 'Get-HomeAssistantMedia', 'Get-HomeAssistantNotification', 'Get-HomeAssistantStatistic', 'Get-HomeAssistantTrace', 'Get-HomeAssistantUpdate', 'Get-HomeAssistantWeather', 'Install-HomeAssistantUpdate', 'Invoke-HomeAssistantAction', 'Invoke-HomeAssistantApp', 'Invoke-HomeAssistantAutomation', 'Invoke-HomeAssistantRecorderMaintenance', 'Invoke-HomeAssistantRemote', 'Invoke-HomeAssistantRoutine', 'New-HomeAssistantBackup', 'Receive-HomeAssistantCalendarEvent', 'Receive-HomeAssistantEvent', 'Receive-HomeAssistantNotification', 'Receive-HomeAssistantWeatherForecast', 'Remove-HomeAssistantAutomation', 'Remove-HomeAssistantCalendarEvent', 'Remove-HomeAssistantCategory', 'Remove-HomeAssistantDashboard', 'Remove-HomeAssistantLabel', 'Remove-HomeAssistantNotification', 'Remove-HomeAssistantStatistic', 'Restart-HomeAssistant', 'Send-HomeAssistantNotification', 'Set-HomeAssistantAlarm', 'Set-HomeAssistantAutomation', 'Set-HomeAssistantCalendarEvent', 'Set-HomeAssistantCamera', 'Set-HomeAssistantCategory', 'Set-HomeAssistantClimate', 'Set-HomeAssistantCover', 'Set-HomeAssistantDashboard', 'Set-HomeAssistantEnergy', 'Set-HomeAssistantFan', 'Set-HomeAssistantHelper', 'Set-HomeAssistantHumidifier', 'Set-HomeAssistantLabel', 'Set-HomeAssistantLawnMower', 'Set-HomeAssistantLight', 'Set-HomeAssistantLock', 'Set-HomeAssistantMediaPlayer', 'Set-HomeAssistantSiren', 'Set-HomeAssistantStatistic', 'Set-HomeAssistantSwitch', 'Set-HomeAssistantVacuum', 'Set-HomeAssistantValve', 'Set-HomeAssistantWaterHeater', 'Test-HomeAssistantAutomationDraft', 'Test-HomeAssistantConfiguration', 'Test-HomeAssistantStatistic')
 $AliasesToExport = @()
 Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport

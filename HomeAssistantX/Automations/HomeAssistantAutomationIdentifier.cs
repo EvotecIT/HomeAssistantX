@@ -54,6 +54,13 @@ public static class HomeAssistantAutomationIdentifier
             },
             cancellationToken);
 
+    internal static void ValidateDefinitionForSaveInline(
+        string automationId,
+        JsonElement definition,
+        string parameterName,
+        CancellationToken cancellationToken = default)
+        => ValidateDefinitionForSaveCore(automationId, definition, parameterName, cancellationToken);
+
     private static void ValidateDefinitionForSaveCore(
         string automationId,
         JsonElement definition,

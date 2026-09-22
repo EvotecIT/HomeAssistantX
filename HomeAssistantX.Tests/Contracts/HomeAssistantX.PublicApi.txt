@@ -33,14 +33,24 @@ T before-field-init sealed class HomeAssistantX.Automations.HomeAssistantAutomat
   M instance System.Threading.Tasks.Task<HomeAssistantX.Automations.HomeAssistantAutomationConfiguration> GetConfigurationAsync(System.String automationId, System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> SaveConfigurationAsync(System.String automationId, System.Text.Json.JsonElement definition, System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<HomeAssistantX.Services.HomeAssistantServiceCallResult> TriggerAsync(HomeAssistantX.Services.HomeAssistantTarget target, System.Boolean skipConditions = true, System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> ValidateDraftAsync(System.Text.Json.JsonElement definition, System.Threading.CancellationToken cancellationToken = null)
 T before-field-init sealed class HomeAssistantX.Automations.HomeAssistantAutomationConfiguration
   C special-name HomeAssistantX.Automations.HomeAssistantAutomationConfiguration()
   P instance System.String AutomationId {get;set;}
   P instance System.Text.Json.JsonElement Definition {get;set;}
+T before-field-init sealed class HomeAssistantX.Automations.HomeAssistantAutomationDraft
+  P instance System.Text.Json.JsonElement Action {get;}
+  P instance System.Nullable<System.Text.Json.JsonElement> Condition {get;}
+  P instance System.Text.Json.JsonElement Definition {get;}
+  P instance System.Text.Json.JsonElement Trigger {get;}
+  M static HomeAssistantX.Automations.HomeAssistantAutomationDraft Parse(System.Text.Json.JsonElement definition, System.Threading.CancellationToken cancellationToken = null)
+  M static System.Threading.Tasks.Task<HomeAssistantX.Automations.HomeAssistantAutomationDraft> ParseAsync(System.String definitionJson, System.Threading.CancellationToken cancellationToken = null)
+  M static System.Threading.Tasks.Task<HomeAssistantX.Automations.HomeAssistantAutomationDraft> ParseAsync(System.Text.Json.JsonElement definition, System.Threading.CancellationToken cancellationToken = null)
 T before-field-init static class HomeAssistantX.Automations.HomeAssistantAutomationIdentifier
   M static System.String NormalizeConfigurationId(System.String automationId)
 T before-field-init sealed class HomeAssistantX.Automations.HomeAssistantAutomationStatus
   C special-name HomeAssistantX.Automations.HomeAssistantAutomationStatus()
+  P instance System.String? ConfigurationId {get;set;}
   P instance System.Nullable<System.Int64> CurrentRuns {get;set;}
   P instance System.String EntityId {get;set;}
   P instance System.Nullable<System.Boolean> IsEnabled {get;set;}

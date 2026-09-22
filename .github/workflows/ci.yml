@@ -22,6 +22,8 @@ jobs:
         run: dotnet build HomeAssistantX.slnx --configuration Release --no-restore
       - name: Test .NET 10 protocol contracts
         run: dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net10.0
+      - name: Test MCP transport and operator contracts
+        run: dotnet test HomeAssistantX.Mcp.Tests/HomeAssistantX.Mcp.Tests.csproj --configuration Release --no-build --framework net10.0
       - name: Test .NET Framework contracts
         run: dotnet test HomeAssistantX.Tests/HomeAssistantX.Tests.csproj --configuration Release --no-build --framework net472
       - name: Test PowerShell 7 module contracts
@@ -44,3 +46,14 @@ jobs:
       - name: Test packed package consumers
         shell: pwsh
         run: ./Tests/Packages/Test-PackageConsumers.ps1 -PackagePath (Get-Item ./artifacts/packages/HomeAssistantX.*.nupkg).FullName
+      - name: Pack and install MCP tool
+        shell: pwsh
+        run: |
+          dotnet pack HomeAssistantX.Mcp/HomeAssistantX.Mcp.csproj --configuration Release --no-build --output artifacts/packages
+          $toolPackage = Get-Item artifacts/packages/HomeAssistantX.Mcp.*.nupkg
+          $toolVersion = $toolPackage.BaseName.Substring('HomeAssistantX.Mcp.'.Length)
+          dotnet tool install HomeAssistantX.Mcp --version $toolVersion --tool-path artifacts/mcp-tool --add-source artifacts/packages
+      - name: Test packed MCP tool transport
+        run: dotnet test HomeAssistantX.Mcp.Tests/HomeAssistantX.Mcp.Tests.csproj --configuration Release --no-build --framework net10.0
+        env:
+          HOMEASSISTANTX_MCP_TEST_EXECUTABLE: ${{ github.workspace }}\artifacts\mcp-tool\homeassistantx-mcp.exe

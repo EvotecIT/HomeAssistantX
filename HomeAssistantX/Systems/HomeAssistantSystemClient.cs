@@ -34,7 +34,7 @@ public sealed class HomeAssistantSystemClient
     }
 
     /// <summary>Validates trigger, condition, and action configuration fragments.</summary>
-    public Task<JsonElement> ValidateConfigAsync(
+    public async Task<JsonElement> ValidateConfigAsync(
         object? trigger = null,
         object? condition = null,
         object? action = null,
@@ -43,17 +43,17 @@ public sealed class HomeAssistantSystemClient
         var payload = new Dictionary<string, object?>();
         if (trigger is not null)
         {
-            payload["trigger"] = trigger;
+            payload["triggers"] = trigger;
         }
 
         if (condition is not null)
         {
-            payload["condition"] = condition;
+            payload["conditions"] = condition;
         }
 
         if (action is not null)
         {
-            payload["action"] = action;
+            payload["actions"] = action;
         }
 
         if (payload.Count == 0)
@@ -61,7 +61,19 @@ public sealed class HomeAssistantSystemClient
             throw new ArgumentException("At least one trigger, condition, or action fragment is required.");
         }
 
-        return _webSocket.RequestAsync("validate_config", payload, cancellationToken);
+        try
+        {
+            return await _webSocket.RequestAsync("validate_config", payload, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HomeAssistantCommandException exception) when (exception.Code == "invalid_format")
+        {
+            // Older Home Assistant releases used singular field names for this command.
+            var legacyPayload = new Dictionary<string, object?>();
+            if (trigger is not null) legacyPayload["trigger"] = trigger;
+            if (condition is not null) legacyPayload["condition"] = condition;
+            if (action is not null) legacyPayload["action"] = action;
+            return await _webSocket.RequestAsync("validate_config", legacyPayload, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Resolves the entities, devices, and areas selected by a target.</summary>

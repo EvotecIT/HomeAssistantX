@@ -100,6 +100,7 @@ $expectedCommands = @(
     'Set-HomeAssistantVacuum',
     'Set-HomeAssistantValve',
     'Set-HomeAssistantWaterHeater',
+    'Test-HomeAssistantAutomationDraft',
     'Test-HomeAssistantConfiguration',
     'Test-HomeAssistantStatistic'
 )
@@ -185,6 +186,7 @@ $outputTypeContracts = @{
     'Restart-HomeAssistant' = @('HomeAssistantIntegrationOperationResult', 'JsonElement')
     'Set-HomeAssistantAutomation' = @('JsonElement')
     'Set-HomeAssistantDashboard' = @('HomeAssistantDashboard', 'HomeAssistantDashboardResource', 'JsonElement')
+    'Test-HomeAssistantAutomationDraft' = @('JsonElement')
     'Test-HomeAssistantStatistic' = @('JsonElement')
 }
 foreach ($entry in $outputTypeContracts.GetEnumerator()) {
@@ -251,6 +253,13 @@ $server.StartInfo.RedirectStandardError = $true
 $server.StartInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
 $null = $server.Start()
 $connection = $null
+$testOutputRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$testOutputDir = [IO.Path]::GetFullPath([IO.Path]::Combine(
+    $testOutputRoot, 'HomeAssistantX-ModuleTest-' + [Guid]::NewGuid().ToString('N')))
+if (-not $testOutputDir.StartsWith($testOutputRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The module test output directory escaped the system temporary directory.'
+}
+$null = New-Item -ItemType Directory -Path $testOutputDir
 try {
     $ready = $server.StandardOutput.ReadLine()
     if ([string]::IsNullOrWhiteSpace($ready) -or -not $ready.StartsWith('READY ')) {
@@ -471,6 +480,11 @@ try {
     $backups = @($connection | Get-HomeAssistantBackup)
     $supervisorOverview = $connection | Get-HomeAssistantInfo -Supervisor
     $configuration = $connection | Test-HomeAssistantConfiguration
+    $automationDraftValidation = $connection | Test-HomeAssistantAutomationDraft -ConfigurationJson '{"alias":"Morning","triggers":[],"actions":[]}'
+    $automationDraftValidationObject = ConvertFrom-Json -InputObject $automationDraftValidation.GetRawText()
+    if ($null -eq $automationDraftValidationObject.PSObject.Properties['triggers']) {
+        throw 'Automation draft validation did not return Home Assistant trigger feedback.'
+    }
     $notifications = @(Get-HomeAssistantNotification)
     $notificationUpdates = @(Receive-HomeAssistantNotification -Count 1 -TimeoutSeconds 5)
     $calendars = @(Get-HomeAssistantCalendar)
@@ -602,7 +616,7 @@ try {
         if ($server.StandardOutput.ReadLine() -ne 'DEFAULT_LABELS_SET') { throw 'The default label fixture did not reset.' }
     }
 
-    $diagnosticPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')
+    $diagnosticPath = Join-Path $testOutputDir ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')
     try {
         [IO.File]::WriteAllText($diagnosticPath, 'existing diagnostic')
         $diagnosticFile = $connection | Export-HomeAssistantDiagnostic -EntryId entry-1 -Path $diagnosticPath -Force -Confirm:$false
@@ -645,7 +659,7 @@ try {
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') { throw 'A whitespace-only notification value dispatched an action.' }
 
-    $cameraPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Camera-' + [Guid]::NewGuid().ToString('N') + '.jpg')
+    $cameraPath = Join-Path $testOutputDir ('HomeAssistantX-Camera-' + [Guid]::NewGuid().ToString('N') + '.jpg')
     try {
         [IO.File]::WriteAllText($cameraPath, 'old image')
         $cameraFile = Export-HomeAssistantCameraSnapshot camera.front $cameraPath -Width 640 -Height 360 -Force -Confirm:$false
@@ -1341,4 +1355,5 @@ try {
         }
     }
     $server.Dispose()
+    Remove-Item -LiteralPath $testOutputDir -Recurse
 }

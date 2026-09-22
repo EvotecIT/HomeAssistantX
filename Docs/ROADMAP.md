@@ -11,7 +11,6 @@ HomeAssistantX remains one dependency-light package. New packages are justified 
 - [ ] Promote integration-specific raw commands into typed APIs only when two consumers need the same stable contract.
 - [ ] Add IPv6 mDNS discovery when a real IPv6-only consumer can validate the platform behavior.
 - [ ] Publish an optional NaCl SecretBox adapter only when a dependency can be justified, maintained, and validated across all target frameworks; the core protector interface remains dependency-free.
-- [ ] Add an MCP/agent adapter over the same explicit connection and typed operations after the library and PowerShell contracts have field experience. Keep mutations policy-gated and expose read-only troubleshooting first.
 - [ ] Add narrowly scoped restore/recovery helpers only after defining interactive confirmation, backup verification, and failure-recovery contracts.
 
 ## Explicit non-goals

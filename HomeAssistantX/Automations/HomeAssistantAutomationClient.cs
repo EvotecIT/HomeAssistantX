@@ -7,6 +7,7 @@ using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
+using HomeAssistantX.Systems;
 
 namespace HomeAssistantX.Automations;
 
@@ -16,12 +17,14 @@ public sealed class HomeAssistantAutomationClient
     private readonly HomeAssistantStateClient _states;
     private readonly HomeAssistantRestClient _rest;
     private readonly HomeAssistantServiceClient _services;
+    private readonly HomeAssistantSystemClient _system;
 
-    internal HomeAssistantAutomationClient(HomeAssistantStateClient states, HomeAssistantRestClient rest, HomeAssistantServiceClient services)
+    internal HomeAssistantAutomationClient(HomeAssistantStateClient states, HomeAssistantRestClient rest, HomeAssistantServiceClient services, HomeAssistantSystemClient system)
     {
         _states = states;
         _rest = rest;
         _services = services;
+        _system = system;
     }
 
     public async Task<IReadOnlyList<HomeAssistantAutomationStatus>> GetAsync(CancellationToken cancellationToken = default)
@@ -97,19 +100,30 @@ public sealed class HomeAssistantAutomationClient
         };
     }
 
-    /// <summary>Creates or replaces an editable automation definition and requests a targeted automation reload.</summary>
+    /// <summary>Asks Home Assistant to validate a draft's trigger, condition, and action fragments without saving it. Keep the source JSON document alive until the task completes.</summary>
+    public async Task<JsonElement> ValidateDraftAsync(JsonElement definition, CancellationToken cancellationToken = default)
+    {
+        var draft = await HomeAssistantAutomationDraft.ParseAsync(definition, cancellationToken).ConfigureAwait(false);
+        return await _system.ValidateConfigAsync(draft.Trigger, draft.Condition, draft.Action, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Creates or replaces an editable automation definition and requests a targeted automation reload. Keep the source JSON document alive until the task completes.</summary>
     public async Task<JsonElement> SaveConfigurationAsync(string automationId, JsonElement definition, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var id = HomeAssistantAutomationIdentifier.NormalizeConfigurationId(automationId, cancellationToken);
-        HomeAssistantAutomationIdentifier.ValidateDefinitionForSave(id, definition, nameof(definition), cancellationToken);
-        var frozenDefinition = HomeAssistantJson.RunCancellationIsolated(
-            () => HomeAssistantJson.FreezeValue(
+        // The source JsonElement belongs to the caller until this worker completes, even on cancellation.
+        var frozenDefinition = await Task.Run(() =>
+        {
+            HomeAssistantAutomationIdentifier.ValidateDefinitionForSaveInline(
+                id, definition, nameof(definition), cancellationToken);
+            return HomeAssistantJson.FreezeValue(
                 definition,
                 nameof(definition),
                 "Automation definition",
-                cancellationToken),
-            cancellationToken);
+                cancellationToken);
+        }, CancellationToken.None).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         return await _rest.SendAsync<JsonElement>(HttpMethod.Post, ConfigurationPath(id, cancellationToken), frozenDefinition, cancellationToken).ConfigureAwait(false);
     }
 
@@ -130,6 +144,7 @@ public sealed class HomeAssistantAutomationClient
         return new HomeAssistantAutomationStatus
         {
             EntityId = state.EntityId,
+            ConfigurationId = HomeAssistantAttributeReader.GetString(state.Attributes, "id", cancellationToken),
             Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name", cancellationToken),
             IsEnabled = CancellationAwareString.EqualsOrdinalIgnoreCase(state.State, "on", cancellationToken)
                 ? true
