@@ -981,6 +981,18 @@ T before-field-init sealed class HomeAssistantX.Operations.HomeAssistantIntegrat
 T before-field-init sealed class HomeAssistantX.Operations.HomeAssistantLogClient
   M instance System.Threading.Tasks.Task<System.String> GetLegacyErrorLogAsync(System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantSystemLogEntry>> GetSystemLogAsync(System.Threading.CancellationToken cancellationToken = null)
+T before-field-init sealed class HomeAssistantX.Operations.HomeAssistantOperationalSnapshot
+  C special-name HomeAssistantX.Operations.HomeAssistantOperationalSnapshot()
+  P instance System.Nullable<System.Int32> ActiveRepairIssueCount {get;set;}
+  P instance System.Nullable<System.Int32> AvailableUpdateCount {get;set;}
+  P instance HomeAssistantX.Operations.HomeAssistantCapabilityReport Capabilities {get;set;}
+  P instance System.Nullable<System.Int32> EntityCount {get;set;}
+  P instance System.Boolean IsPartial {get;}
+  P instance System.DateTimeOffset ObservedAt {get;set;}
+  P instance System.Nullable<System.Int32> SystemLogEntryCount {get;set;}
+  P instance System.Nullable<System.Int32> UnavailableEntityCount {get;set;}
+  P instance System.Collections.Generic.IReadOnlyList<System.String> UnavailableSections {get;set;}
+  P instance System.Nullable<System.Int32> UnknownEntityCount {get;set;}
 T before-field-init sealed class HomeAssistantX.Operations.HomeAssistantOperationsClient
   P instance HomeAssistantX.Operations.HomeAssistantDiagnosticsClient Diagnostics {get;}
   P instance HomeAssistantX.Operations.HomeAssistantSystemHealthClient Health {get;}
@@ -990,6 +1002,7 @@ T before-field-init sealed class HomeAssistantX.Operations.HomeAssistantOperatio
   P instance HomeAssistantX.Operations.HomeAssistantTraceClient Traces {get;}
   P instance HomeAssistantX.Operations.HomeAssistantUpdateClient Updates {get;}
   M instance System.Threading.Tasks.Task<HomeAssistantX.Operations.HomeAssistantCapabilityReport> GetCapabilitiesAsync(System.Threading.CancellationToken cancellationToken = null)
+  M instance System.Threading.Tasks.Task<HomeAssistantX.Operations.HomeAssistantOperationalSnapshot> GetOperationalSnapshotAsync(System.Threading.CancellationToken cancellationToken = null)
 T before-field-init sealed class HomeAssistantX.Operations.HomeAssistantRepairClient
   M instance System.Threading.Tasks.Task<System.Text.Json.JsonElement> GetIssueDataAsync(System.String domain, System.String issueId, System.Threading.CancellationToken cancellationToken = null)
   M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantRepairIssue>> GetIssuesAsync(System.Boolean includeIgnored = false, System.Threading.CancellationToken cancellationToken = null)

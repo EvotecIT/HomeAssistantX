@@ -235,7 +235,7 @@ internal sealed partial class TestHomeAssistantServer
                 await WriteHttpResponseAsync(stream, 200, "{\"value\":1}").ConfigureAwait(false);
                 break;
             case "GET /api/components":
-                await WriteHttpResponseAsync(stream, 200, "[\"api\",\"websocket_api\",\"recorder\"]").ConfigureAwait(false);
+                await WriteHttpResponseAsync(stream, 200, ComponentsResponseJson).ConfigureAwait(false);
                 break;
             case "GET /api/events":
                 await WriteHttpResponseAsync(stream, 200, "[{\"event\":\"state_changed\",\"listener_count\":5}]").ConfigureAwait(false);

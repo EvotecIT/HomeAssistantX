@@ -200,6 +200,10 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
     public string ConfigurationResponseJson { get; set; } =
         "{\"location_name\":\"Test Home\",\"Location_Name\":\"Case-distinct extension\",\"time_zone\":\"Europe/Warsaw\",\"version\":\"2026.8.3\",\"state\":\"RUNNING\",\"components\":[\"api\",\"websocket_api\"],\"custom_field\":42}";
 
+    public string ComponentsResponseJson { get; set; } = "[\"api\",\"websocket_api\",\"recorder\"]";
+
+    public string? RepairsListErrorCode { get; set; }
+
     public string? ExtendedEntityRegistryResponseJson { get; set; }
 
     public bool PublishNullStateEventData { get; set; }
@@ -1244,6 +1248,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"name\":\"homeassistant.components.test\",\"message\":[\"Test warning\"],\"level\":\"WARNING\",\"source\":[\"homeassistant/components/test/__init__.py\",42],\"exception\":\"test exception\",\"count\":2,\"timestamp\":1787680800,\"first_occurred\":1787680700}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "repairs/list_issues":
+                if (RepairsListErrorCode is not null)
+                {
+                    await session.SendErrorAsync(id, RepairsListErrorCode, "Repairs unavailable", RepairsListErrorCode, _source.Token).ConfigureAwait(false);
+                    return;
+                }
                 await session.SendResultAsync(id, ParseJson("{\"issues\":[{\"domain\":\"test\",\"issue_id\":\"warning-1\",\"active\":true,\"is_fixable\":true,\"severity\":\"warning\",\"ignored\":false,\"created\":\"2026-08-25T10:00:00Z\"},{\"domain\":\"test\",\"issue_id\":\"ignored-1\",\"active\":true,\"is_fixable\":false,\"severity\":\"warning\",\"ignored\":true,\"created\":\"2026-08-25T09:00:00Z\"}]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "repairs/get_issue_data":

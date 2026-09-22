@@ -48,6 +48,7 @@ public sealed class LiveHomeAssistantTests
         var cameras = await client.Cameras.GetAsync();
         var automations = await client.Automations.GetAsync();
         var capabilities = await client.Operations.GetCapabilitiesAsync();
+        var operationalSnapshot = await client.Operations.GetOperationalSnapshotAsync();
         var integrations = await client.Operations.Integrations.GetAllAsync();
         var updates = await client.Operations.Updates.GetAllAsync();
         using var subscription = await client.States.SubscribeAsync(
@@ -242,6 +243,8 @@ public sealed class LiveHomeAssistantTests
             Assert.False(string.IsNullOrWhiteSpace(instance.ServiceInstanceName));
         });
         Assert.Equal(configuration.Version, capabilities.CoreVersion);
+        Assert.Equal(configuration.Version, operationalSnapshot.Capabilities.CoreVersion);
+        Assert.NotNull(operationalSnapshot.EntityCount);
         Assert.NotEmpty(integrations);
         Assert.Equal(System.Text.Json.JsonValueKind.Null, pong.ValueKind);
         Assert.Equal(configuration.Version, webSocketConfiguration.Version);

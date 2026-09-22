@@ -2,6 +2,7 @@ using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
 using HomeAssistantX.WebSockets;
+using HomeAssistantX.Exceptions;
 
 namespace HomeAssistantX.Operations;
 
@@ -10,6 +11,7 @@ public sealed class HomeAssistantOperationsClient
 {
     private readonly HomeAssistantRestClient _rest;
     private readonly HomeAssistantWebSocketClient _webSocket;
+    private readonly HomeAssistantStateClient _states;
 
     internal HomeAssistantOperationsClient(
         HomeAssistantRestClient rest,
@@ -19,6 +21,7 @@ public sealed class HomeAssistantOperationsClient
     {
         _rest = rest;
         _webSocket = webSocket;
+        _states = states;
         Logs = new HomeAssistantLogClient(rest, webSocket);
         Repairs = new HomeAssistantRepairClient(webSocket);
         Health = new HomeAssistantSystemHealthClient(webSocket);
@@ -41,6 +44,82 @@ public sealed class HomeAssistantOperationsClient
     public HomeAssistantUpdateClient Updates { get; }
 
     public HomeAssistantDiagnosticsClient Diagnostics { get; }
+
+    /// <summary>
+    /// Reads one privacy-safe summary of installation capabilities, entity availability, updates,
+    /// active Repairs issues, and aggregated system-log entries. Optional section failures leave
+    /// their counts null and are listed by stable section name. Cancellation is never suppressed.
+    /// </summary>
+    public async Task<HomeAssistantOperationalSnapshot> GetOperationalSnapshotAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var observedAt = DateTimeOffset.UtcNow;
+        var capabilities = await GetCapabilitiesAsync(cancellationToken).ConfigureAwait(false);
+        var unavailableSections = new List<string>();
+        var snapshot = new HomeAssistantOperationalSnapshot
+        {
+            ObservedAt = observedAt,
+            Capabilities = capabilities
+        };
+
+        try
+        {
+            var states = await _states.GetAllAsync(cancellationToken).ConfigureAwait(false);
+            var unavailable = 0;
+            var unknown = 0;
+            var updates = 0;
+            foreach (var state in states)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (string.Equals(state.State, "unavailable", StringComparison.OrdinalIgnoreCase)) unavailable++;
+                if (string.Equals(state.State, "unknown", StringComparison.OrdinalIgnoreCase)) unknown++;
+                if (string.Equals(state.Domain, "update", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(state.State, "on", StringComparison.OrdinalIgnoreCase)) updates++;
+            }
+
+            snapshot.EntityCount = states.Count;
+            snapshot.UnavailableEntityCount = unavailable;
+            snapshot.UnknownEntityCount = unknown;
+            if (IsAvailable(capabilities, "updates")) snapshot.AvailableUpdateCount = updates;
+        }
+        catch (HomeAssistantException) when (!cancellationToken.IsCancellationRequested)
+        {
+            unavailableSections.Add("states");
+        }
+
+        if (IsAvailable(capabilities, "repairs"))
+        {
+            try
+            {
+                var issues = await Repairs.GetIssuesAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                snapshot.ActiveRepairIssueCount = issues.Count(issue => issue.Active);
+            }
+            catch (HomeAssistantException) when (!cancellationToken.IsCancellationRequested)
+            {
+                unavailableSections.Add("repairs");
+            }
+        }
+
+        if (IsAvailable(capabilities, "system_log"))
+        {
+            try
+            {
+                snapshot.SystemLogEntryCount = (await Logs.GetSystemLogAsync(cancellationToken).ConfigureAwait(false)).Count;
+            }
+            catch (HomeAssistantException) when (!cancellationToken.IsCancellationRequested)
+            {
+                unavailableSections.Add("system_log");
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        snapshot.UnavailableSections = unavailableSections.ToArray();
+        return snapshot;
+    }
+
+    private static bool IsAvailable(HomeAssistantCapabilityReport report, string name)
+        => report.Capabilities.Any(capability => capability.Name == name
+            && capability.Availability == HomeAssistantCapabilityAvailability.Available);
 
     /// <summary>Discovers install-type and component capabilities without changing the server.</summary>
     public async Task<HomeAssistantCapabilityReport> GetCapabilitiesAsync(

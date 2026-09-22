@@ -111,7 +111,7 @@ if (($actualCommands -join '|') -ne ($expectedCommands -join '|')) {
 
 $parameterSetContracts = @{
     'Get-HomeAssistantLog'        = @('App', 'Core', 'Host', 'Legacy', 'Supervisor', 'SystemLog')
-    'Get-HomeAssistantInfo'       = @('Capabilities', 'Health', 'Overview', 'Supervisor')
+    'Get-HomeAssistantInfo'       = @('Capabilities', 'Health', 'OperationalSnapshot', 'Overview', 'Supervisor')
     'Get-HomeAssistantEnergy'     = @('FossilConsumption', 'Info', 'Preferences', 'SolarForecast', 'Validation')
     'Get-HomeAssistantStatistic'  = @('Catalog', 'Metadata', 'Values')
     'Get-HomeAssistantWeather'    = @('Current', 'Forecast', 'Units')
@@ -396,6 +396,12 @@ try {
     }
 
     $info = Get-HomeAssistantInfo
+    $operationalSnapshot = Get-HomeAssistantInfo -OperationalSnapshot
+    if ($operationalSnapshot.Capabilities.CoreVersion -ne '2026.8.3' -or
+        $null -eq $operationalSnapshot.EntityCount -or
+        $operationalSnapshot.IsPartial) {
+        throw 'The PowerShell operational snapshot did not return a complete bounded summary.'
+    }
 
     $falseSelectorRejected = $false
     try {
