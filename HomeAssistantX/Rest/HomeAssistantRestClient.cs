@@ -97,6 +97,9 @@ public sealed partial class HomeAssistantRestClient : IDisposable
             requestTimeout,
             cancellationToken).ConfigureAwait(false);
 
+        using var stateAttributesPolicy = HomeAssistantAttributeDictionaryConverter.UseTolerantStateAttributes(
+            _options.TreatMalformedStateAttributesAsEmpty);
+
         if (result.ValueKind == JsonValueKind.Array)
         {
             return new HomeAssistantServiceCallResult
@@ -239,6 +242,8 @@ public sealed partial class HomeAssistantRestClient : IDisposable
                     : serializerOptions;
                 T? value;
                 using (HomeAssistantAttributeDictionaryConverter.UseCancellationToken(operationToken))
+                using (HomeAssistantAttributeDictionaryConverter.UseTolerantStateAttributes(
+                           _options.TreatMalformedStateAttributesAsEmpty))
                 {
                     value = await JsonSerializer.DeserializeAsync<T>(
                         stream,

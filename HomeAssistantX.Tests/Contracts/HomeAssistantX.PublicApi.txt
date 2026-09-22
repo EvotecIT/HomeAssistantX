@@ -161,6 +161,7 @@ T before-field-init sealed class HomeAssistantX.Configuration.HomeAssistantClien
   P instance System.TimeSpan ReconnectMinimumDelay {get;set;}
   P instance System.TimeSpan RequestTimeout {get;set;}
   P instance System.Int32 SubscriptionBufferCapacity {get;set;}
+  P instance System.Boolean TreatMalformedStateAttributesAsEmpty {get;set;}
 T enum HomeAssistantX.Controls.HomeAssistantAlarmAction : System.Int32
   F Disarm = 0
   F ArmHome = 1

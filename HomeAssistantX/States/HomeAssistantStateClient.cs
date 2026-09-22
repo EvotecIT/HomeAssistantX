@@ -69,6 +69,8 @@ public sealed class HomeAssistantStateClient : IDisposable
     public async Task<IReadOnlyList<HomeAssistantState>> GetAllWebSocketAsync(CancellationToken cancellationToken = default)
     {
         var result = await _webSocket.RequestAsync("get_states", null, cancellationToken).ConfigureAwait(false);
+        using var stateAttributesPolicy = HomeAssistantAttributeDictionaryConverter.UseTolerantStateAttributes(
+            _options.TreatMalformedStateAttributesAsEmpty);
         return HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(
             result,
             "The Home Assistant state list could not be decoded.",
@@ -194,6 +196,8 @@ public sealed class HomeAssistantStateClient : IDisposable
         JsonElement eventMessage,
         CancellationToken cancellationToken)
     {
+        using var stateAttributesPolicy = HomeAssistantAttributeDictionaryConverter.UseTolerantStateAttributes(
+            _options.TreatMalformedStateAttributesAsEmpty);
         var eventValue = HomeAssistantJson.DeserializeResponse<HomeAssistantEvent>(
             eventMessage,
             "A Home Assistant state event could not be decoded.",
@@ -244,6 +248,8 @@ public sealed class HomeAssistantStateClient : IDisposable
                 .ConfigureAwait(false);
         }
 
+        using var stateAttributesPolicy = HomeAssistantAttributeDictionaryConverter.UseTolerantStateAttributes(
+            _options.TreatMalformedStateAttributesAsEmpty);
         var currentStates = HomeAssistantJson.DeserializeResponse<HomeAssistantState[]>(
             snapshot,
             "The get_states response could not be decoded.",

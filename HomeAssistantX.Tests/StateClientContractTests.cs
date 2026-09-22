@@ -18,6 +18,54 @@ public sealed class StateClientContractTests
     }
 
     [Fact]
+    public async Task TolerantStateReadsKeepDiscoveryAliveWhenOneEntityHasMalformedAttributes()
+    {
+        using var server = new TestHomeAssistantServer();
+        server.SetStates("[{\"entity_id\":\"sensor.bad\",\"state\":\"on\",\"attributes\":[1,2]}," +
+                         "{\"entity_id\":\"media_player.good\",\"state\":\"playing\",\"attributes\":{\"friendly_name\":\"Good\"}}]");
+        using var strict = TestClientFactory.Create(server);
+        await Assert.ThrowsAsync<HomeAssistantProtocolException>(() => strict.States.GetAllAsync());
+
+        using var tolerant = TestClientFactory.Create(server, treatMalformedStateAttributesAsEmpty: true);
+        var restStates = await tolerant.States.GetAllAsync();
+        var webSocketStates = await tolerant.States.GetAllWebSocketAsync();
+        await tolerant.States.InitializeAsync();
+
+        Assert.Equal(2, restStates.Count);
+        Assert.Empty(restStates.Single(state => state.EntityId == "sensor.bad").Attributes);
+        Assert.Equal("Good", restStates.Single(state => state.EntityId == "media_player.good")
+            .Attributes["friendly_name"].GetString());
+        Assert.Equal(2, webSocketStates.Count);
+        Assert.Empty(webSocketStates.Single(state => state.EntityId == "sensor.bad").Attributes);
+        Assert.Equal(2, tolerant.States.Snapshot.Count);
+    }
+
+    [Fact]
+    public async Task TolerantSubscriptionAppliesMalformedAttributesInStateChange()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server, treatMalformedStateAttributesAsEmpty: true);
+        var received = new TaskCompletionSource<HomeAssistantStateChange>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = await client.States.SubscribeAsync(
+            HomeAssistantStateFilter.ForEntities("light.kitchen"),
+            (change, _) =>
+            {
+                received.TrySetResult(change);
+                return Task.CompletedTask;
+            });
+
+        await server.PublishStateChangeAsync(
+            "light.kitchen",
+            TestHomeAssistantServer.KitchenLightOffStateJson,
+            "{\"entity_id\":\"light.kitchen\",\"state\":\"on\",\"attributes\":true}");
+        var change = await WithTimeoutAsync(received.Task);
+
+        Assert.NotNull(change.CurrentState);
+        Assert.Empty(change.CurrentState.Attributes);
+        Assert.Empty(client.States.Snapshot["light.kitchen"].Attributes);
+    }
+
+    [Fact]
     public async Task BuffersEventsReceivedBetweenSubscriptionAndInitialSnapshot()
     {
         using var server = new TestHomeAssistantServer { SendStateChangeBeforeSnapshot = true };
