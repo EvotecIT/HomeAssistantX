@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using HomeAssistantX.Exceptions;
+using HomeAssistantX.Automations;
 using ModelContextProtocol.Server;
 
 namespace HomeAssistantX.Mcp;
@@ -148,8 +149,7 @@ public sealed class HomeAssistantMcpTools
         CancellationToken cancellationToken)
     {
         using var document = JsonDocument.Parse(definitionJson);
-        var (trigger, condition, action) = ReadAutomationFragments(document.RootElement);
-        var validation = await client.System.ValidateConfigAsync(trigger, condition, action, cancellationToken);
+        var validation = await client.Automations.ValidateDraftAsync(document.RootElement, cancellationToken);
         return new { Definition = document.RootElement.Clone(), Validation = validation };
     }
 
@@ -164,7 +164,7 @@ public sealed class HomeAssistantMcpTools
     {
         access.RequireChanges();
         using var document = JsonDocument.Parse(definitionJson);
-        _ = ReadAutomationFragments(document.RootElement);
+        _ = HomeAssistantAutomationDraft.Parse(document.RootElement, cancellationToken);
         if (string.IsNullOrWhiteSpace(expectedRevision))
             throw new ArgumentException("An expected revision is required.", nameof(expectedRevision));
 
@@ -185,20 +185,6 @@ public sealed class HomeAssistantMcpTools
 
         var response = await client.Automations.SaveConfigurationAsync(automationId, document.RootElement, cancellationToken);
         return new { AutomationId = automationId, Created = existing is null, Response = response };
-    }
-
-    private static (JsonElement Trigger, JsonElement? Condition, JsonElement Action) ReadAutomationFragments(JsonElement definition)
-    {
-        if (definition.ValueKind != JsonValueKind.Object)
-            throw new ArgumentException("An automation definition must be a JSON object.");
-        if ((!definition.TryGetProperty("triggers", out var trigger) && !definition.TryGetProperty("trigger", out trigger))
-            || (!definition.TryGetProperty("actions", out var action) && !definition.TryGetProperty("action", out action)))
-            throw new ArgumentException("An automation definition needs triggers and actions.");
-
-        JsonElement? condition = definition.TryGetProperty("conditions", out var conditions)
-            || definition.TryGetProperty("condition", out conditions)
-                ? conditions : null;
-        return (trigger, condition, action);
     }
 
     private static string Fingerprint(JsonElement definition)

@@ -51,7 +51,7 @@ public sealed class HomeAssistantClient : IDisposable
         Media = new HomeAssistantMediaBrowserClient(WebSocket);
         MobileApp = new HomeAssistantMobileAppClient(Rest, options);
         Dashboards = new HomeAssistantDashboardClient(WebSocket);
-        Automations = new HomeAssistantAutomationClient(States, Rest, Services);
+        Automations = new HomeAssistantAutomationClient(States, Rest, Services, System);
         Operations = new HomeAssistantOperationsClient(Rest, WebSocket, States, Services);
         Supervisor = HomeAssistantSupervisorClient.CreateViaCore(Rest, WebSocket);
     }

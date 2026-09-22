@@ -297,6 +297,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string FrontendPanelsResponseJson { get; set; } =
         "{\"lovelace\":{\"title\":\"Overview\",\"component_name\":\"lovelace\",\"default_visible\":true,\"show_in_sidebar\":true,\"require_admin\":false,\"future_panel\":true}}";
+    public bool UseLegacyValidationFields { get; set; }
     public string LovelaceConfigurationResponseJson { get; set; } =
         "{\"title\":\"Home\",\"views\":[{\"title\":\"Kitchen\"}],\"future_config\":true}";
 
@@ -701,7 +702,25 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson(FrontendPanelsResponseJson), false, _source.Token).ConfigureAwait(false);
                 return;
             case "validate_config":
-                await session.SendResultAsync(id, ParseJson("{\"trigger\":null,\"condition\":null,\"action\":null}"), false, _source.Token).ConfigureAwait(false);
+                var names = UseLegacyValidationFields
+                    ? new[] { "trigger", "condition", "action" }
+                    : new[] { "triggers", "conditions", "actions" };
+                var invalidNames = UseLegacyValidationFields
+                    ? new[] { "triggers", "conditions", "actions" }
+                    : new[] { "trigger", "condition", "action" };
+                if (invalidNames.Any(name => command.TryGetProperty(name, out _)))
+                {
+                    await session.SendErrorAsync(id, "invalid_format", "Unexpected validation fields.", "invalid_format", _source.Token).ConfigureAwait(false);
+                    return;
+                }
+
+                var validation = new Dictionary<string, object?>();
+                foreach (var name in names)
+                {
+                    if (command.TryGetProperty(name, out _))
+                        validation[name] = new { valid = true, error = (string?)null };
+                }
+                await session.SendResultAsync(id, JsonSerializer.SerializeToElement(validation), false, _source.Token).ConfigureAwait(false);
                 return;
             case "extract_from_target":
                 await session.SendResultAsync(id, ParseJson("{\"referenced_entities\":[\"light.kitchen\"],\"referenced_devices\":[],\"referenced_areas\":[]}"), false, _source.Token).ConfigureAwait(false);

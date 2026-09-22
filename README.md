@@ -389,6 +389,7 @@ Set-HomeAssistantDashboard -ConfigurationJson $dashboardJson `
 Get-HomeAssistantAutomation
 Invoke-HomeAssistantAutomation automation.morning -WhatIf
 Get-HomeAssistantAutomation morning-routine -Configuration
+Test-HomeAssistantAutomationDraft -ConfigurationJson $automationJson
 Set-HomeAssistantAutomation morning-routine $automationJson -WhatIf
 ```
 
@@ -398,6 +399,8 @@ fields while exposing stable browse/play identifiers. Lovelace writes require
 an administrator and storage-backed dashboards/resources. Automation entity
 execution is a runtime action; editing uses the separate administrator-only
 configuration identifier and never happens implicitly during `Invoke`.
+Draft validation checks trigger, condition, and action fragments with Home
+Assistant without saving the definition; it does not test physical effects.
 
 ### Troubleshoot and administer
 

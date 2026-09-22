@@ -7,6 +7,7 @@ using HomeAssistantX.Protocol;
 using HomeAssistantX.Rest;
 using HomeAssistantX.Services;
 using HomeAssistantX.States;
+using HomeAssistantX.Systems;
 
 namespace HomeAssistantX.Automations;
 
@@ -16,12 +17,14 @@ public sealed class HomeAssistantAutomationClient
     private readonly HomeAssistantStateClient _states;
     private readonly HomeAssistantRestClient _rest;
     private readonly HomeAssistantServiceClient _services;
+    private readonly HomeAssistantSystemClient _system;
 
-    internal HomeAssistantAutomationClient(HomeAssistantStateClient states, HomeAssistantRestClient rest, HomeAssistantServiceClient services)
+    internal HomeAssistantAutomationClient(HomeAssistantStateClient states, HomeAssistantRestClient rest, HomeAssistantServiceClient services, HomeAssistantSystemClient system)
     {
         _states = states;
         _rest = rest;
         _services = services;
+        _system = system;
     }
 
     public async Task<IReadOnlyList<HomeAssistantAutomationStatus>> GetAsync(CancellationToken cancellationToken = default)
@@ -95,6 +98,13 @@ public sealed class HomeAssistantAutomationClient
                 "The automation definition could not be snapshotted.",
                 cancellationToken: cancellationToken)
         };
+    }
+
+    /// <summary>Asks Home Assistant to validate a draft's trigger, condition, and action fragments without saving it.</summary>
+    public Task<JsonElement> ValidateDraftAsync(JsonElement definition, CancellationToken cancellationToken = default)
+    {
+        var draft = HomeAssistantAutomationDraft.Parse(definition, cancellationToken);
+        return _system.ValidateConfigAsync(draft.Trigger, draft.Condition, draft.Action, cancellationToken);
     }
 
     /// <summary>Creates or replaces an editable automation definition and requests a targeted automation reload.</summary>

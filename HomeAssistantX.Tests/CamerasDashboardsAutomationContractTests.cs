@@ -2836,6 +2836,28 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public async Task AutomationDraftValidationUsesNativeFragmentsWithoutSaving()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var definition = JsonDocument.Parse("{\"alias\":\"Morning\",\"triggers\":[],\"conditions\":[],\"actions\":[{\"action\":\"light.turn_on\"}],\"future_key\":true}");
+
+        var result = await client.Automations.ValidateDraftAsync(definition.RootElement);
+
+        Assert.True(result.TryGetProperty("triggers", out _));
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("validate_config")));
+        Assert.Equal(JsonValueKind.Array, command.RootElement.GetProperty("triggers").ValueKind);
+        Assert.Equal("light.turn_on", command.RootElement.GetProperty("actions")[0].GetProperty("action").GetString());
+        Assert.True(command.RootElement.TryGetProperty("conditions", out _));
+        Assert.Null(server.LastRequestBody);
+
+        using var ambiguous = JsonDocument.Parse("{\"trigger\":[],\"triggers\":[],\"action\":[]}");
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.ValidateDraftAsync(ambiguous.RootElement));
+        using var missing = JsonDocument.Parse("{\"alias\":\"Missing actions\",\"trigger\":[]}");
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.ValidateDraftAsync(missing.RootElement));
+    }
+
+    [Fact]
     public void AutomationDefinitionIdTraversalHonorsPreCanceledTokensBeforeJsonAccess()
     {
         JsonElement definition;
