@@ -56,7 +56,8 @@ public sealed class HomeAssistantOperationalSnapshot
 
     public int? AvailableUpdateCount { get; set; }
 
-    public int? ActiveRepairIssueCount { get; set; }
+    /// <summary>Active Repairs issues that have not been ignored by an administrator.</summary>
+    public int? ActiveUnignoredRepairIssueCount { get; set; }
 
     /// <summary>Number of aggregated system-log entries, not the sum of their occurrence counts.</summary>
     public int? SystemLogEntryCount { get; set; }

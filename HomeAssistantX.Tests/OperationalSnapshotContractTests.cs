@@ -29,7 +29,7 @@ public sealed class OperationalSnapshotContractTests
         Assert.Equal(1, snapshot.UnavailableEntityCount);
         Assert.Equal(1, snapshot.UnknownEntityCount);
         Assert.Equal(1, snapshot.AvailableUpdateCount);
-        Assert.Equal(1, snapshot.ActiveRepairIssueCount);
+        Assert.Equal(1, snapshot.ActiveUnignoredRepairIssueCount);
         Assert.Equal(1, snapshot.SystemLogEntryCount);
         Assert.False(snapshot.IsPartial);
         Assert.Empty(snapshot.UnavailableSections);
@@ -50,12 +50,41 @@ public sealed class OperationalSnapshotContractTests
 
         Assert.Equal(2, snapshot.EntityCount);
         Assert.Null(snapshot.AvailableUpdateCount);
-        Assert.Null(snapshot.ActiveRepairIssueCount);
+        Assert.Null(snapshot.ActiveUnignoredRepairIssueCount);
         Assert.Null(snapshot.SystemLogEntryCount);
         Assert.True(snapshot.IsPartial);
         Assert.Equal("repairs", Assert.Single(snapshot.UnavailableSections));
         Assert.Equal(HomeAssistantCapabilityAvailability.NotInstalled,
             Assert.Single(snapshot.Capabilities.Capabilities, capability => capability.Name == "system_log").Availability);
+    }
+
+    [Fact]
+    public async Task RestCountsSurviveWebSocketOutage()
+    {
+        using var server = new TestHomeAssistantServer
+        {
+            ComponentsResponseJson = "[\"api\",\"websocket_api\",\"hassio\",\"repairs\",\"system_log\",\"update\"]",
+            RejectWebSocketUpgrade = true
+        };
+        server.SetStates("[{\"entity_id\":\"light.kitchen\",\"state\":\"unavailable\",\"attributes\":{}},"
+            + "{\"entity_id\":\"update.core\",\"state\":\"on\",\"attributes\":{}}]");
+        using var client = TestClientFactory.Create(server);
+
+        var snapshot = await client.Operations.GetOperationalSnapshotAsync();
+
+        Assert.Equal(2, snapshot.EntityCount);
+        Assert.Equal(1, snapshot.UnavailableEntityCount);
+        Assert.Equal(1, snapshot.AvailableUpdateCount);
+        Assert.Null(snapshot.ActiveUnignoredRepairIssueCount);
+        Assert.Null(snapshot.SystemLogEntryCount);
+        Assert.Equal(HomeAssistantCapabilityAvailability.Unavailable,
+            Assert.Single(snapshot.Capabilities.Capabilities, capability => capability.Name == "websocket").Availability);
+        Assert.Equal(HomeAssistantCapabilityAvailability.Unavailable,
+            Assert.Single(snapshot.Capabilities.Capabilities, capability => capability.Name == "repairs").Availability);
+        Assert.Equal(HomeAssistantCapabilityAvailability.Unavailable,
+            Assert.Single(snapshot.Capabilities.Capabilities, capability => capability.Name == "supervisor").Availability);
+        Assert.True(snapshot.IsPartial);
+        Assert.Equal("websocket", Assert.Single(snapshot.UnavailableSections));
     }
 #endif
 

@@ -407,7 +407,7 @@ Get-HomeAssistantUpdate -AvailableOnly
 ```
 
 Use the operational snapshot as a first read when investigating a home. It
-returns entity availability, available-update, active Repairs, and system-log
+returns entity availability, available-update, active unignored Repairs, and system-log
 entry counts without entity names or log messages. Counts are `null` when a
 section is not installed or its read failed; `IsPartial` and
 `UnavailableSections` distinguish read failures from missing capabilities.

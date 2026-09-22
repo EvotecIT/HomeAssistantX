@@ -47,7 +47,7 @@ public sealed class HomeAssistantOperationsClient
 
     /// <summary>
     /// Reads one privacy-safe summary of installation capabilities, entity availability, updates,
-    /// active Repairs issues, and aggregated system-log entries. Optional section failures leave
+    /// active unignored Repairs issues, and aggregated system-log entries. Optional section failures leave
     /// their counts null and are listed by stable section name. Cancellation is never suppressed.
     /// </summary>
     public async Task<HomeAssistantOperationalSnapshot> GetOperationalSnapshotAsync(
@@ -61,6 +61,7 @@ public sealed class HomeAssistantOperationsClient
             ObservedAt = observedAt,
             Capabilities = capabilities
         };
+        if (!IsAvailable(capabilities, "websocket")) unavailableSections.Add("websocket");
 
         try
         {
@@ -92,7 +93,7 @@ public sealed class HomeAssistantOperationsClient
             try
             {
                 var issues = await Repairs.GetIssuesAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-                snapshot.ActiveRepairIssueCount = issues.Count(issue => issue.Active);
+                snapshot.ActiveUnignoredRepairIssueCount = issues.Count(issue => issue.Active);
             }
             catch (HomeAssistantException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -128,6 +129,7 @@ public sealed class HomeAssistantOperationsClient
         var configuration = await _rest.GetConfigurationAsync(cancellationToken).ConfigureAwait(false);
         var components = await _rest.GetComponentsAsync(cancellationToken).ConfigureAwait(false);
         var componentSet = new HashSet<string>(components, StringComparer.OrdinalIgnoreCase);
+        var webSocketAvailability = HomeAssistantCapabilityAvailability.Available;
         string? installationType = null;
         bool? supervisorManaged = componentSet.Contains("hassio") ? true : null;
         var supervisorAvailability = supervisorManaged == true
@@ -158,8 +160,29 @@ public sealed class HomeAssistantOperationsClient
         {
             // system_health is optional; component-based capability discovery remains useful.
         }
+        catch (HomeAssistantAuthenticationException)
+        {
+            webSocketAvailability = HomeAssistantCapabilityAvailability.NotAuthorized;
+        }
+        catch (HomeAssistantConnectionException)
+        {
+            webSocketAvailability = HomeAssistantCapabilityAvailability.Unavailable;
+        }
+        catch (HomeAssistantProtocolException)
+        {
+            // A malformed system_health response does not make other WebSocket commands unavailable.
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            webSocketAvailability = HomeAssistantCapabilityAvailability.Unavailable;
+        }
 
-        if (supervisorManaged == true)
+        if (supervisorManaged == true && webSocketAvailability != HomeAssistantCapabilityAvailability.Available)
+        {
+            supervisorAvailability = webSocketAvailability;
+            supervisorDetail = "Supervisor access could not be checked because WebSocket is unavailable.";
+        }
+        else if (supervisorManaged == true)
         {
             try
             {
@@ -184,18 +207,39 @@ public sealed class HomeAssistantOperationsClient
                     ? "Supervisor is present, but the current connection is not authorized for administrative operations."
                     : "Supervisor is present, but its API is unavailable through the current connection.";
             }
+            catch (HomeAssistantAuthenticationException)
+            {
+                supervisorAvailability = HomeAssistantCapabilityAvailability.NotAuthorized;
+                supervisorDetail = "Supervisor is present, but the current connection is not authorized for administrative operations.";
+            }
+            catch (HomeAssistantException)
+            {
+                supervisorAvailability = HomeAssistantCapabilityAvailability.Unavailable;
+                supervisorDetail = "Supervisor is present, but its API is unavailable through the current connection.";
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                supervisorAvailability = HomeAssistantCapabilityAvailability.Unavailable;
+                supervisorDetail = "Supervisor is present, but its API is unavailable through the current connection.";
+            }
         }
 
         var capabilities = new[]
         {
             Available("rest"),
-            Available("websocket"),
+            new HomeAssistantCapability
+            {
+                Name = "websocket",
+                Availability = webSocketAvailability,
+                Detail = webSocketAvailability == HomeAssistantCapabilityAvailability.Available
+                    ? null : "WebSocket is unavailable through the current connection."
+            },
             FromComponent("history", "recorder", componentSet),
             FromComponent("logbook", "logbook", componentSet),
-            FromComponent("system_log", "system_log", componentSet),
-            FromComponent("repairs", "repairs", componentSet),
-            FromComponent("diagnostics", "diagnostics", componentSet),
-            FromComponents("traces", new[] { "automation", "script" }, componentSet),
+            FromComponent("system_log", "system_log", componentSet, webSocketAvailability),
+            FromComponent("repairs", "repairs", componentSet, webSocketAvailability),
+            FromComponent("diagnostics", "diagnostics", componentSet, webSocketAvailability),
+            FromComponents("traces", new[] { "automation", "script" }, componentSet, webSocketAvailability),
             FromComponent("updates", "update", componentSet),
             FromComponent("backups", "backup", componentSet),
             new HomeAssistantCapability
@@ -228,31 +272,39 @@ public sealed class HomeAssistantOperationsClient
     private static HomeAssistantCapability FromComponent(
         string name,
         string component,
-        ISet<string> components)
+        ISet<string> components,
+        HomeAssistantCapabilityAvailability webSocketAvailability = HomeAssistantCapabilityAvailability.Available)
     {
         return new HomeAssistantCapability
         {
             Name = name,
-            Availability = components.Contains(component)
-                ? HomeAssistantCapabilityAvailability.Available
-                : HomeAssistantCapabilityAvailability.NotInstalled,
-            Detail = components.Contains(component) ? null : "Component '" + component + "' is not loaded."
+            Availability = !components.Contains(component)
+                ? HomeAssistantCapabilityAvailability.NotInstalled
+                : webSocketAvailability,
+            Detail = !components.Contains(component)
+                ? "Component '" + component + "' is not loaded."
+                : webSocketAvailability == HomeAssistantCapabilityAvailability.Available
+                    ? null : "WebSocket is unavailable through the current connection."
         };
     }
 
     private static HomeAssistantCapability FromComponents(
         string name,
         IReadOnlyList<string> candidates,
-        ISet<string> components)
+        ISet<string> components,
+        HomeAssistantCapabilityAvailability webSocketAvailability = HomeAssistantCapabilityAvailability.Available)
     {
         var available = candidates.Any(components.Contains);
         return new HomeAssistantCapability
         {
             Name = name,
             Availability = available
-                ? HomeAssistantCapabilityAvailability.Available
+                ? webSocketAvailability
                 : HomeAssistantCapabilityAvailability.NotInstalled,
-            Detail = available ? null : "None of the required components are loaded."
+            Detail = !available
+                ? "None of the required components are loaded."
+                : webSocketAvailability == HomeAssistantCapabilityAvailability.Available
+                    ? null : "WebSocket is unavailable through the current connection."
         };
     }
 

@@ -204,6 +204,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public string? RepairsListErrorCode { get; set; }
 
+    public bool RejectWebSocketUpgrade { get; set; }
+
     public string? ExtendedEntityRegistryResponseJson { get; set; }
 
     public bool PublishNullStateEventData { get; set; }
@@ -476,6 +478,11 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
             if (headers.TryGetValue("Upgrade", out var upgrade)
                 && string.Equals(upgrade, "websocket", StringComparison.OrdinalIgnoreCase))
             {
+                if (RejectWebSocketUpgrade)
+                {
+                    await WriteHttpResponseAsync(stream, 503, "{\"message\":\"WebSocket unavailable\"}").ConfigureAwait(false);
+                    return;
+                }
                 await HandleWebSocketAsync(client, stream, headers).ConfigureAwait(false);
                 return;
             }

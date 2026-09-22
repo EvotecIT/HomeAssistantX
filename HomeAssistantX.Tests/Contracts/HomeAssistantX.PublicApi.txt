@@ -983,7 +983,7 @@ T before-field-init sealed class HomeAssistantX.Operations.HomeAssistantLogClien
   M instance System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HomeAssistantX.Operations.HomeAssistantSystemLogEntry>> GetSystemLogAsync(System.Threading.CancellationToken cancellationToken = null)
 T before-field-init sealed class HomeAssistantX.Operations.HomeAssistantOperationalSnapshot
   C special-name HomeAssistantX.Operations.HomeAssistantOperationalSnapshot()
-  P instance System.Nullable<System.Int32> ActiveRepairIssueCount {get;set;}
+  P instance System.Nullable<System.Int32> ActiveUnignoredRepairIssueCount {get;set;}
   P instance System.Nullable<System.Int32> AvailableUpdateCount {get;set;}
   P instance HomeAssistantX.Operations.HomeAssistantCapabilityReport Capabilities {get;set;}
   P instance System.Nullable<System.Int32> EntityCount {get;set;}
