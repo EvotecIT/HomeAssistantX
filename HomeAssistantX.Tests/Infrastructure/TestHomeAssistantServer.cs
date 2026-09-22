@@ -55,6 +55,8 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
 
     public const string AccessToken = "test-access-token";
 
+    public string? RepairIssuesResponseJson { get; set; }
+
     public Uri BaseUri { get; }
 
     public int WebSocketConnectionCount => Volatile.Read(ref _connectionCount);
@@ -1244,7 +1246,7 @@ internal sealed partial class TestHomeAssistantServer : IDisposable
                 await session.SendResultAsync(id, ParseJson("[{\"name\":\"homeassistant.components.test\",\"message\":[\"Test warning\"],\"level\":\"WARNING\",\"source\":[\"homeassistant/components/test/__init__.py\",42],\"exception\":\"test exception\",\"count\":2,\"timestamp\":1787680800,\"first_occurred\":1787680700}]"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "repairs/list_issues":
-                await session.SendResultAsync(id, ParseJson("{\"issues\":[{\"domain\":\"test\",\"issue_id\":\"warning-1\",\"active\":true,\"is_fixable\":true,\"severity\":\"warning\",\"ignored\":false,\"created\":\"2026-08-25T10:00:00Z\"},{\"domain\":\"test\",\"issue_id\":\"ignored-1\",\"active\":true,\"is_fixable\":false,\"severity\":\"warning\",\"ignored\":true,\"created\":\"2026-08-25T09:00:00Z\"}]}"), false, _source.Token).ConfigureAwait(false);
+                await session.SendResultAsync(id, ParseJson(RepairIssuesResponseJson ?? "{\"issues\":[{\"domain\":\"test\",\"issue_id\":\"warning-1\",\"active\":true,\"is_fixable\":true,\"severity\":\"warning\",\"ignored\":false,\"created\":\"2026-08-25T10:00:00Z\"},{\"domain\":\"test\",\"issue_id\":\"ignored-1\",\"active\":true,\"is_fixable\":false,\"severity\":\"warning\",\"ignored\":true,\"created\":\"2026-08-25T09:00:00Z\"}]}"), false, _source.Token).ConfigureAwait(false);
                 return;
             case "repairs/get_issue_data":
                 await session.SendResultAsync(id, ParseJson("{\"issue_data\":{\"summary\":\"Test repair\"}}"), false, _source.Token).ConfigureAwait(false);

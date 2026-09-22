@@ -6,6 +6,8 @@ namespace HomeAssistantX.Automations;
 public sealed class HomeAssistantAutomationStatus
 {
     public string EntityId { get; set; } = string.Empty;
+    /// <summary>Editable configuration id from state attributes, when Home Assistant exposes one.</summary>
+    public string? ConfigurationId { get; set; }
     public string? Name { get; set; }
     public bool? IsEnabled { get; set; }
     public DateTimeOffset? LastTriggered { get; set; }

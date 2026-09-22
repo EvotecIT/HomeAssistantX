@@ -279,6 +279,12 @@ internal sealed partial class TestHomeAssistantServer
             case "GET /api/config/automation/config/morning-routine":
                 await WriteHttpResponseAsync(stream, 200, AutomationConfigurationResponseJson).ConfigureAwait(false);
                 break;
+            case "GET /api/config/automation/config/new-routine":
+                await WriteHttpResponseAsync(stream, 404, "{}").ConfigureAwait(false);
+                break;
+            case "POST /api/config/automation/config/new-routine":
+                await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\"}").ConfigureAwait(false);
+                break;
             case "POST /api/config/automation/config/morning-routine":
                 await WriteHttpResponseAsync(stream, 200, "{\"result\":\"ok\"}").ConfigureAwait(false);
                 break;

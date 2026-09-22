@@ -41,6 +41,7 @@ T before-field-init static class HomeAssistantX.Automations.HomeAssistantAutomat
   M static System.String NormalizeConfigurationId(System.String automationId)
 T before-field-init sealed class HomeAssistantX.Automations.HomeAssistantAutomationStatus
   C special-name HomeAssistantX.Automations.HomeAssistantAutomationStatus()
+  P instance System.String? ConfigurationId {get;set;}
   P instance System.Nullable<System.Int64> CurrentRuns {get;set;}
   P instance System.String EntityId {get;set;}
   P instance System.Nullable<System.Boolean> IsEnabled {get;set;}

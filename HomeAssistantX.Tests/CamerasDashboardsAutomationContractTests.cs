@@ -2817,9 +2817,11 @@ public sealed class CamerasDashboardsAutomationContractTests
     public async Task AutomationConfigurationIsSeparateFromRuntimeExecution()
     {
         using var server = new TestHomeAssistantServer();
-        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{\"friendly_name\":\"Morning\",\"last_triggered\":\"2026-08-26T06:00:00Z\",\"mode\":\"single\",\"current\":0}}]");
+        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{\"id\":\"morning-routine\",\"friendly_name\":\"Morning\",\"last_triggered\":\"2026-08-26T06:00:00Z\",\"mode\":\"single\",\"current\":0}}]");
         using var client = TestClientFactory.Create(server);
-        Assert.True(Assert.Single(await client.Automations.GetAsync()).IsEnabled);
+        var automation = Assert.Single(await client.Automations.GetAsync());
+        Assert.True(automation.IsEnabled);
+        Assert.Equal("morning-routine", automation.ConfigurationId);
         await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.GetAsync("automation.morning.extra"));
         var definition = await client.Automations.GetConfigurationAsync("morning-routine");
         Assert.True(definition.Definition.GetProperty("future_automation").GetBoolean());

@@ -251,6 +251,13 @@ $server.StartInfo.RedirectStandardError = $true
 $server.StartInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
 $null = $server.Start()
 $connection = $null
+$testOutputRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$testOutputDir = [IO.Path]::GetFullPath([IO.Path]::Combine(
+    $testOutputRoot, 'HomeAssistantX-ModuleTest-' + [Guid]::NewGuid().ToString('N')))
+if (-not $testOutputDir.StartsWith($testOutputRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The module test output directory escaped the system temporary directory.'
+}
+$null = New-Item -ItemType Directory -Path $testOutputDir
 try {
     $ready = $server.StandardOutput.ReadLine()
     if ([string]::IsNullOrWhiteSpace($ready) -or -not $ready.StartsWith('READY ')) {
@@ -596,7 +603,7 @@ try {
         if ($server.StandardOutput.ReadLine() -ne 'DEFAULT_LABELS_SET') { throw 'The default label fixture did not reset.' }
     }
 
-    $diagnosticPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')
+    $diagnosticPath = Join-Path $testOutputDir ('HomeAssistantX-Diagnostic-' + [Guid]::NewGuid().ToString('N') + '.json')
     try {
         [IO.File]::WriteAllText($diagnosticPath, 'existing diagnostic')
         $diagnosticFile = $connection | Export-HomeAssistantDiagnostic -EntryId entry-1 -Path $diagnosticPath -Force -Confirm:$false
@@ -639,7 +646,7 @@ try {
     $server.StandardInput.Flush()
     if ($server.StandardOutput.ReadLine() -ne 'SERVICE_CALL_NONE') { throw 'A whitespace-only notification value dispatched an action.' }
 
-    $cameraPath = Join-Path ([IO.Path]::GetTempPath()) ('HomeAssistantX-Camera-' + [Guid]::NewGuid().ToString('N') + '.jpg')
+    $cameraPath = Join-Path $testOutputDir ('HomeAssistantX-Camera-' + [Guid]::NewGuid().ToString('N') + '.jpg')
     try {
         [IO.File]::WriteAllText($cameraPath, 'old image')
         $cameraFile = Export-HomeAssistantCameraSnapshot camera.front $cameraPath -Width 640 -Height 360 -Force -Confirm:$false
@@ -1335,4 +1342,5 @@ try {
         }
     }
     $server.Dispose()
+    Remove-Item -LiteralPath $testOutputDir -Recurse
 }

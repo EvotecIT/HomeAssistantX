@@ -66,6 +66,7 @@ raw access for custom integrations.
   updates, and restarts
 - Windows PowerShell 5.1 and PowerShell 7 on Windows, macOS, and Linux
 - .NET Framework 4.7.2, .NET Standard 2.0, and .NET 10 from one package
+- a local .NET 10 MCP server for AI-assisted discovery, diagnostics, and automation drafts
 
 The endpoint-by-endpoint contract is maintained in the
 [Home Assistant support matrix](Docs/SUPPORT.md).
@@ -109,6 +110,10 @@ Home Assistant -> HomeAssistantX -> product mapper -> application model -> UI
 
 ## 📦 Installation
 
+The first public NuGet and PowerShell Gallery packages are pending. The commands
+below apply after publication. Until then, build the repository from source;
+the MCP server can run directly from that checkout.
+
 ### .NET
 
 ```bash
@@ -128,6 +133,14 @@ Install-Module -Name HomeAssistantX -AllowClobber -Force
 | PowerShell hosts | Windows PowerShell 5.1, PowerShell 7 |
 | Native dependencies | None |
 | License | MIT |
+
+## AI access through MCP
+
+The separate `HomeAssistantX.Mcp` host uses the same C# client as the PowerShell
+module and Windows applications. It offers entity and action discovery, issues,
+updates, system logs, automation inspection, draft validation, and guarded
+automation definition saves. It uses local stdio, so the Home Assistant token
+stays in the local process environment. See [MCP setup and workflow](Docs/MCP.md).
 
 ## 🚀 PowerShell quick start
 

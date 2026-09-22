@@ -130,6 +130,7 @@ public sealed class HomeAssistantAutomationClient
         return new HomeAssistantAutomationStatus
         {
             EntityId = state.EntityId,
+            ConfigurationId = HomeAssistantAttributeReader.GetString(state.Attributes, "id", cancellationToken),
             Name = HomeAssistantAttributeReader.GetString(state.Attributes, "friendly_name", cancellationToken),
             IsEnabled = CancellationAwareString.EqualsOrdinalIgnoreCase(state.State, "on", cancellationToken)
                 ? true
