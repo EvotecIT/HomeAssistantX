@@ -2817,9 +2817,11 @@ public sealed class CamerasDashboardsAutomationContractTests
     public async Task AutomationConfigurationIsSeparateFromRuntimeExecution()
     {
         using var server = new TestHomeAssistantServer();
-        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{\"friendly_name\":\"Morning\",\"last_triggered\":\"2026-08-26T06:00:00Z\",\"mode\":\"single\",\"current\":0}}]");
+        server.SetStates("[{\"entity_id\":\"automation.morning\",\"state\":\"on\",\"attributes\":{\"id\":\"morning-routine\",\"friendly_name\":\"Morning\",\"last_triggered\":\"2026-08-26T06:00:00Z\",\"mode\":\"single\",\"current\":0}}]");
         using var client = TestClientFactory.Create(server);
-        Assert.True(Assert.Single(await client.Automations.GetAsync()).IsEnabled);
+        var automation = Assert.Single(await client.Automations.GetAsync());
+        Assert.True(automation.IsEnabled);
+        Assert.Equal("morning-routine", automation.ConfigurationId);
         await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.GetAsync("automation.morning.extra"));
         var definition = await client.Automations.GetConfigurationAsync("morning-routine");
         Assert.True(definition.Definition.GetProperty("future_automation").GetBoolean());
@@ -2831,6 +2833,73 @@ public sealed class CamerasDashboardsAutomationContractTests
         Assert.Equal("trigger", runtime.RootElement.GetProperty("service").GetString());
         Assert.False(runtime.RootElement.GetProperty("service_data").GetProperty("skip_condition").GetBoolean());
         await client.Automations.DeleteConfigurationAsync("morning-routine");
+    }
+
+    [Fact]
+    public async Task AutomationDraftValidationUsesNativeFragmentsWithoutSaving()
+    {
+        using var server = new TestHomeAssistantServer();
+        using var client = TestClientFactory.Create(server);
+        using var definition = JsonDocument.Parse("{\"alias\":\"Morning\",\"triggers\":[],\"conditions\":[],\"actions\":[{\"action\":\"light.turn_on\"}],\"future_key\":true}");
+
+        var result = await client.Automations.ValidateDraftAsync(definition.RootElement);
+
+        Assert.True(result.TryGetProperty("triggers", out _));
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("validate_config")));
+        Assert.Equal(JsonValueKind.Array, command.RootElement.GetProperty("triggers").ValueKind);
+        Assert.Equal("light.turn_on", command.RootElement.GetProperty("actions")[0].GetProperty("action").GetString());
+        Assert.True(command.RootElement.TryGetProperty("conditions", out _));
+        Assert.Null(server.LastRequestBody);
+
+        using var ambiguous = JsonDocument.Parse("{\"trigger\":[],\"triggers\":[],\"action\":[]}");
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.ValidateDraftAsync(ambiguous.RootElement));
+        using var missing = JsonDocument.Parse("{\"alias\":\"Missing actions\",\"trigger\":[]}");
+        await Assert.ThrowsAsync<ArgumentException>(() => client.Automations.ValidateDraftAsync(missing.RootElement));
+    }
+
+    [Fact]
+    public void AutomationDraftSnapshotsUnknownFieldsAndHonorsPreCancellation()
+    {
+        HomeAssistantAutomationDraft draft;
+        using (var definition = JsonDocument.Parse("{\"triggers\":[],\"actions\":[],\"future_key\":{\"nested\":true}}"))
+        {
+            draft = HomeAssistantAutomationDraft.Parse(definition.RootElement);
+        }
+
+        Assert.True(draft.Definition.GetProperty("future_key").GetProperty("nested").GetBoolean());
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationDraft.Parse(draft.Definition, canceled.Token));
+    }
+
+    [Fact]
+    public async Task AutomationDraftParsesJsonTextWithAnOwnedSnapshotAndCancellation()
+    {
+        var draft = await HomeAssistantAutomationDraft.ParseAsync(
+            "{\"triggers\":[],\"actions\":[],\"future_key\":{\"nested\":true}}");
+        Assert.True(draft.Definition.GetProperty("future_key").GetProperty("nested").GetBoolean());
+
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantAutomationDraft.ParseAsync("{\"triggers\":[],\"actions\":[]}", canceled.Token));
+    }
+
+    [Fact]
+    public async Task AutomationDraftParsesCallerOwnedJsonElementAsynchronously()
+    {
+        HomeAssistantAutomationDraft draft;
+        using (var definition = JsonDocument.Parse("{\"triggers\":[],\"actions\":[],\"future_key\":{\"nested\":true}}"))
+        {
+            draft = await HomeAssistantAutomationDraft.ParseAsync(definition.RootElement);
+        }
+
+        Assert.True(draft.Definition.GetProperty("future_key").GetProperty("nested").GetBoolean());
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            HomeAssistantAutomationDraft.ParseAsync(draft.Definition, canceled.Token));
     }
 
     [Fact]

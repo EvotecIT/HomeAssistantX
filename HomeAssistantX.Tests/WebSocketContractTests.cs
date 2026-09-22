@@ -909,7 +909,7 @@ public sealed class WebSocketContractTests
         Assert.Equal("Test Home", configuration.LocationName);
         Assert.True(services.GetProperty("light").TryGetProperty("turn_on", out _));
         Assert.Equal("Overview", panels.GetProperty("lovelace").GetProperty("title").GetString());
-        Assert.True(validation.TryGetProperty("action", out _));
+        Assert.True(validation.TryGetProperty("actions", out _));
         Assert.Equal("light.kitchen", extracted.GetProperty("referenced_entities")[0].GetString());
         Assert.Equal(1, triggers.GetArrayLength());
         Assert.Equal(1, conditions.GetArrayLength());
@@ -934,8 +934,8 @@ public sealed class WebSocketContractTests
         using var conversationCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("conversation/process")));
         Assert.False(conversationCommand.RootElement.TryGetProperty("language", out _));
         using var validationCommand = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("validate_config")));
-        Assert.True(validationCommand.RootElement.TryGetProperty("action", out _));
-        Assert.False(validationCommand.RootElement.TryGetProperty("trigger", out _));
+        Assert.True(validationCommand.RootElement.TryGetProperty("actions", out _));
+        Assert.False(validationCommand.RootElement.TryGetProperty("triggers", out _));
         target.EntityIds = new[] { " " };
         await Assert.ThrowsAsync<ArgumentException>(() => client.System.ExtractFromTargetAsync(target));
         await Assert.ThrowsAsync<ArgumentException>(() => client.System.GetTriggersForTargetAsync(target));
@@ -945,6 +945,20 @@ public sealed class WebSocketContractTests
             client.System.ExtractFromTargetAsync(target, cancellationToken: cancellation.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             client.System.GetServicesForTargetAsync(target, cancellationToken: cancellation.Token));
+    }
+
+    [Fact]
+    public async Task ConfigValidationFallsBackToLegacyFieldNamesWhenServerRejectsModernSchema()
+    {
+        using var server = new TestHomeAssistantServer { UseLegacyValidationFields = true };
+        using var client = TestClientFactory.Create(server);
+
+        var result = await client.System.ValidateConfigAsync(trigger: new[] { new { platform = "time", at = "07:00:00" } });
+
+        Assert.True(result.GetProperty("trigger").GetProperty("valid").GetBoolean());
+        using var command = JsonDocument.Parse(Assert.IsType<string>(server.GetLastWebSocketCommand("validate_config")));
+        Assert.True(command.RootElement.TryGetProperty("trigger", out _));
+        Assert.False(command.RootElement.TryGetProperty("triggers", out _));
     }
 
     [Fact]

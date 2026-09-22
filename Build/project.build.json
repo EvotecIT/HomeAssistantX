@@ -6,6 +6,7 @@
   "AlignPackageVersions": true,
   "ExcludeProjects": [
     "HomeAssistantX.Tests",
+    "HomeAssistantX.Mcp.Tests",
     "HomeAssistantX.LiveTests",
     "HomeAssistantX.TestServer",
     "HomeAssistantX.Examples"
