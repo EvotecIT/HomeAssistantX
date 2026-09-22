@@ -31,22 +31,48 @@ public sealed class HomeAssistantAutomationDraft
         string definitionJson,
         CancellationToken cancellationToken = default)
     {
-        using var document = await HomeAssistantJson.ParseDocumentAsync(definitionJson, cancellationToken).ConfigureAwait(false);
-        return Parse(document.RootElement, cancellationToken);
+        if (definitionJson is null) throw new ArgumentNullException(nameof(definitionJson));
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // The worker owns the document through both parsing and snapshotting. The caller may
+        // stop waiting on cancellation without disposing a document the worker is still reading.
+        var parseTask = Task.Run(() =>
+        {
+            using var document = JsonDocument.Parse(definitionJson);
+            return ParseCore(document.RootElement, cancellationToken);
+        }, CancellationToken.None);
+        var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(() => canceled.TrySetResult(true));
+        if (await Task.WhenAny(parseTask, canceled.Task).ConfigureAwait(false) != parseTask)
+        {
+            _ = parseTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var draft = await parseTask.ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return draft;
     }
 
     /// <summary>Snapshots a definition and rejects ambiguous fragment names before validation or save.</summary>
     public static HomeAssistantAutomationDraft Parse(JsonElement definition, CancellationToken cancellationToken = default)
+        => HomeAssistantJson.RunCancellationIsolated(
+            () => ParseCore(definition, cancellationToken),
+            cancellationToken);
+
+    private static HomeAssistantAutomationDraft ParseCore(JsonElement definition, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (definition.ValueKind != JsonValueKind.Object)
             throw new ArgumentException("An automation definition must be a JSON object.", nameof(definition));
-        if (HomeAssistantAutomationIdentifier.HasDuplicateProperties(definition, cancellationToken))
+        if (HomeAssistantJson.HasDuplicatePropertiesInline(definition, cancellationToken))
             throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", nameof(definition));
 
-        var frozen = HomeAssistantJson.RunCancellationIsolated(
-            () => HomeAssistantJson.FreezeValue(definition, nameof(definition), "Automation definition", cancellationToken),
-            cancellationToken);
+        var frozen = HomeAssistantJson.FreezeValue(definition, nameof(definition), "Automation definition", cancellationToken);
         var hasTriggers = frozen.TryGetProperty("triggers", out var triggers);
         var hasTrigger = frozen.TryGetProperty("trigger", out var trigger);
         var hasActions = frozen.TryGetProperty("actions", out var actions);
