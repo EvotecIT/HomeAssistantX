@@ -149,8 +149,9 @@ public sealed class HomeAssistantMcpTools
         CancellationToken cancellationToken)
     {
         using var document = JsonDocument.Parse(definitionJson);
-        var validation = await client.Automations.ValidateDraftAsync(document.RootElement, cancellationToken);
-        return new { Definition = document.RootElement.Clone(), Validation = validation };
+        var draft = HomeAssistantAutomationDraft.Parse(document.RootElement, cancellationToken);
+        var validation = await client.Automations.ValidateDraftAsync(draft.Definition, cancellationToken);
+        return new { draft.Definition, Validation = validation };
     }
 
     [McpServerTool(Name = "save_home_automation_definition", Destructive = true), Description("Create or replace one automation definition after local write opt-in. Use revision 'new' to create, or the fingerprint from get_home_automation_definition to update.")]

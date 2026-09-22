@@ -91,6 +91,7 @@ public sealed class McpTransportTests
                 client,
                 "{\"alias\":\"Test\",\"triggers\":[],\"actions\":[]}",
                 CancellationToken.None));
+        Assert.Equal("Test", draft.GetProperty("Definition").GetProperty("alias").GetString());
         Assert.Equal(JsonValueKind.Object, draft.GetProperty("Validation").ValueKind);
 
         var current = JsonSerializer.SerializeToElement(

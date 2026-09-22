@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HomeAssistantX.Protocol;
 
 namespace HomeAssistantX.Automations;
 
@@ -34,7 +35,9 @@ public sealed class HomeAssistantAutomationDraft
         if (HomeAssistantAutomationIdentifier.HasDuplicateProperties(definition, cancellationToken))
             throw new ArgumentException("An automation definition cannot contain duplicate JSON properties.", nameof(definition));
 
-        var frozen = definition.Clone();
+        var frozen = HomeAssistantJson.RunCancellationIsolated(
+            () => HomeAssistantJson.FreezeValue(definition, nameof(definition), "Automation definition", cancellationToken),
+            cancellationToken);
         var hasTriggers = frozen.TryGetProperty("triggers", out var triggers);
         var hasTrigger = frozen.TryGetProperty("trigger", out var trigger);
         var hasActions = frozen.TryGetProperty("actions", out var actions);

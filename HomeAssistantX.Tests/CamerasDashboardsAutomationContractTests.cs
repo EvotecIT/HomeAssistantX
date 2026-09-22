@@ -2858,6 +2858,22 @@ public sealed class CamerasDashboardsAutomationContractTests
     }
 
     [Fact]
+    public void AutomationDraftSnapshotsUnknownFieldsAndHonorsPreCancellation()
+    {
+        HomeAssistantAutomationDraft draft;
+        using (var definition = JsonDocument.Parse("{\"triggers\":[],\"actions\":[],\"future_key\":{\"nested\":true}}"))
+        {
+            draft = HomeAssistantAutomationDraft.Parse(definition.RootElement);
+        }
+
+        Assert.True(draft.Definition.GetProperty("future_key").GetProperty("nested").GetBoolean());
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeAssistantAutomationDraft.Parse(draft.Definition, canceled.Token));
+    }
+
+    [Fact]
     public void AutomationDefinitionIdTraversalHonorsPreCanceledTokensBeforeJsonAccess()
     {
         JsonElement definition;

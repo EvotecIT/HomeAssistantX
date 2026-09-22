@@ -475,8 +475,8 @@ try {
     $supervisorOverview = $connection | Get-HomeAssistantInfo -Supervisor
     $configuration = $connection | Test-HomeAssistantConfiguration
     $automationDraftValidation = $connection | Test-HomeAssistantAutomationDraft -ConfigurationJson '{"alias":"Morning","triggers":[],"actions":[]}'
-    $triggerValidation = [System.Text.Json.JsonElement]::new()
-    if (-not $automationDraftValidation.TryGetProperty('triggers', [ref] $triggerValidation)) {
+    $automationDraftValidationObject = ConvertFrom-Json -InputObject $automationDraftValidation.GetRawText()
+    if ($null -eq $automationDraftValidationObject.PSObject.Properties['triggers']) {
         throw 'Automation draft validation did not return Home Assistant trigger feedback.'
     }
     $notifications = @(Get-HomeAssistantNotification)
